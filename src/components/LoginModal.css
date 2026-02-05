@@ -53,6 +53,18 @@
   text-decoration: underline;
 }
 
+.modal-body {
+  padding: 20px;
+}
+
+.modal-footer {
+  padding: 20px;
+  border-top: 1px solid #eee;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 @media (max-width: 576px) {
   .modal-content {
     margin: 10px;

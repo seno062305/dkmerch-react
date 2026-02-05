@@ -20,7 +20,6 @@ const WeverseSection = ({ onProductClick, onAddToCart }) => {
       kpopGroup: "BTS",          
       rating: 4.8 
     },
-    // ... (same products array as in App.js, pero isa-isahin mo)
     { id: 2, name: "BLACKPINK 'BORN PINK' Album", category: "albums", price: 2499, originalPrice: 2799, image: "https://images.unsplash.com/photo-1511379938547-c1f69419868d?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80", description: "Second studio album with 8 tracks including 'Pink Venom' and 'Shut Down'.", stock: 8, isPreOrder: false, isSale: true, reviewCount: 18, kpopGroup: "BLACKPINK", rating: 4.9 },
     { id: 3, name: "TWICE Official Light Stick", category: "lightsticks", price: 3299, originalPrice: 3499, image: "https://images.unsplash.com/photo-1578269174936-2709b6aeb913?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80", description: "Candybong Z with Bluetooth connectivity and multiple light modes.", stock: 5, isPreOrder: false, isSale: false, reviewCount: 32, kpopGroup: "TWICE", rating: 4.7 },
     { id: 4, name: "SEVENTEEN 'SECTOR 17' Album", category: "albums", price: 2199, originalPrice: 2399, image: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80", description: "4th studio repackage album with 3 new tracks and exclusive photocards.", stock: 0, isPreOrder: true, isSale: true, reviewCount: 15, kpopGroup: "SEVENTEEN", rating: 4.6 },

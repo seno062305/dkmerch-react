@@ -31,7 +31,12 @@
 }
 
 .notification i {
-  color: var(--primary-color);
+  color: var(--success-color);
+  font-size: 20px;
+}
+
+.notification span {
+  font-weight: 600;
 }
 
 /* Modal overlay */
@@ -104,4 +109,13 @@
 .modal-close:hover {
   color: var(--dark-color);
   transform: scale(1.1);
+}
+
+@media (max-width: 576px) {
+  .notification {
+    top: 10px;
+    right: 10px;
+    left: 10px;
+    padding: 12px 15px;
+  }
 }

@@ -100,6 +100,7 @@ button {
   color: white;
   padding: 60px 0;
   margin-bottom: 40px;
+  text-align: center;
 }
 
 .page-title {
@@ -111,6 +112,7 @@ button {
   font-size: 18px;
   opacity: 0.9;
   max-width: 600px;
+  margin: 0 auto;
 }
 
 /* Modal overlay */

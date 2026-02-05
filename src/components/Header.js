@@ -1,75 +1,127 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import './Header.css';
 
 const Header = ({ cartCount, wishlistCount, onLoginClick, onCartClick }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
   const navigate = useNavigate();
+
+  // Prevent body scroll when mobile menu is open
+  useEffect(() => {
+    if (isMobileMenuOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isMobileMenuOpen]);
 
   const handleSearch = (e) => {
     e.preventDefault();
     if (searchQuery.trim()) {
       alert(`Searching for: ${searchQuery}`);
-      // Implement actual search logic
+      setShowSearch(false);
     }
   };
 
   const toggleMobileMenu = () => {
     setIsMobileMenuOpen(!isMobileMenuOpen);
+    setIsDropdownOpen(false);
   };
 
-  const kpopGroups = ['BTS', 'BLACKPINK', 'TWICE', 'SEVENTEEN', 'STRAY KIDS'];
+  const toggleDropdown = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDropdownOpen(!isDropdownOpen);
+  };
+
+  const closeMenu = () => {
+    setIsMobileMenuOpen(false);
+    setIsDropdownOpen(false);
+  };
+
+  const handleCollectionsClick = (e) => {
+    if (window.innerWidth <= 992) {
+      toggleDropdown(e);
+    } else {
+      closeMenu();
+    }
+  };
 
   return (
     <header>
-      <div className="header-top">
-        <div className="container">
-          <div className="header-top-info">
-            <span><i className="fas fa-phone"></i> +63 912 345 6789</span>
-            <span><i className="fas fa-envelope"></i> support@dkmerch.com</span>
-          </div>
-          <div className="header-top-links">
-            <a href="#">Track Order</a>
-            <a href="#">Help Center</a>
-            <a href="#" onClick={(e) => { e.preventDefault(); onLoginClick(); }}>Login</a>
-            <a href="#" onClick={(e) => { e.preventDefault(); onLoginClick(); }}>Register</a>
-          </div>
-        </div>
-      </div>
-
       <div className="main-header">
         <div className="container">
           <Link to="/" className="logo">
-            <img src="/images/dklogo2-removebg-preview.png" alt="DKMerch Logo" />
+            <img src="/images/dklogo2-removebg-preview.png" alt="DKMerch" />
+            <div className="logo-text">
+              <span className="logo-brand">DKMerch</span>
+              <span className="logo-tagline">K-Pop Paradise</span>
+            </div>
           </Link>
 
-          <form className="search-bar" onSubmit={handleSearch}>
-            <i className="fas fa-search"></i>
-            <input
-              type="text"
-              placeholder="Search for albums, photocards, lightsticks..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </form>
+          <nav className={`main-nav ${isMobileMenuOpen ? 'active' : ''}`}>
+            <ul className={isMobileMenuOpen ? 'active' : ''}>
+              <li><Link to="/" onClick={closeMenu}>Home</Link></li>
+              <li className={`dropdown ${isDropdownOpen ? 'active' : ''}`}>
+                <Link 
+                  to="/collections" 
+                  onClick={handleCollectionsClick}
+                >
+                  Collections <i className="fas fa-chevron-down"></i>
+                </Link>
+                <ul className="dropdown-menu">
+                  <li><Link to="/collections?category=photocards" onClick={closeMenu}>Photocards</Link></li>
+                  <li><Link to="/collections?category=albums" onClick={closeMenu}>Albums</Link></li>
+                  <li><Link to="/collections?category=lightsticks" onClick={closeMenu}>Lightsticks</Link></li>
+                  <li><Link to="/collections?category=apparel" onClick={closeMenu}>Apparel</Link></li>
+                  <li><Link to="/collections?category=accessories" onClick={closeMenu}>Accessories</Link></li>
+                </ul>
+              </li>
+              <li><Link to="/preorder" onClick={closeMenu}>Pre-Order</Link></li>
+              <li><Link to="/new" onClick={closeMenu}>New Arrivals</Link></li>
+              <li><Link to="/track-order" onClick={closeMenu}>Track Order</Link></li>
+              <li><Link to="/help" onClick={closeMenu}>Help Center</Link></li>
+            </ul>
+          </nav>
 
           <div className="header-actions">
-            <a href="#" className="header-action-item">
+            <button 
+              className="header-action-item search-toggle"
+              onClick={() => setShowSearch(!showSearch)}
+            >
+              <i className="fas fa-search"></i>
+              <span>Search</span>
+            </button>
+            
+            <a href="#" className="header-action-item" onClick={(e) => { e.preventDefault(); onLoginClick(); }}>
               <i className="fas fa-user"></i>
               <span>Account</span>
             </a>
+            
             <Link to="/wishlist" className="header-action-item">
               <i className="fas fa-heart"></i>
               <span>Wishlist</span>
-              <div className="wishlist-count">{wishlistCount}</div>
+              {wishlistCount > 0 && <div className="wishlist-count">{wishlistCount}</div>}
             </Link>
+            
             <a href="#" className="header-action-item" onClick={(e) => { e.preventDefault(); onCartClick(); }}>
               <i className="fas fa-shopping-cart"></i>
               <span>Cart</span>
-              <div className="cart-count">{cartCount}</div>
+              {cartCount > 0 && <div className="cart-count">{cartCount}</div>}
             </a>
-            <button className="mobile-menu-toggle" onClick={toggleMobileMenu}>
+            
+            <button 
+              className={`mobile-menu-toggle ${isMobileMenuOpen ? 'active' : ''}`}
+              onClick={toggleMobileMenu}
+              aria-label="Toggle mobile menu"
+            >
               <span></span>
               <span></span>
               <span></span>
@@ -78,32 +130,31 @@ const Header = ({ cartCount, wishlistCount, onLoginClick, onCartClick }) => {
         </div>
       </div>
 
-      <nav>
-        <div className="container nav-container">
-          <ul className={`main-nav ${isMobileMenuOpen ? 'active' : ''}`}>
-            <li><Link to="/" onClick={() => setIsMobileMenuOpen(false)}>Home</Link></li>
-            <li className="dropdown">
-              <Link to="/collections">Collections <i className="fas fa-chevron-down"></i></Link>
-              <ul className="dropdown-menu">
-                <li><Link to="/collections?category=photocards">Photocards</Link></li>
-                <li><Link to="/collections?category=albums">Albums</Link></li>
-                <li><Link to="/collections?category=lightsticks">Lightsticks</Link></li>
-                <li><Link to="/collections?category=apparel">Apparel</Link></li>
-                <li><Link to="/collections?category=accessories">Accessories</Link></li>
-              </ul>
-            </li>
-            <li><Link to="/preorder">Pre-Order</Link></li>
-            <li><Link to="/new">New Arrivals</Link></li>
-          </ul>
-          <div className="kpop-groups">
-            {kpopGroups.map(group => (
-              <Link key={group} to={`/collections?group=${group}`} className="kpop-group">
-                {group}
-              </Link>
-            ))}
+      {/* Search Bar Overlay */}
+      {showSearch && (
+        <div className="search-overlay" onClick={() => setShowSearch(false)}>
+          <div className="search-container" onClick={(e) => e.stopPropagation()}>
+            <form onSubmit={handleSearch} className="search-bar-expanded">
+              <i className="fas fa-search"></i>
+              <input
+                type="text"
+                placeholder="Search for albums, photocards, lightsticks..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                autoFocus
+              />
+              <button type="button" onClick={() => setShowSearch(false)} className="search-close">
+                <i className="fas fa-times"></i>
+              </button>
+            </form>
           </div>
         </div>
-      </nav>
+      )}
+
+      {/* Mobile Menu Overlay */}
+      {isMobileMenuOpen && (
+        <div className="mobile-overlay" onClick={closeMenu}></div>
+      )}
     </header>
   );
 };

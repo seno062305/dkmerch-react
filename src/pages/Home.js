@@ -4,45 +4,35 @@ import LogoMarquee from '../components/LogoMarquee';
 import WeverseSection from '../components/WeverseSection';
 
 const Home = ({ onProductClick, onAddToCart }) => {
-  const heroSlides = [
+  const carouselSlides = [
     {
-      image: "https://images.unsplash.com/photo-1511379938547-c1f69419868d?ixlib=rb-4.0.3&auto=format&fit=crop&w=1770&q=80",
-      title: "Official K-Pop Merchandise Store",
-      description: "Discover exclusive albums, photocards, lightsticks, and more from your favorite K-Pop groups. Pre-order the latest releases!",
-      buttonText: "Shop Now",
-      buttonIcon: "arrow-right"
+      image: 'https://images.unsplash.com/photo-1540039155733-5bb30b53aa14?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80',
+      title: 'Welcome to DKMerch',
+      description: 'Your one-stop shop for authentic K-Pop merchandise',
+      buttonText: 'Shop Now',
+      buttonIcon: 'arrow-right'
     },
     {
-      image: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?ixlib=rb-4.0.3&auto=format&fit=crop&w=1770&q=80",
-      title: "Exclusive Album Collections",
-      description: "Get limited edition albums with exclusive photocards, posters, and member benefits. Don't miss out on rare items!",
-      buttonText: "View Albums",
-      buttonIcon: "record-vinyl"
+      image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80',
+      title: 'New Album Releases',
+      description: 'Pre-order the latest albums from your favorite groups',
+      buttonText: 'Pre-Order Now',
+      buttonIcon: 'shopping-bag'
     },
     {
-      image: "https://images.unsplash.com/photo-1578269174936-2709b6aeb913?ixlib=rb-4.0.3&auto=format&fit=crop&w=1770&q=80",
-      title: "Official Lightsticks",
-      description: "Complete your fan experience with authentic lightsticks that connect to concerts. Bluetooth enabled with multiple light modes.",
-      buttonText: "Explore Lightsticks",
-      buttonIcon: "lightbulb"
-    },
-    {
-      image: "https://images.unsplash.com/photo-1523381210434-271e8be1f52b?ixlib=rb-4.0.3&auto=format&fit=crop&w=1770&q=80",
-      title: "K-Pop Fashion & Apparel",
-      description: "Wear your favorite groups with pride. Official merch hoodies, t-shirts, and accessories from top K-Pop brands.",
-      buttonText: "Shop Apparel",
-      buttonIcon: "tshirt"
+      image: 'https://images.unsplash.com/photo-1506157786151-b8491531f063?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80',
+      title: 'Exclusive Photocards',
+      description: 'Complete your collection with rare photocards',
+      buttonText: 'Browse Collection',
+      buttonIcon: 'images'
     }
   ];
 
   return (
     <div className="home-page">
-      <HeroCarousel slides={heroSlides} />
+      <HeroCarousel slides={carouselSlides} />
       <LogoMarquee />
-      <WeverseSection 
-        onProductClick={onProductClick}
-        onAddToCart={onAddToCart}
-      />
+      <WeverseSection onProductClick={onProductClick} onAddToCart={onAddToCart} />
     </div>
   );
 };

@@ -6,6 +6,8 @@ import Home from './pages/Home';
 import Collections from './pages/Collections';
 import PreOrder from './pages/PreOrder';
 import NewArrivals from './pages/NewArrivals';
+import TrackOrder from './pages/TrackOrder';
+import Help from './pages/Help';
 import LoginModal from './components/LoginModal';
 import CartModal from './components/CartModal';
 import ProductModal from './components/ProductModal';
@@ -166,6 +168,20 @@ function App() {
     });
 
     setCartCount(prev => prev + 1);
+    
+    // Show notification
+    const notification = document.createElement('div');
+    notification.className = 'notification show';
+    notification.innerHTML = `
+      <i class="fas fa-check-circle"></i>
+      <span>Added to cart!</span>
+    `;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+      notification.classList.remove('show');
+      setTimeout(() => notification.remove(), 300);
+    }, 2000);
   };
 
   const handleRemoveFromCart = (productId) => {
@@ -198,6 +214,8 @@ function App() {
           <Route path="/collections" element={<Collections />} />
           <Route path="/preorder" element={<PreOrder />} />
           <Route path="/new" element={<NewArrivals />} />
+          <Route path="/track-order" element={<TrackOrder />} />
+          <Route path="/help" element={<Help />} />
           <Route path="/wishlist" element={<WishlistPage />} />
         </Routes>
         

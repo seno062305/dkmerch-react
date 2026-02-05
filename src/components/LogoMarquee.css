@@ -35,10 +35,17 @@
   justify-content: center;
   min-width: 180px;
   transition: var(--transition);
+  cursor: pointer;
+  outline: none;
 }
 
 .logo-item:hover {
   transform: translateY(-10px);
+}
+
+.logo-item:focus {
+  outline: 2px solid var(--primary-color);
+  border-radius: 12px;
 }
 
 .logo-circle {
@@ -117,6 +124,7 @@
   width: 200px; height: 100%;
   background: linear-gradient(90deg, white, transparent);
   z-index: 2;
+  pointer-events: none;
 }
 
 .marquee-gradient-right {
@@ -125,6 +133,7 @@
   width: 200px; height: 100%;
   background: linear-gradient(90deg, transparent, white);
   z-index: 2;
+  pointer-events: none;
 }
 
 /* Responsive */

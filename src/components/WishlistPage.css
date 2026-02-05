@@ -54,6 +54,8 @@
     background: none;
     font-size: 20px;
     transition: var(--transition);
+    border: none;
+    cursor: pointer;
 }
 
 .wishlist-item-remove:hover {

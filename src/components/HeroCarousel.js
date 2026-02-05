@@ -1,9 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import './HeroCarousel.css';
 
 const HeroCarousel = ({ slides }) => {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
+
+  const totalSlides = slides.length;
+
+  const goToSlide = useCallback((index) => {
+    // Infinite loop logic
+    let newIndex = index;
+    if (index >= totalSlides) {
+      newIndex = 0;
+    } else if (index < 0) {
+      newIndex = totalSlides - 1;
+    }
+    setCurrentSlide(newIndex);
+  }, [totalSlides]);
 
   useEffect(() => {
     if (!isAutoPlaying) return;
@@ -13,12 +26,7 @@ const HeroCarousel = ({ slides }) => {
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [currentSlide, isAutoPlaying]);
-
-  const goToSlide = (index) => {
-    const newIndex = (index + slides.length) % slides.length;
-    setCurrentSlide(newIndex);
-  };
+  }, [currentSlide, isAutoPlaying, goToSlide]);
 
   const handlePrev = () => {
     goToSlide(currentSlide - 1);
