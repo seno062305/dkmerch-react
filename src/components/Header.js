@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import './Header.css';
 
@@ -8,19 +8,6 @@ const Header = ({ cartCount, wishlistCount, onLoginClick, onCartClick }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const navigate = useNavigate();
-
-  // Prevent body scroll when mobile menu is open
-  useEffect(() => {
-    if (isMobileMenuOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [isMobileMenuOpen]);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -32,7 +19,7 @@ const Header = ({ cartCount, wishlistCount, onLoginClick, onCartClick }) => {
 
   const toggleMobileMenu = () => {
     setIsMobileMenuOpen(!isMobileMenuOpen);
-    setIsDropdownOpen(false);
+    setIsDropdownOpen(false); // Close dropdown when toggling menu
   };
 
   const toggleDropdown = (e) => {
@@ -44,14 +31,6 @@ const Header = ({ cartCount, wishlistCount, onLoginClick, onCartClick }) => {
   const closeMenu = () => {
     setIsMobileMenuOpen(false);
     setIsDropdownOpen(false);
-  };
-
-  const handleCollectionsClick = (e) => {
-    if (window.innerWidth <= 992) {
-      toggleDropdown(e);
-    } else {
-      closeMenu();
-    }
   };
 
   return (
@@ -72,7 +51,14 @@ const Header = ({ cartCount, wishlistCount, onLoginClick, onCartClick }) => {
               <li className={`dropdown ${isDropdownOpen ? 'active' : ''}`}>
                 <Link 
                   to="/collections" 
-                  onClick={handleCollectionsClick}
+                  onClick={(e) => {
+                    // On mobile, toggle dropdown
+                    if (window.innerWidth <= 992) {
+                      toggleDropdown(e);
+                    } else {
+                      closeMenu();
+                    }
+                  }}
                 >
                   Collections <i className="fas fa-chevron-down"></i>
                 </Link>
@@ -120,7 +106,6 @@ const Header = ({ cartCount, wishlistCount, onLoginClick, onCartClick }) => {
             <button 
               className={`mobile-menu-toggle ${isMobileMenuOpen ? 'active' : ''}`}
               onClick={toggleMobileMenu}
-              aria-label="Toggle mobile menu"
             >
               <span></span>
               <span></span>
@@ -149,11 +134,6 @@ const Header = ({ cartCount, wishlistCount, onLoginClick, onCartClick }) => {
             </form>
           </div>
         </div>
-      )}
-
-      {/* Mobile Menu Overlay */}
-      {isMobileMenuOpen && (
-        <div className="mobile-overlay" onClick={closeMenu}></div>
       )}
     </header>
   );

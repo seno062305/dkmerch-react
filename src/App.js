@@ -20,7 +20,7 @@ function App() {
   const [showProductModal, setShowProductModal] = useState(false);
   const [currentProduct, setCurrentProduct] = useState(null);
   const [cartCount, setCartCount] = useState(2);
-  const [wishlistCount, setWishlistCount] = useState(3);
+  const [wishlistCount, setWishlistCount] = useState(5);
   const [cart, setCart] = useState([
     { id: 4, quantity: 1 },
     { id: 6, quantity: 2 }
