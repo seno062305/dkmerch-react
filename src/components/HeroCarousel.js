@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import './HeroCarousel.css';
 
 const HeroCarousel = ({ slides }) => {
+  const navigate = useNavigate();
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
 
@@ -40,6 +42,28 @@ const HeroCarousel = ({ slides }) => {
     setTimeout(() => setIsAutoPlaying(true), 10000);
   };
 
+  const handleButtonClick = (slideIndex) => {
+    // Navigate based on slide index
+    if (slideIndex === 0) {
+      // "Shop Now" - go to collections
+      navigate('/collections');
+    } else if (slideIndex === 1) {
+      // "Pre-Order Now" - go to preorder
+      navigate('/preorder');
+    } else if (slideIndex === 2) {
+      // "Browse Collection" - go to collections
+      navigate('/collections');
+    }
+
+    // Smooth scroll to top after navigation
+    setTimeout(() => {
+      window.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+      });
+    }, 100);
+  };
+
   return (
     <section className="hero-carousel">
       <div className="carousel-track" style={{ transform: `translateX(-${currentSlide * 100}%)` }}>
@@ -52,9 +76,12 @@ const HeroCarousel = ({ slides }) => {
             <div className="carousel-content">
               <h1>{slide.title}</h1>
               <p>{slide.description}</p>
-              <a href="#collections" className="btn btn-primary">
+              <button 
+                className="btn btn-primary"
+                onClick={() => handleButtonClick(index)}
+              >
                 {slide.buttonText} <i className={`fas fa-${slide.buttonIcon}`}></i>
-              </a>
+              </button>
             </div>
           </div>
         ))}

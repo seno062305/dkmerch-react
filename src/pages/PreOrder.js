@@ -1,53 +1,105 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './PreOrder.css';
+import { getProducts } from '../utils/productStorage';
+import { addToCart } from '../utils/cartStorage';
+import { toggleWishlist } from '../utils/wishlistStorage';
+import { useAuth } from '../context/AuthContext';
+import { useNotification } from '../context/NotificationContext';
+import ProductModal from '../components/ProductModal';
+import LoginModal from '../components/LoginModal';
 
 const PreOrder = () => {
   const [selectedGroup, setSelectedGroup] = useState('all');
+  const [preOrderProducts, setPreOrderProducts] = useState([]);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  
+  const { isAuthenticated } = useAuth();
+  const { showNotification } = useNotification();
 
-  const preOrderProducts = [
-    {
-      id: 1,
-      name: "SEVENTEEN 'SECTOR 17' Album",
-      group: "SEVENTEEN",
-      price: 2199,
-      originalPrice: 2399,
-      releaseDate: "March 15, 2026",
-      image: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
-      description: "4th studio repackage album with 3 new tracks and exclusive photocards.",
-      stock: 100,
-      benefits: ["Early bird discount", "Exclusive photocard", "Poster included"]
-    },
-    {
-      id: 2,
-      name: "BLACKPINK 'THE ALBUM' Vinyl",
-      group: "BLACKPINK",
-      price: 4299,
-      originalPrice: 4599,
-      releaseDate: "March 20, 2026",
-      image: "https://images.unsplash.com/photo-1544785349-c4a5301826fd?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
-      description: "Limited edition vinyl version of BLACKPINK's first studio album.",
-      stock: 50,
-      benefits: ["Limited edition", "Numbered certificate", "Special packaging"]
-    },
-    {
-      id: 3,
-      name: "NewJeans 'OMG' Album",
-      group: "NEWJEANS",
-      price: 1899,
-      originalPrice: 2099,
-      releaseDate: "April 1, 2026",
-      image: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
-      description: "First full album with 12 tracks including title track 'OMG'.",
-      stock: 150,
-      benefits: ["Pre-order photocard", "Poster", "Member stickers"]
-    }
-  ];
+  useEffect(() => {
+    loadPreOrderProducts();
 
-  const groups = ['all', 'SEVENTEEN', 'BLACKPINK', 'NEWJEANS', 'BTS', 'TWICE'];
+    // Listen for product updates from admin
+    const handleProductUpdate = () => {
+      loadPreOrderProducts();
+    };
+
+    window.addEventListener('productsUpdated', handleProductUpdate);
+    window.addEventListener('storage', handleProductUpdate);
+
+    return () => {
+      window.removeEventListener('productsUpdated', handleProductUpdate);
+      window.removeEventListener('storage', handleProductUpdate);
+    };
+  }, []);
+
+  const loadPreOrderProducts = () => {
+    const allProducts = getProducts();
+    // Filter only products with isPreOrder = true
+    const filtered = allProducts.filter(product => product.isPreOrder === true);
+    setPreOrderProducts(filtered);
+  };
+
+  // Get unique groups from pre-order products
+  const groups = ['all', ...new Set(preOrderProducts.map(p => p.kpopGroup))];
 
   const filteredProducts = selectedGroup === 'all' 
     ? preOrderProducts 
-    : preOrderProducts.filter(p => p.group === selectedGroup);
+    : preOrderProducts.filter(p => p.kpopGroup === selectedGroup);
+
+  const handleProductClick = (product) => {
+    setSelectedProduct(product);
+  };
+
+  const handleCloseModal = () => {
+    setSelectedProduct(null);
+  };
+
+  const handleRequireLogin = () => {
+    setSelectedProduct(null);
+    setShowLoginModal(true);
+  };
+
+  const handleCloseLoginModal = () => {
+    setShowLoginModal(false);
+  };
+
+  // ✅ ADD TO CART FUNCTION
+  const handleAddToCart = (product) => {
+    if (!isAuthenticated) {
+      handleRequireLogin();
+      return;
+    }
+
+    try {
+      addToCart(product.id);
+      showNotification(`${product.name} added to cart!`, 'success');
+      
+      // Dispatch event to update cart count in navbar
+      window.dispatchEvent(new Event('storage'));
+    } catch (error) {
+      showNotification('Failed to add to cart', 'error');
+    }
+  };
+
+  // ✅ ADD TO WISHLIST FUNCTION
+  const handleAddToWishlist = (product) => {
+    if (!isAuthenticated) {
+      handleRequireLogin();
+      return;
+    }
+
+    try {
+      toggleWishlist(product.id);
+      showNotification(`${product.name} added to wishlist!`, 'success');
+      
+      // Dispatch event to update wishlist count in navbar
+      window.dispatchEvent(new Event('storage'));
+    } catch (error) {
+      showNotification('Failed to add to wishlist', 'error');
+    }
+  };
 
   return (
     <main>
@@ -77,46 +129,46 @@ const PreOrder = () => {
 
           <div className="preorder-grid">
             {filteredProducts.map(product => (
-              <div key={product.id} className="preorder-card">
+              <div 
+                key={product.id} 
+                className="preorder-card"
+                onClick={() => handleProductClick(product)}
+                style={{ cursor: 'pointer' }}
+              >
                 <div className="preorder-badge">PRE-ORDER</div>
                 <div className="preorder-image">
                   <img src={product.image} alt={product.name} />
-                  <div className="release-date">
-                    <i className="fas fa-calendar-alt"></i>
-                    <span>{product.releaseDate}</span>
-                  </div>
                 </div>
                 <div className="preorder-info">
-                  <div className="product-group">{product.group}</div>
+                  <div className="product-group">{product.kpopGroup}</div>
                   <h3 className="product-name">{product.name}</h3>
-                  <p className="product-description">{product.description}</p>
                   
-                  <div className="benefits">
-                    <h4>Pre-order Benefits:</h4>
-                    <ul>
-                      {product.benefits.map((benefit, index) => (
-                        <li key={index}>
-                          <i className="fas fa-check-circle"></i> {benefit}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
                   <div className="product-price">
                     <span className="current-price">₱{product.price.toLocaleString()}</span>
-                    <span className="original-price">₱{product.originalPrice.toLocaleString()}</span>
-                    <span className="discount">
-                      {Math.round((1 - product.price/product.originalPrice) * 100)}% OFF
-                    </span>
+                    {product.isSale && product.originalPrice > product.price && (
+                      <>
+                        <span className="original-price">₱{product.originalPrice.toLocaleString()}</span>
+                        <span className="discount">
+                          {Math.round((1 - product.price/product.originalPrice) * 100)}% OFF
+                        </span>
+                      </>
+                    )}
                   </div>
 
                   <div className="stock-info">
                     <i className="fas fa-box"></i>
-                    <span>{product.stock} slots remaining</span>
+                    <span>{product.stock > 0 ? `${product.stock} slots remaining` : 'Out of stock'}</span>
                   </div>
 
-                  <button className="btn btn-primary">
-                    <i className="fas fa-shopping-cart"></i> Pre-Order Now
+                  <button 
+                    className="btn btn-primary"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleProductClick(product);
+                    }}
+                  >
+                    <i className="fas fa-shopping-cart"></i> 
+                    {isAuthenticated ? 'Add to Cart' : 'Pre-Order Now'}
                   </button>
                 </div>
               </div>
@@ -132,6 +184,20 @@ const PreOrder = () => {
           )}
         </section>
       </div>
+
+      {selectedProduct && (
+        <ProductModal
+          product={selectedProduct}
+          onClose={handleCloseModal}
+          onRequireLogin={handleRequireLogin}
+          onAddToCart={handleAddToCart}
+          onAddToWishlist={handleAddToWishlist}
+        />
+      )}
+
+      {showLoginModal && (
+        <LoginModal onClose={handleCloseLoginModal} />
+      )}
     </main>
   );
 };

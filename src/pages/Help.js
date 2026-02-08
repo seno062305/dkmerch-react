@@ -1,165 +1,151 @@
-import React, { useState } from 'react';
+import React, { useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import './Help.css';
 
 const Help = () => {
-  const [activeCategory, setActiveCategory] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const location = useLocation();
 
-  const faqs = [
-    {
-      category: 'orders',
-      question: 'How do I place an order?',
-      answer: 'Browse our collections, add items to your cart, and proceed to checkout. You can pay via credit card, debit card, or online banking.'
-    },
-    {
-      category: 'orders',
-      question: 'Can I modify or cancel my order?',
-      answer: 'You can modify or cancel your order within 1 hour of placing it. After that, please contact our customer service team for assistance.'
-    },
-    {
-      category: 'shipping',
-      question: 'How long does shipping take?',
-      answer: 'Standard shipping takes 3-5 business days within Metro Manila and 5-7 business days for provincial areas. Express shipping is available for 1-2 days delivery.'
-    },
-    {
-      category: 'shipping',
-      question: 'Do you ship internationally?',
-      answer: 'Currently, we only ship within the Philippines. International shipping will be available soon!'
-    },
-    {
-      category: 'payment',
-      question: 'What payment methods do you accept?',
-      answer: 'We accept credit cards (Visa, Mastercard), debit cards, GCash, PayMaya, and bank transfers.'
-    },
-    {
-      category: 'payment',
-      question: 'Is my payment information secure?',
-      answer: 'Yes! We use industry-standard encryption to protect your payment information. We never store your full credit card details.'
-    },
-    {
-      category: 'returns',
-      question: 'What is your return policy?',
-      answer: 'We accept returns within 7 days of delivery for unopened items in original packaging. Please contact us to initiate a return.'
-    },
-    {
-      category: 'returns',
-      question: 'How do I return an item?',
-      answer: 'Contact our customer service team with your order number. We\'ll provide you with a return shipping label and instructions.'
-    },
-    {
-      category: 'products',
-      question: 'Are all products authentic?',
-      answer: 'Yes! We only sell 100% authentic K-Pop merchandise sourced directly from official distributors and labels.'
-    },
-    {
-      category: 'products',
-      question: 'When will pre-order items be shipped?',
-      answer: 'Pre-order items are shipped on or before the release date specified on the product page. You\'ll receive a notification when your item ships.'
+  useEffect(() => {
+    // Handle anchor navigation after component mounts
+    if (location.hash) {
+      const id = location.hash.replace('#', '');
+      setTimeout(() => {
+        const element = document.getElementById(id);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 100);
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  ];
-
-  const categories = [
-    { id: 'all', name: 'All', icon: 'list' },
-    { id: 'orders', name: 'Orders', icon: 'shopping-bag' },
-    { id: 'shipping', name: 'Shipping', icon: 'truck' },
-    { id: 'payment', name: 'Payment', icon: 'credit-card' },
-    { id: 'returns', name: 'Returns', icon: 'undo' },
-    { id: 'products', name: 'Products', icon: 'box' }
-  ];
-
-  const filteredFaqs = faqs.filter(faq => {
-    const categoryMatch = activeCategory === 'all' || faq.category === activeCategory;
-    const searchMatch = searchQuery === '' || 
-      faq.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      faq.answer.toLowerCase().includes(searchQuery.toLowerCase());
-    return categoryMatch && searchMatch;
-  });
+  }, [location]);
 
   return (
-    <main>
-      <div className="page-header">
-        <div className="container">
-          <h1 className="page-title">Help Center</h1>
-          <p className="page-description">Find answers to frequently asked questions</p>
-        </div>
-      </div>
-
+    <div className="help-page">
       <div className="container">
-        <section className="help-page">
-          <div className="help-search">
-            <div className="search-box">
-              <i className="fas fa-search"></i>
-              <input
-                type="text"
-                placeholder="Search for help..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+        <div className="help-header">
+          <h1>Help Center</h1>
+          <p>Find answers to your questions and learn more about our services</p>
+        </div>
+
+        {/* FAQ Section */}
+        <section id="faq" className="help-section">
+          <h2><i className="fas fa-question-circle"></i> Frequently Asked Questions</h2>
+          <div className="faq-grid">
+            <div className="faq-item">
+              <h3>How do I place an order?</h3>
+              <p>Browse our products, add items to your cart, and proceed to checkout. You'll need to create an account or checkout as a guest.</p>
+            </div>
+            <div className="faq-item">
+              <h3>Do you ship internationally?</h3>
+              <p>Yes! We ship to most countries worldwide. Shipping fees and delivery times vary by location.</p>
+            </div>
+            <div className="faq-item">
+              <h3>Are all products authentic?</h3>
+              <p>Absolutely! We guarantee that all our K-Pop merchandise is 100% authentic and officially licensed.</p>
+            </div>
+            <div className="faq-item">
+              <h3>How long does shipping take?</h3>
+              <p>Domestic orders typically arrive within 3-7 business days. International orders may take 10-21 business days.</p>
             </div>
           </div>
+        </section>
 
-          <div className="help-categories">
-            {categories.map(cat => (
-              <button
-                key={cat.id}
-                className={`category-btn ${activeCategory === cat.id ? 'active' : ''}`}
-                onClick={() => setActiveCategory(cat.id)}
-              >
-                <i className={`fas fa-${cat.icon}`}></i>
-                <span>{cat.name}</span>
-              </button>
-            ))}
+        {/* Shipping Section */}
+        <section id="shipping" className="help-section">
+          <h2><i className="fas fa-shipping-fast"></i> Shipping Information</h2>
+          <div className="info-content">
+            <div className="info-card">
+              <h3>Domestic Shipping</h3>
+              <ul>
+                <li>Standard Shipping: ₱150 (3-7 business days)</li>
+                <li>Express Shipping: ₱300 (1-3 business days)</li>
+                <li>Free shipping on orders over ₱2,500</li>
+              </ul>
+            </div>
+            <div className="info-card">
+              <h3>International Shipping</h3>
+              <ul>
+                <li>Standard International: Starting at ₱800</li>
+                <li>Express International: Starting at ₱1,500</li>
+                <li>Delivery time: 10-21 business days</li>
+              </ul>
+            </div>
+            <div className="info-card">
+              <h3>Order Processing</h3>
+              <ul>
+                <li>Orders are processed within 1-2 business days</li>
+                <li>You'll receive a tracking number via email</li>
+                <li>Track your order in the Track Order page</li>
+              </ul>
+            </div>
           </div>
+        </section>
 
-          <div className="faq-section">
-            {filteredFaqs.map((faq, index) => (
-              <div key={index} className="faq-item">
-                <div className="faq-question">
-                  <i className="fas fa-question-circle"></i>
-                  <h3>{faq.question}</h3>
-                </div>
-                <div className="faq-answer">
-                  <p>{faq.answer}</p>
-                </div>
-              </div>
-            ))}
-
-            {filteredFaqs.length === 0 && (
-              <div className="no-results">
-                <i className="fas fa-search"></i>
-                <h3>No results found</h3>
-                <p>Try searching with different keywords</p>
-              </div>
-            )}
+        {/* Returns Section */}
+        <section id="returns" className="help-section">
+          <h2><i className="fas fa-undo"></i> Return Policy</h2>
+          <div className="info-content">
+            <div className="info-card">
+              <h3>Return Window</h3>
+              <p>You have 14 days from the date of delivery to initiate a return for most items.</p>
+            </div>
+            <div className="info-card">
+              <h3>Eligible Items</h3>
+              <ul>
+                <li>Items must be unused and in original packaging</li>
+                <li>Albums must have intact shrink wrap</li>
+                <li>Photocards and collectibles must be in mint condition</li>
+              </ul>
+            </div>
+            <div className="info-card">
+              <h3>Non-Returnable Items</h3>
+              <ul>
+                <li>Opened albums or damaged packaging</li>
+                <li>Pre-order items (special circumstances only)</li>
+                <li>Sale or clearance items</li>
+              </ul>
+            </div>
+            <div className="info-card">
+              <h3>How to Return</h3>
+              <ol>
+                <li>Contact our support team at support@dkmerch.com</li>
+                <li>Provide your order number and reason for return</li>
+                <li>Receive return authorization and instructions</li>
+                <li>Ship the item back using provided label</li>
+                <li>Refund processed within 5-7 business days</li>
+              </ol>
+            </div>
           </div>
+        </section>
 
-          <div className="contact-support">
-            <h2>Still need help?</h2>
-            <p>Our customer support team is here to assist you</p>
-            <div className="contact-methods">
-              <div className="contact-card">
-                <i className="fas fa-envelope"></i>
-                <h4>Email Us</h4>
-                <p>support@dkmerch.com</p>
-                <small>We'll respond within 24 hours</small>
-              </div>
-              <div className="contact-card">
-                <i className="fas fa-phone"></i>
-                <h4>Call Us</h4>
-                <p>+63 912 345 6789</p>
-                <small>Mon-Sat: 9AM-6PM</small>
-              </div>
-              <div className="contact-card">
-                <i className="fas fa-comments"></i>
-                <h4>Live Chat</h4>
-                <p>Chat with us now</p>
-                <button className="btn btn-primary btn-small">Start Chat</button>
-              </div>
+        {/* Contact Section */}
+        <section className="help-section contact-section">
+          <h2><i className="fas fa-envelope"></i> Still Need Help?</h2>
+          <p>Our customer support team is here to assist you!</p>
+          <div className="contact-options">
+            <div className="contact-option">
+              <i className="fas fa-envelope"></i>
+              <h3>Email Us</h3>
+              <p>support@dkmerch.com</p>
+              <p className="response-time">Response within 24 hours</p>
+            </div>
+            <div className="contact-option">
+              <i className="fas fa-phone"></i>
+              <h3>Call Us</h3>
+              <p>+63 912 345 6789</p>
+              <p className="response-time">Mon-Sat: 9AM-6PM</p>
+            </div>
+            <div className="contact-option">
+              <i className="fab fa-facebook-messenger"></i>
+              <h3>Live Chat</h3>
+              <p>Chat with us on Facebook</p>
+              <p className="response-time">Mon-Sat: 9AM-6PM</p>
             </div>
           </div>
         </section>
       </div>
-    </main>
+    </div>
   );
 };
 

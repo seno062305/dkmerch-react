@@ -16,32 +16,45 @@ const LogoMarquee = () => {
     { name: 'NEWJEANS', logo: '/images/newjeans.jpg' }
   ];
 
-  // Duplicate the array to create a seamless loop
+  // duplicate para seamless loop
   const duplicatedGroups = [...groups, ...groups];
 
   const handleGroupClick = (groupName) => {
-    navigate(`/collections?group=${groupName}`);
+    navigate('/collections', {
+      state: {
+        filterGroup: groupName,
+        scrollToTop: true
+      }
+    });
+
+    setTimeout(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 100);
   };
 
   return (
     <section className="logo-marquee-section">
       <div className="container">
-        <h2 className="logo-marquee-title">Featured <span>K-Pop Groups</span></h2>
+        <h2 className="logo-marquee-title">
+          Featured <span>K-Pop Groups</span>
+        </h2>
       </div>
+
       <div className="marquee-container">
-        <div className="marquee-gradient-left"></div>
-        <div className="marquee-gradient-right"></div>
+        <div className="marquee-gradient-left" />
+        <div className="marquee-gradient-right" />
+
         <div className="marquee-track">
           {duplicatedGroups.map((group, index) => (
-            <div 
-              key={index} 
+            <div
+              key={index}
               className="logo-item"
-              onClick={() => handleGroupClick(group.name)}
               role="button"
               tabIndex={0}
-              onKeyPress={(e) => {
-                if (e.key === 'Enter') handleGroupClick(group.name);
-              }}
+              onClick={() => handleGroupClick(group.name)}
+              onKeyDown={(e) =>
+                e.key === 'Enter' && handleGroupClick(group.name)
+              }
             >
               <div className="logo-circle">
                 <img src={group.logo} alt={group.name} />

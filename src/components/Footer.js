@@ -1,9 +1,10 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import './Footer.css';
 
 const Footer = () => {
   const currentYear = new Date().getFullYear();
+  const navigate = useNavigate();
 
   const socialLinks = [
     { icon: 'facebook-f', url: '#', label: 'Facebook' },
@@ -13,18 +14,33 @@ const Footer = () => {
     { icon: 'tiktok', url: '#', label: 'TikTok' }
   ];
 
+  // Handle navigation with scroll to top
+  const handleNavClick = (e, path) => {
+    e.preventDefault();
+    navigate(path);
+    setTimeout(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 50);
+  };
+
+  // Handle navigation to help page with section
+  const handleHelpSectionClick = (e, section) => {
+    e.preventDefault();
+    navigate('/help');
+    setTimeout(() => {
+      const element = document.getElementById(section);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }, 100);
+  };
+
   const quickLinks = [
     { label: 'Home', path: '/' },
     { label: 'Collections', path: '/collections' },
-    { label: 'Pre-Order', path: '/preorder' },
-    { label: 'New Arrivals', path: '/new' }
-  ];
-
-  const customerLinks = [
-    { label: 'Track Order', path: '/track-order' },
-    { label: 'Shipping Info', path: '/shipping' },
-    { label: 'Returns', path: '/returns' },
-    { label: 'FAQ', path: '/faq' }
+    { label: 'Pre-Order', path: '/preorder' }
   ];
 
   return (
@@ -48,7 +64,12 @@ const Footer = () => {
             <ul className="footer-links">
               {quickLinks.map((link, index) => (
                 <li key={index}>
-                  <Link to={link.path}>{link.label}</Link>
+                  <a 
+                    href={link.path}
+                    onClick={(e) => handleNavClick(e, link.path)}
+                  >
+                    {link.label}
+                  </a>
                 </li>
               ))}
             </ul>
@@ -57,11 +78,38 @@ const Footer = () => {
           <div className="footer-section">
             <h4>Customer Service</h4>
             <ul className="footer-links">
-              {customerLinks.map((link, index) => (
-                <li key={index}>
-                  <Link to={link.path}>{link.label}</Link>
-                </li>
-              ))}
+              <li>
+                <a 
+                  href="/track-order"
+                  onClick={(e) => handleNavClick(e, '/track-order')}
+                >
+                  Track Order
+                </a>
+              </li>
+              <li>
+                <a 
+                  href="/help#shipping"
+                  onClick={(e) => handleHelpSectionClick(e, 'shipping')}
+                >
+                  Shipping Info
+                </a>
+              </li>
+              <li>
+                <a 
+                  href="/help#returns"
+                  onClick={(e) => handleHelpSectionClick(e, 'returns')}
+                >
+                  Returns
+                </a>
+              </li>
+              <li>
+                <a 
+                  href="/help#faq"
+                  onClick={(e) => handleHelpSectionClick(e, 'faq')}
+                >
+                  FAQ
+                </a>
+              </li>
             </ul>
           </div>
 

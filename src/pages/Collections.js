@@ -1,229 +1,282 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useSearchParams, useNavigate } from 'react-router-dom';
+import { getProducts } from '../utils/productStorage';
+import { addToCart } from '../utils/cartStorage';
+import { toggleWishlist, isInWishlist } from '../utils/wishlistStorage';
+import { useNotification } from '../context/NotificationContext';
+import ProductModal from '../components/ProductModal';
 import './Collections.css';
 
 const Collections = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [selectedCategory, setSelectedCategory] = useState(searchParams.get('category') || 'all');
-  const [selectedGroup, setSelectedGroup] = useState(searchParams.get('group') || 'all');
+  const { showNotification } = useNotification();
+  const [allProducts, setAllProducts] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedGroup, setSelectedGroup] = useState('all');
+  const [highlightedProductId, setHighlightedProductId] = useState(null);
+  const [selectedProduct, setSelectedProduct] = useState(null);
 
-  const products = [
-    { 
-      id: 1,  
-      name: "BTS 'Proof' Album Set",                   
-      category: "albums",      
-      price: 3599, 
-      originalPrice: 3999, 
-      image: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80", 
-      description: "Limited edition album set includes CD, photobook, photocard set, poster and more.", 
-      stock: 15, 
-      isPreOrder: false, 
-      isSale: true,
-      reviewCount: 24,
-      kpopGroup: "BTS",          
-      rating: 4.8 
-    },
-    { 
-      id: 2,  
-      name: "BLACKPINK 'BORN PINK' Album",            
-      category: "albums",      
-      price: 2499, 
-      originalPrice: 2799, 
-      image: "https://images.unsplash.com/photo-1511379938547-c1f69419868d?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80", 
-      description: "Second studio album with 8 tracks including 'Pink Venom' and 'Shut Down'.", 
-      stock: 8, 
-      isPreOrder: false, 
-      isSale: true,
-      reviewCount: 18,
-      kpopGroup: "BLACKPINK",    
-      rating: 4.9 
-    },
-    { 
-      id: 3,  
-      name: "TWICE Official Light Stick",             
-      category: "lightsticks", 
-      price: 3299, 
-      originalPrice: 3499, 
-      image: "https://images.unsplash.com/photo-1578269174936-2709b6aeb913?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80", 
-      description: "Candybong Z with Bluetooth connectivity and multiple light modes.", 
-      stock: 5, 
-      isPreOrder: false, 
-      isSale: false,
-      reviewCount: 32,
-      kpopGroup: "TWICE",           
-      rating: 4.7 
-    },
-    { 
-      id: 4,  
-      name: "SEVENTEEN 'SECTOR 17' Album",            
-      category: "albums",      
-      price: 2199, 
-      originalPrice: 2399, 
-      image: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80", 
-      description: "4th studio repackage album with 3 new tracks and exclusive photocards.", 
-      stock: 0, 
-      isPreOrder: true, 
-      isSale: true,
-      reviewCount: 15,
-      kpopGroup: "SEVENTEEN",     
-      rating: 4.6 
-    },
-    { 
-      id: 5,  
-      name: "BTS Jimin Photocard Set",                
-      category: "photocards",  
-      price: 899,  
-      originalPrice: 999,  
-      image: "https://images.unsplash.com/photo-1516280440614-37939bbacd81?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80", 
-      description: "Set of 5 exclusive Jimin photocards from various album releases.", 
-      stock: 22, 
-      isPreOrder: false, 
-      isSale: false,
-      reviewCount: 42,
-      kpopGroup: "BTS",          
-      rating: 4.9 
-    },
-    { 
-      id: 6,  
-      name: "STRAY KIDS 'MAXIDENT' Album",            
-      category: "albums",      
-      price: 1999, 
-      originalPrice: 2199, 
-      image: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80", 
-      description: "Mini album with 8 tracks including 'CASE 143' and exclusive member versions.", 
-      stock: 12, 
-      isPreOrder: false, 
-      isSale: true,
-      reviewCount: 28,
-      kpopGroup: "STRAY KIDS",   
-      rating: 4.8 
-    },
-    { 
-      id: 7,  
-      name: "BTS 'LOVE YOURSELF' Hoodie",             
-      category: "apparel",     
-      price: 1899, 
-      originalPrice: 2199, 
-      image: "https://images.unsplash.com/photo-1523381210434-271e8be1f52b?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80", 
-      description: "Official BTS merch hoodie with 'LOVE YOURSELF' logo and album artwork.", 
-      stock: 7, 
-      isPreOrder: false, 
-      isSale: true,
-      reviewCount: 36,
-      kpopGroup: "BTS",          
-      rating: 4.5 
-    },
-    { 
-      id: 8,  
-      name: "BLACKPINK 'THE ALBUM' Vinyl",            
-      category: "albums",      
-      price: 4299, 
-      originalPrice: 4599, 
-      image: "https://images.unsplash.com/photo-1544785349-c4a5301826fd?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80", 
-      description: "Limited edition vinyl version of BLACKPINK's first studio album.", 
-      stock: 3, 
-      isPreOrder: true, 
-      isSale: false,
-      reviewCount: 9,
-      kpopGroup: "BLACKPINK",    
-      rating: 5.0 
+  const loadProducts = () => {
+    setAllProducts(getProducts());
+  };
+
+  useEffect(() => {
+    loadProducts();
+
+    // SAME TAB (Admin add/edit/delete)
+    window.addEventListener('dkmerch-products-updated', loadProducts);
+
+    // CART / WISHLIST / OTHER TAB
+    window.addEventListener('storage', loadProducts);
+
+    return () => {
+      window.removeEventListener('dkmerch-products-updated', loadProducts);
+      window.removeEventListener('storage', loadProducts);
+    };
+  }, []);
+
+  // Handle filtering from LogoMarquee or search
+  useEffect(() => {
+    // Check for group filter from LogoMarquee (via state)
+    if (location.state?.filterGroup) {
+      setSelectedGroup(location.state.filterGroup);
+      
+      // Scroll to top if requested
+      if (location.state.scrollToTop) {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      
+      // Clear the state to prevent re-applying on future navigations
+      window.history.replaceState({}, document.title);
     }
+
+    // Check for product ID from search (via query param)
+    const productId = searchParams.get('product');
+    if (productId) {
+      setHighlightedProductId(parseInt(productId));
+      
+      // Scroll to highlighted product after a short delay
+      setTimeout(() => {
+        const element = document.querySelector(`[data-product-id="${productId}"]`);
+        if (element) {
+          element.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'center' 
+          });
+        }
+      }, 300);
+
+      // Remove highlight after 3 seconds
+      setTimeout(() => {
+        setHighlightedProductId(null);
+      }, 3000);
+    }
+  }, [location.state, searchParams]);
+
+  const categories = [
+    'all',
+    'albums',
+    'photocards',
+    'lightsticks',
+    'apparel',
+    'accessories'
   ];
 
-  const categories = ['all', 'albums', 'photocards', 'lightsticks', 'apparel', 'accessories'];
-  const groups = ['all', 'BTS', 'BLACKPINK', 'TWICE', 'SEVENTEEN', 'STRAY KIDS'];
+  const groups = [
+    'all',
+    'BTS',
+    'BLACKPINK',
+    'TWICE',
+    'SEVENTEEN',
+    'STRAY KIDS',
+    'EXO',
+    'RED VELVET',
+    'NEWJEANS'
+  ];
 
-  const filteredProducts = products.filter(product => {
-    const categoryMatch = selectedCategory === 'all' || product.category === selectedCategory;
-    const groupMatch = selectedGroup === 'all' || product.kpopGroup === selectedGroup;
+  const filteredProducts = allProducts.filter(product => {
+    const categoryMatch =
+      selectedCategory === 'all' || product.category === selectedCategory;
+    const groupMatch =
+      selectedGroup === 'all' || product.kpopGroup === selectedGroup;
     return categoryMatch && groupMatch;
   });
 
-  useEffect(() => {
-    const category = searchParams.get('category');
-    const group = searchParams.get('group');
-    if (category) setSelectedCategory(category);
-    if (group) setSelectedGroup(group);
-  }, [searchParams]);
+  const handleResetFilters = () => {
+    setSelectedCategory('all');
+    setSelectedGroup('all');
+  };
+
+  const handleProductClick = (product) => {
+    setSelectedProduct(product);
+  };
+
+  const handleCloseModal = () => {
+    setSelectedProduct(null);
+  };
+
+  // ✅ CORRECT: Use addToCart from cartStorage
+  const handleAddToCart = (product) => {
+    try {
+      if (product.stock === 0 && !product.isPreOrder) {
+        showNotification('Product is out of stock', 'error');
+        return;
+      }
+
+      addToCart(product.id);
+      showNotification(`${product.name} added to cart!`, 'success');
+      
+      // Trigger storage event for other components
+      window.dispatchEvent(new Event('storage'));
+    } catch (error) {
+      console.error('Error adding to cart:', error);
+      showNotification('Error adding to cart', 'error');
+    }
+  };
+
+  // ✅ CORRECT: Use toggleWishlist from wishlistStorage (stores IDs only)
+  const handleAddToWishlist = (product) => {
+    try {
+      const wasInWishlist = isInWishlist(product.id);
+      
+      toggleWishlist(product.id);
+      
+      if (wasInWishlist) {
+        showNotification(`${product.name} removed from wishlist!`, 'success');
+      } else {
+        showNotification(`${product.name} added to wishlist!`, 'success');
+      }
+      
+      // Trigger storage event
+      window.dispatchEvent(new Event('storage'));
+    } catch (error) {
+      console.error('Error updating wishlist:', error);
+      showNotification('Error updating wishlist', 'error');
+    }
+  };
 
   return (
-    <main>
-      <div className="page-header">
-        <div className="container">
-          <h1 className="page-title">Our Collections</h1>
-          <p className="page-description">Explore authentic K-Pop merchandise from your favorite artists</p>
+    <div className="collections-page">
+      <div className="collections-header">
+        <h1>All Collections</h1>
+        <p>Explore our complete K-Pop merchandise collection</p>
+      </div>
+
+      <div className="collections-filters">
+        <div className="filters-single-line">
+          <div className="filter-group">
+            <label>Category:</label>
+            <div className="filter-buttons">
+              {categories.map(cat => (
+                <button
+                  key={cat}
+                  className={`filter-btn ${selectedCategory === cat ? 'active' : ''}`}
+                  onClick={() => setSelectedCategory(cat)}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="filter-divider" />
+
+          <div className="filter-group">
+            <label>Group:</label>
+            <div className="filter-buttons">
+              {groups.map(group => (
+                <button
+                  key={group}
+                  className={`filter-btn ${selectedGroup === group ? 'active' : ''}`}
+                  onClick={() => setSelectedGroup(group)}
+                >
+                  {group}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="container">
-        <section className="collections-page">
-          <div className="filters">
-            <div className="filter-group">
-              <h3>Category</h3>
-              <div className="filter-options">
-                {categories.map(cat => (
-                  <button
-                    key={cat}
-                    className={`filter-btn ${selectedCategory === cat ? 'active' : ''}`}
-                    onClick={() => setSelectedCategory(cat)}
-                  >
-                    {cat.charAt(0).toUpperCase() + cat.slice(1)}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="filter-group">
-              <h3>K-Pop Group</h3>
-              <div className="filter-options">
-                {groups.map(group => (
-                  <button
-                    key={group}
-                    className={`filter-btn ${selectedGroup === group ? 'active' : ''}`}
-                    onClick={() => setSelectedGroup(group)}
-                  >
-                    {group}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="products-grid">
-            {filteredProducts.map(product => (
-              <div key={product.id} className="product-card">
-                {product.isSale && <span className="badge sale-badge">SALE</span>}
-                {product.isPreOrder && <span className="badge preorder-badge">PRE-ORDER</span>}
-                <div className="product-image">
-                  <img src={product.image} alt={product.name} />
-                </div>
-                <div className="product-info">
-                  <div className="product-group">{product.kpopGroup}</div>
-                  <h3 className="product-name">{product.name}</h3>
-                  <div className="product-price">
-                    <span className="current-price">₱{product.price.toLocaleString()}</span>
-                    {product.originalPrice > product.price && (
-                      <span className="original-price">₱{product.originalPrice.toLocaleString()}</span>
-                    )}
-                  </div>
-                  <button className="btn btn-primary btn-small">
-                    <i className="fas fa-shopping-cart"></i> Add to Cart
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {filteredProducts.length === 0 && (
-            <div className="no-results">
-              <i className="fas fa-box-open"></i>
-              <h3>No products found</h3>
-              <p>Try adjusting your filters</p>
-            </div>
-          )}
-        </section>
+      <div className="results-count">
+        <p>
+          Showing {filteredProducts.length} product{filteredProducts.length !== 1 ? 's' : ''}
+          {selectedGroup !== 'all' && ` for ${selectedGroup}`}
+          {selectedCategory !== 'all' && ` in ${selectedCategory}`}
+        </p>
       </div>
-    </main>
+
+      {filteredProducts.length === 0 ? (
+        <div className="no-results">
+          <i className="fas fa-box-open"></i>
+          <p>
+            {selectedGroup !== 'all' 
+              ? `No products found for ${selectedGroup}`
+              : 'No products available'}
+          </p>
+          {(selectedGroup !== 'all' || selectedCategory !== 'all') && (
+            <button className="reset-filters-btn" onClick={handleResetFilters}>
+              Reset Filters
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="collections-grid">
+          {filteredProducts.map(product => (
+            <div
+              key={product.id}
+              data-product-id={product.id}
+              className={`collection-card ${highlightedProductId === product.id ? 'highlighted' : ''}`}
+              onClick={() => handleProductClick(product)}
+            >
+              {product.isSale && (
+                <div className="collection-sale-badge">SALE</div>
+              )}
+
+              <div className="collection-card-img">
+                <img src={product.image} alt={product.name} />
+              </div>
+
+              <div className="collection-card-info">
+                <div className="collection-card-group">
+                  {product.kpopGroup}
+                </div>
+
+                <div className="collection-card-name">
+                  {product.name}
+                </div>
+
+                <div className="collection-card-price-row">
+                  <span
+                    className={`collection-card-price ${product.isSale ? 'sale' : ''}`}
+                  >
+                    ₱{product.price.toLocaleString()}
+                  </span>
+
+                  {product.originalPrice > product.price && (
+                    <span className="collection-card-price-original">
+                      ₱{product.originalPrice.toLocaleString()}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Product Modal with Rating System */}
+      {selectedProduct && (
+        <ProductModal
+          product={selectedProduct}
+          onClose={handleCloseModal}
+          onAddToCart={handleAddToCart}
+          onAddToWishlist={handleAddToWishlist}
+        />
+      )}
+    </div>
   );
 };
 
