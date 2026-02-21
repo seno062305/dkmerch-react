@@ -15,7 +15,6 @@ const AdminPromos = () => {
     isActive: true
   });
 
-  // Load promos from localStorage on mount
   useEffect(() => {
     const savedPromos = localStorage.getItem('promos');
     if (savedPromos) {
@@ -23,7 +22,6 @@ const AdminPromos = () => {
     }
   }, []);
 
-  // Save promos to localStorage whenever they change
   useEffect(() => {
     if (promos.length > 0 || localStorage.getItem('promos')) {
       localStorage.setItem('promos', JSON.stringify(promos));
@@ -40,23 +38,16 @@ const AdminPromos = () => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    
     if (editingPromo) {
-      // Update existing promo
-      setPromos(promos.map(promo => 
-        promo.id === editingPromo.id 
+      setPromos(promos.map(promo =>
+        promo.id === editingPromo.id
           ? { ...formData, id: editingPromo.id }
           : promo
       ));
     } else {
-      // Create new promo
-      const newPromo = {
-        ...formData,
-        id: Date.now().toString()
-      };
+      const newPromo = { ...formData, id: Date.now().toString() };
       setPromos([...promos, newPromo]);
     }
-
     resetForm();
   };
 
@@ -82,36 +73,42 @@ const AdminPromos = () => {
 
   const toggleStatus = (id) => {
     setPromos(promos.map(promo =>
-      promo.id === id
-        ? { ...promo, isActive: !promo.isActive }
-        : promo
+      promo.id === id ? { ...promo, isActive: !promo.isActive } : promo
     ));
   };
 
   const resetForm = () => {
     setFormData({
-      code: '',
-      name: '',
-      discount: '',
-      maxDiscount: '',
-      startDate: '',
-      endDate: '',
-      isActive: true
+      code: '', name: '', discount: '', maxDiscount: '',
+      startDate: '', endDate: '', isActive: true
     });
     setEditingPromo(null);
     setShowModal(false);
   };
 
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toISOString().split('T')[0];
-  };
-
   const formatPeriod = (startDate, endDate) => {
     const start = new Date(startDate);
     const end = new Date(endDate);
-    return `${start.toISOString().split('T')[0]} - ${end.toISOString().split('T')[0]}`;
+    return `${start.toISOString().split('T')[0]} – ${end.toISOString().split('T')[0]}`;
   };
+
+  const TagIcon = () => (
+    <svg className="tag-icon" viewBox="0 0 20 20" fill="currentColor">
+      <path fillRule="evenodd" d="M17.707 9.293a1 1 0 010 1.414l-7 7a1 1 0 01-1.414 0l-7-7A.997.997 0 012 10V5a3 3 0 013-3h5c.256 0 .512.098.707.293l7 7zM5 6a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+    </svg>
+  );
+
+  const EditIcon = () => (
+    <svg viewBox="0 0 20 20" fill="currentColor">
+      <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+    </svg>
+  );
+
+  const DeleteIcon = () => (
+    <svg viewBox="0 0 20 20" fill="currentColor">
+      <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+    </svg>
+  );
 
   return (
     <div className="admin-promos">
@@ -125,6 +122,7 @@ const AdminPromos = () => {
         </button>
       </div>
 
+      {/* ── DESKTOP TABLE ── */}
       <div className="promos-table-container">
         <table className="promos-table">
           <thead>
@@ -149,12 +147,7 @@ const AdminPromos = () => {
               promos.map(promo => (
                 <tr key={promo.id}>
                   <td>
-                    <span className="promo-code">
-                      <svg className="tag-icon" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M17.707 9.293a1 1 0 010 1.414l-7 7a1 1 0 01-1.414 0l-7-7A.997.997 0 012 10V5a3 3 0 013-3h5c.256 0 .512.098.707.293l7 7zM5 6a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
-                      </svg>
-                      {promo.code}
-                    </span>
+                    <span className="promo-code"><TagIcon />{promo.code}</span>
                   </td>
                   <td>{promo.name}</td>
                   <td>{promo.discount}%</td>
@@ -162,33 +155,17 @@ const AdminPromos = () => {
                   <td>{formatPeriod(promo.startDate, promo.endDate)}</td>
                   <td>
                     <label className="toggle-switch">
-                      <input
-                        type="checkbox"
-                        checked={promo.isActive}
-                        onChange={() => toggleStatus(promo.id)}
-                      />
+                      <input type="checkbox" checked={promo.isActive} onChange={() => toggleStatus(promo.id)} />
                       <span className="toggle-slider"></span>
                     </label>
                   </td>
                   <td>
                     <div className="action-buttons">
-                      <button
-                        className="edit-btn"
-                        onClick={() => handleEdit(promo)}
-                        title="Edit"
-                      >
-                        <svg viewBox="0 0 20 20" fill="currentColor">
-                          <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                        </svg>
+                      <button className="edit-btn" onClick={() => handleEdit(promo)} title="Edit">
+                        <EditIcon />
                       </button>
-                      <button
-                        className="delete-btn"
-                        onClick={() => handleDelete(promo.id)}
-                        title="Delete"
-                      >
-                        <svg viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                        </svg>
+                      <button className="delete-btn" onClick={() => handleDelete(promo.id)} title="Delete">
+                        <DeleteIcon />
                       </button>
                     </div>
                   </td>
@@ -199,6 +176,59 @@ const AdminPromos = () => {
         </table>
       </div>
 
+      {/* ── MOBILE CARD LIST ── */}
+      <div className="promo-cards-list">
+        {promos.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '40px 20px', color: '#999', background: 'white', borderRadius: '12px' }}>
+            No promos available. Create your first promo!
+          </div>
+        ) : (
+          promos.map(promo => (
+            <div className="promo-card" key={promo.id}>
+              <div className="promo-card-header">
+                <span className="promo-card-code"><TagIcon />{promo.code}</span>
+                <div className="promo-card-toggle">
+                  <span>{promo.isActive ? 'Active' : 'Inactive'}</span>
+                  <label className="toggle-switch">
+                    <input type="checkbox" checked={promo.isActive} onChange={() => toggleStatus(promo.id)} />
+                    <span className="toggle-slider"></span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="promo-card-body">
+                <div className="promo-card-field">
+                  <label>Name</label>
+                  <span>{promo.name}</span>
+                </div>
+                <div className="promo-card-field">
+                  <label>Discount</label>
+                  <span>{promo.discount}%</span>
+                </div>
+                <div className="promo-card-field">
+                  <label>Max Discount</label>
+                  <span>₱{promo.maxDiscount}</span>
+                </div>
+                <div className="promo-card-field promo-card-period">
+                  <label>Period</label>
+                  <span>{formatPeriod(promo.startDate, promo.endDate)}</span>
+                </div>
+              </div>
+
+              <div className="promo-card-actions">
+                <button className="edit-btn" onClick={() => handleEdit(promo)} title="Edit">
+                  <EditIcon />
+                </button>
+                <button className="delete-btn" onClick={() => handleDelete(promo.id)} title="Delete">
+                  <DeleteIcon />
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* ── MODAL ── */}
       {showModal && (
         <div className="modal-overlay" onClick={resetForm}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -211,101 +241,39 @@ const AdminPromos = () => {
               <div className="form-grid">
                 <div className="form-group">
                   <label htmlFor="code">Promo Code *</label>
-                  <input
-                    type="text"
-                    id="code"
-                    name="code"
-                    value={formData.code}
-                    onChange={handleInputChange}
-                    placeholder="e.g., SUMMER25"
-                    required
-                  />
+                  <input type="text" id="code" name="code" value={formData.code} onChange={handleInputChange} placeholder="e.g., SUMMER25" required />
                 </div>
-
                 <div className="form-group">
                   <label htmlFor="name">Promo Name *</label>
-                  <input
-                    type="text"
-                    id="name"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleInputChange}
-                    placeholder="e.g., Summer Sale"
-                    required
-                  />
+                  <input type="text" id="name" name="name" value={formData.name} onChange={handleInputChange} placeholder="e.g., Summer Sale" required />
                 </div>
-
                 <div className="form-group">
                   <label htmlFor="discount">Discount (%) *</label>
-                  <input
-                    type="number"
-                    id="discount"
-                    name="discount"
-                    value={formData.discount}
-                    onChange={handleInputChange}
-                    min="1"
-                    max="100"
-                    placeholder="e.g., 25"
-                    required
-                  />
+                  <input type="number" id="discount" name="discount" value={formData.discount} onChange={handleInputChange} min="1" max="100" placeholder="e.g., 25" required />
                 </div>
-
                 <div className="form-group">
                   <label htmlFor="maxDiscount">Max Discount (₱) *</label>
-                  <input
-                    type="number"
-                    id="maxDiscount"
-                    name="maxDiscount"
-                    value={formData.maxDiscount}
-                    onChange={handleInputChange}
-                    min="1"
-                    placeholder="e.g., 500"
-                    required
-                  />
+                  <input type="number" id="maxDiscount" name="maxDiscount" value={formData.maxDiscount} onChange={handleInputChange} min="1" placeholder="e.g., 500" required />
                 </div>
-
                 <div className="form-group">
                   <label htmlFor="startDate">Start Date *</label>
-                  <input
-                    type="date"
-                    id="startDate"
-                    name="startDate"
-                    value={formData.startDate}
-                    onChange={handleInputChange}
-                    required
-                  />
+                  <input type="date" id="startDate" name="startDate" value={formData.startDate} onChange={handleInputChange} required />
                 </div>
-
                 <div className="form-group">
                   <label htmlFor="endDate">End Date *</label>
-                  <input
-                    type="date"
-                    id="endDate"
-                    name="endDate"
-                    value={formData.endDate}
-                    onChange={handleInputChange}
-                    min={formData.startDate}
-                    required
-                  />
+                  <input type="date" id="endDate" name="endDate" value={formData.endDate} onChange={handleInputChange} min={formData.startDate} required />
                 </div>
               </div>
 
               <div className="form-group checkbox-group">
                 <label>
-                  <input
-                    type="checkbox"
-                    name="isActive"
-                    checked={formData.isActive}
-                    onChange={handleInputChange}
-                  />
+                  <input type="checkbox" name="isActive" checked={formData.isActive} onChange={handleInputChange} />
                   <span>Active (users can use this promo)</span>
                 </label>
               </div>
 
               <div className="modal-actions">
-                <button type="button" className="cancel-btn" onClick={resetForm}>
-                  Cancel
-                </button>
+                <button type="button" className="cancel-btn" onClick={resetForm}>Cancel</button>
                 <button type="submit" className="submit-btn">
                   {editingPromo ? 'Update Promo' : 'Create Promo'}
                 </button>

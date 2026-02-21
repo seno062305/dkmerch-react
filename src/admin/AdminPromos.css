@@ -35,6 +35,8 @@
   cursor: pointer;
   transition: all 0.3s ease;
   box-shadow: 0 2px 8px rgba(236, 72, 153, 0.3);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .create-btn:hover {
@@ -42,6 +44,7 @@
   box-shadow: 0 4px 12px rgba(236, 72, 153, 0.4);
 }
 
+/* ── DESKTOP TABLE ── */
 .promos-table-container {
   background: white;
   border-radius: 12px;
@@ -67,6 +70,7 @@
   text-transform: uppercase;
   letter-spacing: 0.5px;
   border-bottom: 1px solid #e5e5e5;
+  white-space: nowrap;
 }
 
 .promos-table tbody tr {
@@ -79,7 +83,7 @@
 }
 
 .promos-table td {
-  padding: 18px 20px;
+  padding: 16px 20px;
   font-size: 14px;
   color: #333;
 }
@@ -197,6 +201,86 @@
   height: 16px;
 }
 
+/* ── MOBILE CARD VIEW ── */
+.promo-cards-list {
+  display: none;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.promo-card {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  border: 1px solid #f0f0f0;
+}
+
+.promo-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  gap: 8px;
+}
+
+.promo-card-code {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #ec4899;
+  font-weight: 700;
+  font-family: 'Courier New', monospace;
+  font-size: 15px;
+}
+
+.promo-card-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.promo-card-toggle span {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.promo-card-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.promo-card-field label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 3px;
+}
+
+.promo-card-field span {
+  font-size: 14px;
+  color: #333;
+  font-weight: 500;
+}
+
+.promo-card-period {
+  grid-column: 1 / -1;
+}
+
+.promo-card-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  border-top: 1px solid #f0f0f0;
+  padding-top: 12px;
+}
+
 /* Modal */
 .modal-overlay {
   position: fixed;
@@ -210,6 +294,7 @@
   justify-content: center;
   z-index: 1000;
   padding: 20px;
+  box-sizing: border-box;
 }
 
 .modal-content {
@@ -243,13 +328,14 @@
   font-size: 32px;
   color: #999;
   cursor: pointer;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 6px;
   transition: all 0.2s ease;
+  flex-shrink: 0;
 }
 
 .close-btn:hover {
@@ -289,6 +375,8 @@
   font-size: 14px;
   transition: all 0.2s ease;
   font-family: inherit;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .form-group input:focus {
@@ -361,35 +449,66 @@
   box-shadow: 0 4px 12px rgba(236, 72, 153, 0.4);
 }
 
-/* Responsive */
+/* ══════════════════════════
+   RESPONSIVE
+══════════════════════════ */
+
 @media (max-width: 768px) {
   .admin-promos {
-    padding: 20px;
+    padding: 16px;
+    background-color: #f5f5f5;
+    min-height: 100vh;
   }
 
   .promos-header {
     flex-direction: column;
-    gap: 16px;
+    gap: 14px;
     align-items: flex-start;
+    margin-bottom: 20px;
   }
+
+  .promos-header h1 { font-size: 26px; }
 
   .create-btn {
     width: 100%;
+    text-align: center;
   }
 
-  .promos-table-container {
-    overflow-x: auto;
-  }
+  /* Hide table, show cards */
+  .promos-table-container { display: none; }
+  .promo-cards-list { display: flex; }
 
-  .promos-table {
-    min-width: 800px;
-  }
+  .form-grid { grid-template-columns: 1fr; gap: 14px; }
+}
 
-  .form-grid {
-    grid-template-columns: 1fr;
-  }
+@media (max-width: 480px) {
+  .admin-promos { padding: 12px; }
+
+  .promos-header h1 { font-size: 22px; }
+
+  .modal-overlay { padding: 0; align-items: flex-end; }
 
   .modal-content {
-    margin: 20px;
+    border-radius: 16px 16px 0 0;
+    max-height: 92vh;
   }
+
+  .modal-header { padding: 16px 16px 14px; }
+  .modal-header h2 { font-size: 17px; }
+
+  .modal-content form { padding: 14px; }
+
+  .modal-actions {
+    flex-direction: column-reverse;
+    gap: 8px;
+  }
+
+  .cancel-btn,
+  .submit-btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .promo-card-body { grid-template-columns: 1fr; }
+  .promo-card-period { grid-column: 1; }
 }

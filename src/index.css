@@ -162,3 +162,26 @@ button {
     font-size: 28px;
   }
 }
+
+/* ── Plain white page-header for PreOrder and TrackOrder pages ── */
+/* Add these at the BOTTOM of your index.css */
+
+.preorder-main .page-header,
+.trackorder-main .page-header {
+  background: none;
+  background-image: none;
+  background-color: #f5f5f5;
+  border-bottom: 1px solid #e0e0e0;
+  padding: 60px 0;
+}
+
+.preorder-main .page-title,
+.trackorder-main .page-title {
+  color: var(--dark-color);
+  text-shadow: none;
+}
+
+.preorder-main .page-description,
+.trackorder-main .page-description {
+  color: var(--gray-color);
+}

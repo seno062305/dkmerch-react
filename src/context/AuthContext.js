@@ -5,7 +5,7 @@ const AuthContext = createContext(null);
 const BUILT_IN_ADMIN = {
   id: 0,
   name: "Administrator",
-  username: "admin", // ✅ ADDED USERNAME
+  username: "admin",
   email: "admin",
   password: "admin123",
   role: "admin"
@@ -20,12 +20,8 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const users = JSON.parse(localStorage.getItem("users")) || [];
     const adminExists = users.some(u => u.email === BUILT_IN_ADMIN.email);
-
     if (!adminExists) {
-      localStorage.setItem(
-        "users",
-        JSON.stringify([BUILT_IN_ADMIN, ...users])
-      );
+      localStorage.setItem("users", JSON.stringify([BUILT_IN_ADMIN, ...users]));
     }
   }, []);
 
@@ -33,61 +29,91 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const storedUser = JSON.parse(localStorage.getItem("authUser"));
     if (storedUser) {
+      // Always re-check rider approval status on mount
+      if (storedUser.role === 'rider') {
+        const apps = JSON.parse(localStorage.getItem('dkmerch_rider_applications')) || [];
+        const riderApp = apps.find(a => a.email === storedUser.email);
+        if (riderApp && riderApp.status !== 'approved') {
+          // Rider was revoked, clear session
+          localStorage.removeItem("authUser");
+          return;
+        }
+      }
       setUser(storedUser);
       setRole(storedUser.role);
       setIsAuthenticated(true);
     }
   }, []);
 
-  // ✅ FIXED LOGIN - ACCEPTS USERNAME OR EMAIL
+  // LOGIN - accepts username or email
   const login = (identifier, password) => {
+    // Check regular users first
     const users = JSON.parse(localStorage.getItem("users")) || [];
-    
-    // Find user by username OR email
     const foundUser = users.find(
       u => (u.username === identifier || u.email === identifier) && u.password === password
     );
 
-    if (!foundUser) {
-      return { success: false, message: "Invalid username/email or password" };
+    if (foundUser) {
+      localStorage.setItem("authUser", JSON.stringify(foundUser));
+      setUser(foundUser);
+      setRole(foundUser.role);
+      setIsAuthenticated(true);
+      return { success: true, role: foundUser.role };
     }
 
-    localStorage.setItem("authUser", JSON.stringify(foundUser));
-    setUser(foundUser);
-    setRole(foundUser.role);
-    setIsAuthenticated(true);
+    // Check if this is a rider login (by email)
+    const riderApps = JSON.parse(localStorage.getItem('dkmerch_rider_applications')) || [];
+    const riderApp = riderApps.find(a => a.email === identifier);
 
-    return { success: true, role: foundUser.role };
+    if (riderApp) {
+      if (riderApp.status !== 'approved') {
+        return {
+          success: false,
+          message: riderApp.status === 'pending'
+            ? 'Your rider application is still pending admin approval.'
+            : 'Your rider application was not approved.'
+        };
+      }
+      // Rider login - use their email as identifier, they don't have a password in localStorage
+      // So we match by email only (simplified - in production use proper auth)
+      const riderUser = {
+        id: riderApp.id,
+        name: riderApp.fullName,
+        email: riderApp.email,
+        role: 'rider'
+      };
+      localStorage.setItem("authUser", JSON.stringify(riderUser));
+      setUser(riderUser);
+      setRole('rider');
+      setIsAuthenticated(true);
+      return { success: true, role: 'rider' };
+    }
+
+    return { success: false, message: "Invalid username/email or password" };
   };
 
-  // ✅ FIXED REGISTER - INCLUDES USERNAME
+  // REGISTER - includes username
   const register = ({ name, username, email, password }) => {
     const users = JSON.parse(localStorage.getItem("users")) || [];
-    
-    // Check if username already exists
+
     if (users.some(u => u.username === username)) {
       return { success: false, message: "Username already taken" };
     }
-    
-    // Check if email already exists
     if (users.some(u => u.email === email)) {
       return { success: false, message: "Email already exists" };
     }
 
-    // Create new user
     const newUser = {
       id: Date.now(),
       name,
-      username, // ✅ STORE USERNAME
+      username,
       email,
       password,
       role: "user"
     };
 
-    // Add to users array
     users.push(newUser);
     localStorage.setItem("users", JSON.stringify(users));
-
     return { success: true };
   };
 

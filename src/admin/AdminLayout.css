@@ -7,16 +7,18 @@
 
 /* Sidebar Styling */
 .admin-sidebar {
-  width: 260px;
-  background: linear-gradient(180deg, var(--dark-color, #42011eea) 0%, #2a0a1e 100%);
-  color: white;
+  width: 220px;
+  background: #ffffff;
+  color: #333;
   padding: 0;
   position: fixed;
   height: 100vh;
   overflow-y: auto;
-  box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
-  z-index: 100;
+  box-shadow: 2px 0 10px rgba(0, 0, 0, 0.08);
+  z-index: 1000;
   transition: transform 0.3s ease;
+  display: flex;
+  flex-direction: column;
 }
 
 .admin-sidebar::-webkit-scrollbar {
@@ -24,169 +26,189 @@
 }
 
 .admin-sidebar::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.05);
+  background: #f0f0f0;
 }
 
 .admin-sidebar::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
+  background: #ddd;
   border-radius: 3px;
 }
 
+/* Logo */
 .admin-logo-container {
-  padding: 30px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(0, 0, 0, 0.2);
+  padding: 28px 20px 20px 20px;
+  border-bottom: 1px solid #f0f0f0;
 }
 
 .admin-logo {
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-size: 22px;
+  gap: 10px;
+  font-size: 20px;
   font-weight: 700;
-  color: white;
+  color: #1a1a2e;
   margin: 0;
 }
 
 .admin-logo i {
-  font-size: 28px;
+  font-size: 22px;
   color: var(--primary-color, #fc1268);
 }
 
 .admin-tagline {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
-  margin-top: 5px;
+  font-size: 11px;
+  color: #999;
+  margin-top: 4px;
   font-weight: 400;
 }
 
 /* Navigation */
 .admin-sidebar nav {
-  padding: 20px 15px;
+  padding: 16px 12px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
+  flex: 1;
 }
 
 .admin-nav-link {
   display: flex;
   align-items: center;
-  gap: 12px;
-  color: rgba(255, 255, 255, 0.75);
+  gap: 11px;
+  color: #666;
   text-decoration: none;
-  padding: 12px 15px;
-  border-radius: var(--border-radius, 8px);
+  padding: 11px 13px;
+  border-radius: 10px;
   font-weight: 500;
-  font-size: 14px;
-  transition: var(--transition, all 0.3s ease);
+  font-size: 13.5px;
+  transition: all 0.2s ease;
   position: relative;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 .admin-nav-link i {
-  font-size: 18px;
-  width: 20px;
+  font-size: 16px;
+  width: 18px;
   text-align: center;
+  color: #aaa;
+  transition: color 0.2s ease;
 }
 
 .admin-nav-link:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
-  transform: translateX(5px);
+  background: #fef0f5;
+  color: var(--primary-color, #fc1268);
+}
+
+.admin-nav-link:hover i {
+  color: var(--primary-color, #fc1268);
 }
 
 .admin-nav-link.active {
-  background: linear-gradient(135deg, var(--primary-color, #fc1268), var(--secondary-color, #9c27b0));
+  background: linear-gradient(135deg, #fc1268, #e0105a);
   color: white;
-  box-shadow: 0 4px 12px rgba(252, 18, 104, 0.3);
+  box-shadow: 0 4px 12px rgba(252, 18, 104, 0.25);
 }
 
-/* Order Notification Badge */
+.admin-nav-link.active i {
+  color: white;
+}
+
+/* Order Badge */
 .order-badge {
   position: absolute;
   right: 12px;
   top: 50%;
   transform: translateY(-50%);
-  background: var(--danger-color, #dc3545);
+  background: #fc1268;
   color: white;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  min-width: 20px;
-  height: 20px;
+  min-width: 19px;
+  height: 19px;
   border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 6px;
+  padding: 0 5px;
   animation: pulse 2s infinite;
 }
 
-@keyframes pulse {
-  0%, 100% {
-    box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7);
-  }
-  50% {
-    box-shadow: 0 0 0 6px rgba(220, 53, 69, 0);
-  }
+.admin-nav-link.active .order-badge {
+  background: white;
+  color: #fc1268;
 }
 
-/* Logout Button */
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(252, 18, 104, 0.5); }
+  50% { box-shadow: 0 0 0 5px rgba(252, 18, 104, 0); }
+}
+
+/* Logout */
 .admin-logout {
-  margin-top: auto;
-  padding: 15px 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 14px 12px;
+  border-top: 1px solid #f0f0f0;
 }
 
 .admin-logout-btn {
   display: flex;
   align-items: center;
-  gap: 12px;
-  color: #ff6b6b;
+  gap: 11px;
+  color: #fc1268;
   text-decoration: none;
-  padding: 12px 15px;
-  border-radius: var(--border-radius, 8px);
+  padding: 11px 13px;
+  border-radius: 10px;
   font-weight: 500;
-  font-size: 14px;
-  background: rgba(255, 107, 107, 0.1);
-  border: 1px solid rgba(255, 107, 107, 0.2);
+  font-size: 13.5px;
+  background: #fff0f5;
+  border: 1px solid #ffd6e7;
   width: 100%;
   cursor: pointer;
-  transition: var(--transition, all 0.3s ease);
+  transition: all 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 .admin-logout-btn:hover {
-  background: rgba(255, 107, 107, 0.2);
-  transform: translateX(5px);
+  background: #ffe0ec;
 }
 
 .admin-logout-btn i {
-  font-size: 18px;
+  font-size: 16px;
 }
 
 /* Main Content Area */
 .admin-content {
   flex: 1;
-  margin-left: 260px;
+  margin-left: 220px;
   padding: 40px;
   min-height: 100vh;
   background: #f5f5f5;
+  /* Critical: ensure content is above nothing but below modals */
+  position: relative;
+  z-index: 1;
 }
 
 /* Mobile Menu Toggle */
 .mobile-menu-toggle {
   display: none;
   position: fixed;
-  top: 20px;
-  left: 20px;
-  z-index: 101;
+  top: 16px;
+  left: 16px;
+  z-index: 1100;
   background: linear-gradient(135deg, #fc1268, #9c27b0);
   color: white;
   border: none;
-  width: 50px;
-  height: 50px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   cursor: pointer;
   box-shadow: 0 4px 12px rgba(252, 18, 104, 0.4);
   transition: all 0.3s ease;
+  align-items: center;
+  justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 .mobile-menu-toggle:hover {
@@ -194,10 +216,10 @@
 }
 
 .mobile-menu-toggle i {
-  font-size: 20px;
+  font-size: 18px;
 }
 
-/* Mobile Overlay */
+/* Mobile Overlay — sits UNDER sidebar, ABOVE content */
 .mobile-overlay {
   display: none;
   position: fixed;
@@ -206,37 +228,32 @@
   right: 0;
   bottom: 0;
   background: rgba(0, 0, 0, 0.5);
-  z-index: 99;
+  z-index: 999;
   opacity: 0;
   transition: opacity 0.3s ease;
+  pointer-events: none; /* don't block clicks when hidden */
 }
 
 .mobile-overlay.active {
   opacity: 1;
+  pointer-events: auto; /* intercept clicks to close sidebar */
 }
 
-/* Responsive Design */
+/* ── Responsive ── */
 @media (max-width: 1024px) {
-  .admin-sidebar {
-    width: 240px;
-  }
-
-  .admin-content {
-    margin-left: 240px;
-    padding: 30px;
-  }
+  .admin-sidebar { width: 200px; }
+  .admin-content { margin-left: 200px; padding: 30px; }
 }
 
 @media (max-width: 768px) {
   .mobile-menu-toggle {
     display: flex;
-    align-items: center;
-    justify-content: center;
   }
 
   .admin-sidebar {
     transform: translateX(-100%);
-    width: 280px;
+    width: 260px;
+    z-index: 1000;
   }
 
   .admin-sidebar.mobile-open {
@@ -249,76 +266,32 @@
 
   .admin-content {
     margin-left: 0;
-    padding: 80px 20px 20px 20px;
+    /* top padding gives room for the hamburger button */
+    padding: 72px 20px 20px 20px;
+    z-index: 1;
   }
 
-  .admin-logo-container {
-    padding: 25px 20px;
+  /* All interactive elements in content must be easily tappable */
+  .admin-content button,
+  .admin-content select,
+  .admin-content input,
+  .admin-content a {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
 
-  .admin-nav-link {
-    padding: 14px 15px;
-    font-size: 15px;
-  }
-
-  .admin-nav-link i {
-    font-size: 20px;
-    width: 24px;
-  }
-
-  .order-badge {
-    right: 15px;
-    font-size: 10px;
-    min-width: 18px;
-    height: 18px;
+  /* Dropdowns / selects need explicit z-index to appear above sibling cards */
+  .admin-content select {
+    position: relative;
+    z-index: 10;
   }
 }
 
 @media (max-width: 576px) {
-  .mobile-menu-toggle {
-    width: 45px;
-    height: 45px;
-    top: 15px;
-    left: 15px;
-  }
-
-  .mobile-menu-toggle i {
-    font-size: 18px;
-  }
-
-  .admin-sidebar {
-    width: 260px;
-  }
-
-  .admin-content {
-    padding: 70px 15px 15px 15px;
-  }
-
-  .admin-logo {
-    font-size: 20px;
-  }
-
-  .admin-logo i {
-    font-size: 24px;
-  }
-
-  .admin-nav-link {
-    padding: 12px 15px;
-    font-size: 14px;
-  }
-
-  .admin-logout {
-    padding: 12px 15px;
-  }
-
-  .admin-logout-btn {
-    padding: 12px 15px;
-    font-size: 13px;
-  }
+  .admin-sidebar { width: 240px; }
+  .admin-content { padding: 68px 14px 14px 14px; }
 }
 
 @media (max-width: 400px) {
-  .admin-sidebar {
-    width: 100%;
-  }
+  .admin-sidebar { width: 100%; }
 }

@@ -20,7 +20,6 @@ const PreOrder = () => {
   useEffect(() => {
     loadPreOrderProducts();
 
-    // Listen for product updates from admin
     const handleProductUpdate = () => {
       loadPreOrderProducts();
     };
@@ -36,12 +35,10 @@ const PreOrder = () => {
 
   const loadPreOrderProducts = () => {
     const allProducts = getProducts();
-    // Filter only products with isPreOrder = true
     const filtered = allProducts.filter(product => product.isPreOrder === true);
     setPreOrderProducts(filtered);
   };
 
-  // Get unique groups from pre-order products
   const groups = ['all', ...new Set(preOrderProducts.map(p => p.kpopGroup))];
 
   const filteredProducts = selectedGroup === 'all' 
@@ -65,36 +62,28 @@ const PreOrder = () => {
     setShowLoginModal(false);
   };
 
-  // ✅ ADD TO CART FUNCTION
   const handleAddToCart = (product) => {
     if (!isAuthenticated) {
       handleRequireLogin();
       return;
     }
-
     try {
       addToCart(product.id);
       showNotification(`${product.name} added to cart!`, 'success');
-      
-      // Dispatch event to update cart count in navbar
       window.dispatchEvent(new Event('storage'));
     } catch (error) {
       showNotification('Failed to add to cart', 'error');
     }
   };
 
-  // ✅ ADD TO WISHLIST FUNCTION
   const handleAddToWishlist = (product) => {
     if (!isAuthenticated) {
       handleRequireLogin();
       return;
     }
-
     try {
       toggleWishlist(product.id);
       showNotification(`${product.name} added to wishlist!`, 'success');
-      
-      // Dispatch event to update wishlist count in navbar
       window.dispatchEvent(new Event('storage'));
     } catch (error) {
       showNotification('Failed to add to wishlist', 'error');
@@ -102,7 +91,8 @@ const PreOrder = () => {
   };
 
   return (
-    <main>
+    <main className="preorder-main">
+      {/* ✅ plain-header removes the maroon gradient */}
       <div className="page-header">
         <div className="container">
           <h1 className="page-title">Pre-Order Items</h1>

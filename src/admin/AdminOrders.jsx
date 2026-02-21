@@ -10,11 +10,9 @@ const AdminOrders = () => {
 
   useEffect(() => {
     loadOrders();
-
     const handleUpdate = () => loadOrders();
     window.addEventListener('storage', handleUpdate);
     window.addEventListener('orderUpdated', handleUpdate);
-
     return () => {
       window.removeEventListener('storage', handleUpdate);
       window.removeEventListener('orderUpdated', handleUpdate);
@@ -27,98 +25,92 @@ const AdminOrders = () => {
 
   const loadOrders = () => {
     const storedOrders = JSON.parse(localStorage.getItem('dkmerch_orders')) || [];
-    
-    const validOrders = storedOrders.filter(order => {
-      return order && 
-             order.orderId && 
-             order.items && 
-             Array.isArray(order.items) && 
-             order.items.length > 0;
-    });
-
-    const sorted = validOrders.sort((a, b) => 
-      new Date(b.createdAt) - new Date(a.createdAt)
+    const validOrders = storedOrders.filter(order =>
+      order && order.orderId && order.items && Array.isArray(order.items) && order.items.length > 0
     );
-
+    const sorted = validOrders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     setOrders(sorted);
   };
 
-  // ✅ FIXED FILTER WITH NULL/UNDEFINED CHECKS
   const filterOrders = () => {
     let filtered = [...orders];
-
     if (activeTab !== 'all') {
       filtered = filtered.filter(order => order.orderStatus === activeTab);
     }
-
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase();
       filtered = filtered.filter(order => {
-        // ✅ Safe checks for undefined/null values
         const orderId = order.orderId || '';
         const customerName = order.customerName || '';
         const email = order.email || '';
-        
-        return orderId.toLowerCase().includes(searchLower) ||
-               customerName.toLowerCase().includes(searchLower) ||
-               email.toLowerCase().includes(searchLower);
+        return (
+          orderId.toLowerCase().includes(searchLower) ||
+          customerName.toLowerCase().includes(searchLower) ||
+          email.toLowerCase().includes(searchLower)
+        );
       });
     }
-
     setFilteredOrders(filtered);
   };
 
-  const getPendingCount = () => {
-    return orders.filter(o => o.orderStatus === 'pending').length;
-  };
+  const getPendingCount = () => orders.filter(o => o.orderStatus === 'pending').length;
 
   const getStatusColor = (status) => {
     const colors = {
       pending: '#ffc107',
       confirmed: '#17a2b8',
-      shipped: '#007bff',
+      shipped: '#6366f1',
+      out_for_delivery: '#f97316',
       completed: '#28a745',
-      cancelled: '#dc3545'
+      cancelled: '#dc3545',
     };
     return colors[status] || '#6c757d';
   };
 
-  // ✅ FIXED: Update BOTH orderStatus AND status fields
+  const getStatusLabel = (status) => {
+    const labels = {
+      pending: 'Pending',
+      confirmed: 'Confirmed',
+      shipped: 'Shipped',
+      out_for_delivery: 'Out for Delivery',
+      completed: 'Completed',
+      cancelled: 'Cancelled',
+    };
+    return labels[status] || status || 'Pending';
+  };
+
   const updateOrderStatus = (orderId, newStatus) => {
-    const updatedOrders = orders.map(order => 
-      order.orderId === orderId 
-        ? { 
-            ...order, 
-            orderStatus: newStatus,  // For admin panel
-            status: mapStatusToTrackingStatus(newStatus),  // For tracking timeline
-            updatedAt: new Date().toISOString() 
+    const updatedOrders = orders.map(order =>
+      order.orderId === orderId
+        ? {
+            ...order,
+            orderStatus: newStatus,
+            status: mapStatusToTrackingStatus(newStatus),
+            updatedAt: new Date().toISOString(),
           }
         : order
     );
-
     localStorage.setItem('dkmerch_orders', JSON.stringify(updatedOrders));
     setOrders(updatedOrders);
-    
     if (selectedOrder?.orderId === orderId) {
-      setSelectedOrder({ 
-        ...selectedOrder, 
+      setSelectedOrder({
+        ...selectedOrder,
         orderStatus: newStatus,
-        status: mapStatusToTrackingStatus(newStatus)
+        status: mapStatusToTrackingStatus(newStatus),
       });
     }
-
     window.dispatchEvent(new Event('orderUpdated'));
     window.dispatchEvent(new Event('storage'));
   };
 
-  // ✅ NEW: Map admin status to tracking timeline status
   const mapStatusToTrackingStatus = (adminStatus) => {
     const statusMap = {
-      'pending': 'Processing',
-      'confirmed': 'Confirmed',
-      'shipped': 'Shipped',
-      'completed': 'Delivered',
-      'cancelled': 'Cancelled'
+      pending: 'Processing',
+      confirmed: 'Confirmed',
+      shipped: 'Shipped',
+      out_for_delivery: 'Out for Delivery',
+      completed: 'Delivered',
+      cancelled: 'Cancelled',
     };
     return statusMap[adminStatus] || 'Processing';
   };
@@ -138,47 +130,29 @@ const AdminOrders = () => {
     <div className="admin-orders-page">
       {/* Tabs */}
       <div className="orders-tabs">
-        <button 
-          className={`tab-btn ${activeTab === 'all' ? 'active' : ''}`}
-          onClick={() => setActiveTab('all')}
-        >
-          <i className="fas fa-list"></i>
-          All Orders
-        </button>
-        <button 
-          className={`tab-btn ${activeTab === 'pending' ? 'active' : ''}`}
-          onClick={() => setActiveTab('pending')}
-        >
-          <i className="fas fa-clock"></i>
-          Pending {getPendingCount() > 0 && `(${getPendingCount()})`}
-        </button>
-        <button 
-          className={`tab-btn ${activeTab === 'confirmed' ? 'active' : ''}`}
-          onClick={() => setActiveTab('confirmed')}
-        >
-          <i className="fas fa-check-circle"></i>
-          Confirmed
-        </button>
-        <button 
-          className={`tab-btn ${activeTab === 'shipped' ? 'active' : ''}`}
-          onClick={() => setActiveTab('shipped')}
-        >
-          <i className="fas fa-shipping-fast"></i>
-          Shipped
-        </button>
-        <button 
-          className={`tab-btn ${activeTab === 'completed' ? 'active' : ''}`}
-          onClick={() => setActiveTab('completed')}
-        >
-          <i className="fas fa-check-double"></i>
-          Completed
-        </button>
+        {[
+          { key: 'all', icon: 'fa-list', label: 'All Orders' },
+          { key: 'pending', icon: 'fa-clock', label: `Pending${getPendingCount() > 0 ? ` (${getPendingCount()})` : ''}` },
+          { key: 'confirmed', icon: 'fa-check-circle', label: 'Confirmed' },
+          { key: 'shipped', icon: 'fa-box', label: 'Shipped' },
+          { key: 'out_for_delivery', icon: 'fa-shipping-fast', label: 'Out for Delivery' },
+          { key: 'completed', icon: 'fa-check-double', label: 'Completed' },
+        ].map(t => (
+          <button
+            key={t.key}
+            className={`tab-btn ${activeTab === t.key ? 'active' : ''}`}
+            onClick={() => setActiveTab(t.key)}
+          >
+            <i className={`fas ${t.icon}`}></i>
+            {t.label}
+          </button>
+        ))}
       </div>
 
-      {/* Search Filter */}
+      {/* Search */}
       <div className="orders-filters">
         <div className="filter-group">
-          <input 
+          <input
             type="text"
             className="search-input"
             placeholder="🔍 Search by Order ID, Customer Name, or Email..."
@@ -188,7 +162,7 @@ const AdminOrders = () => {
         </div>
       </div>
 
-      {/* Orders Table */}
+      {/* Table */}
       <div className="orders-container">
         {filteredOrders.length === 0 ? (
           <div className="empty-orders">
@@ -205,6 +179,8 @@ const AdminOrders = () => {
                   <th>ITEMS</th>
                   <th>TOTAL</th>
                   <th>STATUS</th>
+                  <th>RIDER</th>
+                  <th>PROOF</th>
                   <th>DATE</th>
                   <th>ACTIONS</th>
                 </tr>
@@ -212,9 +188,7 @@ const AdminOrders = () => {
               <tbody>
                 {filteredOrders.map(order => (
                   <tr key={order.orderId}>
-                    <td>
-                      <strong>#{order.orderId.slice(-8)}</strong>
-                    </td>
+                    <td><strong>#{order.orderId.slice(-8)}</strong></td>
                     <td>
                       <div className="customer-info">
                         <strong>{order.customerName || 'N/A'}</strong>
@@ -222,28 +196,41 @@ const AdminOrders = () => {
                       </div>
                     </td>
                     <td>{order.items.length} item(s)</td>
+                    <td><strong>₱{(order.total || 0).toLocaleString()}</strong></td>
                     <td>
-                      <strong>₱{(order.total || 0).toLocaleString()}</strong>
-                    </td>
-                    <td>
-                      <span 
+                      <span
                         className="status-badge"
                         style={{ backgroundColor: getStatusColor(order.orderStatus) }}
                       >
-                        {order.orderStatus || 'pending'}
+                        {getStatusLabel(order.orderStatus)}
                       </span>
                     </td>
                     <td>
-                      {order.createdAt 
-                        ? new Date(order.createdAt).toLocaleDateString('en-PH')
-                        : 'N/A'
-                      }
+                      {order.riderInfo ? (
+                        <div style={{ fontSize: '12px' }}>
+                          <strong>{order.riderInfo.name}</strong>
+                          <div style={{ color: '#888' }}>{order.riderInfo.plate}</div>
+                        </div>
+                      ) : (
+                        <span style={{ color: '#ccc', fontSize: '12px' }}>—</span>
+                      )}
                     </td>
                     <td>
-                      <button
-                        className="view-btn"
-                        onClick={() => setSelectedOrder(order)}
-                      >
+                      {order.deliveryProofPhoto ? (
+                        <span className="proof-badge">
+                          <i className="fas fa-check-circle"></i> With Proof
+                        </span>
+                      ) : (
+                        <span style={{ color: '#ccc', fontSize: '12px' }}>—</span>
+                      )}
+                    </td>
+                    <td>
+                      {order.createdAt
+                        ? new Date(order.createdAt).toLocaleDateString('en-PH')
+                        : 'N/A'}
+                    </td>
+                    <td>
+                      <button className="view-btn" onClick={() => setSelectedOrder(order)}>
                         <i className="fas fa-eye"></i> View
                       </button>
                     </td>
@@ -255,55 +242,164 @@ const AdminOrders = () => {
         )}
       </div>
 
-      {/* Order Modal */}
       {selectedOrder && (
-        <OrderModal 
+        <OrderModal
           order={selectedOrder}
           onClose={() => setSelectedOrder(null)}
           onUpdateStatus={updateOrderStatus}
           onDelete={deleteOrder}
+          getStatusColor={getStatusColor}
+          getStatusLabel={getStatusLabel}
         />
       )}
     </div>
   );
 };
 
-// Order Modal Component
-const OrderModal = ({ order, onClose, onUpdateStatus, onDelete }) => {
+// ─── BUTTON RULES ─────────────────────────────────────────────────────────────
+const getButtonRules = (currentStatus) => {
+  const rules = {
+    pending: {
+      confirm_order: true,
+      cancel: true,
+      complete: false,
+      shipped: false,
+      out_for_delivery: false,
+    },
+    confirmed: {
+      confirm_order: false,
+      cancel: true,
+      complete: false,
+      shipped: false,
+      out_for_delivery: false,
+    },
+    shipped: {
+      confirm_order: false,
+      cancel: true,
+      complete: false,
+      shipped: false,
+      out_for_delivery: false,
+    },
+    out_for_delivery: {
+      confirm_order: false,
+      cancel: true,
+      complete: false,  // ✅ CHANGED: admin cannot manually complete — rider does via OTP
+      shipped: false,
+      out_for_delivery: false,
+    },
+    completed: {
+      confirm_order: false,
+      cancel: false,
+      complete: false,
+      shipped: false,
+      out_for_delivery: false,
+    },
+    cancelled: {
+      confirm_order: false,
+      cancel: false,
+      complete: false,
+      shipped: false,
+      out_for_delivery: false,
+    },
+  };
+  return rules[currentStatus] || rules['pending'];
+};
+
+// ─── ORDER MODAL ─────────────────────────────────────────────────────────────
+const OrderModal = ({ order, onClose, onUpdateStatus, onDelete, getStatusColor, getStatusLabel }) => {
   const [productReviews, setProductReviews] = useState([]);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [proofExpanded, setProofExpanded] = useState(false);
 
   useEffect(() => {
-    loadProductReviews();
-  }, [order]);
-
-  const loadProductReviews = () => {
     const allReviews = JSON.parse(localStorage.getItem('product_reviews')) || [];
-    
-    // Get product IDs from this order
     const productIds = order.items.map(item => item.id);
-    
-    // Filter reviews for products in this order
-    const orderReviews = allReviews.filter(review => 
-      productIds.includes(review.productId)
-    );
-    
-    setProductReviews(orderReviews);
-  };
-
-  const getStatusColor = (status) => {
-    const colors = {
-      pending: '#ffc107',
-      confirmed: '#17a2b8',
-      shipped: '#007bff',
-      completed: '#28a745',
-      cancelled: '#dc3545'
-    };
-    return colors[status] || '#6c757d';
-  };
+    setProductReviews(allReviews.filter(r => productIds.includes(r.productId)));
+  }, [order]);
 
   const subtotal = order.subtotal || 0;
   const shippingFee = order.shippingFee || 0;
   const total = order.total || (subtotal + shippingFee);
+
+  const currentStatus = order.orderStatus || 'pending';
+  const allowed = getButtonRules(currentStatus);
+  const isDone = currentStatus === 'completed' || currentStatus === 'cancelled';
+
+  const hasDeliveryProof = !!(order.deliveryProofPhoto);
+  const otpVerified = !!(order.deliveryOtpVerified);
+
+  const handleConfirmCancel = (reason) => {
+    const updatedOrders = JSON.parse(localStorage.getItem('dkmerch_orders')) || [];
+    const newOrders = updatedOrders.map(o =>
+      o.orderId === order.orderId
+        ? { ...o, cancelReason: reason }
+        : o
+    );
+    localStorage.setItem('dkmerch_orders', JSON.stringify(newOrders));
+    onUpdateStatus(order.orderId, 'cancelled');
+    setShowCancelModal(false);
+  };
+
+  const allStatusButtons = [
+    {
+      key: 'pending',
+      targetStatus: 'pending',
+      icon: 'fa-clock',
+      label: 'Pending',
+      className: 'pending',
+      actionKey: null,
+    },
+    {
+      key: 'confirm',
+      targetStatus: 'confirmed',
+      icon: 'fa-check-circle',
+      label: 'Confirmed',
+      className: 'confirmed',
+      actionKey: 'confirm_order',
+    },
+    {
+      key: 'complete',
+      targetStatus: 'completed',
+      icon: 'fa-check-double',
+      label: 'Completed',
+      className: 'completed',
+      actionKey: 'complete',
+    },
+    {
+      key: 'cancel',
+      targetStatus: 'cancelled',
+      icon: 'fa-times-circle',
+      label: 'Cancelled',
+      className: 'cancelled',
+      actionKey: 'cancel',
+    },
+    {
+      key: 'shipped',
+      targetStatus: 'shipped',
+      icon: 'fa-box',
+      label: 'Shipped',
+      className: 'shipped',
+      actionKey: 'shipped',
+      riderManaged: true,
+    },
+    {
+      key: 'out_for_delivery',
+      targetStatus: 'out_for_delivery',
+      icon: 'fa-shipping-fast',
+      label: 'Out for Delivery',
+      className: 'out-delivery',
+      actionKey: 'out_for_delivery',
+      riderManaged: true,
+    },
+  ];
+
+  const getBlockReason = (btn) => {
+    if (btn.riderManaged) return 'Auto via rider';
+    if (currentStatus === btn.targetStatus) return 'Current status';
+    if (isDone) return currentStatus === 'completed' ? 'Order completed' : 'Order cancelled';
+    if (!allowed[btn.actionKey]) return 'Not available';
+    return null;
+  };
 
   return (
     <div className="order-modal-overlay" onClick={onClose}>
@@ -311,11 +407,11 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onDelete }) => {
         <div className="modal-header">
           <div>
             <h2>Order #{order.orderId?.slice(-8) || 'N/A'}</h2>
-            <span 
+            <span
               className="status-badge"
               style={{ backgroundColor: getStatusColor(order.orderStatus) }}
             >
-              {order.orderStatus || 'pending'}
+              {getStatusLabel(order.orderStatus)}
             </span>
           </div>
           <button className="close-btn" onClick={onClose}>
@@ -324,7 +420,8 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onDelete }) => {
         </div>
 
         <div className="modal-body">
-          {/* Customer Information */}
+
+          {/* Customer Info */}
           <div className="modal-section">
             <h3><i className="fas fa-user"></i> Customer Information</h3>
             <div className="order-info-grid">
@@ -347,7 +444,115 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onDelete }) => {
             </div>
           </div>
 
-          {/* Order Information */}
+          {/* Rider Info */}
+          {order.riderInfo && (
+            <div className="modal-section">
+              <h3><i className="fas fa-motorcycle"></i> Assigned Rider</h3>
+              <div className="order-info-grid rider-info-grid">
+                <div className="info-item">
+                  <label>Rider Name</label>
+                  <strong>{order.riderInfo.name || 'N/A'}</strong>
+                </div>
+                <div className="info-item">
+                  <label>Phone</label>
+                  <span>{order.riderInfo.phone || 'N/A'}</span>
+                </div>
+                <div className="info-item">
+                  <label>Vehicle Type</label>
+                  <span style={{ textTransform: 'capitalize' }}>{order.riderInfo.vehicle || 'N/A'}</span>
+                </div>
+                <div className="info-item">
+                  <label>Plate Number</label>
+                  <span>{order.riderInfo.plate || 'N/A'}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── PROOF OF DELIVERY ── */}
+          {(hasDeliveryProof || otpVerified) && (
+            <div className="modal-section">
+              <h3><i className="fas fa-shield-alt"></i> Proof of Delivery</h3>
+              <div className="pod-card">
+                {/* OTP Verified row */}
+                <div className={`pod-otp-row ${otpVerified ? 'verified' : 'unverified'}`}>
+                  <div className="pod-otp-icon">
+                    <i className={`fas ${otpVerified ? 'fa-check-circle' : 'fa-times-circle'}`}></i>
+                  </div>
+                  <div className="pod-otp-text">
+                    <strong>OTP Verification</strong>
+                    <span>
+                      {otpVerified
+                        ? 'Customer OTP was verified by rider ✅'
+                        : 'OTP not verified'}
+                    </span>
+                  </div>
+                  {otpVerified && (
+                    <span className="pod-otp-badge">Verified</span>
+                  )}
+                </div>
+
+                {/* Confirmed timestamp */}
+                {order.deliveryConfirmedAt && (
+                  <div className="pod-timestamp">
+                    <i className="fas fa-clock"></i>
+                    <span>
+                      Confirmed on{' '}
+                      {new Date(order.deliveryConfirmedAt).toLocaleString('en-PH', {
+                        month: 'long', day: 'numeric', year: 'numeric',
+                        hour: '2-digit', minute: '2-digit',
+                      })}
+                    </span>
+                  </div>
+                )}
+
+                {/* Photo proof — only show if available */}
+                {hasDeliveryProof && (
+                  <div className="pod-photo-section">
+                    <div
+                      className="pod-photo-header"
+                      onClick={() => setProofExpanded(!proofExpanded)}
+                    >
+                      <div className="pod-photo-label">
+                        <i className="fas fa-camera"></i>
+                        <strong>Delivery Photo</strong>
+                      </div>
+                      <button className="pod-toggle-btn">
+                        <i className={`fas ${proofExpanded ? 'fa-chevron-up' : 'fa-chevron-down'}`}></i>
+                        {proofExpanded ? 'Hide' : 'Show'} Photo
+                      </button>
+                    </div>
+                    {proofExpanded && (
+                      <div className="pod-photo-wrap">
+                        <img
+                          src={order.deliveryProofPhoto}
+                          alt="Proof of delivery"
+                          className="pod-photo"
+                        />
+                        <a
+                          href={order.deliveryProofPhoto}
+                          download={`proof-${order.orderId?.slice(-8)}.jpg`}
+                          className="pod-download-btn"
+                        >
+                          <i className="fas fa-download"></i> Download Photo
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* No photo message */}
+                {!hasDeliveryProof && otpVerified && (
+                  <div className="pod-timestamp">
+                    <i className="fas fa-image"></i>
+                    <span style={{ color: '#94a3b8' }}>No photo proof uploaded (optional)</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Order Info */}
           <div className="modal-section">
             <h3><i className="fas fa-info-circle"></i> Order Information</h3>
             <div className="order-info-grid">
@@ -358,10 +563,9 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onDelete }) => {
               <div className="info-item">
                 <label>Order Date</label>
                 <span>
-                  {order.createdAt 
+                  {order.createdAt
                     ? new Date(order.createdAt).toLocaleString('en-PH')
-                    : 'N/A'
-                  }
+                    : 'N/A'}
                 </span>
               </div>
               <div className="info-item">
@@ -370,11 +574,11 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onDelete }) => {
               </div>
               <div className="info-item">
                 <label>Order Status</label>
-                <span 
+                <span
                   className="status-badge"
                   style={{ backgroundColor: getStatusColor(order.orderStatus) }}
                 >
-                  {order.orderStatus || 'pending'}
+                  {getStatusLabel(order.orderStatus)}
                 </span>
               </div>
             </div>
@@ -383,16 +587,15 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onDelete }) => {
           {/* Order Items */}
           <div className="modal-section">
             <h3>
-              <i className="fas fa-box"></i> 
-              Order Items ({order.items?.length || 0})
+              <i className="fas fa-box"></i> Order Items ({order.items?.length || 0})
             </h3>
             <div className="order-items-list">
               {order.items && order.items.length > 0 ? (
                 order.items.map((item, index) => (
                   <div key={index} className="order-item-card">
                     <div className="item-image">
-                      <img 
-                        src={item.image} 
+                      <img
+                        src={item.image}
                         alt={item.name || 'Product'}
                         onError={(e) => {
                           e.target.onerror = null;
@@ -423,20 +626,19 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onDelete }) => {
             </div>
           </div>
 
-          {/* ✅ PRODUCT REVIEWS SECTION */}
+          {/* Product Reviews */}
           {productReviews.length > 0 && (
             <div className="modal-section">
               <h3>
-                <i className="fas fa-star"></i> 
-                Product Reviews ({productReviews.length})
+                <i className="fas fa-star"></i> Product Reviews ({productReviews.length})
               </h3>
               <div className="reviews-list">
                 {productReviews.map((review) => (
                   <div key={review.id} className="review-card">
                     <div className="review-card-header">
                       <div className="review-product-info">
-                        <img 
-                          src={review.productImage} 
+                        <img
+                          src={review.productImage}
                           alt={review.productName}
                           className="review-product-image"
                           onError={(e) => {
@@ -495,54 +697,210 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onDelete }) => {
           {/* Status Management */}
           <div className="modal-section">
             <h3><i className="fas fa-tasks"></i> Update Order Status</h3>
+
+            {isDone && (
+              <div className={`status-done-notice ${currentStatus}`}>
+                <i className={`fas ${currentStatus === 'completed' ? 'fa-check-circle' : 'fa-ban'}`}></i>
+                <span>
+                  {currentStatus === 'completed'
+                    ? 'This order has been completed. No further actions available.'
+                    : 'This order has been cancelled. No further actions available.'}
+                </span>
+              </div>
+            )}
+
+            {(currentStatus === 'shipped' || currentStatus === 'out_for_delivery') && (
+              <div className="rider-managed-notice">
+                <i className="fas fa-motorcycle"></i>
+                <div>
+                  <strong>Rider-managed status</strong>
+                  <p>
+                    {currentStatus === 'out_for_delivery'
+                      ? 'Rider is on the way! The order will be automatically marked as Completed once the rider confirms delivery via OTP with the customer.'
+                      : 'This order is Shipped and is handled by the assigned rider. You may still Cancel if needed.'}
+                  </p>
+                </div>
+              </div>
+            )}
+
             <div className="status-buttons">
-              <button
-                className="status-btn pending"
-                onClick={() => onUpdateStatus(order.orderId, 'pending')}
-                disabled={order.orderStatus === 'pending'}
-              >
-                <i className="fas fa-clock"></i> Pending
-              </button>
-              <button
-                className="status-btn confirmed"
-                onClick={() => onUpdateStatus(order.orderId, 'confirmed')}
-                disabled={order.orderStatus === 'confirmed'}
-              >
-                <i className="fas fa-check-circle"></i> Confirmed
-              </button>
-              <button
-                className="status-btn shipped"
-                onClick={() => onUpdateStatus(order.orderId, 'shipped')}
-                disabled={order.orderStatus === 'shipped'}
-              >
-                <i className="fas fa-shipping-fast"></i> Shipped
-              </button>
-              <button
-                className="status-btn completed"
-                onClick={() => onUpdateStatus(order.orderId, 'completed')}
-                disabled={order.orderStatus === 'completed'}
-              >
-                <i className="fas fa-check-double"></i> Completed
-              </button>
-              <button
-                className="status-btn cancelled"
-                onClick={() => onUpdateStatus(order.orderId, 'cancelled')}
-                disabled={order.orderStatus === 'cancelled'}
-              >
-                <i className="fas fa-times-circle"></i> Cancelled
-              </button>
+              {allStatusButtons.map((btn) => {
+                const isCurrent = currentStatus === btn.targetStatus;
+                const blockReason = getBlockReason(btn);
+                const isClickable = !blockReason && btn.actionKey;
+
+                const handleClick = () => {
+                  if (!isClickable) return;
+                  if (btn.targetStatus === 'cancelled') {
+                    setShowCancelModal(true);
+                  } else {
+                    onUpdateStatus(order.orderId, btn.targetStatus);
+                  }
+                };
+
+                return (
+                  <div key={btn.key} className="status-btn-wrapper">
+                    <button
+                      className={`status-btn ${btn.className} ${isCurrent ? 'is-current' : ''} ${!isClickable ? 'is-blocked' : ''}`}
+                      onClick={handleClick}
+                      disabled={!isClickable}
+                      title={blockReason || `Set to ${btn.label}`}
+                    >
+                      <i className={`fas ${btn.icon}`}></i>
+                      <span>{btn.label}</span>
+                      {btn.riderManaged && (
+                        <span className="rider-badge-sm">🛵 via rider</span>
+                      )}
+                      {isCurrent && (
+                        <span className="current-indicator">✓ Current</span>
+                      )}
+                    </button>
+                    {blockReason && !isCurrent && (
+                      <div className="block-reason">
+                        <i className="fas fa-lock"></i> {blockReason}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
 
-          {/* Delete Order */}
+          {/* Cancel Reason Display */}
+          {currentStatus === 'cancelled' && order.cancelReason && (
+            <div className="modal-section">
+              <h3><i className="fas fa-ban"></i> Cancellation Reason</h3>
+              <div className="cancel-reason-display">
+                <i className="fas fa-quote-left"></i>
+                <p>{order.cancelReason}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Delete */}
           <div className="modal-actions">
-            <button 
-              className="delete-order-btn"
-              onClick={() => onDelete(order.orderId)}
-            >
+            <button className="delete-order-btn" onClick={() => onDelete(order.orderId)}>
               <i className="fas fa-trash"></i> Delete Order
             </button>
           </div>
+
+        </div>
+      </div>
+
+      {showCancelModal && (
+        <CancelReasonModal
+          order={order}
+          onConfirm={handleConfirmCancel}
+          onClose={() => setShowCancelModal(false)}
+        />
+      )}
+    </div>
+  );
+};
+
+// ─── CANCEL REASON MODAL ──────────────────────────────────────────────────────
+const CANCEL_PRESETS = [
+  'Item is out of stock',
+  'Customer requested cancellation',
+  'Duplicate order',
+  'Payment issue / not verified',
+  'Rider unavailable in the area',
+  'Incorrect order details',
+  'Fraudulent order detected',
+  'Other reason',
+];
+
+const CancelReasonModal = ({ order, onConfirm, onClose }) => {
+  const [selectedPreset, setSelectedPreset] = useState('');
+  const [customReason, setCustomReason] = useState('');
+  const [error, setError] = useState('');
+
+  const isOther = selectedPreset === 'Other reason';
+  const finalReason = isOther ? customReason.trim() : selectedPreset;
+
+  const handleConfirm = () => {
+    if (!finalReason) {
+      setError('Please select or enter a cancellation reason.');
+      return;
+    }
+    onConfirm(finalReason);
+  };
+
+  return (
+    <div className="cancel-reason-overlay" onClick={onClose}>
+      <div className="cancel-reason-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="cancel-reason-header">
+          <div className="cancel-reason-icon">
+            <i className="fas fa-ban"></i>
+          </div>
+          <div>
+            <h3>Cancel Order</h3>
+            <p>Order #{order.orderId?.slice(-8)}</p>
+          </div>
+          <button className="close-btn" onClick={onClose}>
+            <i className="fas fa-times"></i>
+          </button>
+        </div>
+
+        <div className="cancel-reason-body">
+          <p className="cancel-reason-prompt">
+            Please select or enter a reason for cancelling this order. This will be recorded and visible in the order details.
+          </p>
+
+          <div className="cancel-presets">
+            {CANCEL_PRESETS.map((preset) => (
+              <button
+                key={preset}
+                className={`cancel-preset-chip ${selectedPreset === preset ? 'active' : ''}`}
+                onClick={() => {
+                  setSelectedPreset(preset);
+                  setError('');
+                  if (preset !== 'Other reason') setCustomReason('');
+                }}
+              >
+                {selectedPreset === preset && <i className="fas fa-check"></i>}
+                {preset}
+              </button>
+            ))}
+          </div>
+
+          {isOther && (
+            <div className="cancel-custom-wrap">
+              <label>Specify your reason <span className="required">*</span></label>
+              <textarea
+                className="cancel-custom-input"
+                placeholder="Type the cancellation reason here..."
+                value={customReason}
+                onChange={(e) => {
+                  setCustomReason(e.target.value);
+                  setError('');
+                }}
+                rows={3}
+                maxLength={300}
+                autoFocus
+              />
+              <div className="char-count">{customReason.length}/300</div>
+            </div>
+          )}
+
+          {error && (
+            <div className="cancel-error">
+              <i className="fas fa-exclamation-circle"></i> {error}
+            </div>
+          )}
+        </div>
+
+        <div className="cancel-reason-footer">
+          <button className="cancel-go-back-btn" onClick={onClose}>
+            <i className="fas fa-arrow-left"></i> Go Back
+          </button>
+          <button
+            className="cancel-confirm-btn"
+            onClick={handleConfirm}
+            disabled={!finalReason}
+          >
+            <i className="fas fa-ban"></i> Confirm Cancellation
+          </button>
         </div>
       </div>
     </div>

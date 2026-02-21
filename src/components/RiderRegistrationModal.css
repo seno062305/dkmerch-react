@@ -1,0 +1,395 @@
+.rider-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow-y: auto;
+  /* Use webkit scroll on iOS */
+  -webkit-overflow-scrolling: touch;
+}
+
+.rider-modal-container {
+  background: #fff;
+  border-radius: 16px;
+  padding: 32px;
+  width: 100%;
+  max-width: 520px;
+  /* No max-height — let overlay scroll instead */
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  /* Give breathing room at the bottom on mobile */
+  margin: auto;
+}
+
+.rider-modal-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: #f1f5f9;
+  border: none;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  font-size: 16px;
+  cursor: pointer;
+  color: #555;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  flex-shrink: 0;
+}
+
+.rider-modal-close:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.rider-modal-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #6a0dad;
+  margin-bottom: 4px;
+  padding-right: 40px; /* avoid overlap with close btn */
+}
+
+.rider-modal-subtitle {
+  color: #888;
+  font-size: 14px;
+  margin-bottom: 24px;
+}
+
+/* ── FORM ── */
+.rider-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.rider-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+}
+
+.rider-form-group label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+}
+
+.rider-form-group input,
+.rider-form-group select {
+  padding: 11px 14px;
+  border: 1.5px solid #ddd;
+  border-radius: 8px;
+  font-size: 16px; /* 16px prevents iOS zoom on focus */
+  outline: none;
+  transition: border 0.2s;
+  background: #fff;
+  width: 100%;
+  box-sizing: border-box;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* Re-add arrow for select */
+.rider-form-group select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 40px;
+  cursor: pointer;
+}
+
+.rider-form-group input:focus,
+.rider-form-group select:focus {
+  border-color: #6a0dad;
+  box-shadow: 0 0 0 3px rgba(106, 13, 173, 0.1);
+}
+
+/* Validation error styles */
+.rider-form-group input.input-error,
+.rider-form-group select.input-error {
+  border-color: #dc3545;
+  background: #fff8f8;
+}
+
+.error-msg {
+  font-size: 12px;
+  color: #dc3545;
+  margin-top: 2px;
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  line-height: 1.4;
+}
+
+.match-ok {
+  font-size: 12px;
+  color: #16a34a;
+  font-weight: 600;
+}
+
+/* Row layout — stacks on small screens */
+.rider-form-row {
+  display: flex;
+  gap: 14px;
+}
+
+/* 🔑 Password field with toggle */
+.rider-password-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.rider-password-wrapper input {
+  width: 100%;
+  padding-right: 48px;
+  box-sizing: border-box;
+}
+
+.rider-pw-toggle {
+  position: absolute;
+  right: 10px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 6px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.2s;
+  /* Ensure tappable on mobile */
+  min-width: 36px;
+  min-height: 36px;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.rider-pw-toggle:hover {
+  opacity: 0.7;
+}
+
+/* Password strength */
+.rider-pw-strength {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 6px;
+  margin-top: 4px;
+}
+
+.rider-pw-strength.valid {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.rider-pw-strength.partial {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
+.rider-pw-strength.invalid {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/* Password rules checklist */
+.rider-pw-rules {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: #f5f3ff;
+  border-radius: 8px;
+  border: 1px solid #ede9fe;
+}
+
+.pw-rule {
+  font-size: 12px;
+  color: #6b7280;
+  transition: color 0.2s;
+}
+
+.pw-rule.rule-ok {
+  color: #16a34a;
+  font-weight: 600;
+}
+
+/* Submit button */
+.rider-submit-btn {
+  background: #6a0dad;
+  color: white;
+  border: none;
+  padding: 14px;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 6px;
+  transition: background 0.2s;
+  width: 100%;
+  min-height: 48px;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.rider-submit-btn:hover {
+  background: #520a99;
+}
+
+/* Success state */
+.rider-modal-success {
+  text-align: center;
+  padding: 30px 0;
+}
+
+.success-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+.rider-modal-success h3 {
+  font-size: 20px;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.rider-modal-success p {
+  color: #777;
+  font-size: 14px;
+  margin-bottom: 24px;
+  line-height: 1.6;
+}
+
+.rider-btn-close {
+  background: #6a0dad;
+  color: white;
+  border: none;
+  padding: 12px 28px;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.2s;
+  min-height: 44px;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.rider-btn-close:hover {
+  background: #520a99;
+}
+
+/* Field footer */
+.field-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 18px;
+  margin-top: 3px;
+  gap: 8px;
+}
+
+.char-count {
+  font-size: 11px;
+  color: #bbb;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.char-count.count-done {
+  color: #28a745;
+  font-weight: 600;
+}
+
+/* ── MOBILE ── */
+@media (max-width: 560px) {
+  .rider-modal-overlay {
+    padding: 0;
+    align-items: flex-end; /* slide up from bottom */
+  }
+
+  .rider-modal-container {
+    padding: 24px 18px 32px;
+    border-radius: 20px 20px 0 0;
+    max-width: 100%;
+    width: 100%;
+    /* Allow natural height, scroll in overlay */
+    max-height: 92vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Drag handle visual hint */
+  .rider-modal-container::before {
+    content: '';
+    display: block;
+    width: 40px;
+    height: 4px;
+    background: #e2e8f0;
+    border-radius: 2px;
+    margin: 0 auto 20px;
+  }
+
+  .rider-modal-title {
+    font-size: 19px;
+  }
+
+  /* Stack the vehicle+plate row vertically */
+  .rider-form-row {
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .rider-form-group input,
+  .rider-form-group select {
+    font-size: 16px; /* keep at 16 to prevent iOS zoom */
+    padding: 12px 14px;
+  }
+
+  .rider-form-group select {
+    padding-right: 40px;
+  }
+
+  /* Larger tap targets */
+  .rider-submit-btn,
+  .rider-btn-close {
+    padding: 15px;
+    font-size: 15px;
+  }
+
+  .rider-modal-close {
+    top: 12px;
+    right: 12px;
+    width: 34px;
+    height: 34px;
+    font-size: 15px;
+  }
+}
+
+@media (max-width: 360px) {
+  .rider-modal-container {
+    padding: 20px 14px 28px;
+  }
+
+  .rider-modal-title {
+    font-size: 17px;
+  }
+
+  .rider-pw-rules {
+    font-size: 11px;
+  }
+}

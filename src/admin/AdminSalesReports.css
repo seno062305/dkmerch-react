@@ -28,24 +28,28 @@
   height: 400px;
   font-size: 16px;
   color: #666;
+  gap: 10px;
 }
 
 /* Filter Section */
 .filter-section {
   background: white;
-  padding: 20px;
+  padding: 18px 20px;
   border-radius: 12px;
   margin-bottom: 25px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
 .date-inputs {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .date-input-group {
@@ -61,6 +65,7 @@
 .date-input-group label {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .date-input-group svg {
@@ -77,11 +82,13 @@
   outline: none;
   font-family: inherit;
   cursor: pointer;
+  min-width: 0;
 }
 
 .date-separator {
   color: #9ca3af;
   font-size: 14px;
+  white-space: nowrap;
 }
 
 .view-mode-tabs {
@@ -90,10 +97,11 @@
   background-color: #f3f4f6;
   padding: 4px;
   border-radius: 8px;
+  flex-shrink: 0;
 }
 
 .mode-tab {
-  padding: 8px 20px;
+  padding: 8px 16px;
   border: none;
   background: transparent;
   color: #6b7280;
@@ -102,11 +110,10 @@
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s ease;
+  white-space: nowrap;
 }
 
-.mode-tab:hover {
-  color: #374151;
-}
+.mode-tab:hover { color: #374151; }
 
 .mode-tab.active {
   background: white;
@@ -118,27 +125,26 @@
 .summary-cards {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 20px;
+  gap: 16px;
   margin-bottom: 25px;
 }
 
 .summary-card {
   background: white;
-  padding: 20px;
+  padding: 18px;
   border-radius: 12px;
   display: flex;
-  gap: 16px;
+  gap: 14px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   transition: transform 0.2s ease;
+  align-items: center;
 }
 
-.summary-card:hover {
-  transform: translateY(-2px);
-}
+.summary-card:hover { transform: translateY(-2px); }
 
 .card-icon {
-  width: 48px;
-  height: 48px;
+  width: 46px;
+  height: 46px;
   border-radius: 10px;
   display: flex;
   align-items: center;
@@ -147,46 +153,35 @@
 }
 
 .card-icon svg {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
 }
 
-.revenue-icon {
-  background: linear-gradient(135deg, #10b981 0%, #34d399 100%);
-  color: white;
-}
-
-.orders-icon {
-  background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%);
-  color: white;
-}
-
-.completed-icon {
-  background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%);
-  color: white;
-}
-
-.average-icon {
-  background: linear-gradient(135deg, #ec4899 0%, #f472b6 100%);
-  color: white;
-}
+.revenue-icon   { background: linear-gradient(135deg, #10b981 0%, #34d399 100%); color: white; }
+.orders-icon    { background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%); color: white; }
+.completed-icon { background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%); color: white; }
+.average-icon   { background: linear-gradient(135deg, #ec4899 0%, #f472b6 100%); color: white; }
 
 .card-content {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  min-width: 0;
 }
 
 .card-value {
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 700;
   color: #1a1a1a;
   line-height: 1.2;
   margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .card-label {
-  font-size: 13px;
+  font-size: 12px;
   color: #6b7280;
   font-weight: 500;
 }
@@ -201,19 +196,19 @@
 
 .chart-container {
   background: white;
-  padding: 24px;
+  padding: 20px;
   border-radius: 12px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
 }
 
 .chart-container h3 {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   color: #1a1a1a;
-  margin: 0 0 20px 0;
+  margin: 0 0 16px 0;
 }
 
-/* Chart Styling */
 .line-chart,
 .bar-chart {
   width: 100%;
@@ -242,7 +237,6 @@
   stroke-width: 1;
 }
 
-/* Line Chart */
 .chart-line {
   fill: none;
   stroke: url(#lineGradient);
@@ -258,11 +252,8 @@
   transition: r 0.2s ease;
 }
 
-.data-point:hover {
-  r: 7;
-}
+.data-point:hover { r: 7; }
 
-/* Bar Chart */
 .bar {
   fill: #8b5cf6;
   transition: all 0.2s ease;
@@ -290,6 +281,7 @@
 
 .products-table-container {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .products-table {
@@ -310,122 +302,122 @@
   text-transform: uppercase;
   letter-spacing: 0.5px;
   border-bottom: 1px solid #e5e5e5;
+  white-space: nowrap;
 }
 
-.products-table th:first-child {
-  width: 60px;
-  text-align: center;
-}
-
+.products-table th:first-child { width: 50px; text-align: center; }
 .products-table th:nth-child(3),
-.products-table th:nth-child(4) {
-  text-align: right;
-}
+.products-table th:nth-child(4) { text-align: right; }
 
 .products-table tbody tr {
   border-bottom: 1px solid #f0f0f0;
   transition: background-color 0.2s ease;
 }
 
-.products-table tbody tr:hover {
-  background-color: #fafafa;
-}
+.products-table tbody tr:hover { background-color: #fafafa; }
 
 .products-table td {
-  padding: 16px;
+  padding: 14px 16px;
   font-size: 14px;
   color: #333;
 }
 
-.rank-cell {
-  text-align: center;
-  font-weight: 600;
-  color: #6b7280;
-  font-size: 15px;
-}
-
-.product-name {
-  font-weight: 500;
-  color: #1f2937;
-}
+.rank-cell { text-align: center; font-weight: 600; color: #6b7280; font-size: 15px; }
+.product-name { font-weight: 500; color: #1f2937; }
 
 .products-table td:nth-child(3),
-.products-table td:nth-child(4) {
-  text-align: right;
-}
+.products-table td:nth-child(4) { text-align: right; }
 
-.revenue-cell {
-  font-weight: 600;
-  color: #059669;
-}
+.revenue-cell { font-weight: 600; color: #059669; }
 
-/* Responsive Design */
+.empty-state { text-align: center; padding: 40px 20px; color: #999; }
+.empty-state i { font-size: 48px; display: block; margin-bottom: 12px; }
+.empty-state p { font-size: 14px; }
+
+/* ══════════════════════════
+   RESPONSIVE
+══════════════════════════ */
+
 @media (max-width: 1200px) {
-  .summary-cards {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .charts-grid {
-    grid-template-columns: 1fr;
-  }
+  .summary-cards { grid-template-columns: repeat(2, 1fr); }
+  .charts-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 768px) {
-  .admin-sales-reports {
-    padding: 20px;
-  }
+  .admin-sales-reports { padding: 16px; }
+
+  .reports-header h1 { font-size: 24px; }
 
   .filter-section {
     flex-direction: column;
-    gap: 16px;
     align-items: stretch;
+    gap: 12px;
+    padding: 14px 16px;
   }
 
   .date-inputs {
     flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
     width: 100%;
   }
 
   .date-input-group {
     width: 100%;
+    box-sizing: border-box;
+    justify-content: flex-start;
   }
 
-  .view-mode-tabs {
+  .date-input-group input[type="date"] {
+    flex: 1;
     width: 100%;
   }
 
-  .mode-tab {
-    flex: 1;
-  }
+  .date-separator { text-align: center; }
+
+  .view-mode-tabs { width: 100%; }
+  .mode-tab { flex: 1; text-align: center; padding: 8px 10px; font-size: 13px; }
 
   .summary-cards {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
   }
 
-  .products-table-container {
-    overflow-x: auto;
-  }
+  .summary-card { padding: 14px; gap: 12px; }
+  .card-icon { width: 40px; height: 40px; }
+  .card-icon svg { width: 18px; height: 18px; }
+  .card-value { font-size: 18px; }
+  .card-label { font-size: 11px; }
 
-  .products-table {
-    min-width: 600px;
-  }
+  .charts-grid { gap: 14px; margin-bottom: 16px; }
+  .chart-container { padding: 16px; }
+  .chart-container h3 { font-size: 14px; margin-bottom: 12px; }
+
+  .top-products-section { padding: 16px; }
+  .top-products-section h3 { font-size: 16px; }
+
+  .products-table { min-width: 500px; }
+  .products-table th,
+  .products-table td { padding: 10px 12px; font-size: 13px; }
 }
 
 @media (max-width: 480px) {
-  .reports-header h1 {
-    font-size: 24px;
-  }
+  .admin-sales-reports { padding: 12px; }
 
-  .card-value {
-    font-size: 20px;
-  }
+  .reports-header h1 { font-size: 20px; }
+  .subtitle { font-size: 13px; }
 
-  .chart-container {
-    padding: 16px;
-  }
+  .summary-cards { gap: 10px; }
+  .summary-card { padding: 12px; gap: 10px; }
+  .card-icon { width: 36px; height: 36px; border-radius: 8px; }
+  .card-icon svg { width: 16px; height: 16px; }
+  .card-value { font-size: 16px; }
 
-  .chart-container h3,
-  .top-products-section h3 {
-    font-size: 16px;
-  }
+  .chart-container { padding: 12px; }
+  .line-chart, .bar-chart { height: 160px; }
+
+  .top-products-section { padding: 12px; }
+  .products-table th,
+  .products-table td { padding: 8px 10px; font-size: 12px; }
 }

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import "./LoginModal.css";
 import { useAuth } from "../context/AuthContext";
 import RegisterModal from "./RegisterModal";
+import RiderRegistrationModal from "./RiderRegistrationModal";
 import { useNavigate } from "react-router-dom";
 
 const LoginModal = ({ onClose }) => {
@@ -14,9 +15,11 @@ const LoginModal = ({ onClose }) => {
   });
 
   const [showRegister, setShowRegister] = useState(false);
+  const [showRiderRegister, setShowRiderRegister] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [isRiderMode, setIsRiderMode] = useState(false);
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -32,7 +35,6 @@ const LoginModal = ({ onClose }) => {
     setError("");
     setIsLoading(true);
 
-    // Simulate loading for better UX
     setTimeout(() => {
       const result = login(formData.email, formData.password);
 
@@ -49,6 +51,13 @@ const LoginModal = ({ onClose }) => {
         return;
       }
 
+      // 🛵 RIDER AUTO REDIRECT
+      if (result.role === "rider") {
+        onClose();
+        navigate("/rider", { replace: true });
+        return;
+      }
+
       // normal user
       onClose();
     }, 500);
@@ -57,26 +66,18 @@ const LoginModal = ({ onClose }) => {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
-    // Clear error when user starts typing
     if (error) setError("");
   };
 
-  // ✅ CLEAR LOGIN FORM AND SWITCH TO REGISTER
   const handleSwitchToRegister = () => {
     setFormData({ email: "", password: "" });
     setError("");
     setShowRegister(true);
   };
 
-  // ✅ FORGOT PASSWORD - REDIRECT TO SETTINGS (KAHIT HINDI NAKA-LOGIN)
   const handleForgotPassword = () => {
-    // Close modal
     onClose();
-    
-    // Set flag in localStorage to indicate forgot password flow
     localStorage.setItem('dkmerch_forgot_password', 'true');
-    
-    // Navigate to settings with password tab active
     navigate("/settings", { state: { activeTab: "password", forgotPassword: true } });
   };
 
@@ -84,35 +85,70 @@ const LoginModal = ({ onClose }) => {
     setShowRegister(false);
   };
 
-  // switch to Register modal
+  const toggleRiderMode = () => {
+    setIsRiderMode(!isRiderMode);
+    setFormData({ email: "", password: "" });
+    setError("");
+  };
+
   if (showRegister) {
     return <RegisterModal onClose={handleRegisterSuccess} />;
+  }
+
+  if (showRiderRegister) {
+    return <RiderRegistrationModal onClose={() => setShowRiderRegister(false)} />;
   }
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="login-modal-content" onClick={(e) => e.stopPropagation()}>
-        {/* Close Button */}
         <button className="modal-close-btn" onClick={onClose} aria-label="Close">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
 
-        {/* Header with Icon */}
+        {/* 🛵 Rider Login Toggle Button - Top Left */}
+        <button
+          className={`rider-toggle-btn ${isRiderMode ? 'rider-mode-active' : ''}`}
+          onClick={toggleRiderMode}
+          title={isRiderMode ? "Switch to User Login" : "Rider Login"}
+          aria-label="Rider Login"
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19 7c0-1.1-.9-2-2-2h-3v2h3v2.65L13.52 14H10V9H6c-2.21 0-4 1.79-4 4v3h2c0 1.66 1.34 3 3 3s3-1.34 3-3h4.48L19 10.35V7zm-13 8c-.55 0-1-.45-1-1h2c0 .55-.45 1-1 1z"/>
+            <path d="M5 6h5v2H5zm14 7c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3zm0 4c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1z"/>
+          </svg>
+          <span>{isRiderMode ? "Rider" : "Rider"}</span>
+        </button>
+
         <div className="login-modal-header">
-          <div className="login-icon">
-            <svg viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
-            </svg>
+          <div className={`login-icon ${isRiderMode ? 'rider-icon-mode' : ''}`}>
+            {isRiderMode ? (
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19 7c0-1.1-.9-2-2-2h-3v2h3v2.65L13.52 14H10V9H6c-2.21 0-4 1.79-4 4v3h2c0 1.66 1.34 3 3 3s3-1.34 3-3h4.48L19 10.35V7zm-13 8c-.55 0-1-.45-1-1h2c0 .55-.45 1-1 1z"/>
+                <path d="M5 6h5v2H5zm14 7c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3zm0 4c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1z"/>
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
+              </svg>
+            )}
           </div>
-          <h2>Welcome Back!</h2>
-          <p className="login-subtitle">Log in to your DKMerch account</p>
+          <h2>{isRiderMode ? "Rider Login" : "Welcome Back!"}</h2>
+          <p className="login-subtitle">
+            {isRiderMode
+              ? "Log in to your DKMerch Rider account"
+              : "Log in to your DKMerch account"}
+          </p>
+          {isRiderMode && (
+            <div className="rider-mode-badge">
+              🛵 Rider Portal
+            </div>
+          )}
         </div>
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="login-form">
-          {/* Error Message */}
           {error && (
             <div className="error-banner">
               <svg viewBox="0 0 20 20" fill="currentColor">
@@ -122,7 +158,6 @@ const LoginModal = ({ onClose }) => {
             </div>
           )}
 
-          {/* Email/Username Input */}
           <div className="input-group">
             <label htmlFor="email">Email / Username</label>
             <div className="input-wrapper">
@@ -134,7 +169,7 @@ const LoginModal = ({ onClose }) => {
                 type="text"
                 id="email"
                 name="email"
-                placeholder="Enter your email or username"
+                placeholder={isRiderMode ? "Enter your rider email" : "Enter your email or username"}
                 className="form-input"
                 value={formData.email}
                 onChange={handleChange}
@@ -144,7 +179,6 @@ const LoginModal = ({ onClose }) => {
             </div>
           </div>
 
-          {/* Password Input */}
           <div className="input-group">
             <label htmlFor="password">Password</label>
             <div className="input-wrapper">
@@ -155,7 +189,7 @@ const LoginModal = ({ onClose }) => {
                 type={showPassword ? "text" : "password"}
                 id="password"
                 name="password"
-                placeholder="Enter your password"
+                placeholder={isRiderMode ? "Enter your @rider password" : "Enter your password"}
                 className="form-input password-input"
                 value={formData.password}
                 onChange={handleChange}
@@ -181,21 +215,24 @@ const LoginModal = ({ onClose }) => {
                 )}
               </button>
             </div>
+            {isRiderMode && (
+              <p className="rider-password-hint">
+                🔑 Rider passwords must start with <strong>@rider</strong> (max 10 characters)
+              </p>
+            )}
           </div>
 
-          {/* Forgot Password Link */}
           <div className="forgot-password-wrapper">
-            <button
-              type="button"
-              className="forgot-password-link"
-              onClick={handleForgotPassword}
-            >
+            <button type="button" className="forgot-password-link" onClick={handleForgotPassword}>
               Forgot Password?
             </button>
           </div>
 
-          {/* Submit Button */}
-          <button type="submit" className="login-submit-btn" disabled={isLoading}>
+          <button
+            type="submit"
+            className={`login-submit-btn ${isRiderMode ? 'rider-submit-mode' : ''}`}
+            disabled={isLoading}
+          >
             {isLoading ? (
               <>
                 <svg className="spinner" viewBox="0 0 24 24">
@@ -209,29 +246,40 @@ const LoginModal = ({ onClose }) => {
                 <svg viewBox="0 0 20 20" fill="currentColor">
                   <path fillRule="evenodd" d="M3 3a1 1 0 011 1v12a1 1 0 11-2 0V4a1 1 0 011-1zm7.707 3.293a1 1 0 010 1.414L9.414 9H17a1 1 0 110 2H9.414l1.293 1.293a1 1 0 01-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>
-                Log In
+                {isRiderMode ? "Rider Log In" : "Log In"}
               </>
             )}
           </button>
 
-          {/* Divider */}
           <div className="divider">
             <span>OR</span>
           </div>
 
-          {/* Sign Up Link */}
-          <div className="signup-section">
-            <p>
-              New to DKMerch?{" "}
-              <button
-                type="button"
-                className="signup-link"
-                onClick={handleSwitchToRegister}
-              >
-                Create an account
-              </button>
-            </p>
-          </div>
+          {isRiderMode ? (
+            <div className="signup-section">
+              <p>
+                Want to be a rider?{" "}
+                <button type="button" className="signup-link" onClick={() => setShowRiderRegister(true)}>
+                  Apply Now
+                </button>
+              </p>
+              <p style={{ marginTop: '10px' }}>
+                Not a rider?{" "}
+                <button type="button" className="signup-link" onClick={toggleRiderMode}>
+                  User Login
+                </button>
+              </p>
+            </div>
+          ) : (
+            <div className="signup-section">
+              <p>
+                New to DKMerch?{" "}
+                <button type="button" className="signup-link" onClick={handleSwitchToRegister}>
+                  Create an account
+                </button>
+              </p>
+            </div>
+          )}
         </form>
       </div>
     </div>

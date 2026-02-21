@@ -26,12 +26,8 @@ body.login-modal-open {
 }
 
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 /* Modal Content */
@@ -48,14 +44,8 @@ body.login-modal-open {
 }
 
 @keyframes slideUp {
-  from {
-    transform: translateY(50px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
+  from { transform: translateY(50px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
 }
 
 /* Close Button */
@@ -91,6 +81,54 @@ body.login-modal-open {
   color: #374151;
 }
 
+/* 🛵 Rider Toggle Button - Top Left */
+.rider-toggle-btn {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 20px;
+  border: 2px solid #e5e7eb;
+  background: #f9fafb;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  color: #6b7280;
+  transition: all 0.3s ease;
+  z-index: 10;
+}
+
+.rider-toggle-btn svg {
+  width: 16px;
+  height: 16px;
+  color: #6b7280;
+  transition: color 0.3s ease;
+}
+
+.rider-toggle-btn:hover {
+  border-color: #7c3aed;
+  color: #7c3aed;
+  background: #f5f3ff;
+}
+
+.rider-toggle-btn:hover svg {
+  color: #7c3aed;
+}
+
+.rider-toggle-btn.rider-mode-active {
+  background: linear-gradient(135deg, #7c3aed, #a855f7);
+  border-color: transparent;
+  color: white;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.35);
+}
+
+.rider-toggle-btn.rider-mode-active svg {
+  color: white;
+}
+
 /* Modal Header */
 .login-modal-header {
   padding: 40px 40px 30px;
@@ -107,6 +145,13 @@ body.login-modal-open {
   align-items: center;
   justify-content: center;
   box-shadow: 0 10px 25px rgba(236, 72, 153, 0.3);
+  transition: all 0.4s ease;
+}
+
+/* Rider mode icon style */
+.login-icon.rider-icon-mode {
+  background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
+  box-shadow: 0 10px 25px rgba(124, 58, 237, 0.35);
 }
 
 .login-icon svg {
@@ -130,6 +175,30 @@ body.login-modal-open {
   color: #6b7280;
   font-size: 15px;
   margin: 0;
+}
+
+/* Rider Mode Badge */
+.rider-mode-badge {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 5px 14px;
+  background: linear-gradient(135deg, #7c3aed, #a855f7);
+  color: white;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+/* Rider password hint */
+.rider-password-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #7c3aed;
+  background: #f5f3ff;
+  border: 1px solid #ede9fe;
+  border-radius: 8px;
+  padding: 7px 10px;
 }
 
 /* Form */
@@ -221,10 +290,6 @@ body.login-modal-open {
   background: #ffffff;
 }
 
-.form-input:focus + .input-icon {
-  color: #ec4899;
-}
-
 /* Password Input */
 .password-input {
   padding-right: 48px;
@@ -304,6 +369,16 @@ body.login-modal-open {
   margin-bottom: 24px;
 }
 
+/* Rider submit button */
+.login-submit-btn.rider-submit-mode {
+  background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.35);
+}
+
+.login-submit-btn.rider-submit-mode:hover:not(:disabled) {
+  box-shadow: 0 8px 20px rgba(124, 58, 237, 0.45);
+}
+
 .login-submit-btn svg {
   width: 20px;
   height: 20px;
@@ -331,12 +406,8 @@ body.login-modal-open {
 }
 
 @keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 /* Divider */
@@ -452,6 +523,11 @@ body.login-modal-open {
     width: 18px;
     height: 18px;
   }
+
+  .rider-toggle-btn {
+    top: 16px;
+    left: 16px;
+  }
 }
 
 @media (max-width: 380px) {
@@ -502,7 +578,8 @@ body.login-modal-open {
 .login-submit-btn:focus-visible,
 .forgot-password-link:focus-visible,
 .signup-link:focus-visible,
-.modal-close-btn:focus-visible {
+.modal-close-btn:focus-visible,
+.rider-toggle-btn:focus-visible {
   outline: 2px solid #ec4899;
   outline-offset: 2px;
 }

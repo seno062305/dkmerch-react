@@ -749,3 +749,23 @@ body.search-open {
     height: 40px;
   }
 }
+/* ===============================================
+   RIDER REGISTRATION BUTTON
+=============================================== */
+
+.rider-register-btn {
+  color: #6a0dad;
+}
+
+.rider-register-btn i {
+  color: #6a0dad;
+}
+
+.rider-register-btn span {
+  color: #6a0dad;
+}
+
+.rider-register-btn:hover {
+  color: #520a99 !important;
+  transform: translateY(-2px);
+}

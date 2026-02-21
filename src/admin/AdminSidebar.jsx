@@ -7,38 +7,25 @@ const AdminSidebar = ({ onLinkClick }) => {
   const navigate = useNavigate();
   const [newOrderCount, setNewOrderCount] = useState(0);
 
-  // ✅ FIXED: Simplified and accurate order counting
   useEffect(() => {
     const checkNewOrders = () => {
       const orders = JSON.parse(localStorage.getItem('dkmerch_orders')) || [];
-      
-      // ✅ Filter valid orders with proper field checks
       const validOrders = orders.filter(order => {
-        // Must have orderId (or fallback to id)
         if (!order.orderId && !order.id) return false;
-        
-        // Must have items array with at least one item
         if (!order.items || !Array.isArray(order.items) || order.items.length === 0) return false;
-        
         return true;
       });
-      
-      // ✅ Count pending/confirmed orders (check both field variants)
       const pendingOrders = validOrders.filter(order => {
         const status = order.orderStatus || order.status || '';
         return status === 'pending' || status === 'confirmed';
       });
-      
       setNewOrderCount(pendingOrders.length);
     };
 
     checkNewOrders();
-
-    // Listen for order updates
     const handleOrderUpdate = () => checkNewOrders();
     window.addEventListener('storage', handleOrderUpdate);
     window.addEventListener('orderUpdated', handleOrderUpdate);
-
     return () => {
       window.removeEventListener('storage', handleOrderUpdate);
       window.removeEventListener('orderUpdated', handleOrderUpdate);
@@ -46,7 +33,6 @@ const AdminSidebar = ({ onLinkClick }) => {
   }, []);
 
   const handleLogout = () => {
-    // Confirm logout
     if (window.confirm('Are you sure you want to logout?')) {
       logout();
       navigate('/', { replace: true });
@@ -54,10 +40,7 @@ const AdminSidebar = ({ onLinkClick }) => {
   };
 
   const handleNavClick = () => {
-    // Call the parent's onLinkClick to close mobile menu
-    if (onLinkClick) {
-      onLinkClick();
-    }
+    if (onLinkClick) onLinkClick();
   };
 
   return (
@@ -107,6 +90,11 @@ const AdminSidebar = ({ onLinkClick }) => {
         <NavLink to="/admin/users" className="admin-nav-link" onClick={handleNavClick}>
           <i className="fas fa-users"></i>
           <span>User Management</span>
+        </NavLink>
+
+        <NavLink to="/admin/riders" className="admin-nav-link" onClick={handleNavClick}>
+          <i className="fas fa-motorcycle"></i>
+          <span>Riders</span>
         </NavLink>
       </nav>
 
