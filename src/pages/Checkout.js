@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
-import { useProducts, useUpdateProduct } from '../utils/productStorage';
+import { useProducts, usePreOrderProducts, useUpdateProduct } from '../utils/productStorage';
 import { useCreateOrder } from '../utils/orderStorage';
 import { useCart, useClearCart } from '../context/cartUtils';
 import { useMutation, useQuery, useAction } from 'convex/react';
@@ -21,7 +21,11 @@ const Checkout = () => {
   const { user, isAuthenticated } = useAuth();
   const { showNotification } = useNotification();
 
-  const products      = useProducts();
+  // ✅ Include both regular + pre-order products
+  const regularProducts  = useProducts() || [];
+  const preOrderProducts = usePreOrderProducts() || [];
+  const products         = [...regularProducts, ...preOrderProducts];
+
   const cartItems     = useCart();
   const createOrder   = useCreateOrder();
   const clearCart     = useClearCart();
@@ -73,7 +77,6 @@ const Checkout = () => {
     setSavedContact({ fullName: init.fullName, email: init.email, phone: init.phone });
     setSavedAddress({ address: init.address, city: init.city, zipCode: init.zipCode });
 
-    // Only open edit mode if fields are missing
     const contactMissing = !init.fullName || !init.email || !init.phone;
     const addressMissing = !init.address  || !init.city  || !init.zipCode;
     setIsEditingContact(contactMissing);
@@ -87,6 +90,7 @@ const Checkout = () => {
     }
   }, [cartItems.length, products.length]);
 
+  // ✅ Search across all products (regular + pre-order)
   const getProductById    = (id) => products.find(p => p._id === id || p.id === id);
   const getQty            = (item) => item.qty ?? item.quantity ?? 1;
   const getTotalPcs       = () => cartItems.reduce((sum, item) => sum + getQty(item), 0);
@@ -239,16 +243,18 @@ const Checkout = () => {
       const shipping   = calcShipping(totalPcs);
       const orderTotal = subtotal + shipping;
 
-      const orderItems = cartItems.map(item => {
-        const product = getProductById(item.productId || item.id);
-        return {
-          id:       item.productId || item.id,
-          name:     product?.name  || 'Unknown',
-          price:    product?.price || 0,
-          quantity: getQty(item),
-          image:    product?.image || '',
-        };
-      });
+   const orderItems = cartItems.map(item => {
+  const product = getProductById(item.productId || item.id);
+  return {
+    id:          item.productId || item.id,
+    name:        product?.name  || 'Unknown',
+    price:       product?.price || 0,
+    quantity:    getQty(item),
+    image:       product?.image || '',
+    isPreOrder:  product?.isPreOrder  || false,
+    releaseDate: product?.releaseDate || null,
+  };
+});
 
       await createOrder({
         orderId,
@@ -267,12 +273,11 @@ const Checkout = () => {
         paymentStatus:   'pending',
       });
 
-      // Pass customer info to PayMongo so it pre-fills the form
       const { paymentLinkUrl } = await createPaymentLink({
         orderId,
-        amount:       orderTotal,
-        description:  `DKMerch Order ${orderId}`,
-        customerName: savedContact.fullName,
+        amount:        orderTotal,
+        description:   `DKMerch Order ${orderId}`,
+        customerName:  savedContact.fullName,
         customerEmail: savedContact.email,
         customerPhone: savedContact.phone,
       });
@@ -450,7 +455,7 @@ const Checkout = () => {
                 <h2>Payment</h2>
                 <div className="payment-info-notice">
                   <i className="fas fa-shield-alt"></i>
-                  <span>You will be redirected to a secure <strong>PayMongo</strong> page where you can choose to pay via <strong>GCash</strong>, <strong>Maya</strong>, or <strong>Card</strong>.</span>
+                  <span>You will be redirected to a secure <strong>PayMongo</strong> page where you can choose to pay via <strong>GCash</strong> or <strong>Maya</strong>.</span>
                 </div>
                 <div style={{ display: 'flex', gap: '12px', marginTop: '14px', alignItems: 'center' }}>
                   <div className="payment-icon-wrap payment-icon-gcash" style={{ width: '40px', height: '40px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -458,9 +463,9 @@ const Checkout = () => {
                   </div>
                   <span style={{ fontSize: '14px', fontWeight: 600 }}>GCash</span>
                   <div className="payment-icon-wrap payment-icon-paymaya" style={{ width: '40px', height: '40px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: '8px' }}>
-                    <i className="fas fa-credit-card" style={{ fontSize: '18px' }}></i>
+                    <i className="fas fa-wallet" style={{ fontSize: '18px' }}></i>
                   </div>
-                  <span style={{ fontSize: '14px', fontWeight: 600 }}>Maya / Card</span>
+                  <span style={{ fontSize: '14px', fontWeight: 600 }}>Maya</span>
                 </div>
               </div>
 
@@ -484,8 +489,21 @@ const Checkout = () => {
                       <div key={item.productId || item.id} className="summary-item">
                         <img src={product.image} alt={product.name} />
                         <div className="item-details">
-                          <p className="item-name">{product.name}</p>
+                          <p className="item-name">
+                            {product.name}
+                            {product.isPreOrder && (
+                              <span className="item-preorder-badge">PRE-ORDER</span>
+                            )}
+                          </p>
                           <p className="item-meta">{product.kpopGroup}</p>
+                          {product.isPreOrder && product.releaseDate && (
+                            <p className="item-release-date">
+                              <i className="fas fa-calendar-alt"></i>{' '}
+                              Expected: {new Date(product.releaseDate).toLocaleDateString('en-PH', {
+                                year: 'numeric', month: 'long', day: 'numeric'
+                              })}
+                            </p>
+                          )}
                           <p className="item-qty">Qty: {qty}</p>
                           {product.stock < qty && <p className="item-error">⚠️ Only {product.stock} in stock</p>}
                         </div>

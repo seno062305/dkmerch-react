@@ -23,14 +23,12 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
   const allProductsRaw = useQuery(api.products.getAllProducts);
   const allProducts = React.useMemo(() => allProductsRaw || [], [allProductsRaw]);
 
-  // Scroll to top on page change (not hash changes)
   useEffect(() => {
     if (!location.hash) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   }, [location.pathname]);
 
-  // Scroll to hash element
   useEffect(() => {
     if (location.hash) {
       const id = location.hash.replace('#', '');
@@ -41,7 +39,6 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
     }
   }, [location.hash]);
 
-  // Search filter
   useEffect(() => {
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
@@ -58,7 +55,6 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
     }
   }, [searchQuery, allProducts]);
 
-  // Close dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -69,12 +65,10 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Body overflow lock
   useEffect(() => {
     document.body.style.overflow = (showMobileMenu || showSearch || showRiderModal) ? 'hidden' : '';
   }, [showMobileMenu, showSearch, showRiderModal]);
 
-  // FIXED: scroll-to-section — read state once via ref, never put location.state in deps
   useEffect(() => {
     const scrollTarget = location.state?.scrollTo;
     if (
@@ -83,7 +77,6 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
       scrollTarget !== lastScrollTarget.current
     ) {
       lastScrollTarget.current = scrollTarget;
-      // Clear the state immediately so it doesn't re-trigger on re-renders
       window.history.replaceState({}, '', '/');
       const tryScroll = (attempts = 0) => {
         const element = document.getElementById(scrollTarget);
@@ -98,7 +91,6 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
     if (location.pathname !== '/') {
       lastScrollTarget.current = null;
     }
-  // IMPORTANT: only depend on pathname — never put location.state here
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
 
@@ -111,7 +103,6 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
   };
 
   const handleLoginClick = () => window.dispatchEvent(new Event('openLoginModal'));
-
   const closeMobileMenu = () => setShowMobileMenu(false);
 
   const handleHomeClick = (e) => {
@@ -231,12 +222,7 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
                         <div className="user-email">{user?.email}</div>
                       </div>
                     </div>
-                    <Link to="/wishlist" className="dropdown-item" onClick={() => setShowAccountDropdown(false)}>
-                      <i className="fas fa-star"></i> My Favorites
-                    </Link>
-                    <Link to="/my-orders" className="dropdown-item" onClick={() => setShowAccountDropdown(false)}>
-                      <i className="fas fa-box"></i> My Orders
-                    </Link>
+                    {/* ✅ Settings and Logout lang */}
                     <Link to="/settings" className="dropdown-item" onClick={() => setShowAccountDropdown(false)}>
                       <i className="fas fa-cog"></i> Settings
                     </Link>

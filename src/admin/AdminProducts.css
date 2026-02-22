@@ -295,18 +295,21 @@
   border-color: #ee4d2d;
 }
 
+/* ✅ FIXED: use aspect-ratio + object-fit: contain so images always show */
 .product-image {
   position: relative;
   width: 100%;
-  height: 240px;
-  background: white;
+  aspect-ratio: 1 / 1;
+  background: #f8f9fa;
   overflow: hidden;
+  padding: 15px;
+  box-sizing: border-box;
 }
 
 .product-image img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   transition: transform 0.3s ease;
 }
 
@@ -428,4 +431,55 @@
   .form-header { flex-direction: column; align-items: stretch; gap: 12px; }
   .cancel-edit-btn { width: 100%; justify-content: center; }
   .submit-btn { width: 100%; justify-content: center; }
+}
+
+/* ── Release Date Field (shown when Pre-Order is checked) ── */
+.release-date-field {
+  background: #eff6ff;
+  border: 1.5px solid #bfdbfe;
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-top: 4px;
+}
+
+.release-date-field label {
+  color: #2563eb;
+}
+
+.release-date-field label i {
+  color: #2563eb;
+}
+
+.release-date-field input[type="date"] {
+  border-color: #bfdbfe;
+  background: white;
+}
+
+.release-date-field input[type="date"]:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.release-date-field .helper-text {
+  color: #2563eb;
+  opacity: 0.8;
+}
+
+/* ── Release Date in product card (catalog) ── */
+.release-date-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.release-date-info i {
+  font-size: 11px;
 }

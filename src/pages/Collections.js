@@ -26,19 +26,16 @@ const Collections = () => {
   const isWishlisted = (productId) =>
     wishlistItems.some(item => item.productId === productId);
 
-  // FIXED: Split into two separate effects so location.state and searchParams
-  // don't interfere with each other, and clear state immediately to prevent re-trigger
   useEffect(() => {
     const filterGroup = location.state?.filterGroup;
     const scrollToTop = location.state?.scrollToTop;
     if (filterGroup) {
       setSelectedGroup(filterGroup);
       if (scrollToTop) window.scrollTo({ top: 0, behavior: 'smooth' });
-      // Clear state immediately so this never runs again on re-render
       window.history.replaceState({}, document.title);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname]); // only pathname, never location.state
+  }, [location.pathname]);
 
   useEffect(() => {
     const productId = searchParams.get('product');
@@ -141,7 +138,12 @@ const Collections = () => {
                 className={`collection-card ${highlightedProductId === pid ? 'highlighted' : ''}`}
                 onClick={() => setSelectedProduct(product)}
               >
-                {product.isSale && <div className="collection-sale-badge">SALE</div>}
+                {/* Badges — PRE-ORDER takes priority over SALE */}
+                {product.isPreOrder
+                  ? <div className="collection-preorder-badge">PRE-ORDER</div>
+                  : product.isSale && <div className="collection-sale-badge">SALE</div>
+                }
+
                 <div className="collection-card-img">
                   <img src={product.image} alt={product.name} />
                 </div>

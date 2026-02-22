@@ -87,7 +87,7 @@ const OrderSuccess = () => {
             <div className="success-actions">
               <button
                 className="btn-track-order"
-                onClick={() => navigate('/my-orders')}
+                onClick={() => navigate('/track-order')}
               >
                 <i className="fas fa-list-alt"></i> View My Orders
               </button>

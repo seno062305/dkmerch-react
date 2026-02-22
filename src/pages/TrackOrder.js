@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useUserOrders, useOrdersByEmail, useUpdateOrderOtp } from '../utils/orderStorage';
-import { useProducts } from '../utils/productStorage';
+import { useProducts, usePreOrderProducts } from '../utils/productStorage';
 import './TrackOrder.css';
 
 const TrackOrder = () => {
@@ -11,15 +11,25 @@ const TrackOrder = () => {
   const [searchParams] = useSearchParams();
   const orderIdParam = searchParams.get('order');
 
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState('processing');
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [trackingEmail, setTrackingEmail] = useState('');
   const [searchEmail, setSearchEmail] = useState('');
   const [showTrackedOrders, setShowTrackedOrders] = useState(false);
+  const [lightboxImg, setLightboxImg] = useState(null);
+
+  const [removeConfirm, setRemoveConfirm] = useState(null);
+  const [hiddenOrders, setHiddenOrders] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('hiddenDeliveredOrders') || '[]'); } catch { return []; }
+  });
 
   const orders      = useUserOrders(isAuthenticated ? user?.email : null) || [];
   const emailOrders = useOrdersByEmail(searchEmail) || [];
-  const products    = useProducts() || [];
+
+  // ✅ Include both regular + pre-order products for fallback lookup
+  const regularProducts  = useProducts() || [];
+  const preOrderProducts = usePreOrderProducts() || [];
+  const products         = [...regularProducts, ...preOrderProducts];
 
   const selectedOrder = selectedOrderId
     ? (orders.find(o => o._id === selectedOrderId) || emailOrders.find(o => o._id === selectedOrderId))
@@ -78,9 +88,32 @@ const TrackOrder = () => {
     ];
   };
 
-  const filteredOrders = filter === 'all'
-    ? orders
-    : orders.filter(o => getDisplayStatus(o).toLowerCase() === filter.toLowerCase());
+  const isDelivered = (order) => {
+    const s = (order.orderStatus || order.status || '').toLowerCase();
+    return s === 'delivered' || s === 'completed';
+  };
+
+  const handleRemoveOrder = (orderId) => {
+    const updated = [...hiddenOrders, orderId];
+    setHiddenOrders(updated);
+    localStorage.setItem('hiddenDeliveredOrders', JSON.stringify(updated));
+    setRemoveConfirm(null);
+  };
+
+  const FILTERS = [
+    { key: 'processing', label: 'Processing' },
+    { key: 'confirmed', label: 'Confirmed' },
+    { key: 'shipped', label: 'Shipped' },
+    { key: 'out for delivery', label: 'Out for Delivery' },
+    { key: 'delivered', label: 'Delivered' },
+    { key: 'cancelled', label: 'Cancelled' },
+  ];
+
+  const visibleOrders = orders.filter(o => !hiddenOrders.includes(o._id));
+
+  const filteredOrders = visibleOrders.filter(o =>
+    getDisplayStatus(o).toLowerCase() === filter.toLowerCase()
+  );
 
   const handleFindMyOrders = (e) => {
     e.preventDefault();
@@ -89,51 +122,102 @@ const TrackOrder = () => {
     setShowTrackedOrders(true);
   };
 
-  // Square card component
+  // ✅ Check if order has any pre-order items — checks item data first, then fallback to products list
+  const getPreOrderReleaseDate = (order) => {
+    if (!order.items) return null;
+    for (const item of order.items) {
+      if (item.isPreOrder && item.releaseDate) return item.releaseDate;
+      const product = getProductById(item.id);
+      if (product?.isPreOrder && product?.releaseDate) return product.releaseDate;
+    }
+    return null;
+  };
+
   const OrderCard = ({ order, onViewDetails }) => {
     const ordDate = order._creationTime ? new Date(order._creationTime) : null;
     const orderStatus = getDisplayStatus(order);
+    const statusKey = order.orderStatus || order.status || 'pending';
     const firstItem = order.items?.[0];
     const firstProduct = firstItem ? getProductById(firstItem.id) : null;
     const imgSrc = firstItem?.image || firstProduct?.image;
     const itemName = firstItem?.name || firstProduct?.name;
     const extraCount = (order.items?.length || 1) - 1;
+    const delivered = isDelivered(order);
+    const releaseDate = getPreOrderReleaseDate(order);
 
     return (
       <div className="order-card">
-        {/* Square image */}
-        <div className="order-card-img">
+        <div
+          className="order-card-img"
+          onClick={() => imgSrc && setLightboxImg(imgSrc)}
+          title={imgSrc ? 'Click to view image' : ''}
+        >
           {imgSrc
             ? <img src={imgSrc} alt={itemName} />
             : <i className="fas fa-box order-no-img"></i>
           }
+          {imgSrc && (
+            <div className="order-img-zoom"><i className="fas fa-search-plus"></i></div>
+          )}
           {extraCount > 0 && (
             <span className="order-extra-badge">+{extraCount}</span>
           )}
-          <span className={`order-status-overlay ${getStatusClass(order.orderStatus || order.status)}`}>
+          <span className={`order-status-overlay ${getStatusClass(statusKey)}`}>
             {orderStatus}
           </span>
         </div>
 
-        {/* Info below */}
         <div className="order-card-info">
           <p className="order-card-id">Order #{order.orderId?.slice(-8) || 'N/A'}</p>
           <p className="order-card-name">
             {itemName}
             {extraCount > 0 && <span className="order-and-more"> +{extraCount} more</span>}
           </p>
+
+          {/* ✅ Pre-order release date badge */}
+          {releaseDate && (
+            <div className="order-card-preorder-badge">
+              <i className="fas fa-calendar-alt"></i>
+              <span>
+                Expected:{' '}
+                {new Date(releaseDate).toLocaleDateString('en-PH', {
+                  year: 'numeric', month: 'long', day: 'numeric'
+                })}
+              </span>
+            </div>
+          )}
+
+          <div className="order-card-meta">
+            <span className={`order-status-text ${getStatusClass(statusKey)}`}>
+              <i className="fas fa-circle"></i> {orderStatus}
+            </span>
+            {ordDate && (
+              <span className="order-card-date">
+                <i className="fas fa-calendar-alt"></i>
+                {ordDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              </span>
+            )}
+          </div>
+
           <div className="order-card-price-row">
             <span className="order-card-price">₱{order.total?.toLocaleString()}</span>
-            <span className="order-card-date">
-              {ordDate ? ordDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''}
-            </span>
           </div>
+
           <button
             className="btn btn-primary btn-small order-view-btn"
             onClick={() => onViewDetails(order)}
           >
             <i className="fas fa-search"></i> View Details
           </button>
+
+          {delivered && (
+            <button
+              className="btn order-remove-btn"
+              onClick={() => setRemoveConfirm(order._id)}
+            >
+              <i className="fas fa-trash-alt"></i> Remove
+            </button>
+          )}
         </div>
       </div>
     );
@@ -145,26 +229,28 @@ const TrackOrder = () => {
         <div className="page-header">
           <div className="container">
             <h1 className="page-title">Track Orders</h1>
-            <p className="page-description">View the status of your orders</p>
+            <p className="page-description">Track and manage your orders</p>
           </div>
         </div>
         <div className="container">
           <section className="track-order-page">
             <div className="orders-filter">
-              {[
-                { key: 'all', label: `All Orders (${orders.length})` },
-                { key: 'processing', label: 'Processing' },
-                { key: 'shipped', label: 'Shipped' },
-                { key: 'delivered', label: 'Delivered' },
-              ].map(f => (
-                <button key={f.key} className={`filter-btn ${filter === f.key ? 'active' : ''}`} onClick={() => setFilter(f.key)}>{f.label}</button>
+              {FILTERS.map(f => (
+                <button
+                  key={f.key}
+                  className={`filter-btn ${filter === f.key ? 'active' : ''}`}
+                  onClick={() => setFilter(f.key)}
+                >
+                  {f.label}
+                </button>
               ))}
             </div>
+
             {filteredOrders.length === 0 ? (
               <div className="orders-empty">
                 <i className="fas fa-shipping-fast"></i>
-                <h3>No Orders Found</h3>
-                <p>You haven't placed any orders yet.</p>
+                <h3>No {filter} Orders</h3>
+                <p>You have no {filter} orders at the moment.</p>
                 <button className="btn btn-primary" onClick={() => navigate('/collections')}>
                   <i className="fas fa-shopping-bag"></i> Start Shopping
                 </button>
@@ -178,6 +264,7 @@ const TrackOrder = () => {
             )}
           </section>
         </div>
+
         {selectedOrder && (
           <TrackingModal
             order={selectedOrder}
@@ -187,6 +274,31 @@ const TrackOrder = () => {
             getStatusClass={getStatusClass}
             getDisplayStatus={getDisplayStatus}
           />
+        )}
+
+        {lightboxImg && (
+          <div className="order-lightbox" onClick={() => setLightboxImg(null)}>
+            <button className="lightbox-close" onClick={() => setLightboxImg(null)}>
+              <i className="fas fa-times"></i>
+            </button>
+            <img src={lightboxImg} alt="Product" onClick={e => e.stopPropagation()} />
+          </div>
+        )}
+
+        {removeConfirm && (
+          <div className="remove-confirm-overlay" onClick={() => setRemoveConfirm(null)}>
+            <div className="remove-confirm-dialog" onClick={e => e.stopPropagation()}>
+              <div className="remove-confirm-icon"><i className="fas fa-trash-alt"></i></div>
+              <h3>Remove Order?</h3>
+              <p>Are you sure you want to remove this delivered order from your list? This action cannot be undone.</p>
+              <div className="remove-confirm-actions">
+                <button className="btn btn-outline" onClick={() => setRemoveConfirm(null)}>Cancel</button>
+                <button className="btn btn-danger" onClick={() => handleRemoveOrder(removeConfirm)}>
+                  <i className="fas fa-trash-alt"></i> Yes, Remove
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </main>
     );
@@ -256,6 +368,14 @@ const TrackOrder = () => {
           getStatusClass={getStatusClass}
           getDisplayStatus={getDisplayStatus}
         />
+      )}
+      {lightboxImg && (
+        <div className="order-lightbox" onClick={() => setLightboxImg(null)}>
+          <button className="lightbox-close" onClick={() => setLightboxImg(null)}>
+            <i className="fas fa-times"></i>
+          </button>
+          <img src={lightboxImg} alt="Product" onClick={e => e.stopPropagation()} />
+        </div>
       )}
     </main>
   );
@@ -388,10 +508,20 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
             {order.items?.map((item, index) => {
               const product = getProductById(item.id);
               const qty = item.quantity || item.qty || 1;
+              const isPreOrder = item.isPreOrder || product?.isPreOrder;
+              const releaseDate = item.releaseDate || product?.releaseDate;
               return (
                 <div key={index} className="order-item-timeline">
                   <div className="item-details">
                     <strong>{item.name || product?.name}</strong>
+                    {isPreOrder && releaseDate && (
+                      <span className="item-preorder-release">
+                        <i className="fas fa-calendar-alt"></i>{' '}
+                        Expected: {new Date(releaseDate).toLocaleDateString('en-PH', {
+                          year: 'numeric', month: 'long', day: 'numeric'
+                        })}
+                      </span>
+                    )}
                     <span>Qty: {qty}</span>
                   </div>
                   <div className="item-price">₱{((item.price || product?.price || 0) * qty).toLocaleString()}</div>

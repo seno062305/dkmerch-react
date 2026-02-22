@@ -158,7 +158,6 @@
 
 .checkout-section:hover {
   box-shadow: var(--shadow-lg);
-  /* NO transform, NO left/top border animation */
 }
 
 /* ── Section header row ── */
@@ -585,8 +584,7 @@ textarea {
 }
 
 /* ═══════════════════════════════════
-   ORDER SUMMARY — NO top gradient bar,
-   NO hover transform/border effects
+   ORDER SUMMARY
 ═══════════════════════════════════ */
 .order-summary {
   position: sticky;
@@ -601,7 +599,6 @@ textarea {
   to   { opacity: 1; transform: translateX(0); }
 }
 
-/* Clean summary card — no ::before top bar */
 .summary-card {
   background: var(--bg-secondary);
   border-radius: var(--radius-xl);
@@ -623,6 +620,7 @@ textarea {
   letter-spacing: -0.02em;
 }
 
+/* ── SCROLLBAR HIDDEN ── */
 .summary-items {
   max-height: 350px;
   overflow-y: auto;
@@ -630,12 +628,12 @@ textarea {
   padding-right: 4px;
   width: 100%;
   order: 0;
+  scrollbar-width: none; /* Firefox */
 }
 
-.summary-items::-webkit-scrollbar { width: 6px; }
-.summary-items::-webkit-scrollbar-track { background: var(--bg-primary); border-radius: 10px; }
-.summary-items::-webkit-scrollbar-thumb { background: var(--border-medium); border-radius: 10px; transition: var(--transition-smooth); }
-.summary-items::-webkit-scrollbar-thumb:hover { background: var(--primary-pink); }
+.summary-items::-webkit-scrollbar {
+  display: none; /* Chrome / Safari / Edge */
+}
 
 .summary-item {
   display: flex;
@@ -982,4 +980,51 @@ html { scroll-behavior: smooth; }
   background: linear-gradient(135deg, var(--primary-pink) 0%, var(--secondary-purple) 100%);
   color: white;
   border: none;
+}
+
+/* ── Pre-order badge in order summary items ── */
+.item-preorder-badge {
+  display: inline-block;
+  background: var(--info-color, #17a2b8);
+  color: white;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+/* ── Release date in order summary ── */
+.item-release-date {
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  color: #2563eb;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.item-release-date i {
+  font-size: 10px;
+}
+
+/* ── Section complete badge ── */
+.section-complete-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--success-green);
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 20px;
+  padding: 3px 10px;
+  margin-left: 10px;
+  vertical-align: middle;
 }

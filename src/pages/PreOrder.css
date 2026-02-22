@@ -1,177 +1,245 @@
 .preorder-page {
-  padding: 40px 0 80px;
+  padding: 0 0 80px;
 }
 
-.filter-bar {
+/* ── Filter Bar ── */
+.preorder-filter-bar {
+  background: #f8f9fa;
+  padding: 30px 40px;
+  border-bottom: 2px solid #eee;
+  margin-bottom: 0;
+}
+
+.preorder-filter-bar h3 {
+  font-size: 13px;
+  font-weight: 700;
+  color: #333;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+}
+
+.filter-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.filter-btn {
+  padding: 8px 20px;
   background: white;
-  padding: 25px;
-  border-radius: var(--border-radius);
-  margin-bottom: 40px;
-  box-shadow: var(--box-shadow);
+  border: 1.5px solid #ccc;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
 }
 
-.filter-bar h3 {
-  font-size: 16px;
-  margin-bottom: 15px;
-  color: var(--dark-color);
+.filter-btn:hover {
+  border-color: #111;
+  background: #f5f5f5;
 }
 
+.filter-btn.active {
+  background: #111;
+  color: #fff;
+  border-color: #111;
+}
+
+/* ── Grid ── */
 .preorder-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-  gap: 30px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0;
+  background: white;
 }
 
+/* ── Card ── */
 .preorder-card {
   background: white;
-  border-radius: var(--border-radius);
-  overflow: hidden;
-  box-shadow: var(--box-shadow);
-  transition: var(--transition);
+  border: 1px solid #e0e0e0;
+  border-right: none;
+  border-bottom: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
   position: relative;
+  overflow: hidden;
 }
 
 .preorder-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  z-index: 10;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  transform: scale(1.02);
 }
 
+/* ── PRE-ORDER badge ── */
 .preorder-badge {
   position: absolute;
-  top: 15px;
-  left: 15px;
+  top: 12px;
+  left: 12px;
   background: var(--info-color);
   color: white;
-  padding: 6px 14px;
-  border-radius: 4px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
-  z-index: 10;
+  padding: 6px 12px;
+  border-radius: 3px;
+  z-index: 5;
   text-transform: uppercase;
 }
 
+/* ── Image ── */
 .preorder-image {
-  position: relative;
   width: 100%;
-  height: 300px;
+  aspect-ratio: 1 / 1;
+  background: #f8f9fa;
   overflow: hidden;
-  background: #f5f5f5;
+  padding: 15px;
+  position: relative;
 }
 
 .preorder-image img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  transition: var(--transition);
+  object-fit: contain;
+  transition: transform 0.4s ease;
 }
 
 .preorder-card:hover .preorder-image img {
   transform: scale(1.05);
 }
 
-.release-date {
-  position: absolute;
-  bottom: 15px;
-  right: 15px;
-  background: rgba(0, 0, 0, 0.8);
-  color: white;
-  padding: 8px 15px;
-  border-radius: 20px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  backdrop-filter: blur(5px);
+/* ── Info ── */
+.preorder-info {
+  padding: 16px;
 }
 
-.release-date i {
+.product-group {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--primary-color);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.product-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #222;
+  line-height: 1.4;
+  margin-bottom: 8px;
+  min-height: 36px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ── Release Date Badge ── */
+.release-date-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.release-date-badge i {
+  font-size: 11px;
+  color: #2563eb;
+}
+
+/* ── Price ── */
+.product-price {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.current-price {
+  font-size: 15px;
+  font-weight: 700;
   color: var(--primary-color);
 }
 
-.preorder-info {
-  padding: 25px;
-}
-
-.product-description {
-  color: var(--gray-color);
-  font-size: 14px;
-  line-height: 1.6;
-  margin-bottom: 20px;
-}
-
-.benefits {
-  background: #f8f9fa;
-  padding: 15px;
-  border-radius: 8px;
-  margin-bottom: 20px;
-}
-
-.benefits h4 {
-  font-size: 14px;
-  margin-bottom: 10px;
-  color: var(--dark-color);
-}
-
-.benefits ul {
-  list-style: none;
-}
-
-.benefits li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
-  font-size: 13px;
-  color: var(--gray-color);
-}
-
-.benefits li:last-child {
-  margin-bottom: 0;
-}
-
-.benefits i {
-  color: var(--success-color);
+.original-price {
   font-size: 12px;
+  color: #999;
+  text-decoration: line-through;
 }
 
 .discount {
   background: var(--danger-color);
   color: white;
-  padding: 4px 10px;
-  border-radius: 4px;
-  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 11px;
   font-weight: 700;
 }
 
+/* ── Stock ── */
 .stock-info {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 20px;
-  font-size: 14px;
+  gap: 6px;
+  margin-bottom: 12px;
+  font-size: 12px;
   color: var(--warning-color);
   font-weight: 600;
 }
 
-.stock-info i {
-  font-size: 16px;
-}
+.stock-info i { font-size: 12px; }
 
 .preorder-card .btn {
   width: 100%;
+  padding: 10px;
+  font-size: 13px;
+}
+
+/* ── No Results ── */
+.no-results {
+  text-align: center;
+  padding: 80px 20px;
+}
+
+.no-results i {
+  font-size: 64px;
+  color: #ddd;
+  margin-bottom: 20px;
+  display: block;
+}
+
+.no-results h3 { font-size: 20px; color: #444; margin-bottom: 10px; }
+.no-results p  { font-size: 15px; color: #888; }
+
+/* ── Responsive ── */
+@media (max-width: 992px) {
+  .preorder-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
 }
 
 @media (max-width: 768px) {
-  .preorder-grid {
-    grid-template-columns: 1fr;
-  }
+  .preorder-filter-bar { padding: 20px; }
+  .preorder-grid { grid-template-columns: repeat(2, 1fr); }
+  .preorder-image { padding: 12px; }
+}
 
-  .preorder-image {
-    height: 250px;
-  }
+@media (max-width: 576px) {
+  .filter-btn { padding: 7px 16px; font-size: 12px; }
+  .preorder-info { padding: 12px; }
+  .product-name { font-size: 12px; min-height: 32px; }
+}
 
-  .preorder-info {
-    padding: 20px;
-  }
+@media (max-width: 400px) {
+  .preorder-grid { grid-template-columns: 1fr; }
 }

@@ -14,7 +14,6 @@ import PreOrder from './pages/PreOrder';
 import TrackOrder from './pages/TrackOrder';
 import Help from './pages/Help';
 import Settings from './pages/Settings';
-import MyOrders from './pages/MyOrders';
 
 import LoginModal from './components/LoginModal';
 import CartModal from './components/CartModal';
@@ -93,8 +92,9 @@ function AppContent() {
         <Route path="/wishlist" element={<WishlistPage />} />
         <Route path="/checkout" element={<Checkout />} />
         <Route path="/settings" element={<Settings />} />
-        <Route path="/my-orders" element={<MyOrders />} />
-              <Route path="/order-success" element={<OrderSuccess />} />
+        {/* ✅ /my-orders now redirects to /track-order */}
+        <Route path="/my-orders" element={<Navigate to="/track-order" replace />} />
+        <Route path="/order-success" element={<OrderSuccess />} />
 
         <Route path="/rider" element={
           <RiderRoute>

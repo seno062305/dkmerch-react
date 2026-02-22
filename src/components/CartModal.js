@@ -1,16 +1,20 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../context/NotificationContext';
-import { useProducts } from '../utils/productStorage';
+import { useProducts, usePreOrderProducts } from '../utils/productStorage';
 import { useUpdateCartQuantity, useRemoveFromCart } from '../context/cartUtils';
 import './CartModal.css';
 
 const CartModal = ({ cart, onClose }) => {
   const navigate = useNavigate();
   const { showNotification } = useNotification();
-  const products = useProducts() || [];
+
+  const regularProducts  = useProducts() || [];
+  const preOrderProducts = usePreOrderProducts() || [];
+  const allProducts      = [...regularProducts, ...preOrderProducts];
+
   const updateCartQuantity = useUpdateCartQuantity();
-  const removeFromCart = useRemoveFromCart();
+  const removeFromCart     = useRemoveFromCart();
 
   React.useEffect(() => {
     const scrollY = window.scrollY;
@@ -30,11 +34,10 @@ const CartModal = ({ cart, onClose }) => {
   }, []);
 
   const findProduct = (productId) =>
-    products.find(p => p._id === productId || p.id === productId);
+    allProducts.find(p => p._id === productId || p.id === productId);
 
   const getQty = (item) => item.qty ?? item.quantity ?? 1;
 
-  // Total number of pieces across all items
   const getTotalPieces = () =>
     cart.reduce((sum, item) => sum + getQty(item), 0);
 
@@ -44,12 +47,11 @@ const CartModal = ({ cart, onClose }) => {
       return total + (product ? product.price * getQty(item) : 0);
     }, 0);
 
-  // Shipping: ₱10 base + ₱10 per piece, FREE if 10 pcs or more
   const calculateShipping = () => {
     if (cart.length === 0) return 0;
     const totalPcs = getTotalPieces();
-    if (totalPcs >= 10) return 0;          // FREE shipping
-    return 10 + (totalPcs * 10);           // ₱10 base + ₱10 per pc
+    if (totalPcs >= 10) return 0;
+    return 10 + (totalPcs * 10);
   };
 
   const calculateTotal = () => calculateSubtotal() + calculateShipping();
@@ -63,11 +65,7 @@ const CartModal = ({ cart, onClose }) => {
   const handleUpdateQty = async (productId, currentQty, change) => {
     const newQty = currentQty + change;
     const product = findProduct(productId);
-
-    if (newQty < 1) {
-      handleRemoveItem(productId);
-      return;
-    }
+    if (newQty < 1) { handleRemoveItem(productId); return; }
     if (product && newQty > product.stock) {
       showNotification(`Only ${product.stock} item(s) available in stock`, 'error');
       return;
@@ -89,7 +87,7 @@ const CartModal = ({ cart, onClose }) => {
   };
 
   const totalPcs = getTotalPieces();
-  const shipping = calculateShipping();
+  const shipping  = calculateShipping();
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -111,10 +109,10 @@ const CartModal = ({ cart, onClose }) => {
               <div className="cart-items">
                 {cart.map(item => {
                   const productId = item.productId || item.id;
-                  const product = findProduct(productId);
+                  const product   = findProduct(productId);
                   if (!product) return null;
 
-                  const qty = getQty(item);
+                  const qty        = getQty(item);
                   const atMaxStock = qty >= product.stock;
 
                   return (
@@ -124,17 +122,35 @@ const CartModal = ({ cart, onClose }) => {
                       </div>
                       <div className="cart-item-details">
                         <div className="cart-item-name-row">
-                          <div className="cart-item-name">{product.name}</div>
+                          <div className="cart-item-name">
+                            {product.name}
+                            {product.isPreOrder && (
+                              <span className="cart-preorder-badge">PRE-ORDER</span>
+                            )}
+                          </div>
                           <div className="cart-item-stock-info">{product.stock} available</div>
                         </div>
+
                         <div className="cart-item-meta">{product.kpopGroup} • {product.category}</div>
+
+                        {product.isPreOrder && product.releaseDate && (
+                          <div className="cart-preorder-release">
+                            <i className="fas fa-calendar-alt"></i>
+                            Expected: {new Date(product.releaseDate).toLocaleDateString('en-PH', {
+                              year: 'numeric', month: 'long', day: 'numeric'
+                            })}
+                          </div>
+                        )}
+
                         <div className="cart-item-price">₱{(product.price * qty).toLocaleString()}</div>
+
                         {atMaxStock && (
                           <div className="stock-limit-notice">
                             <i className="fas fa-info-circle"></i>
                             <span>Maximum stock reached</span>
                           </div>
                         )}
+
                         <div className="cart-item-actions">
                           <div className="quantity-controls">
                             <button className="quantity-btn minus" onClick={() => handleUpdateQty(productId, qty, -1)}>-</button>
@@ -156,31 +172,15 @@ const CartModal = ({ cart, onClose }) => {
               </div>
 
               <div className="cart-summary">
-                {/* Free shipping progress */}
                 {totalPcs < 10 && (
-                  <div style={{
-                    background: '#f0f4ff',
-                    borderRadius: '8px',
-                    padding: '10px 14px',
-                    marginBottom: '12px',
-                    fontSize: '13px',
-                    color: '#555',
-                  }}>
-                    <i className="fas fa-truck" style={{ marginRight: '6px', color: '#6c63ff' }}></i>
+                  <div className="shipping-notice">
+                    <i className="fas fa-truck"></i>
                     Add <strong>{10 - totalPcs} more pc{10 - totalPcs > 1 ? 's' : ''}</strong> to get <strong>FREE shipping!</strong>
                   </div>
                 )}
                 {totalPcs >= 10 && (
-                  <div style={{
-                    background: '#f0fff4',
-                    borderRadius: '8px',
-                    padding: '10px 14px',
-                    marginBottom: '12px',
-                    fontSize: '13px',
-                    color: '#22863a',
-                    fontWeight: 600,
-                  }}>
-                    <i className="fas fa-check-circle" style={{ marginRight: '6px' }}></i>
+                  <div className="shipping-notice free">
+                    <i className="fas fa-check-circle"></i>
                     You got FREE shipping!
                   </div>
                 )}
@@ -193,7 +193,7 @@ const CartModal = ({ cart, onClose }) => {
                   <span>Shipping ({totalPcs} pc{totalPcs > 1 ? 's' : ''}):</span>
                   <span>
                     {shipping === 0
-                      ? <span style={{ color: '#22863a', fontWeight: 600 }}>FREE</span>
+                      ? <span className="free-shipping-text">FREE</span>
                       : `₱${shipping.toLocaleString()}`}
                   </span>
                 </div>
@@ -206,16 +206,13 @@ const CartModal = ({ cart, onClose }) => {
           )}
         </div>
 
-        <div className="modal-footer">
-          <button className="btn btn-outline" onClick={() => { onClose(); navigate('/collections'); }}>
-            Continue Shopping
-          </button>
-          {cart.length > 0 && (
+        {cart.length > 0 && (
+          <div className="modal-footer">
             <button className="btn btn-primary" onClick={handleCheckout}>
               Proceed to Checkout
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import './AdminProducts.css';
 import { useProducts, useAddProduct, useUpdateProduct, useDeleteProduct } from '../utils/productStorage';
+import { usePreOrderProducts } from '../utils/productStorage';
 
 const emptyForm = {
   name: '',
@@ -12,18 +13,23 @@ const emptyForm = {
   stock: '',
   description: '',
   isSale: false,
-  isPreOrder: false
+  isPreOrder: false,
+  releaseDate: '',
 };
 
 const AdminProducts = () => {
-  const products = useProducts() || [];
-  const addProduct = useAddProduct();
+  // Fetch both regular + preorder products for the catalog
+  const regularProducts   = useProducts() || [];
+  const preOrderProducts  = usePreOrderProducts() || [];
+  const products          = [...regularProducts, ...preOrderProducts];
+
+  const addProduct    = useAddProduct();
   const updateProduct = useUpdateProduct();
   const deleteProduct = useDeleteProduct();
 
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm]           = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm]         = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const fileInputRef = useRef(null);
 
@@ -31,17 +37,16 @@ const AdminProducts = () => {
     const { name, value, type, checked } = e.target;
     setForm(prev => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : value
+      [name]: type === 'checkbox' ? checked : value,
+      // Clear releaseDate if Pre-Order is unchecked
+      ...(name === 'isPreOrder' && !checked ? { releaseDate: '' } : {}),
     }));
   };
 
-  // When user picks a file, convert it to /images/filename.jpg path
   const handleFileSelect = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    // Store as /images/<filename> so it matches public/images folder
-    const imagePath = `/images/${file.name}`;
-    setForm(prev => ({ ...prev, image: imagePath }));
+    setForm(prev => ({ ...prev, image: `/images/${file.name}` }));
   };
 
   const handleSubmit = async (e) => {
@@ -51,19 +56,24 @@ const AdminProducts = () => {
       alert('Name, Price, and Image are required');
       return;
     }
+    if (form.isPreOrder && !form.releaseDate) {
+      alert('Please set a Release Date for Pre-Order items');
+      return;
+    }
 
     const productData = {
-      name: form.name,
-      category: form.category,
-      kpopGroup: form.kpopGroup,
-      price: Number(form.price),
+      name:          form.name,
+      category:      form.category,
+      kpopGroup:     form.kpopGroup,
+      price:         Number(form.price),
       originalPrice: form.originalPrice ? Number(form.originalPrice) : Number(form.price),
-      stock: Number(form.stock || 0),
-      image: form.image,
-      description: form.description || '',
-      isSale: Boolean(form.isSale),
-      isPreOrder: Boolean(form.isPreOrder),
-      status: form.isPreOrder ? 'preorder' : form.isSale ? 'sale' : 'available',
+      stock:         Number(form.stock || 0),
+      image:         form.image,
+      description:   form.description || '',
+      isSale:        Boolean(form.isSale),
+      isPreOrder:    Boolean(form.isPreOrder),
+      releaseDate:   form.isPreOrder ? form.releaseDate : '',
+      status:        form.isPreOrder ? 'preorder' : form.isSale ? 'sale' : 'available',
     };
 
     if (editingId) {
@@ -78,16 +88,17 @@ const AdminProducts = () => {
 
   const handleEdit = (product) => {
     setForm({
-      name: product.name || '',
-      category: product.category || 'albums',
-      kpopGroup: product.kpopGroup || 'BTS',
-      price: String(product.price || ''),
+      name:          product.name || '',
+      category:      product.category || 'albums',
+      kpopGroup:     product.kpopGroup || 'BTS',
+      price:         String(product.price || ''),
       originalPrice: String(product.originalPrice || ''),
-      stock: String(product.stock || ''),
-      image: product.image || '',
-      description: product.description || '',
-      isSale: product.isSale || false,
-      isPreOrder: product.isPreOrder || false,
+      stock:         String(product.stock || ''),
+      image:         product.image || '',
+      description:   product.description || '',
+      isSale:        product.isSale || false,
+      isPreOrder:    product.isPreOrder || false,
+      releaseDate:   product.releaseDate || '',
     });
     setEditingId(product._id);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -111,10 +122,20 @@ const AdminProducts = () => {
     return matchesSearch && matchesCategory;
   });
 
-  const totalProducts = products.length;
-  const totalValue = products.reduce((sum, p) => sum + (p.price * p.stock), 0);
-  const onSaleCount = products.filter(p => p.isSale).length;
-  const preOrderCount = products.filter(p => p.isPreOrder).length;
+  const totalProducts  = products.length;
+  const totalValue     = products.reduce((sum, p) => sum + (p.price * p.stock), 0);
+  const onSaleCount    = products.filter(p => p.isSale).length;
+  const preOrderCount  = products.filter(p => p.isPreOrder).length;
+
+  // Format release date for display
+  const formatReleaseDate = (dateStr) => {
+    if (!dateStr) return null;
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' });
+  };
+
+  // Today's date as min value for date picker
+  const today = new Date().toISOString().split('T')[0];
 
   return (
     <div className="admin-products-page">
@@ -197,7 +218,7 @@ const AdminProducts = () => {
               <input type="number" name="stock" placeholder="0" value={form.stock} onChange={handleChange} required />
             </div>
 
-            {/* IMAGE FIELD - file browser + manual path */}
+            {/* IMAGE FIELD */}
             <div className="form-group full-width">
               <label><i className="fas fa-image"></i> Product Image *</label>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -212,31 +233,13 @@ const AdminProducts = () => {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current.click()}
-                  style={{
-                    padding: '10px 16px',
-                    background: '#6c63ff',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                    fontSize: '14px',
-                  }}
+                  style={{ padding: '10px 16px', background: '#6c63ff', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', whiteSpace: 'nowrap', fontSize: '14px' }}
                 >
                   <i className="fas fa-folder-open"></i> Browse
                 </button>
               </div>
-              {/* Hidden file input - accepts images only */}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                style={{ display: 'none' }}
-                onChange={handleFileSelect}
-              />
-              <small className="helper-text">
-                Click Browse to pick from your images folder, or type the path manually (e.g. /images/product.jpg)
-              </small>
+              <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileSelect} />
+              <small className="helper-text">Click Browse to pick from your images folder, or type the path manually (e.g. /images/product.jpg)</small>
             </div>
 
             {form.image && (
@@ -260,6 +263,7 @@ const AdminProducts = () => {
               <small className="helper-text">Describe the product features and details</small>
             </div>
 
+            {/* CHECKBOXES */}
             <div className="form-group full-width">
               <div className="checkbox-group">
                 <label className="checkbox-label">
@@ -274,6 +278,24 @@ const AdminProducts = () => {
                 </label>
               </div>
             </div>
+
+            {/* RELEASE DATE — only shows when Pre-Order is checked */}
+            {form.isPreOrder && (
+              <div className="form-group full-width release-date-field">
+                <label><i className="fas fa-calendar-alt"></i> Release Date *</label>
+                <input
+                  type="date"
+                  name="releaseDate"
+                  value={form.releaseDate}
+                  onChange={handleChange}
+                  min={today}
+                  required={form.isPreOrder}
+                />
+                <small className="helper-text">
+                  <i className="fas fa-info-circle"></i> This item will appear in Pre-Order only — not in Collections — until you uncheck Pre-Order.
+                </small>
+              </div>
+            )}
           </div>
 
           <div className="form-actions">
@@ -317,8 +339,8 @@ const AdminProducts = () => {
                 <div className="product-image">
                   <img src={product.image} alt={product.name} />
                   <div className="product-badges">
-                    {product.isSale && <span className="badge sale"><i className="fas fa-tag"></i> Sale</span>}
                     {product.isPreOrder && <span className="badge pre-order"><i className="fas fa-clock"></i> Pre-Order</span>}
+                    {product.isSale && !product.isPreOrder && <span className="badge sale"><i className="fas fa-tag"></i> Sale</span>}
                   </div>
                 </div>
                 <div className="product-details">
@@ -330,6 +352,13 @@ const AdminProducts = () => {
                     <span className="group"><i className="fas fa-users"></i> {product.kpopGroup}</span>
                     <span className="stock"><i className="fas fa-box"></i> Stock: {product.stock}</span>
                   </div>
+                  {/* Show release date if pre-order */}
+                  {product.isPreOrder && product.releaseDate && (
+                    <div className="release-date-info">
+                      <i className="fas fa-calendar-alt"></i>
+                      Release: {formatReleaseDate(product.releaseDate)}
+                    </div>
+                  )}
                   <div className="product-pricing">
                     <div className="price">₱{product.price.toLocaleString()}</div>
                     {product.originalPrice > product.price && (

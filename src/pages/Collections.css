@@ -11,19 +11,19 @@
   color: #1a1f36;
   padding: 50px 40px;
   text-align: center;
-  border-bottom: 1px solid #eee;
+  border-bottom: 0px solid #eee;
 }
 
 .collections-header h1 {
-  font-size: 36px;
-  font-weight: 700;
+  font-size: 32px;
+  font-weight: 650;
   margin-bottom: 10px;
-  color: #1a1f36;
+  color:#22000fea;
 }
 
 .collections-header p {
   font-size: 16px;
-  color: #64748b;
+  color: #6c757d;
 }
 
 /* Filters */
@@ -141,11 +141,27 @@
   transform: scale(1.02);
 }
 
+/* SALE badge */
 .collection-sale-badge {
   position: absolute;
   top: 12px;
   left: 12px;
   background: var(--primary-color);
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 3px;
+  z-index: 5;
+  text-transform: uppercase;
+}
+
+/* PRE-ORDER badge — teal, same position as SALE */
+.collection-preorder-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  background: var(--info-color);
   color: white;
   font-size: 11px;
   font-weight: 700;

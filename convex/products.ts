@@ -2,8 +2,10 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 
+// ── Regular products only (excludes pre-orders) ──
 export const getAllProducts = query(async ({ db }) => {
-  return await db.query("products").collect();
+  const products = await db.query("products").collect();
+  return products.filter(p => !p.isPreOrder && p.status !== "preorder");
 });
 
 export const getProductById = query({
@@ -13,6 +15,7 @@ export const getProductById = query({
   },
 });
 
+// ── Pre-order products only ──
 export const getPreOrderProducts = query(async ({ db }) => {
   const products = await db.query("products").collect();
   return products.filter(p => p.isPreOrder || p.status === "preorder");

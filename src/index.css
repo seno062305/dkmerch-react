@@ -1,7 +1,7 @@
 :root {
   --primary-color: #fc1268;
   --secondary-color: #9c27b0;
-  --dark-color: #42011eea;
+  --dark-color: #22000fea;
   --light-color: #f8f9fa;
   --gray-color: #6c757d;
   --success-color: #28a745;
@@ -21,7 +21,7 @@
 }
 
 body {
-  background-color: #f5f5f5;
+  background-color: #ffffff;
   color: #333;
   line-height: 1.6;
   overflow-x: hidden;
@@ -94,7 +94,7 @@ button {
   font-size: 14px;
 }
 
-/* Page header styles */
+/* Page header styles — global default (dark gradient) */
 .page-header {
   background: linear-gradient(135deg, var(--dark-color), #2a0a1e);
   color: white;
@@ -132,56 +132,52 @@ button {
 
 /* Responsive */
 @media (max-width: 992px) {
-  .container {
-    padding: 0 15px;
-  }
-  .page-title {
-    font-size: 36px;
-  }
+  .container { padding: 0 15px; }
+  .page-title { font-size: 36px; }
 }
 
 @media (max-width: 768px) {
-  .btn {
-    padding: 10px 20px;
-    font-size: 14px;
-  }
-  .page-header {
-  
-    padding: 40px 0;
-  }
-  .page-title {
-    font-size: 32px;
-  }
+  .btn { padding: 10px 20px; font-size: 14px; }
+  .page-header { padding: 40px 0; }
+  .page-title { font-size: 32px; }
 }
 
 @media (max-width: 576px) {
-  .container {
-    padding: 0 10px;
-  }
-  .page-title {
-    font-size: 28px;
-  }
+  .container { padding: 0 10px; }
+  .page-title { font-size: 28px; }
 }
 
-/* ── Plain white page-header for PreOrder and TrackOrder pages ── */
-/* Add these at the BOTTOM of your index.css */
-
+/* ✅ UNIFIED WHITE PAGE HEADER — applies to all main pages */
 .preorder-main .page-header,
-.trackorder-main .page-header {
-  background: none;
-  background-image: none;
-  background-color: #f5f5f5;
+.trackorder-main .page-header,
+.wishlist-main .page-header,
+.collections-main .page-header,
+.help-main .page-header {
+  background: #f8f6f6 !important;
+  background-image: none !important;
   border-bottom: 1px solid #e0e0e0;
-  padding: 60px 0;
+  padding: 50px 0;
+  margin-bottom: 0;
 }
 
 .preorder-main .page-title,
-.trackorder-main .page-title {
-  color: var(--dark-color);
-  text-shadow: none;
+.trackorder-main .page-title,
+.wishlist-main .page-title,
+.collections-main .page-title,
+.help-main .page-title {
+  color: var(--dark-color) !important;
+  -webkit-text-fill-color: var(--dark-color) !important;
+  text-shadow: none !important;
+  background: none !important;
+  font-size: 32px !important;
 }
 
 .preorder-main .page-description,
-.trackorder-main .page-description {
-  color: var(--gray-color);
+.trackorder-main .page-description,
+.wishlist-main .page-description,
+.collections-main .page-description,
+.help-main .page-description {
+  color: var(--gray-color) !important;
+  opacity: 1 !important;
+  font-size: 15px !important;
 }

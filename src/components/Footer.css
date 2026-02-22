@@ -9,7 +9,7 @@ footer {
 .footer-content {
   display: grid;
   grid-template-columns: 2fr 1.2fr 1.5fr 1.5fr;
-  gap: 40px;
+  gap: 80px;
   margin-bottom: 40px;
 }
 

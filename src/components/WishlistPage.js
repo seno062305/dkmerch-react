@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './WishlistPage.css';
 import { useWishlist, useRemoveFromWishlist } from '../context/wishlistUtils';
@@ -8,6 +8,7 @@ import { useNotification } from '../context/NotificationContext';
 const WishlistPage = () => {
   const navigate = useNavigate();
   const { showNotification } = useNotification();
+  const [lightboxImg, setLightboxImg] = useState(null);
 
   const wishlistItems = useWishlist();
   const removeFromWishlist = useRemoveFromWishlist();
@@ -39,85 +40,107 @@ const WishlistPage = () => {
   };
 
   return (
-    <main className="container">
-      <section className="wishlist-container">
-        <div className="page-header">
-          <div className="page-header-icon">
-            <i className="fas fa-star"></i>
-          </div>
+    <main className="wishlist-main">
+      {/* ✅ Matches TrackOrder page-header style */}
+      <div className="page-header">
+        <div className="container">
           <h1 className="page-title">My Favorites</h1>
           <p className="page-description">Your saved K-Pop merch picks — ready to order anytime!</p>
         </div>
+      </div>
 
-        {wishlistItems.length === 0 ? (
-          <div className="wishlist-empty">
-            <i className="fas fa-star"></i>
-            <h3>No favorites yet</h3>
-            <p>Click the star on any product to save it here.</p>
-            <button className="btn btn-primary" onClick={() => navigate('/collections')}>
-              Browse Products
-            </button>
-          </div>
-        ) : (
-          <>
-            <div className="wishlist-count-bar">
-              <span><i className="fas fa-star"></i> {wishlistItems.length} favorite{wishlistItems.length !== 1 ? 's' : ''}</span>
+      <div className="container">
+        <section className="wishlist-page">
+          {wishlistItems.length === 0 ? (
+            <div className="orders-empty">
+              <i className="fas fa-star"></i>
+              <h3>No favorites yet</h3>
+              <p>Click the star on any product to save it here.</p>
+              <button className="btn btn-primary" onClick={() => navigate('/collections')}>
+                <i className="fas fa-shopping-bag"></i> Browse Products
+              </button>
             </div>
-            <div className="wishlist-grid">
-              {wishlistItems.map(item => (
-                <div key={item.productId} className="wishlist-item">
-                  <div className="wishlist-item-header">
-                    <div className="wishlist-item-title">{item.name}</div>
-                    <button
-                      className="wishlist-item-remove"
-                      onClick={() => handleRemoveFromWishlist(item.productId, item.name)}
-                      title="Remove from favorites"
+          ) : (
+            <>
+              {/* Count bar */}
+              <div className="wishlist-count-bar">
+                <i className="fas fa-star"></i>
+                <span>{wishlistItems.length} favorite{wishlistItems.length !== 1 ? 's' : ''}</span>
+              </div>
+
+              {/* ✅ Same grid as TrackOrder orders-grid */}
+              <div className="orders-grid">
+                {wishlistItems.map(item => (
+                  <div key={item.productId} className="order-card">
+                    {/* ✅ Clickable image with zoom overlay */}
+                    <div
+                      className="order-card-img"
+                      onClick={() => item.image && setLightboxImg(item.image)}
+                      title={item.image ? 'Click to view image' : ''}
                     >
-                      <i className="fas fa-times"></i>
-                    </button>
-                  </div>
-                  <div className="wishlist-item-content">
-                    <div className="wishlist-product">
-                      <div className="wishlist-product-image">
-                        <img src={item.image} alt={item.name} />
-                        <div className="favorite-badge">
-                          <i className="fas fa-star"></i>
+                      {item.image
+                        ? <img src={item.image} alt={item.name} />
+                        : <i className="fas fa-box order-no-img"></i>
+                      }
+                      {item.image && (
+                        <div className="order-img-zoom">
+                          <i className="fas fa-search-plus"></i>
                         </div>
+                      )}
+                      {/* ✅ Star badge top-left instead of status */}
+                      <span className="wishlist-star-badge">
+                        <i className="fas fa-star"></i>
+                      </span>
+                    </div>
+
+                    {/* Card info */}
+                    <div className="order-card-info">
+                      <p className="order-card-name" style={{ minHeight: 'unset', marginBottom: '6px' }}>
+                        {item.name}
+                      </p>
+                      <div className="order-card-price-row" style={{ marginBottom: '12px' }}>
+                        <span className="order-card-price">₱{item.price?.toLocaleString()}</span>
                       </div>
-                      <div className="wishlist-product-info">
-                        <div className="wishlist-product-name">{item.name}</div>
-                        <div className="wishlist-product-price">₱{item.price?.toLocaleString()}</div>
-                        <div className="wishlist-actions">
-                          <button
-                            className="btn btn-primary btn-small"
-                            onClick={() => handleAddToCart(item)}
-                          >
-                            <i className="fas fa-shopping-cart"></i> Add to Cart
-                          </button>
-                          <button
-                            className="btn btn-outline btn-small"
-                            onClick={() => handleRemoveFromWishlist(item.productId, item.name)}
-                          >
-                            <i className="fas fa-trash"></i> Remove
-                          </button>
-                        </div>
-                      </div>
+                      <button
+                        className="btn btn-primary btn-small order-view-btn"
+                        style={{ marginBottom: '8px' }}
+                        onClick={() => handleAddToCart(item)}
+                      >
+                        <i className="fas fa-shopping-cart"></i> Add to Cart
+                      </button>
+                      <button
+                        className="order-remove-btn"
+                        onClick={() => handleRemoveFromWishlist(item.productId, item.name)}
+                      >
+                        <i className="fas fa-trash-alt"></i> Remove
+                      </button>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-            <div style={{ textAlign: 'center', marginTop: '40px' }}>
-              <button className="btn btn-primary" onClick={() => navigate('/collections')}>
-                Continue Shopping
-              </button>
-              <button className="btn btn-outline" onClick={handleClearWishlist} style={{ marginLeft: '10px' }}>
-                Clear Favorites
-              </button>
-            </div>
-          </>
-        )}
-      </section>
+                ))}
+              </div>
+
+              <div className="wishlist-footer-actions">
+                <button className="btn btn-primary" onClick={() => navigate('/collections')}>
+                  <i className="fas fa-shopping-bag"></i> Continue Shopping
+                </button>
+                <button className="btn btn-outline-danger" onClick={handleClearWishlist}>
+                  <i className="fas fa-trash"></i> Clear Favorites
+                </button>
+              </div>
+            </>
+          )}
+        </section>
+      </div>
+
+      {/* Lightbox */}
+      {lightboxImg && (
+        <div className="order-lightbox" onClick={() => setLightboxImg(null)}>
+          <button className="lightbox-close" onClick={() => setLightboxImg(null)}>
+            <i className="fas fa-times"></i>
+          </button>
+          <img src={lightboxImg} alt="Product" onClick={e => e.stopPropagation()} />
+        </div>
+      )}
     </main>
   );
 };

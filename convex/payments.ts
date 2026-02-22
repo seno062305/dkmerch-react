@@ -20,6 +20,11 @@ export const createPaymentLink = action({
 
     const encoded = btoa(`${secretKey}:`);
 
+    // ✅ Dynamic base URL — set SITE_URL in your .env / Convex dashboard
+    // Local:  SITE_URL=http://localhost:3000
+    // Prod:   SITE_URL=https://dkmerchwebsite.vercel.app
+    const baseUrl = process.env.SITE_URL || "https://dkmerchwebsite.vercel.app";
+
     const response = await fetch("https://api.paymongo.com/v1/checkout_sessions", {
       method: "POST",
       headers: {
@@ -43,9 +48,9 @@ export const createPaymentLink = action({
                 quantity:    1,
               },
             ],
-            payment_method_types: ["gcash", "paymaya", "card"],
-            success_url: `https://dkmerchwebsite.vercel.app/order-success?orderId=${orderId}`,
-            cancel_url:  `https://dkmerchwebsite.vercel.app/checkout`,
+            payment_method_types: ["gcash", "paymaya"],
+            success_url: `${baseUrl}/order-success?orderId=${orderId}`,
+            cancel_url:  `${baseUrl}/checkout`,
             description: remarks || orderId,
             send_email_receipt: false,
             show_description:   true,
