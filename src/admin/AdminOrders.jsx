@@ -15,22 +15,28 @@ const AdminOrders = () => {
 
   const validOrders = orders.filter(o => o.orderId && o.items?.length > 0);
 
-  // ✅ Tabs now include "paid" for newly paid orders awaiting admin confirmation
   const tabCounts = {
-    paid: validOrders.filter(o => o.paymentStatus === 'paid' && (!o.orderStatus || o.orderStatus === 'pending' || o.orderStatus === 'confirmed')).length,
+    paid: validOrders.filter(o =>
+      o.paymentStatus === 'paid' &&
+      (!o.orderStatus || o.orderStatus === 'pending')
+    ).length,
     pending: validOrders.filter(o => o.orderStatus === 'pending').length,
   };
 
   const filteredOrders = validOrders.filter(order => {
     let matchesTab = true;
     if (activeTab === 'paid') {
-      matchesTab = order.paymentStatus === 'paid' && (!o.orderStatus || order.orderStatus === 'pending' || order.orderStatus === 'confirmed');
+      matchesTab =
+        order.paymentStatus === 'paid' &&
+        (!order.orderStatus || order.orderStatus === 'pending');
     } else if (activeTab !== 'all') {
       matchesTab = order.orderStatus === activeTab;
     }
-    const matchesSearch = !searchTerm || [
-      order.orderId, order.customerName, order.email
-    ].some(f => f?.toLowerCase().includes(searchTerm.toLowerCase()));
+    const matchesSearch =
+      !searchTerm ||
+      [order.orderId, order.customerName, order.email].some(f =>
+        f?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
     return matchesTab && matchesSearch;
   });
 
@@ -58,7 +64,6 @@ const AdminOrders = () => {
     return statusMap[adminStatus] || 'Processing';
   };
 
-  // ✅ FIXED: now sends both status AND orderStatus correctly
   const handleUpdateStatus = async (orderId, newOrderStatus) => {
     try {
       await updateOrderStatusMutation({
@@ -110,16 +115,14 @@ const AdminOrders = () => {
 
   return (
     <div className="admin-orders-page">
-      {/* Tabs */}
       <div className="orders-tabs">
         {[
-          { key: 'all', icon: 'fa-list', label: 'All Orders' },
-          { key: 'paid', icon: 'fa-peso-sign', label: `Paid & Awaiting${tabCounts.paid > 0 ? ` (${tabCounts.paid})` : ''}` },
-          { key: 'pending', icon: 'fa-clock', label: `Pending${tabCounts.pending > 0 ? ` (${tabCounts.pending})` : ''}` },
-          { key: 'confirmed', icon: 'fa-check-circle', label: 'Confirmed' },
-          { key: 'shipped', icon: 'fa-box', label: 'Shipped' },
+          { key: 'all',              icon: 'fa-list',          label: 'All Orders' },
+          { key: 'paid',             icon: 'fa-peso-sign',     label: `Paid & Awaiting${tabCounts.paid > 0 ? ` (${tabCounts.paid})` : ''}` },
+          { key: 'pending',          icon: 'fa-clock',         label: `Pending${tabCounts.pending > 0 ? ` (${tabCounts.pending})` : ''}` },
+          { key: 'confirmed',        icon: 'fa-check-circle',  label: 'Confirmed' },
           { key: 'out_for_delivery', icon: 'fa-shipping-fast', label: 'Out for Delivery' },
-          { key: 'completed', icon: 'fa-check-double', label: 'Completed' },
+          { key: 'completed',        icon: 'fa-check-double',  label: 'Completed' },
         ].map(t => (
           <button
             key={t.key}
@@ -131,29 +134,30 @@ const AdminOrders = () => {
         ))}
       </div>
 
-      {/* Info banner for admin */}
       <div className="admin-flow-info">
         <i className="fas fa-info-circle"></i>
         <span>
-          <strong>Order Flow:</strong> Customer pays via PayMongo → appears in <strong>Paid & Awaiting</strong> tab →
-          Admin confirms → Riders can see & request pickup → Admin approves rider → Rider delivers with OTP + photo
+          <strong>Order Flow:</strong> Customer pays →
+          appears in <strong>Paid &amp; Awaiting</strong> tab →
+          Admin confirms →
+          Rider requests pickup →
+          Admin approves rider →
+          Rider delivers with OTP + photo
         </span>
       </div>
 
-      {/* Search */}
       <div className="orders-filters">
         <div className="filter-group">
           <input
             type="text"
             className="search-input"
-            placeholder="🔍 Search by Order ID, Customer Name, or Email..."
+            placeholder="Search by Order ID, Customer Name, or Email..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
       </div>
 
-      {/* Table */}
       <div className="orders-container">
         {filteredOrders.length === 0 ? (
           <div className="empty-orders">
@@ -187,10 +191,10 @@ const AdminOrders = () => {
                       </div>
                     </td>
                     <td>{order.items.length} item(s)</td>
-                    <td><strong>₱{(order.total || 0).toLocaleString()}</strong></td>
+                    <td><strong>P{(order.total || 0).toLocaleString()}</strong></td>
                     <td>
                       <span className={`payment-badge ${order.paymentStatus === 'paid' ? 'paid' : 'pending'}`}>
-                        {order.paymentStatus === 'paid' ? '✅ Paid' : '⏳ Pending'}
+                        {order.paymentStatus === 'paid' ? 'Paid' : 'Pending'}
                       </span>
                     </td>
                     <td>
@@ -204,7 +208,7 @@ const AdminOrders = () => {
                           <strong>{order.riderInfo.name}</strong>
                           <div style={{ color: '#888' }}>{order.riderInfo.plate}</div>
                         </div>
-                      ) : <span style={{ color: '#ccc', fontSize: '12px' }}>—</span>}
+                      ) : <span style={{ color: '#ccc', fontSize: '12px' }}>-</span>}
                     </td>
                     <td>
                       {order._creationTime
@@ -239,22 +243,6 @@ const AdminOrders = () => {
   );
 };
 
-// ─── BUTTON RULES ─────────────────────────────────────────────────────────────
-// Flow: paid → confirmed (admin) → shipped/out_for_delivery (rider) → completed (rider via OTP)
-const getButtonRules = (currentStatus, paymentStatus) => {
-  const isPaid = paymentStatus === 'paid';
-  const rules = {
-    pending:          { confirm_order: isPaid, cancel: true },
-    confirmed:        { confirm_order: false,  cancel: true },
-    shipped:          { confirm_order: false,  cancel: false },
-    out_for_delivery: { confirm_order: false,  cancel: false },
-    completed:        { confirm_order: false,  cancel: false },
-    cancelled:        { confirm_order: false,  cancel: false },
-  };
-  return rules[currentStatus] || rules['pending'];
-};
-
-// ─── ORDER MODAL ───────────────────────────────────────────────────────────────
 const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDelete, getStatusColor, getStatusLabel }) => {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [proofExpanded, setProofExpanded] = useState(false);
@@ -265,17 +253,14 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
 
   const currentStatus = order.orderStatus || 'pending';
   const paymentStatus = order.paymentStatus || 'pending';
-  const allowed = getButtonRules(currentStatus, paymentStatus);
+  const isPaid = paymentStatus === 'paid';
   const isDone = currentStatus === 'completed' || currentStatus === 'cancelled';
   const isRiderManaged = currentStatus === 'shipped' || currentStatus === 'out_for_delivery';
+  const canConfirm = isPaid && currentStatus === 'pending';
+  const canCancel = !isDone && !isRiderManaged;
 
   const hasDeliveryProof = !!(order.deliveryProofPhoto);
   const otpVerified = !!(order.deliveryOtpVerified);
-
-  const handleConfirmCancel = (reason) => {
-    onCancelWithReason(order.orderId, reason);
-    setShowCancelModal(false);
-  };
 
   return (
     <div className="order-modal-overlay" onClick={onClose}>
@@ -287,8 +272,8 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
               <span className="status-badge" style={{ backgroundColor: getStatusColor(order.orderStatus) }}>
                 {getStatusLabel(order.orderStatus)}
               </span>
-              <span className={`payment-badge ${paymentStatus === 'paid' ? 'paid' : 'pending'}`}>
-                {paymentStatus === 'paid' ? '✅ Paid' : '⏳ Payment Pending'}
+              <span className={`payment-badge ${isPaid ? 'paid' : 'pending'}`}>
+                {isPaid ? 'Paid' : 'Payment Pending'}
               </span>
             </div>
           </div>
@@ -297,72 +282,65 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
 
         <div className="modal-body">
 
-          {/* ── PAYMENT NOTICE ─────────────────────────────── */}
-          {paymentStatus !== 'paid' && (
+          {!isPaid && (
             <div className="flow-notice warning">
               <i className="fas fa-exclamation-triangle"></i>
               <div>
                 <strong>Payment not yet confirmed</strong>
-                <p>This order has not been paid via PayMongo. Do not confirm until payment is verified.</p>
+                <p>Do not confirm until payment is verified via PayMongo.</p>
               </div>
             </div>
           )}
-
-          {paymentStatus === 'paid' && currentStatus === 'pending' && (
+          {isPaid && currentStatus === 'pending' && (
             <div className="flow-notice success">
               <i className="fas fa-check-circle"></i>
               <div>
                 <strong>Payment received! Action needed.</strong>
-                <p>Customer has paid. Click <strong>Confirm Order</strong> below to start processing. Once confirmed, riders can request pickup.</p>
+                <p>Click Confirm Order below. Once confirmed, riders can request pickup.</p>
               </div>
             </div>
           )}
-
-          {paymentStatus === 'paid' && currentStatus === 'confirmed' && (
+          {isPaid && currentStatus === 'confirmed' && (
             <div className="flow-notice info">
               <i className="fas fa-motorcycle"></i>
               <div>
                 <strong>Awaiting rider pickup request</strong>
-                <p>Riders can now see and request this order. Once a rider requests, you'll need to approve them in the <strong>Pickup Requests</strong> tab.</p>
+                <p>Riders can now see this order and request pickup. Approve their request in Pickup Requests tab.</p>
               </div>
             </div>
           )}
-
           {isRiderManaged && (
             <div className="flow-notice purple">
               <i className="fas fa-shipping-fast"></i>
               <div>
                 <strong>Rider is handling delivery</strong>
-                <p>The assigned rider will notify the customer and confirm delivery via OTP + photo proof.</p>
+                <p>Rider will confirm delivery via OTP + photo proof from customer.</p>
               </div>
             </div>
           )}
 
-          {/* Customer Info */}
           <div className="modal-section">
             <h3><i className="fas fa-user"></i> Customer Information</h3>
             <div className="order-info-grid">
               <div className="info-item"><label>Full Name</label><strong>{order.customerName || 'N/A'}</strong></div>
-              <div className="info-item"><label>Email Address</label><span>{order.email || 'N/A'}</span></div>
-              <div className="info-item"><label>Phone Number</label><span>{order.phone || 'N/A'}</span></div>
+              <div className="info-item"><label>Email</label><span>{order.email || 'N/A'}</span></div>
+              <div className="info-item"><label>Phone</label><span>{order.phone || 'N/A'}</span></div>
               <div className="info-item"><label>Delivery Address</label><span>{order.shippingAddress || 'N/A'}</span></div>
             </div>
           </div>
 
-          {/* Rider Info */}
           {order.riderInfo && (
             <div className="modal-section">
               <h3><i className="fas fa-motorcycle"></i> Assigned Rider</h3>
-              <div className="order-info-grid rider-info-grid">
-                <div className="info-item"><label>Rider Name</label><strong>{order.riderInfo.name || 'N/A'}</strong></div>
+              <div className="order-info-grid">
+                <div className="info-item"><label>Name</label><strong>{order.riderInfo.name || 'N/A'}</strong></div>
                 <div className="info-item"><label>Phone</label><span>{order.riderInfo.phone || 'N/A'}</span></div>
-                <div className="info-item"><label>Vehicle Type</label><span style={{ textTransform: 'capitalize' }}>{order.riderInfo.vehicle || 'N/A'}</span></div>
-                <div className="info-item"><label>Plate Number</label><span>{order.riderInfo.plate || 'N/A'}</span></div>
+                <div className="info-item"><label>Vehicle</label><span>{order.riderInfo.vehicle || 'N/A'}</span></div>
+                <div className="info-item"><label>Plate</label><span>{order.riderInfo.plate || 'N/A'}</span></div>
               </div>
             </div>
           )}
 
-          {/* Proof of Delivery */}
           {(hasDeliveryProof || otpVerified) && (
             <div className="modal-section">
               <h3><i className="fas fa-shield-alt"></i> Proof of Delivery</h3>
@@ -373,16 +351,14 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                   </div>
                   <div className="pod-otp-text">
                     <strong>OTP Verification</strong>
-                    <span>{otpVerified ? 'Customer OTP was verified by rider ✅' : 'OTP not verified'}</span>
+                    <span>{otpVerified ? 'Customer OTP verified by rider' : 'OTP not yet verified'}</span>
                   </div>
                   {otpVerified && <span className="pod-otp-badge">Verified</span>}
                 </div>
                 {order.deliveryConfirmedAt && (
                   <div className="pod-timestamp">
                     <i className="fas fa-clock"></i>
-                    <span>Confirmed on {new Date(order.deliveryConfirmedAt).toLocaleString('en-PH', {
-                      month: 'long', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit'
-                    })}</span>
+                    <span>Confirmed: {new Date(order.deliveryConfirmedAt).toLocaleString('en-PH')}</span>
                   </div>
                 )}
                 {hasDeliveryProof && (
@@ -398,7 +374,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                       <div className="pod-photo-wrap">
                         <img src={order.deliveryProofPhoto} alt="Proof of delivery" className="pod-photo" />
                         <a href={order.deliveryProofPhoto} download={`proof-${order.orderId?.slice(-8)}.jpg`} className="pod-download-btn">
-                          <i className="fas fa-download"></i> Download Photo
+                          <i className="fas fa-download"></i> Download
                         </a>
                       </div>
                     )}
@@ -408,104 +384,55 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
             </div>
           )}
 
-          {/* Order Info */}
           <div className="modal-section">
             <h3><i className="fas fa-info-circle"></i> Order Information</h3>
             <div className="order-info-grid">
-              <div className="info-item"><label>Order ID</label><strong>#{order.orderId || 'N/A'}</strong></div>
-              <div className="info-item"><label>Order Date</label><span>{order._creationTime ? new Date(order._creationTime).toLocaleString('en-PH') : 'N/A'}</span></div>
+              <div className="info-item"><label>Order ID</label><strong>#{order.orderId}</strong></div>
+              <div className="info-item"><label>Date</label><span>{order._creationTime ? new Date(order._creationTime).toLocaleString('en-PH') : 'N/A'}</span></div>
               <div className="info-item"><label>Payment Method</label><span>{order.paymentMethod || 'N/A'}</span></div>
               <div className="info-item"><label>Payment Status</label>
-                <span className={`payment-badge ${paymentStatus === 'paid' ? 'paid' : 'pending'}`}>
-                  {paymentStatus === 'paid' ? '✅ Paid' : '⏳ Pending'}
+                <span className={`payment-badge ${isPaid ? 'paid' : 'pending'}`}>
+                  {isPaid ? 'Paid' : 'Pending'}
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Order Items */}
           <div className="modal-section">
             <h3><i className="fas fa-box"></i> Order Items ({order.items?.length || 0})</h3>
             <div className="order-items-list">
-              {order.items?.length > 0 ? (
-                order.items.map((item, index) => (
-                  <div key={index} className="order-item-card">
-                    <div className="item-image">
-                      <img src={item.image} alt={item.name || 'Product'}
-                        onError={(e) => { e.target.onerror = null; e.target.src = 'https://via.placeholder.com/80x80?text=No+Image'; }} />
-                    </div>
-                    <div className="item-details">
-                      <strong>{item.name || 'N/A'}</strong>
-                      <p className="item-price">₱{(item.price || 0).toLocaleString()} × {item.quantity || 0} pc(s)</p>
-                    </div>
-                    <div className="item-subtotal">₱{((item.quantity || 0) * (item.price || 0)).toLocaleString()}</div>
+              {order.items?.map((item, index) => (
+                <div key={index} className="order-item-card">
+                  <div className="item-image">
+                    <img src={item.image} alt={item.name || 'Product'}
+                      onError={(e) => { e.target.onerror = null; e.target.src = 'https://via.placeholder.com/80x80?text=No+Image'; }} />
                   </div>
-                ))
-              ) : <p style={{ textAlign: 'center', color: '#94a3b8', padding: '20px' }}>No items found</p>}
+                  <div className="item-details">
+                    <strong>{item.name || 'N/A'}</strong>
+                    <p className="item-price">P{(item.price || 0).toLocaleString()} x {item.quantity || 0} pc(s)</p>
+                  </div>
+                  <div className="item-subtotal">P{((item.quantity || 0) * (item.price || 0)).toLocaleString()}</div>
+                </div>
+              ))}
             </div>
           </div>
 
-          {/* Order Summary */}
           <div className="modal-section">
             <h3><i className="fas fa-calculator"></i> Order Summary</h3>
             <div className="order-totals">
-              <div className="total-row"><span>Subtotal:</span><strong>₱{subtotal.toLocaleString()}</strong></div>
-              <div className="total-row"><span>Shipping Fee:</span><strong>₱{shippingFee.toLocaleString()}</strong></div>
-              <div className="total-row grand-total"><span>Total Amount:</span><strong>₱{total.toLocaleString()}</strong></div>
+              <div className="total-row"><span>Subtotal:</span><strong>P{subtotal.toLocaleString()}</strong></div>
+              <div className="total-row"><span>Shipping Fee:</span><strong>P{shippingFee.toLocaleString()}</strong></div>
+              <div className="total-row grand-total"><span>Total Amount:</span><strong>P{total.toLocaleString()}</strong></div>
             </div>
           </div>
 
-          {/* ── STATUS MANAGEMENT ──────────────────────────── */}
           <div className="modal-section">
             <h3><i className="fas fa-tasks"></i> Update Order Status</h3>
 
             {isDone && (
               <div className={`status-done-notice ${currentStatus}`}>
                 <i className={`fas ${currentStatus === 'completed' ? 'fa-check-circle' : 'fa-ban'}`}></i>
-                <span>{currentStatus === 'completed'
-                  ? 'Order completed successfully.'
-                  : 'Order has been cancelled.'}</span>
-              </div>
-            )}
-
-            {!isDone && !isRiderManaged && (
-              <div className="status-buttons">
-                {/* CONFIRM ORDER */}
-                <div className="status-btn-wrapper">
-                  <button
-                    className={`status-btn confirmed ${currentStatus === 'confirmed' ? 'is-current' : ''} ${!allowed.confirm_order ? 'is-blocked' : ''}`}
-                    onClick={() => allowed.confirm_order && onUpdateStatus(order.orderId, 'confirmed')}
-                    disabled={!allowed.confirm_order}
-                    title={
-                      currentStatus === 'confirmed' ? 'Already confirmed'
-                      : paymentStatus !== 'paid' ? 'Cannot confirm — payment not yet received'
-                      : 'Confirm this order'
-                    }
-                  >
-                    <i className="fas fa-check-circle"></i>
-                    <span>Confirm Order</span>
-                    {currentStatus === 'confirmed' && <span className="current-indicator">✓ Current</span>}
-                  </button>
-                  {paymentStatus !== 'paid' && currentStatus !== 'confirmed' && (
-                    <div className="block-reason"><i className="fas fa-lock"></i> Awaiting payment</div>
-                  )}
-                  {currentStatus === 'confirmed' && (
-                    <div className="block-reason" style={{ color: '#17a2b8' }}><i className="fas fa-check"></i> Already confirmed</div>
-                  )}
-                </div>
-
-                {/* CANCEL */}
-                {allowed.cancel && (
-                  <div className="status-btn-wrapper">
-                    <button
-                      className="status-btn cancelled"
-                      onClick={() => setShowCancelModal(true)}
-                    >
-                      <i className="fas fa-times-circle"></i>
-                      <span>Cancel Order</span>
-                    </button>
-                  </div>
-                )}
+                <span>{currentStatus === 'completed' ? 'Order completed.' : 'Order cancelled.'}</span>
               </div>
             )}
 
@@ -514,13 +441,45 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                 <i className="fas fa-motorcycle"></i>
                 <div>
                   <strong>Handled by rider</strong>
-                  <p>Status will be updated automatically as the rider delivers the order. Rider uses OTP + photo to confirm delivery.</p>
+                  <p>Rider updates status automatically via OTP + photo confirmation.</p>
                 </div>
+              </div>
+            )}
+
+            {!isDone && !isRiderManaged && (
+              <div className="status-buttons">
+                <div className="status-btn-wrapper">
+                  <button
+                    className={`status-btn confirmed ${currentStatus === 'confirmed' ? 'is-current' : ''} ${!canConfirm ? 'is-blocked' : ''}`}
+                    onClick={() => canConfirm && onUpdateStatus(order.orderId, 'confirmed')}
+                    disabled={!canConfirm}
+                  >
+                    <i className="fas fa-check-circle"></i>
+                    <span>Confirm Order</span>
+                    {currentStatus === 'confirmed' && <span className="current-indicator">Current</span>}
+                  </button>
+                  {!isPaid && (
+                    <div className="block-reason"><i className="fas fa-lock"></i> Awaiting payment first</div>
+                  )}
+                  {isPaid && currentStatus === 'confirmed' && (
+                    <div className="block-reason" style={{ color: '#17a2b8' }}>
+                      <i className="fas fa-check"></i> Already confirmed
+                    </div>
+                  )}
+                </div>
+
+                {canCancel && (
+                  <div className="status-btn-wrapper">
+                    <button className="status-btn cancelled" onClick={() => setShowCancelModal(true)}>
+                      <i className="fas fa-times-circle"></i>
+                      <span>Cancel Order</span>
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
 
-          {/* Cancellation Reason */}
           {currentStatus === 'cancelled' && order.cancelReason && (
             <div className="modal-section">
               <h3><i className="fas fa-ban"></i> Cancellation Reason</h3>
@@ -531,7 +490,6 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
             </div>
           )}
 
-          {/* Delete */}
           <div className="modal-actions">
             <button className="delete-order-btn" onClick={() => onDelete(order.orderId)}>
               <i className="fas fa-trash"></i> Delete Order
@@ -543,7 +501,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
       {showCancelModal && (
         <CancelReasonModal
           order={order}
-          onConfirm={handleConfirmCancel}
+          onConfirm={(reason) => { onCancelWithReason(order.orderId, reason); setShowCancelModal(false); }}
           onClose={() => setShowCancelModal(false)}
         />
       )}
@@ -551,7 +509,6 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
   );
 };
 
-// ─── CANCEL REASON MODAL ──────────────────────────────────────────────────────
 const CANCEL_PRESETS = [
   'Item is out of stock', 'Customer requested cancellation', 'Duplicate order',
   'Payment issue / not verified', 'Rider unavailable in the area',
@@ -565,11 +522,6 @@ const CancelReasonModal = ({ order, onConfirm, onClose }) => {
 
   const isOther = selectedPreset === 'Other reason';
   const finalReason = isOther ? customReason.trim() : selectedPreset;
-
-  const handleConfirm = () => {
-    if (!finalReason) { setError('Please select or enter a cancellation reason.'); return; }
-    onConfirm(finalReason);
-  };
 
   return (
     <div className="cancel-reason-overlay" onClick={onClose}>
@@ -609,7 +561,14 @@ const CancelReasonModal = ({ order, onConfirm, onClose }) => {
         </div>
         <div className="cancel-reason-footer">
           <button className="cancel-go-back-btn" onClick={onClose}><i className="fas fa-arrow-left"></i> Go Back</button>
-          <button className="cancel-confirm-btn" onClick={handleConfirm} disabled={!finalReason}>
+          <button
+            className="cancel-confirm-btn"
+            onClick={() => {
+              if (!finalReason) { setError('Please select or enter a reason.'); return; }
+              onConfirm(finalReason);
+            }}
+            disabled={!finalReason}
+          >
             <i className="fas fa-ban"></i> Confirm Cancellation
           </button>
         </div>
@@ -619,5 +578,3 @@ const CancelReasonModal = ({ order, onConfirm, onClose }) => {
 };
 
 export default AdminOrders;
-
-/* Additional CSS to add to AdminOrders.css */
