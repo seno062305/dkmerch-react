@@ -70,7 +70,6 @@ export default defineSchema({
         price: v.number(),
         image: v.string(),
         quantity: v.number(),
-        // ✅ Added pre-order fields
         isPreOrder: v.optional(v.boolean()),
         releaseDate: v.optional(v.union(v.string(), v.null())),
       })
@@ -88,13 +87,18 @@ export default defineSchema({
     deliveryOtp: v.optional(v.string()),
     deliveryOtpVerified: v.optional(v.boolean()),
     deliveryProofPhoto: v.optional(v.string()),
-    deliveryConfirmedAt: v.optional(v.string()),
     cancelReason: v.optional(v.string()),
     // PayMongo payment fields
-    paymentStatus: v.optional(v.string()),   // pending | paid | failed
-    paymentLinkId: v.optional(v.string()),   // PayMongo link ID
-    paymentLinkUrl: v.optional(v.string()),  // URL to redirect user
-    paidAt: v.optional(v.string()),          // ISO timestamp when paid
+    paymentStatus: v.optional(v.string()),
+    paymentLinkId: v.optional(v.string()),
+    paymentLinkUrl: v.optional(v.string()),
+    paidAt: v.optional(v.string()),
+    // ✅ FIXED: Timestamp fields for accurate order timeline
+    confirmedAt: v.optional(v.string()),
+    shippedAt: v.optional(v.string()),
+    outForDeliveryAt: v.optional(v.string()),
+    deliveryConfirmedAt: v.optional(v.string()),
+    cancelledAt: v.optional(v.string()),
   })
     .index("by_orderId", ["orderId"])
     .index("by_email", ["email"]),
