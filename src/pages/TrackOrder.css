@@ -690,3 +690,176 @@
 .item-preorder-release i {
   font-size: 10px;
 }
+
+/* =============================================
+   ORDERS TAB BAR (logged-in view)
+   ============================================= */
+
+.orders-tab-bar {
+  display: flex;
+  gap: 0;
+  margin-bottom: 20px;
+  background: white;
+  border-radius: 14px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  padding: 6px;
+  overflow-x: auto;
+}
+
+.orders-tab-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border: none;
+  background: transparent;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #888;
+  cursor: pointer;
+  transition: all 0.22s ease;
+  white-space: nowrap;
+  position: relative;
+}
+
+.orders-tab-btn:hover:not(.active) {
+  background: #f5f5f5;
+  color: #444;
+}
+
+/* ✅ Active tab — gradient highlight */
+.orders-tab-btn.active {
+  background: linear-gradient(135deg, #fc1268, #8b5cf6);
+  color: white;
+  box-shadow: 0 4px 14px rgba(252, 18, 104, 0.28);
+}
+
+.orders-tab-btn .tab-label {
+  font-size: 13px;
+}
+
+/* ✅ Count badge */
+.tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(0,0,0,0.08);
+  color: #555;
+  transition: all 0.2s;
+}
+
+/* Count badge when tab is active */
+.tab-count.tab-count-active {
+  background: rgba(255,255,255,0.25);
+  color: white;
+}
+
+/* ✅ Context bar — shows current tab info + order count */
+.tab-context-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: #f8f0ff;
+  border-radius: 10px;
+  margin-bottom: 20px;
+  font-size: 13px;
+  color: #6a1b9a;
+  border: 1px solid #e9d5ff;
+}
+
+.tab-context-bar i {
+  font-size: 14px;
+  color: #8b5cf6;
+  flex-shrink: 0;
+}
+
+.tab-context-bar strong {
+  color: #4c1d95;
+}
+
+.tab-context-count {
+  color: #8b5cf6;
+  font-weight: 600;
+}
+
+/* ✅ Timeline timestamp style */
+.timeline-timestamp {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: #8b5cf6;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.timeline-timestamp i {
+  font-size: 11px;
+}
+
+/* ✅ Rider info banner in modal */
+.rider-info-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+  margin-bottom: 20px;
+}
+
+.rider-info-icon {
+  font-size: 26px;
+  color: #16a34a;
+  flex-shrink: 0;
+}
+
+.rider-info-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rider-info-details strong {
+  font-size: 14px;
+  color: #14532d;
+}
+
+.rider-info-details span {
+  font-size: 12px;
+  color: #166534;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+@media (max-width: 600px) {
+  .orders-tab-bar {
+    padding: 4px;
+    gap: 2px;
+  }
+  .orders-tab-btn {
+    padding: 10px 10px;
+    font-size: 12px;
+    gap: 5px;
+  }
+  .orders-tab-btn .tab-label {
+    display: none; /* hide text on very small screens, show only icon + count */
+  }
+  .tab-count {
+    min-width: 18px;
+    height: 18px;
+    font-size: 10px;
+  }
+}

@@ -11,7 +11,7 @@ const TrackOrder = () => {
   const [searchParams] = useSearchParams();
   const orderIdParam = searchParams.get('order') || searchParams.get('orderId');
 
-  const [filter, setFilter] = useState('processing');
+  const [filter, setFilter] = useState('active');
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [trackingEmail, setTrackingEmail] = useState('');
   const [searchEmail, setSearchEmail] = useState('');
@@ -22,19 +22,17 @@ const TrackOrder = () => {
     try { return JSON.parse(localStorage.getItem('hiddenDeliveredOrders') || '[]'); } catch { return []; }
   });
 
-  const orders      = useUserOrders(isAuthenticated ? user?.email : null) || [];
-  const emailOrders = useOrdersByEmail(searchEmail) || [];
+  const orders           = useUserOrders(isAuthenticated ? user?.email : null) || [];
+  const emailOrders      = useOrdersByEmail(searchEmail) || [];
   const regularProducts  = useProducts() || [];
   const preOrderProducts = usePreOrderProducts() || [];
-  const products = [...regularProducts, ...preOrderProducts];
+  const products         = [...regularProducts, ...preOrderProducts];
 
-  // ✅ FIX: selectedOrder now correctly searches BOTH orders and emailOrders
   const allAvailableOrders = [...orders, ...emailOrders];
   const selectedOrder = selectedOrderId
     ? allAvailableOrders.find(o => o._id === selectedOrderId)
     : null;
 
-  // Auto-open modal for logged-in users via URL param
   useEffect(() => {
     if (orderIdParam && orders.length > 0 && !selectedOrderId) {
       const found = orders.find(o => o.orderId === orderIdParam);
@@ -42,7 +40,6 @@ const TrackOrder = () => {
     }
   }, [orderIdParam, orders]);
 
-  // ✅ FIX: Auto-open modal for GUEST users via URL param after emailOrders loads
   useEffect(() => {
     if (orderIdParam && emailOrders.length > 0 && !selectedOrderId) {
       const found = emailOrders.find(o => o.orderId === orderIdParam);
@@ -78,47 +75,49 @@ const TrackOrder = () => {
     return labels[s] || s;
   };
 
-  // ✅ Timeline uses actual saved timestamps from Convex
+  const isDelivered = (order) => {
+    const s = (order.orderStatus || order.status || '').toLowerCase();
+    return s === 'delivered' || s === 'completed';
+  };
+
+  const isCancelledOrder = (order) => {
+    const s = (order.orderStatus || order.status || '').toLowerCase();
+    return s === 'cancelled';
+  };
+
   const getTimelineSteps = (order) => {
     const status = (order.orderStatus || order.status || 'pending').toLowerCase().replace(/ /g, '_');
-
     const fmt = (ts) => ts
       ? new Date(ts).toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
       : null;
 
-    const placedAt   = fmt(order._creationTime);
-    const paidAt     = fmt(order.paidAt);
-    const confirmedAt = fmt(order.confirmedAt);
-    const shippedAt  = fmt(order.shippedAt);
+    const placedAt         = fmt(order._creationTime);
+    const paidAt           = fmt(order.paidAt);
+    const confirmedAt      = fmt(order.confirmedAt);
+    const shippedAt        = fmt(order.shippedAt);
     const outForDeliveryAt = fmt(order.outForDeliveryAt);
-    const deliveredAt = fmt(order.deliveryConfirmedAt);
+    const deliveredAt      = fmt(order.deliveryConfirmedAt);
 
     if (status === 'cancelled') {
       return [
-        { label: 'Order Placed',  icon: 'fa-shopping-cart', completed: true, time: placedAt },
-        { label: 'Payment',       icon: 'fa-credit-card',   completed: !!order.paidAt, time: paidAt },
-        { label: 'Cancelled',     icon: 'fa-times-circle',  completed: true, isCancelled: true, cancelReason: order.cancelReason, time: null },
+        { label: 'Order Placed', icon: 'fa-shopping-cart', completed: true,           time: placedAt },
+        { label: 'Payment',      icon: 'fa-credit-card',   completed: !!order.paidAt, time: paidAt },
+        { label: 'Cancelled',    icon: 'fa-times-circle',  completed: true, isCancelled: true, cancelReason: order.cancelReason, time: null },
       ];
     }
 
     return [
       {
-        label: 'Order Placed',
-        icon: 'fa-shopping-cart',
-        completed: true,
-        time: placedAt,
+        label: 'Order Placed', icon: 'fa-shopping-cart', completed: true, time: placedAt,
         desc: 'Your order has been placed successfully.',
       },
       {
-        label: 'Payment Confirmed',
-        icon: 'fa-credit-card',
-        completed: order.paymentStatus === 'paid',
-        time: paidAt,
+        label: 'Payment Confirmed', icon: 'fa-credit-card',
+        completed: order.paymentStatus === 'paid', time: paidAt,
         desc: order.paymentStatus === 'paid' ? 'Payment received via PayMongo.' : 'Waiting for payment confirmation.',
       },
       {
-        label: 'Order Confirmed',
-        icon: 'fa-check-circle',
+        label: 'Order Confirmed', icon: 'fa-check-circle',
         completed: ['confirmed','shipped','out_for_delivery','delivered','completed'].includes(status),
         time: confirmedAt,
         desc: ['confirmed','shipped','out_for_delivery','delivered','completed'].includes(status)
@@ -126,8 +125,7 @@ const TrackOrder = () => {
           : 'Waiting for admin to confirm your order.',
       },
       {
-        label: 'Rider Assigned',
-        icon: 'fa-motorcycle',
+        label: 'Rider Assigned', icon: 'fa-motorcycle',
         completed: ['shipped','out_for_delivery','delivered','completed'].includes(status),
         time: shippedAt,
         desc: order.riderInfo
@@ -137,8 +135,7 @@ const TrackOrder = () => {
             : 'Waiting for rider assignment.',
       },
       {
-        label: 'Out for Delivery',
-        icon: 'fa-shipping-fast',
+        label: 'Out for Delivery', icon: 'fa-shipping-fast',
         completed: ['out_for_delivery','delivered','completed'].includes(status),
         time: outForDeliveryAt,
         desc: ['out_for_delivery','delivered','completed'].includes(status)
@@ -146,8 +143,7 @@ const TrackOrder = () => {
           : 'Waiting for rider to pick up your order.',
       },
       {
-        label: 'Delivered',
-        icon: 'fa-check-double',
+        label: 'Delivered', icon: 'fa-check-double',
         completed: ['delivered','completed'].includes(status),
         time: deliveredAt,
         desc: ['delivered','completed'].includes(status)
@@ -157,11 +153,6 @@ const TrackOrder = () => {
     ];
   };
 
-  const isDelivered = (order) => {
-    const s = (order.orderStatus || order.status || '').toLowerCase();
-    return s === 'delivered' || s === 'completed';
-  };
-
   const handleRemoveOrder = (orderId) => {
     const updated = [...hiddenOrders, orderId];
     setHiddenOrders(updated);
@@ -169,18 +160,25 @@ const TrackOrder = () => {
     setRemoveConfirm(null);
   };
 
-  const FILTERS = [
-    { key: 'processing',       label: 'Processing' },
-    { key: 'confirmed',        label: 'Confirmed' },
-    { key: 'out for delivery', label: 'Out for Delivery' },
-    { key: 'delivered',        label: 'Delivered' },
-    { key: 'cancelled',        label: 'Cancelled' },
-  ];
+  const visibleOrders = orders.filter(o => !hiddenOrders.includes(o._id));
 
-  const visibleOrders  = orders.filter(o => !hiddenOrders.includes(o._id));
-  const filteredOrders = visibleOrders.filter(o =>
-    getDisplayStatus(o).toLowerCase() === filter.toLowerCase()
-  );
+  // ✅ Tab buckets
+  const activeOrders    = visibleOrders.filter(o => !isDelivered(o) && !isCancelledOrder(o));
+  const deliveredOrders = visibleOrders.filter(o => isDelivered(o));
+  const cancelledOrders = visibleOrders.filter(o => isCancelledOrder(o));
+
+  const filteredOrders = visibleOrders.filter(o => {
+    if (filter === 'active')    return !isDelivered(o) && !isCancelledOrder(o);
+    if (filter === 'delivered') return isDelivered(o);
+    if (filter === 'cancelled') return isCancelledOrder(o);
+    return true;
+  });
+
+  const FILTERS = [
+    { key: 'active',    icon: 'fa-shopping-bag',  label: 'All Orders', count: activeOrders.length,    desc: 'Active & ongoing orders' },
+    { key: 'delivered', icon: 'fa-check-double',   label: 'Delivered',  count: deliveredOrders.length, desc: 'Successfully delivered' },
+    { key: 'cancelled', icon: 'fa-ban',            label: 'Cancelled',  count: cancelledOrders.length, desc: 'Cancelled orders' },
+  ];
 
   const handleFindMyOrders = (e) => {
     e.preventDefault();
@@ -200,16 +198,16 @@ const TrackOrder = () => {
   };
 
   const OrderCard = ({ order, onViewDetails }) => {
-    const ordDate    = order._creationTime ? new Date(order._creationTime) : null;
-    const orderStatus = getDisplayStatus(order);
-    const statusKey  = order.orderStatus || order.status || 'pending';
-    const firstItem  = order.items?.[0];
+    const ordDate      = order._creationTime ? new Date(order._creationTime) : null;
+    const orderStatus  = getDisplayStatus(order);
+    const statusKey    = order.orderStatus || order.status || 'pending';
+    const firstItem    = order.items?.[0];
     const firstProduct = firstItem ? getProductById(firstItem.id) : null;
-    const imgSrc     = firstItem?.image || firstProduct?.image;
-    const itemName   = firstItem?.name || firstProduct?.name;
-    const extraCount = (order.items?.length || 1) - 1;
-    const delivered  = isDelivered(order);
-    const releaseDate = getPreOrderReleaseDate(order);
+    const imgSrc       = firstItem?.image || firstProduct?.image;
+    const itemName     = firstItem?.name || firstProduct?.name;
+    const extraCount   = (order.items?.length || 1) - 1;
+    const delivered    = isDelivered(order);
+    const releaseDate  = getPreOrderReleaseDate(order);
 
     return (
       <div className="order-card">
@@ -219,21 +217,18 @@ const TrackOrder = () => {
           {extraCount > 0 && <span className="order-extra-badge">+{extraCount}</span>}
           <span className={`order-status-overlay ${getStatusClass(statusKey)}`}>{orderStatus}</span>
         </div>
-
         <div className="order-card-info">
           <p className="order-card-id">Order #{order.orderId?.slice(-8) || 'N/A'}</p>
           <p className="order-card-name">
             {itemName}
             {extraCount > 0 && <span className="order-and-more"> +{extraCount} more</span>}
           </p>
-
           {releaseDate && (
             <div className="order-card-preorder-badge">
               <i className="fas fa-calendar-alt"></i>
               <span>Expected: {new Date(releaseDate).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
             </div>
           )}
-
           <div className="order-card-meta">
             <span className={`order-status-text ${getStatusClass(statusKey)}`}>
               <i className="fas fa-circle"></i> {orderStatus}
@@ -245,15 +240,12 @@ const TrackOrder = () => {
               </span>
             )}
           </div>
-
           <div className="order-card-price-row">
             <span className="order-card-price">₱{order.total?.toLocaleString()}</span>
           </div>
-
           <button className="btn btn-primary btn-small order-view-btn" onClick={() => onViewDetails(order)}>
             <i className="fas fa-search"></i> View Details
           </button>
-
           {delivered && (
             <button className="btn order-remove-btn" onClick={() => setRemoveConfirm(order._id)}>
               <i className="fas fa-trash-alt"></i> Remove
@@ -265,6 +257,8 @@ const TrackOrder = () => {
   };
 
   if (isAuthenticated && user) {
+    const activeTab = FILTERS.find(f => f.key === filter);
+
     return (
       <main className="trackorder-main">
         <div className="page-header">
@@ -275,22 +269,51 @@ const TrackOrder = () => {
         </div>
         <div className="container">
           <section className="track-order-page">
-            <div className="orders-filter">
+
+            {/* ✅ Tab bar with active indicator + count badges */}
+            <div className="orders-tab-bar">
               {FILTERS.map(f => (
-                <button key={f.key} className={`filter-btn ${filter === f.key ? 'active' : ''}`} onClick={() => setFilter(f.key)}>
-                  {f.label}
+                <button
+                  key={f.key}
+                  className={`orders-tab-btn ${filter === f.key ? 'active' : ''}`}
+                  onClick={() => setFilter(f.key)}
+                >
+                  <i className={`fas ${f.icon}`}></i>
+                  <span className="tab-label">{f.label}</span>
+                  {f.count > 0 && (
+                    <span className={`tab-count ${filter === f.key ? 'tab-count-active' : ''}`}>
+                      {f.count}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
 
+            {/* ✅ Context bar — shows what tab you're on + order count */}
+            <div className="tab-context-bar">
+              <i className={`fas ${activeTab?.icon}`}></i>
+              <span>
+                <strong>{activeTab?.label}</strong> — {activeTab?.desc}
+                {filteredOrders.length > 0 && (
+                  <span className="tab-context-count"> · {filteredOrders.length} order{filteredOrders.length !== 1 ? 's' : ''}</span>
+                )}
+              </span>
+            </div>
+
             {filteredOrders.length === 0 ? (
               <div className="orders-empty">
-                <i className="fas fa-shipping-fast"></i>
-                <h3>No {filter} Orders</h3>
-                <p>You have no {filter} orders at the moment.</p>
-                <button className="btn btn-primary" onClick={() => navigate('/collections')}>
-                  <i className="fas fa-shopping-bag"></i> Start Shopping
-                </button>
+                <i className={`fas ${activeTab?.icon}`}></i>
+                <h3>No {activeTab?.label} Yet</h3>
+                <p>
+                  {filter === 'active'    && 'You have no active orders right now.'}
+                  {filter === 'delivered' && 'No delivered orders yet.'}
+                  {filter === 'cancelled' && 'No cancelled orders.'}
+                </p>
+                {filter === 'active' && (
+                  <button className="btn btn-primary" onClick={() => navigate('/collections')}>
+                    <i className="fas fa-shopping-bag"></i> Start Shopping
+                  </button>
+                )}
               </div>
             ) : (
               <div className="orders-grid">
@@ -331,7 +354,7 @@ const TrackOrder = () => {
     );
   }
 
-  // ✅ Guest view — now correctly shows timeline with full Convex data
+  // Guest view
   return (
     <main className="trackorder-main">
       <div className="page-header">
@@ -353,7 +376,9 @@ const TrackOrder = () => {
                     value={trackingEmail} onChange={(e) => setTrackingEmail(e.target.value)} required />
                   <small>Enter the email you used when placing your order</small>
                 </div>
-                <button type="submit" className="btn btn-primary"><i className="fas fa-search"></i> Find My Orders</button>
+                <button type="submit" className="btn btn-primary">
+                  <i className="fas fa-search"></i> Find My Orders
+                </button>
               </form>
             </div>
             <div className="tracking-info">
@@ -388,8 +413,6 @@ const TrackOrder = () => {
           )}
         </section>
       </div>
-
-      {/* ✅ FIX: Modal now renders for guest users — selectedOrder searches emailOrders too */}
       {selectedOrder && (
         <TrackingModal order={selectedOrder} products={products} onClose={handleCloseModal}
           getTimelineSteps={getTimelineSteps} getStatusClass={getStatusClass} getDisplayStatus={getDisplayStatus} />
@@ -398,7 +421,7 @@ const TrackOrder = () => {
   );
 };
 
-// ─── TRACKING MODAL ────────────────────────────────────────────────────────────
+// ─── TRACKING MODAL ─────────────────────────────────────────────────────────
 const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusClass, getDisplayStatus }) => {
   const updateOrderOtp = useUpdateOrderOtp();
   const [generatingOtp, setGeneratingOtp] = useState(false);
@@ -406,7 +429,6 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
 
   const isCancelled      = (order.orderStatus || order.status || '').toLowerCase() === 'cancelled';
   const isOutForDelivery = (order.orderStatus || order.status || '').toLowerCase() === 'out_for_delivery';
-  const isCompleted      = ['delivered','completed'].includes((order.orderStatus || order.status || '').toLowerCase());
   const timelineSteps    = getTimelineSteps(order);
 
   useEffect(() => {
@@ -447,7 +469,6 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
             </div>
           </div>
 
-          {/* Rider info banner */}
           {order.riderInfo && !isCancelled && (
             <div className="rider-info-banner">
               <div className="rider-info-icon"><i className="fas fa-motorcycle"></i></div>
@@ -469,7 +490,6 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
             </div>
           )}
 
-          {/* OTP Section */}
           {isOutForDelivery && (
             <div className="customer-otp-section">
               {!localOtp ? (
@@ -487,9 +507,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
                     <div className="otp-step"><span className="otp-step-num">3</span><span>Rider enters the code to complete the delivery</span></div>
                   </div>
                   <button className={`otp-generate-btn ${generatingOtp ? 'generating' : ''}`} onClick={handleGenerateOtp} disabled={generatingOtp}>
-                    {generatingOtp
-                      ? <><i className="fas fa-spinner fa-spin"></i> Generating OTP...</>
-                      : <><i className="fas fa-key"></i> Generate My OTP</>}
+                    {generatingOtp ? <><i className="fas fa-spinner fa-spin"></i> Generating OTP...</> : <><i className="fas fa-key"></i> Generate My OTP</>}
                   </button>
                   <p className="otp-generate-warning"><i className="fas fa-exclamation-triangle"></i> Only generate this when your rider has arrived.</p>
                 </div>
@@ -511,7 +529,6 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
             </div>
           )}
 
-          {/* ✅ ACCURATE TIMELINE with real timestamps */}
           <div className="tracking-timeline">
             <h3>Order Timeline</h3>
             <div className="timeline">
@@ -542,13 +559,12 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
             </div>
           </div>
 
-          {/* Order Items */}
           <div className="order-items-timeline">
             <h3>Order Items</h3>
             {order.items?.map((item, index) => {
-              const product = getProductById(item.id);
-              const qty = item.quantity || item.qty || 1;
-              const isPreOrder = item.isPreOrder || product?.isPreOrder;
+              const product     = getProductById(item.id);
+              const qty         = item.quantity || item.qty || 1;
+              const isPreOrder  = item.isPreOrder || product?.isPreOrder;
               const releaseDate = item.releaseDate || product?.releaseDate;
               return (
                 <div key={index} className="order-item-timeline">
