@@ -10,23 +10,17 @@ const HeroCarousel = ({ slides }) => {
   const totalSlides = slides.length;
 
   const goToSlide = useCallback((index) => {
-    // Infinite loop logic
     let newIndex = index;
-    if (index >= totalSlides) {
-      newIndex = 0;
-    } else if (index < 0) {
-      newIndex = totalSlides - 1;
-    }
+    if (index >= totalSlides) newIndex = 0;
+    else if (index < 0) newIndex = totalSlides - 1;
     setCurrentSlide(newIndex);
   }, [totalSlides]);
 
   useEffect(() => {
     if (!isAutoPlaying) return;
-
     const interval = setInterval(() => {
       goToSlide(currentSlide + 1);
     }, 5000);
-
     return () => clearInterval(interval);
   }, [currentSlide, isAutoPlaying, goToSlide]);
 
@@ -43,40 +37,39 @@ const HeroCarousel = ({ slides }) => {
   };
 
   const handleButtonClick = (slideIndex) => {
-    // Navigate based on slide index
     if (slideIndex === 0) {
-      // "Shop Now" - go to collections
-      navigate('/collections');
+      // "Shop Now" — scroll to #collections section on homepage
+      const el = document.getElementById('collections');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else {
+        // If not on homepage, navigate then scroll
+        navigate('/', { state: { scrollTo: 'collections' } });
+      }
     } else if (slideIndex === 1) {
-      // "Pre-Order Now" - go to preorder
+      // "Pre-Order Now" — go to preorder page
       navigate('/preorder');
+      setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 100);
     } else if (slideIndex === 2) {
-      // "Browse Collection" - go to collections
+      // "Browse Collection" — go to collections page
       navigate('/collections');
+      setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 100);
     }
-
-    // Smooth scroll to top after navigation
-    setTimeout(() => {
-      window.scrollTo({
-        top: 0,
-        behavior: 'smooth'
-      });
-    }, 100);
   };
 
   return (
     <section className="hero-carousel">
       <div className="carousel-track" style={{ transform: `translateX(-${currentSlide * 100}%)` }}>
         {slides.map((slide, index) => (
-          <div 
-            key={index} 
+          <div
+            key={index}
             className={`carousel-slide ${index === currentSlide ? 'active' : ''}`}
           >
             <img src={slide.image} alt={slide.title} />
             <div className="carousel-content">
               <h1>{slide.title}</h1>
               <p>{slide.description}</p>
-              <button 
+              <button
                 className="btn btn-primary"
                 onClick={() => handleButtonClick(index)}
               >

@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import './PreOrder.css';
-import { getProducts } from '../utils/productStorage';
-import { addToCart } from '../utils/cartStorage';
-import { toggleWishlist } from '../utils/wishlistStorage';
+import { usePreOrderProducts } from '../utils/productStorage';
+import { useAddToCart } from '../context/cartUtils';
+import { useToggleWishlist } from '../context/wishlistUtils';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import ProductModal from '../components/ProductModal';
@@ -10,89 +10,50 @@ import LoginModal from '../components/LoginModal';
 
 const PreOrder = () => {
   const [selectedGroup, setSelectedGroup] = useState('all');
-  const [preOrderProducts, setPreOrderProducts] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [showLoginModal, setShowLoginModal] = useState(false);
-  
+
   const { isAuthenticated } = useAuth();
   const { showNotification } = useNotification();
 
-  useEffect(() => {
-    loadPreOrderProducts();
+  // ✅ Convex hooks
+  const preOrderProducts = usePreOrderProducts();
+  const addToCart        = useAddToCart();
+  const toggleWishlist   = useToggleWishlist();
 
-    const handleProductUpdate = () => {
-      loadPreOrderProducts();
-    };
+  const groups = ['all', ...new Set(preOrderProducts.map(p => p.kpopGroup).filter(Boolean))];
 
-    window.addEventListener('productsUpdated', handleProductUpdate);
-    window.addEventListener('storage', handleProductUpdate);
-
-    return () => {
-      window.removeEventListener('productsUpdated', handleProductUpdate);
-      window.removeEventListener('storage', handleProductUpdate);
-    };
-  }, []);
-
-  const loadPreOrderProducts = () => {
-    const allProducts = getProducts();
-    const filtered = allProducts.filter(product => product.isPreOrder === true);
-    setPreOrderProducts(filtered);
-  };
-
-  const groups = ['all', ...new Set(preOrderProducts.map(p => p.kpopGroup))];
-
-  const filteredProducts = selectedGroup === 'all' 
-    ? preOrderProducts 
+  const filteredProducts = selectedGroup === 'all'
+    ? preOrderProducts
     : preOrderProducts.filter(p => p.kpopGroup === selectedGroup);
-
-  const handleProductClick = (product) => {
-    setSelectedProduct(product);
-  };
-
-  const handleCloseModal = () => {
-    setSelectedProduct(null);
-  };
 
   const handleRequireLogin = () => {
     setSelectedProduct(null);
     setShowLoginModal(true);
   };
 
-  const handleCloseLoginModal = () => {
-    setShowLoginModal(false);
-  };
-
-  const handleAddToCart = (product) => {
-    if (!isAuthenticated) {
-      handleRequireLogin();
-      return;
-    }
+  const handleAddToCart = async (product) => {
+    if (!isAuthenticated) { handleRequireLogin(); return; }
     try {
-      addToCart(product.id);
+      await addToCart(product);
       showNotification(`${product.name} added to cart!`, 'success');
-      window.dispatchEvent(new Event('storage'));
-    } catch (error) {
+    } catch {
       showNotification('Failed to add to cart', 'error');
     }
   };
 
-  const handleAddToWishlist = (product) => {
-    if (!isAuthenticated) {
-      handleRequireLogin();
-      return;
-    }
+  const handleAddToWishlist = async (product) => {
+    if (!isAuthenticated) { handleRequireLogin(); return; }
     try {
-      toggleWishlist(product.id);
+      await toggleWishlist(product);
       showNotification(`${product.name} added to wishlist!`, 'success');
-      window.dispatchEvent(new Event('storage'));
-    } catch (error) {
+    } catch {
       showNotification('Failed to add to wishlist', 'error');
     }
   };
 
   return (
     <main className="preorder-main">
-      {/* ✅ plain-header removes the maroon gradient */}
       <div className="page-header">
         <div className="container">
           <h1 className="page-title">Pre-Order Items</h1>
@@ -106,11 +67,7 @@ const PreOrder = () => {
             <h3>Filter by Group:</h3>
             <div className="filter-options">
               {groups.map(group => (
-                <button
-                  key={group}
-                  className={`filter-btn ${selectedGroup === group ? 'active' : ''}`}
-                  onClick={() => setSelectedGroup(group)}
-                >
+                <button key={group} className={`filter-btn ${selectedGroup === group ? 'active' : ''}`} onClick={() => setSelectedGroup(group)}>
                   {group === 'all' ? 'All Groups' : group}
                 </button>
               ))}
@@ -119,46 +76,27 @@ const PreOrder = () => {
 
           <div className="preorder-grid">
             {filteredProducts.map(product => (
-              <div 
-                key={product.id} 
-                className="preorder-card"
-                onClick={() => handleProductClick(product)}
-                style={{ cursor: 'pointer' }}
-              >
+              <div key={product._id || product.id} className="preorder-card" onClick={() => setSelectedProduct(product)} style={{ cursor: 'pointer' }}>
                 <div className="preorder-badge">PRE-ORDER</div>
-                <div className="preorder-image">
-                  <img src={product.image} alt={product.name} />
-                </div>
+                <div className="preorder-image"><img src={product.image} alt={product.name} /></div>
                 <div className="preorder-info">
                   <div className="product-group">{product.kpopGroup}</div>
                   <h3 className="product-name">{product.name}</h3>
-                  
                   <div className="product-price">
-                    <span className="current-price">₱{product.price.toLocaleString()}</span>
+                    <span className="current-price">₱{product.price?.toLocaleString()}</span>
                     {product.isSale && product.originalPrice > product.price && (
                       <>
-                        <span className="original-price">₱{product.originalPrice.toLocaleString()}</span>
-                        <span className="discount">
-                          {Math.round((1 - product.price/product.originalPrice) * 100)}% OFF
-                        </span>
+                        <span className="original-price">₱{product.originalPrice?.toLocaleString()}</span>
+                        <span className="discount">{Math.round((1 - product.price / product.originalPrice) * 100)}% OFF</span>
                       </>
                     )}
                   </div>
-
                   <div className="stock-info">
                     <i className="fas fa-box"></i>
                     <span>{product.stock > 0 ? `${product.stock} slots remaining` : 'Out of stock'}</span>
                   </div>
-
-                  <button 
-                    className="btn btn-primary"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleProductClick(product);
-                    }}
-                  >
-                    <i className="fas fa-shopping-cart"></i> 
-                    {isAuthenticated ? 'Add to Cart' : 'Pre-Order Now'}
+                  <button className="btn btn-primary" onClick={(e) => { e.stopPropagation(); setSelectedProduct(product); }}>
+                    <i className="fas fa-shopping-cart"></i> {isAuthenticated ? 'Add to Cart' : 'Pre-Order Now'}
                   </button>
                 </div>
               </div>
@@ -176,18 +114,10 @@ const PreOrder = () => {
       </div>
 
       {selectedProduct && (
-        <ProductModal
-          product={selectedProduct}
-          onClose={handleCloseModal}
-          onRequireLogin={handleRequireLogin}
-          onAddToCart={handleAddToCart}
-          onAddToWishlist={handleAddToWishlist}
-        />
+        <ProductModal product={selectedProduct} onClose={() => setSelectedProduct(null)}
+          onRequireLogin={handleRequireLogin} onAddToCart={handleAddToCart} onAddToWishlist={handleAddToWishlist} />
       )}
-
-      {showLoginModal && (
-        <LoginModal onClose={handleCloseLoginModal} />
-      )}
+      {showLoginModal && <LoginModal onClose={() => setShowLoginModal(false)} />}
     </main>
   );
 };

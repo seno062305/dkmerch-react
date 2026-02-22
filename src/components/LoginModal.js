@@ -1,3 +1,4 @@
+// src/components/LoginModal.js
 import React, { useState, useEffect } from "react";
 import "./LoginModal.css";
 import { useAuth } from "../context/AuthContext";
@@ -30,17 +31,17 @@ const LoginModal = ({ onClose }) => {
     };
   }, []);
 
+  // ✅ FIXED: async/await instead of setTimeout + sync call
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setIsLoading(true);
 
-    setTimeout(() => {
-      const result = login(formData.email, formData.password);
+    try {
+      const result = await login(formData.email, formData.password);
 
       if (!result.success) {
         setError(result.message);
-        setIsLoading(false);
         return;
       }
 
@@ -60,7 +61,11 @@ const LoginModal = ({ onClose }) => {
 
       // normal user
       onClose();
-    }, 500);
+    } catch (err) {
+      setError("Login failed. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleChange = (e) => {

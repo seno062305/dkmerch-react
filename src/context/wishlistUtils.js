@@ -1,23 +1,48 @@
-export const WISHLIST_KEY = 'dkmerch_wishlist';
+import { useQuery, useMutation } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import { useAuth } from "./AuthContext";
 
-export const getWishlist = () => {
-  return JSON.parse(localStorage.getItem(WISHLIST_KEY)) || [];
+export const useWishlist = () => {
+  const { user } = useAuth();
+  const userId = user?.id || user?.email || "guest";
+  return useQuery(api.wishlist.getWishlist, { userId }) ?? [];
 };
 
-export const toggleWishlist = (product) => {
-  const wishlist = getWishlist();
-  const exists = wishlist.find(item => item.id === product.id);
-
-  let updated;
-  if (exists) {
-    updated = wishlist.filter(item => item.id !== product.id);
-  } else {
-    updated = [...wishlist, product];
-  }
-
-  localStorage.setItem(WISHLIST_KEY, JSON.stringify(updated));
+export const useToggleWishlist = () => {
+  const mutation = useMutation(api.wishlist.toggleWishlist);
+  const { user } = useAuth();
+  return (product) => {
+    const userId = user?.id || user?.email || "guest";
+    return mutation({
+      userId,
+      productId: product.id || product._id,
+      name: product.name,
+      price: product.price,
+      image: product.image,
+    });
+  };
 };
 
-export const isWishlisted = (id) => {
-  return getWishlist().some(item => item.id === id);
+export const useRemoveFromWishlist = () => {
+  const mutation = useMutation(api.wishlist.removeFromWishlist);
+  const { user } = useAuth();
+  return (productId) => {
+    const userId = user?.id || user?.email || "guest";
+    return mutation({ userId, productId });
+  };
 };
+
+export const useIsInWishlist = (productId) => {
+  const wishlist = useWishlist();
+  return wishlist.some((item) => item.productId === productId);
+};
+
+export const useWishlistCount = () => {
+  return useWishlist().length;
+};
+
+// Legacy stubs
+export const toggleWishlist = () => console.warn("Use useToggleWishlist() hook instead.");
+export const getWishlist = () => [];
+export const isInWishlist = () => false;
+export const getWishlistCount = () => 0;

@@ -1,120 +1,98 @@
+// src/context/AuthContext.js
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { useMutation } from "convex/react";
+import { api } from "../../convex/_generated/api";
 
 const AuthContext = createContext(null);
-
-const BUILT_IN_ADMIN = {
-  id: 0,
-  name: "Administrator",
-  username: "admin",
-  email: "admin",
-  password: "admin123",
-  role: "admin"
-};
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isReady, setIsReady] = useState(false);
 
-  // Ensure admin exists in localStorage
+  const loginUserMutation  = useMutation(api.users.loginUser);
+  const seedAdminMutation  = useMutation(api.users.seedAdmin);
+  const loginRiderMutation = useMutation(api.riders.loginRider);
+  const createUserMutation = useMutation(api.users.createUser);
+
   useEffect(() => {
-    const users = JSON.parse(localStorage.getItem("users")) || [];
-    const adminExists = users.some(u => u.email === BUILT_IN_ADMIN.email);
-    if (!adminExists) {
-      localStorage.setItem("users", JSON.stringify([BUILT_IN_ADMIN, ...users]));
-    }
+    seedAdminMutation({}).catch(() => {});
   }, []);
 
-  // Load logged in user on mount
   useEffect(() => {
     const storedUser = JSON.parse(localStorage.getItem("authUser"));
     if (storedUser) {
-      // Always re-check rider approval status on mount
-      if (storedUser.role === 'rider') {
-        const apps = JSON.parse(localStorage.getItem('dkmerch_rider_applications')) || [];
-        const riderApp = apps.find(a => a.email === storedUser.email);
-        if (riderApp && riderApp.status !== 'approved') {
-          // Rider was revoked, clear session
-          localStorage.removeItem("authUser");
-          return;
-        }
-      }
       setUser(storedUser);
       setRole(storedUser.role);
       setIsAuthenticated(true);
     }
+    setIsReady(true);
   }, []);
 
-  // LOGIN - accepts username or email
-  const login = (identifier, password) => {
-    // Check regular users first
-    const users = JSON.parse(localStorage.getItem("users")) || [];
-    const foundUser = users.find(
-      u => (u.username === identifier || u.email === identifier) && u.password === password
-    );
+  const login = async (identifier, password) => {
+    try {
+      // 1. Try regular user login
+      const result = await loginUserMutation({ identifier, password });
 
-    if (foundUser) {
-      localStorage.setItem("authUser", JSON.stringify(foundUser));
-      setUser(foundUser);
-      setRole(foundUser.role);
-      setIsAuthenticated(true);
-      return { success: true, role: foundUser.role };
-    }
-
-    // Check if this is a rider login (by email)
-    const riderApps = JSON.parse(localStorage.getItem('dkmerch_rider_applications')) || [];
-    const riderApp = riderApps.find(a => a.email === identifier);
-
-    if (riderApp) {
-      if (riderApp.status !== 'approved') {
-        return {
-          success: false,
-          message: riderApp.status === 'pending'
-            ? 'Your rider application is still pending admin approval.'
-            : 'Your rider application was not approved.'
+      if (result.success && result.user) {
+        const sessionUser = {
+          _id: result.user._id,
+          id: result.user._id,
+          name: result.user.name,
+          username: result.user.username,
+          email: result.user.email,
+          role: result.user.role,
         };
+        localStorage.setItem("authUser", JSON.stringify(sessionUser));
+        setUser(sessionUser);
+        setRole(sessionUser.role);
+        setIsAuthenticated(true);
+        return { success: true, role: sessionUser.role };
       }
-      // Rider login - use their email as identifier, they don't have a password in localStorage
-      // So we match by email only (simplified - in production use proper auth)
-      const riderUser = {
-        id: riderApp.id,
-        name: riderApp.fullName,
-        email: riderApp.email,
-        role: 'rider'
-      };
-      localStorage.setItem("authUser", JSON.stringify(riderUser));
-      setUser(riderUser);
-      setRole('rider');
-      setIsAuthenticated(true);
-      return { success: true, role: 'rider' };
-    }
 
-    return { success: false, message: "Invalid username/email or password" };
+      // 2. Try rider login
+      const riderResult = await loginRiderMutation({ email: identifier, password });
+
+      // Rider account exists — show specific message (pending, rejected, wrong password, etc.)
+      if (riderResult.riderExists) {
+        if (riderResult.success && riderResult.rider) {
+          const sessionRider = {
+            _id: riderResult.rider._id,
+            id: riderResult.rider._id,
+            name: riderResult.rider.name,
+            email: riderResult.rider.email,
+            role: "rider",
+          };
+          localStorage.setItem("authUser", JSON.stringify(sessionRider));
+          setUser(sessionRider);
+          setRole("rider");
+          setIsAuthenticated(true);
+          return { success: true, role: "rider" };
+        }
+        // Rider exists but blocked (pending/rejected/suspended/wrong password)
+        return { success: false, message: riderResult.message };
+      }
+
+      // 3. No match in either users or riders
+      return {
+        success: false,
+        message: result.message || "Invalid username/email or password.",
+      };
+    } catch (err) {
+      console.error("Login error:", err);
+      return { success: false, message: "Login failed. Please try again." };
+    }
   };
 
-  // REGISTER - includes username
-  const register = ({ name, username, email, password }) => {
-    const users = JSON.parse(localStorage.getItem("users")) || [];
-
-    if (users.some(u => u.username === username)) {
-      return { success: false, message: "Username already taken" };
+  const register = async ({ name, username, email, password }) => {
+    try {
+      const result = await createUserMutation({ name, username, email, password, role: "user" });
+      return result;
+    } catch (err) {
+      console.error("Register error:", err);
+      return { success: false, message: "Registration failed. Please try again." };
     }
-    if (users.some(u => u.email === email)) {
-      return { success: false, message: "Email already exists" };
-    }
-
-    const newUser = {
-      id: Date.now(),
-      name,
-      username,
-      email,
-      password,
-      role: "user"
-    };
-
-    users.push(newUser);
-    localStorage.setItem("users", JSON.stringify(users));
-    return { success: true };
   };
 
   const logout = () => {
@@ -124,15 +102,10 @@ export const AuthProvider = ({ children }) => {
     setIsAuthenticated(false);
   };
 
+  if (!isReady) return null;
+
   return (
-    <AuthContext.Provider value={{
-      user,
-      role,
-      isAuthenticated,
-      login,
-      register,
-      logout
-    }}>
+    <AuthContext.Provider value={{ user, role, isAuthenticated, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );

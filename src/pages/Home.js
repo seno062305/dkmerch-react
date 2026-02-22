@@ -3,13 +3,20 @@ import HeroCarousel from '../components/HeroCarousel';
 import LogoMarquee from '../components/LogoMarquee';
 import WeverseSection from '../components/WeverseSection';
 import ProductModal from '../components/ProductModal';
-import { addToCart } from '../utils/cartStorage';
-import { toggleWishlist, isInWishlist } from '../utils/wishlistStorage';
+import { useAddToCart } from '../context/cartUtils';
+import { useToggleWishlist, useWishlist } from '../context/wishlistUtils';
 import { useNotification } from '../context/NotificationContext';
 
 const Home = () => {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const { showNotification } = useNotification();
+
+  const addToCartMutation = useAddToCart();
+  const toggleWishlistMutation = useToggleWishlist();
+  const wishlistItems = useWishlist();
+
+  const isWishlisted = (productId) =>
+    wishlistItems.some(item => item.productId === productId);
 
   const carouselSlides = [
     {
@@ -35,65 +42,34 @@ const Home = () => {
     }
   ];
 
-  const handleProductClick = (product) => {
-    setSelectedProduct(product);
-  };
-
-  const handleCloseModal = () => {
-    setSelectedProduct(null);
-  };
-
-  // ✅ CORRECT: Use addToCart from cartStorage
   const handleAddToCart = (product) => {
-    try {
-      if (product.stock === 0 && !product.isPreOrder) {
-        showNotification('Product is out of stock', 'error');
-        return;
-      }
-
-      addToCart(product.id);
-      showNotification(`${product.name} added to cart!`, 'success');
-      
-      // Trigger storage event for other components
-      window.dispatchEvent(new Event('storage'));
-    } catch (error) {
-      console.error('Error adding to cart:', error);
-      showNotification('Error adding to cart', 'error');
+    if (product.stock === 0 && !product.isPreOrder) {
+      showNotification('Product is out of stock', 'error');
+      return;
     }
+    addToCartMutation(product);
+    showNotification(`${product.name} added to cart!`, 'success');
   };
 
-  // ✅ CORRECT: Use toggleWishlist from wishlistStorage (stores IDs only)
   const handleAddToWishlist = (product) => {
-    try {
-      const wasInWishlist = isInWishlist(product.id);
-      
-      toggleWishlist(product.id);
-      
-      if (wasInWishlist) {
-        showNotification(`${product.name} removed from wishlist!`, 'success');
-      } else {
-        showNotification(`${product.name} added to wishlist!`, 'success');
-      }
-      
-      // Trigger storage event
-      window.dispatchEvent(new Event('storage'));
-    } catch (error) {
-      console.error('Error updating wishlist:', error);
-      showNotification('Error updating wishlist', 'error');
-    }
+    const pid = product._id || product.id;
+    toggleWishlistMutation(product);
+    showNotification(
+      isWishlisted(pid) ? `${product.name} removed from wishlist!` : `${product.name} added to wishlist!`,
+      'success'
+    );
   };
 
   return (
     <div className="home-page">
       <HeroCarousel slides={carouselSlides} />
       <LogoMarquee />
-      <WeverseSection onProductClick={handleProductClick} />
-      
-      {/* Product Modal with Rating System */}
+      <WeverseSection onProductClick={setSelectedProduct} />
+
       {selectedProduct && (
         <ProductModal
           product={selectedProduct}
-          onClose={handleCloseModal}
+          onClose={() => setSelectedProduct(null)}
           onAddToCart={handleAddToCart}
           onAddToWishlist={handleAddToWishlist}
         />

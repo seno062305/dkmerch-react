@@ -1,30 +1,32 @@
-/* Collections Page - Fullscreen Weverse Style */
+/* Collections Page */
 .collections-page {
   min-height: 100vh;
   background: #ffffff;
   padding-bottom: 60px;
 }
 
-/* Header */
+/* Header — white, matching Pre-Order style */
 .collections-header {
-  background: linear-gradient(135deg, #0f1a3a 0%, #1a2654 40%, #162040 100%);
-  color: white;
+  background: #ffffff;
+  color: #1a1f36;
   padding: 50px 40px;
   text-align: center;
+  border-bottom: 1px solid #eee;
 }
 
 .collections-header h1 {
   font-size: 36px;
   font-weight: 700;
   margin-bottom: 10px;
+  color: #1a1f36;
 }
 
 .collections-header p {
   font-size: 16px;
-  opacity: 0.8;
+  color: #64748b;
 }
 
-/* Filters Section - Single Line Layout */
+/* Filters */
 .collections-filters {
   background: #f8f9fa;
   padding: 30px 40px;
@@ -85,7 +87,6 @@
   border-color: #111;
 }
 
-/* Divider between filter groups */
 .filter-divider {
   width: 1px;
   height: 30px;
@@ -105,7 +106,7 @@
   color: #666;
 }
 
-/* Fullscreen Grid - like Weverse */
+/* Grid */
 .collections-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -123,7 +124,6 @@
   position: relative;
 }
 
-/* Highlighted product (from search) */
 .collection-card.highlighted {
   animation: highlightPulse 2s ease-in-out;
   border: 2px solid var(--primary-color);
@@ -131,12 +131,8 @@
 }
 
 @keyframes highlightPulse {
-  0%, 100% {
-    box-shadow: 0 0 20px rgba(252, 18, 104, 0.3);
-  }
-  50% {
-    box-shadow: 0 0 30px rgba(252, 18, 104, 0.6);
-  }
+  0%, 100% { box-shadow: 0 0 20px rgba(252, 18, 104, 0.3); }
+  50% { box-shadow: 0 0 30px rgba(252, 18, 104, 0.6); }
 }
 
 .collection-card:hover {
@@ -145,7 +141,6 @@
   transform: scale(1.02);
 }
 
-/* SALE Badge */
 .collection-sale-badge {
   position: absolute;
   top: 12px;
@@ -160,43 +155,6 @@
   text-transform: uppercase;
 }
 
-/* Heart Button */
-.collection-card-heart {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 36px;
-  height: 36px;
-  background: rgba(255, 255, 255, 0.9);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transform: scale(0.8);
-  transition: all 0.3s ease;
-  z-index: 5;
-  cursor: pointer;
-  border: none;
-}
-
-.collection-card:hover .collection-card-heart {
-  opacity: 1;
-  transform: scale(1);
-}
-
-.collection-card-heart i {
-  font-size: 16px;
-  color: #666;
-  transition: all 0.2s ease;
-}
-
-.collection-card-heart:hover i {
-  color: var(--primary-color);
-  transform: scale(1.1);
-}
-
-/* Image Container */
 .collection-card-img {
   width: 100%;
   aspect-ratio: 1 / 1;
@@ -209,18 +167,14 @@
 .collection-card-img::after {
   content: '';
   position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  bottom: 0; left: 0; right: 0;
   height: 80px;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.05), transparent);
+  background: linear-gradient(to top, rgba(0,0,0,0.05), transparent);
   opacity: 0;
   transition: opacity 0.3s ease;
 }
 
-.collection-card:hover .collection-card-img::after {
-  opacity: 1;
-}
+.collection-card:hover .collection-card-img::after { opacity: 1; }
 
 .collection-card-img img {
   width: 100%;
@@ -229,14 +183,9 @@
   transition: transform 0.4s ease;
 }
 
-.collection-card:hover .collection-card-img img {
-  transform: scale(1.05);
-}
+.collection-card:hover .collection-card-img img { transform: scale(1.05); }
 
-/* Card Info */
-.collection-card-info {
-  padding: 16px;
-}
+.collection-card-info { padding: 16px; }
 
 .collection-card-group {
   font-size: 11px;
@@ -273,29 +222,12 @@
   color: var(--primary-color);
 }
 
-.collection-card-price.sale {
-  color: #dc3545;
-}
+.collection-card-price.sale { color: #dc3545; }
 
 .collection-card-price-original {
   font-size: 12px;
   color: #999;
   text-decoration: line-through;
-}
-
-.collection-card-reviews {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-}
-
-.collection-card-stars {
-  color: #ffc107;
-}
-
-.collection-card-review-count {
-  color: #666;
 }
 
 /* No Results */
@@ -331,93 +263,39 @@
 .reset-filters-btn:hover {
   background: #333;
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
 }
 
 /* Responsive */
-@media (max-width: 1200px) {
-  .collections-grid {
-    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  }
-}
-
 @media (max-width: 992px) {
   .filters-single-line {
     flex-direction: column;
     align-items: flex-start;
     gap: 20px;
   }
-
-  .filter-group {
-    width: 100%;
-  }
-
-  .filter-divider {
-    width: 100%;
-    height: 1px;
-  }
-
-  .collections-grid {
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  }
+  .filter-group { width: 100%; }
+  .filter-divider { width: 100%; height: 1px; }
+  .collections-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
 }
 
 @media (max-width: 768px) {
-  .collections-header {
-    padding: 40px 20px;
-  }
-
-  .collections-header h1 {
-    font-size: 28px;
-  }
-
-  .collections-filters {
-    padding: 20px;
-  }
-
-  .results-count {
-    padding: 15px 20px;
-  }
-
-  .collections-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .collection-card-img {
-    padding: 12px;
-  }
+  .collections-header { padding: 40px 20px; }
+  .collections-header h1 { font-size: 28px; }
+  .collections-filters { padding: 20px; }
+  .results-count { padding: 15px 20px; }
+  .collections-grid { grid-template-columns: repeat(2, 1fr); }
+  .collection-card-img { padding: 12px; }
 }
 
 @media (max-width: 576px) {
-  .collections-header h1 {
-    font-size: 24px;
-  }
-
-  .collections-header p {
-    font-size: 14px;
-  }
-
-  .filter-buttons {
-    gap: 8px;
-  }
-
-  .filter-btn {
-    padding: 7px 16px;
-    font-size: 12px;
-  }
-
-  .collection-card-info {
-    padding: 12px;
-  }
-
-  .collection-card-name {
-    font-size: 12px;
-    min-height: 32px;
-  }
+  .collections-header h1 { font-size: 24px; }
+  .collections-header p { font-size: 14px; }
+  .filter-buttons { gap: 8px; }
+  .filter-btn { padding: 7px 16px; font-size: 12px; }
+  .collection-card-info { padding: 12px; }
+  .collection-card-name { font-size: 12px; min-height: 32px; }
 }
 
 @media (max-width: 400px) {
-  .collections-grid {
-    grid-template-columns: 1fr;
-  }
+  .collections-grid { grid-template-columns: 1fr; }
 }

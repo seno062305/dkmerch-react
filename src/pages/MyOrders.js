@@ -1,204 +1,144 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useUserOrders } from '../utils/orderStorage';
+import { useProducts } from '../utils/productStorage';
 import './MyOrders.css';
-import { getOrdersByUser } from '../utils/orderStorage';
-import { getProducts } from '../utils/productStorage';
 
 const MyOrders = () => {
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
-  const [orders, setOrders] = useState([]);
-  const [products, setProducts] = useState([]);
   const [filter, setFilter] = useState('all');
+  const [lightboxImg, setLightboxImg] = useState(null);
 
-  useEffect(() => {
-    // ✅ Redirect if not logged in
-    if (!isAuthenticated || !user) {
-      navigate('/');
-      return;
-    }
+  const orders   = useUserOrders(user?.email) || [];
+  const products = useProducts() || [];
 
-    loadOrders();
+  if (isAuthenticated === false && !user) return null;
 
-    const handleStorageChange = () => {
-      loadOrders();
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    window.addEventListener('orderUpdated', handleStorageChange);
-    
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('orderUpdated', handleStorageChange);
-    };
-  }, [isAuthenticated, user, navigate]);
-
-  const loadOrders = () => {
-    if (!user || !user.email) {
-      setOrders([]);
-      return;
-    }
-
-    // ✅ GET ONLY THIS USER'S ORDERS
-    const userOrders = getOrdersByUser(user.email);
-    const allProducts = getProducts();
-    
-    setOrders(userOrders);
-    setProducts(allProducts);
-  };
-
-  const getProductById = (id) => {
-    return products.find(p => p.id === id);
-  };
+  const getProductById = (id) => products.find(p => p._id === id || p.id === id);
 
   const getStatusClass = (status) => {
-    const statusMap = {
-      'Processing': 'status-processing',
-      'Confirmed': 'status-confirmed',
-      'Shipped': 'status-shipped',
-      'In Transit': 'status-transit',
-      'Out for Delivery': 'status-delivery',
-      'Delivered': 'status-delivered',
-      'Cancelled': 'status-cancelled',
-      'pending': 'status-processing',
-      'confirmed': 'status-confirmed',
-      'shipped': 'status-shipped',
-      'completed': 'status-delivered',
+    const map = {
+      'Processing': 'status-processing', 'Confirmed': 'status-confirmed',
+      'Shipped': 'status-shipped', 'In Transit': 'status-transit',
+      'Out for Delivery': 'status-delivery', 'Delivered': 'status-delivered',
+      'Cancelled': 'status-cancelled', 'pending': 'status-processing',
+      'confirmed': 'status-confirmed', 'shipped': 'status-shipped',
+      'out_for_delivery': 'status-delivery', 'completed': 'status-delivered',
       'cancelled': 'status-cancelled',
     };
-    return statusMap[status] || 'status-processing';
+    return map[status] || 'status-processing';
   };
 
-  const filteredOrders = filter === 'all' 
-    ? orders 
-    : orders.filter(order => {
-        const orderStatus = (order.status || order.orderStatus || '').toLowerCase();
-        const filterStatus = filter.toLowerCase();
-        return orderStatus === filterStatus;
-      });
+  const getDisplayStatus = (order) => {
+    const s = order.orderStatus || order.status || 'pending';
+    const labels = {
+      pending: 'Processing', confirmed: 'Confirmed', shipped: 'Shipped',
+      out_for_delivery: 'Out for Delivery', completed: 'Delivered',
+      cancelled: 'Cancelled', Processing: 'Processing', Confirmed: 'Confirmed',
+      Shipped: 'Shipped', Delivered: 'Delivered', Cancelled: 'Cancelled',
+    };
+    return labels[s] || s;
+  };
+
+  const filteredOrders = filter === 'all'
+    ? orders
+    : orders.filter(o => getDisplayStatus(o).toLowerCase() === filter.toLowerCase());
 
   return (
-    <main>
+    <main className="orders-page-main">
       <div className="page-header">
         <div className="container">
           <h1 className="page-title">My Orders</h1>
           <p className="page-description">Track and manage your orders</p>
         </div>
       </div>
-
       <div className="container">
         <section className="orders-page">
           <div className="orders-filter">
-            <button 
-              className={`filter-btn ${filter === 'all' ? 'active' : ''}`}
-              onClick={() => setFilter('all')}
-            >
-              All Orders ({orders.length})
-            </button>
-            <button 
-              className={`filter-btn ${filter === 'processing' ? 'active' : ''}`}
-              onClick={() => setFilter('processing')}
-            >
-              Processing
-            </button>
-            <button 
-              className={`filter-btn ${filter === 'shipped' ? 'active' : ''}`}
-              onClick={() => setFilter('shipped')}
-            >
-              Shipped
-            </button>
-            <button 
-              className={`filter-btn ${filter === 'delivered' ? 'active' : ''}`}
-              onClick={() => setFilter('delivered')}
-            >
-              Delivered
-            </button>
+            {[
+              { key: 'all', label: `All Orders (${orders.length})` },
+              { key: 'processing', label: 'Processing' },
+              { key: 'shipped', label: 'Shipped' },
+              { key: 'delivered', label: 'Delivered' },
+            ].map(f => (
+              <button
+                key={f.key}
+                className={`filter-btn ${filter === f.key ? 'active' : ''}`}
+                onClick={() => setFilter(f.key)}
+              >
+                {f.label}
+              </button>
+            ))}
           </div>
 
           {filteredOrders.length === 0 ? (
             <div className="orders-empty">
               <i className="fas fa-shopping-bag"></i>
               <h3>No orders found</h3>
-              <p>
-                {filter === 'all' 
-                  ? "You haven't placed any orders yet."
-                  : `You don't have any ${filter} orders.`}
-              </p>
-              <button className="btn btn-primary" onClick={() => navigate('/')}>
-                Start Shopping
-              </button>
+              <p>{filter === 'all' ? "You haven't placed any orders yet." : `No ${filter} orders.`}</p>
+              <button className="btn btn-primary" onClick={() => navigate('/')}>Start Shopping</button>
             </div>
           ) : (
-            <div className="orders-list">
+            <div className="orders-grid">
               {filteredOrders.map(order => {
-                const orderId = order.orderId || order.id;
-                const orderDate = order.date || order.createdAt;
-                const orderStatus = order.status || order.orderStatus || 'Processing';
-                const orderTotal = order.total || 0;
+                const orderDate = order._creationTime ? new Date(order._creationTime) : null;
+                const orderStatus = getDisplayStatus(order);
+                const statusKey = order.orderStatus || order.status || 'pending';
+                const firstItem = order.items?.[0];
+                const firstProduct = firstItem ? getProductById(firstItem.id) : null;
+                const imgSrc = firstItem?.image || firstProduct?.image;
+                const itemName = firstItem?.name || firstProduct?.name;
+                const extraCount = (order.items?.length || 1) - 1;
 
                 return (
-                  <div key={orderId} className="order-card">
-                    <div className="order-header">
-                      <div className="order-info">
-                        <h3>Order #{orderId?.slice(-8) || 'N/A'}</h3>
-                        <p className="order-date">
-                          <i className="fas fa-calendar"></i>
-                          {orderDate 
-                            ? new Date(orderDate).toLocaleDateString('en-US', {
-                                month: 'long',
-                                day: 'numeric',
-                                year: 'numeric'
-                              })
-                            : 'N/A'
-                          }
-                        </p>
-                      </div>
-                      <div className={`order-status ${getStatusClass(orderStatus)}`}>
+                  <div key={order._id} className="order-card">
+                    {/* Clickable image */}
+                    <div
+                      className="order-card-img"
+                      onClick={() => imgSrc && setLightboxImg(imgSrc)}
+                      title="Click to view image"
+                    >
+                      {imgSrc
+                        ? <img src={imgSrc} alt={itemName} />
+                        : <i className="fas fa-box order-no-img"></i>
+                      }
+                      {imgSrc && (
+                        <div className="order-img-zoom"><i className="fas fa-search-plus"></i></div>
+                      )}
+                      {extraCount > 0 && (
+                        <span className="order-extra-badge">+{extraCount}</span>
+                      )}
+                      <span className={`order-status-overlay ${getStatusClass(statusKey)}`}>
                         {orderStatus}
-                      </div>
+                      </span>
                     </div>
 
-                    <div className="order-items">
-                      {order.items && order.items.map((item, index) => {
-                        const product = getProductById(item.id || item.productId);
-                        if (!product) return null;
-                        
-                        return (
-                          <div key={index} className="order-item">
-                            <div className="order-item-image">
-                              <img src={product.image} alt={product.name} />
-                            </div>
-                            <div className="order-item-details">
-                              <h4>{product.name}</h4>
-                              <p className="order-item-group">{product.kpopGroup}</p>
-                              <p className="order-item-quantity">Quantity: {item.quantity}</p>
-                            </div>
-                            <div className="order-item-price">
-                              ₱{(product.price * item.quantity).toLocaleString()}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                    {/* Info */}
+                    <div className="order-card-info">
+                      <p className="order-card-id">Order #{order.orderId?.slice(-8) || 'N/A'}</p>
+                      <p className="order-card-name">
+                        {itemName}
+                        {extraCount > 0 && <span className="order-and-more"> +{extraCount} more</span>}
+                      </p>
 
-                    <div className="order-footer">
-                      <div className="order-total">
-                        <span>Total Amount:</span>
-                        <span className="total-price">₱{orderTotal.toLocaleString()}</span>
-                      </div>
-                      <div className="order-actions">
-                        <button 
-                          className="btn btn-outline btn-small"
-                          onClick={() => navigate(`/track-order?order=${orderId}`)}
-                        >
-                          <i className="fas fa-truck"></i> Track Order
-                        </button>
-                        {(orderStatus === 'Delivered' || orderStatus === 'completed') && (
-                          <button className="btn btn-primary btn-small">
-                            <i className="fas fa-redo"></i> Buy Again
-                          </button>
+                      {/* Status + date text row */}
+                      <div className="order-card-meta">
+                        <span className={`order-status-text ${getStatusClass(statusKey)}`}>
+                          <i className="fas fa-circle"></i> {orderStatus}
+                        </span>
+                        {orderDate && (
+                          <span className="order-card-date">
+                            <i className="fas fa-calendar-alt"></i>
+                            {orderDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </span>
                         )}
+                      </div>
+
+                      {/* Total */}
+                      <div className="order-card-price-row">
+                        <span className="order-card-price">₱{order.total?.toLocaleString()}</span>
                       </div>
                     </div>
                   </div>
@@ -208,6 +148,16 @@ const MyOrders = () => {
           )}
         </section>
       </div>
+
+      {/* Lightbox */}
+      {lightboxImg && (
+        <div className="order-lightbox" onClick={() => setLightboxImg(null)}>
+          <button className="lightbox-close" onClick={() => setLightboxImg(null)}>
+            <i className="fas fa-times"></i>
+          </button>
+          <img src={lightboxImg} alt="Product" onClick={e => e.stopPropagation()} />
+        </div>
+      )}
     </main>
   );
 };

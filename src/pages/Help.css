@@ -1,242 +1,203 @@
 .help-page {
   min-height: 100vh;
-  padding: 40px 0;
 }
 
-.help-header {
-  text-align: center;
-  margin-bottom: 50px;
-  padding-top: 20px;
+/* Matches preorder-main .page-header from index.css */
+.help-main .page-header {
+  background: none;
+  background-image: none;
+  background-color: #f5f5f5;
+  border-bottom: 1px solid #e0e0e0;
+  padding: 60px 0;
 }
 
-.help-header h1 {
-  font-size: 42px;
+.help-main .page-title {
   color: var(--dark-color);
-  margin-bottom: 15px;
-  font-weight: 700;
+  text-shadow: none;
 }
 
-.help-header p {
-  font-size: 18px;
+.help-main .page-description {
   color: var(--gray-color);
 }
 
+/* Sections */
 .help-section {
-  margin-bottom: 60px;
-  padding: 40px;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-  scroll-margin-top: 100px;
+  padding: 50px 0;
+  border-bottom: 1px solid #e0e0e0;
 }
 
+.help-section:last-child {
+  border-bottom: none;
+}
+
+/* h2 with pink underline accent */
 .help-section h2 {
-  font-size: 32px;
+  font-size: 20px;
   color: var(--dark-color);
   margin-bottom: 30px;
   font-weight: 700;
   display: flex;
   align-items: center;
-  gap: 15px;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 2px solid #e0e0e0;
+  position: relative;
+}
+
+.help-section h2::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 50px;
+  height: 2px;
+  background: var(--primary-color);
 }
 
 .help-section h2 i {
   color: var(--primary-color);
-  font-size: 28px;
+  font-size: 20px;
 }
 
+/* FAQ - plain left border, no card */
 .faq-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 25px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 30px;
 }
 
 .faq-item {
-  padding: 25px;
-  background: #f8f9fa;
-  border-radius: 10px;
-  transition: var(--transition);
-}
-
-.faq-item:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+  border-left: 3px solid var(--primary-color);
+  padding-left: 18px;
 }
 
 .faq-item h3 {
-  font-size: 18px;
+  font-size: 15px;
   color: var(--dark-color);
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   font-weight: 600;
 }
 
 .faq-item p {
   color: var(--gray-color);
   line-height: 1.6;
-  font-size: 15px;
+  font-size: 14px;
 }
 
+/* Info cards - plain left border */
 .info-content {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 25px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 30px;
 }
 
 .info-card {
-  padding: 30px;
-  background: #f8f9fa;
-  border-radius: 10px;
-  transition: var(--transition);
-}
-
-.info-card:hover {
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+  border-left: 3px solid var(--primary-color);
+  padding-left: 18px;
 }
 
 .info-card h3 {
-  font-size: 20px;
+  font-size: 15px;
   color: var(--dark-color);
-  margin-bottom: 18px;
+  margin-bottom: 12px;
   font-weight: 600;
 }
 
 .info-card p {
   color: var(--gray-color);
   line-height: 1.7;
-  margin-bottom: 15px;
-  font-size: 15px;
+  margin-bottom: 10px;
+  font-size: 14px;
 }
 
 .info-card ul,
 .info-card ol {
   color: var(--gray-color);
   line-height: 1.8;
-  padding-left: 20px;
+  padding-left: 18px;
 }
 
 .info-card ul li,
 .info-card ol li {
-  margin-bottom: 8px;
-  font-size: 15px;
+  margin-bottom: 6px;
+  font-size: 14px;
 }
 
+/* Contact section */
 .contact-section {
   text-align: center;
-  color: rgb(8, 8, 8);
 }
 
 .contact-section h2 {
-  color: rgb(0, 0, 0);
   justify-content: center;
 }
 
-.contact-section h2 i {
-  color: rgb(0, 0, 0);
+.contact-section h2::after {
+  left: 50%;
+  transform: translateX(-50%);
 }
 
 .contact-section > p {
-  font-size: 18px;
-  margin-bottom: 40px;
-  opacity: 0.95;
+  font-size: 15px;
+  margin-bottom: 32px;
+  color: var(--gray-color);
 }
 
 .contact-options {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 30px;
-  margin-top: 30px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+  margin-top: 24px;
 }
 
+/* White card like preorder-card */
 .contact-option {
-  padding: 35px 25px;
-  background: rgba(230, 90, 218, 0.15);
-  border-radius: 12px;
-  backdrop-filter: blur(10px);
+  background: white;
+  border-radius: var(--border-radius);
+  box-shadow: var(--box-shadow);
+  padding: 30px 20px;
   transition: var(--transition);
 }
 
 .contact-option:hover {
-  background: rgba(131, 4, 235, 0.25);
-  transform: translateY(-5px);
+  transform: translateY(-4px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
 }
 
 .contact-option i {
-  font-size: 36px;
-  margin-bottom: 15px;
-  color: rgb(0, 0, 0);
+  font-size: 30px;
+  margin-bottom: 14px;
+  color: var(--primary-color);
+  display: block;
 }
 
 .contact-option h3 {
-  font-size: 22px;
-  margin-bottom: 10px;
-  color: rgb(0, 0, 0);
+  font-size: 16px;
+  margin-bottom: 8px;
+  color: var(--dark-color);
   font-weight: 600;
 }
 
 .contact-option p {
-  font-size: 16px;
-  margin-bottom: 5px;
-  color: rgb(0, 0, 0);
-  opacity: 0.95;
+  font-size: 14px;
+  margin-bottom: 4px;
+  color: var(--gray-color);
 }
 
 .response-time {
-  font-size: 13px !important;
-  opacity: 0.8 !important;
+  font-size: 12px !important;
   font-style: italic;
+  opacity: 0.8;
 }
 
 /* Responsive */
 @media (max-width: 768px) {
-  .help-header h1 {
-    font-size: 32px;
-  }
-
-  .help-header p {
-    font-size: 16px;
-  }
-
-  .help-section {
-    padding: 25px 20px;
-    margin-bottom: 40px;
-  }
-
-  .help-section h2 {
-    font-size: 26px;
-  }
-
-  .faq-grid,
-  .info-content,
-  .contact-options {
-    grid-template-columns: 1fr;
-  }
-
-  .info-card,
-  .faq-item {
-    padding: 20px;
-  }
+  .help-section { padding: 35px 0; }
+  .help-section h2 { font-size: 17px; }
+  .faq-grid, .info-content, .contact-options { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 576px) {
-  .help-page {
-    padding: 20px 0;
-  }
-
-  .help-header {
-    margin-bottom: 30px;
-  }
-
-  .help-header h1 {
-    font-size: 28px;
-  }
-
-  .help-section {
-    padding: 20px 15px;
-  }
-
-  .help-section h2 {
-    font-size: 22px;
-    flex-direction: column;
-    text-align: center;
-  }
+  .help-section { padding: 25px 0; }
+  .help-section h2 { font-size: 15px; }
 }

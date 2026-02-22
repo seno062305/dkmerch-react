@@ -142,13 +142,32 @@ header {
   transform: translateY(-2px);
 }
 
+/* ⭐ Favorites button - gold star color */
+.favorites-btn {
+  color: #c87d00;
+}
+
+.favorites-btn i {
+  color: #f5a623;
+  transition: transform 0.2s ease;
+}
+
+.favorites-btn:hover {
+  color: #a86800 !important;
+}
+
+.favorites-btn:hover i {
+  transform: scale(1.2) rotate(-5deg);
+  color: #f5a623;
+}
+
 /* Cart and Wishlist Count Badges */
 .cart-count,
 .wishlist-count {
   position: absolute;
   top: -5px;
   right: -5px;
-  background: #9c27b0;
+  background: #f5a623;
   color: white;
   font-size: 0.65rem;
   font-weight: 600;
@@ -160,6 +179,10 @@ header {
   justify-content: center;
   padding: 0 4px;
   border: 2px solid white;
+}
+
+.cart-count {
+  background: #9c27b0;
 }
 
 /* Account Dropdown */
@@ -281,6 +304,11 @@ header {
   color: #9c27b0;
 }
 
+/* ⭐ Star icon in dropdown colored gold */
+.dropdown-item .fa-star {
+  color: #f5a623;
+}
+
 .dropdown-item i {
   width: 20px;
   text-align: center;
@@ -345,12 +373,8 @@ header {
 }
 
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .search-container {
@@ -454,7 +478,6 @@ header {
   background: #f8f9fa;
 }
 
-/* PRODUCT IMAGE STYLING - Replaced icon with actual image */
 .suggestion-image {
   width: 50px;
   height: 50px;
@@ -529,7 +552,6 @@ header {
   color: #999;
 }
 
-/* Lock body scroll when search is open */
 body.search-open {
   overflow: hidden;
 }
@@ -540,7 +562,7 @@ body.search-open {
 }
 
 /* ===============================================
-   RESPONSIVE DESIGN - TABLET & MOBILE
+   RESPONSIVE DESIGN
 =============================================== */
 
 @media (max-width: 1024px) {
@@ -568,7 +590,6 @@ body.search-open {
     flex-wrap: nowrap;
   }
 
-  /* Hide main navigation on mobile */
   .main-nav {
     position: fixed;
     top: 0;
@@ -610,12 +631,10 @@ body.search-open {
     display: none;
   }
 
-  /* Show mobile menu toggle */
   .mobile-menu-toggle {
     display: flex;
   }
 
-  /* Show mobile overlay when menu is open */
   .mobile-overlay {
     display: block;
     position: fixed;
@@ -628,7 +647,6 @@ body.search-open {
     animation: fadeIn 0.3s ease;
   }
 
-  /* Adjust header actions for mobile */
   .header-actions {
     gap: 0.5rem;
   }
@@ -645,7 +663,6 @@ body.search-open {
     font-size: 1.35rem;
   }
 
-  /* Account button adjustments */
   .account-btn {
     padding: 0.25rem;
     flex-direction: column;
@@ -660,7 +677,6 @@ body.search-open {
     display: none;
   }
 
-  /* Account dropdown - full screen on mobile */
   .account-dropdown-menu {
     position: fixed;
     top: auto;
@@ -673,15 +689,10 @@ body.search-open {
   }
 
   @keyframes slideUpMobile {
-    from {
-      transform: translateY(100%);
-    }
-    to {
-      transform: translateY(0);
-    }
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
   }
 
-  /* Logo adjustments */
   .logo img {
     height: 40px;
   }
@@ -694,7 +705,6 @@ body.search-open {
     font-size: 0.65rem;
   }
 
-  /* Search container on mobile */
   .search-container {
     width: 95%;
     padding: 0 1rem;
@@ -708,7 +718,6 @@ body.search-open {
     font-size: 0.95rem;
   }
 
-  /* Product image smaller on mobile */
   .suggestion-image {
     width: 45px;
     height: 45px;
@@ -743,12 +752,12 @@ body.search-open {
     height: 16px;
   }
 
-  /* Even smaller product images on very small screens */
   .suggestion-image {
     width: 40px;
     height: 40px;
   }
 }
+
 /* ===============================================
    RIDER REGISTRATION BUTTON
 =============================================== */

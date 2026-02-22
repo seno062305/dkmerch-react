@@ -1,36 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useQuery } from 'convex/react';
+import { api } from '../../convex/_generated/api';
 
 const AdminSidebar = ({ onLinkClick }) => {
   const { logout } = useAuth();
   const navigate = useNavigate();
-  const [newOrderCount, setNewOrderCount] = useState(0);
 
-  useEffect(() => {
-    const checkNewOrders = () => {
-      const orders = JSON.parse(localStorage.getItem('dkmerch_orders')) || [];
-      const validOrders = orders.filter(order => {
-        if (!order.orderId && !order.id) return false;
-        if (!order.items || !Array.isArray(order.items) || order.items.length === 0) return false;
-        return true;
-      });
-      const pendingOrders = validOrders.filter(order => {
-        const status = order.orderStatus || order.status || '';
-        return status === 'pending' || status === 'confirmed';
-      });
-      setNewOrderCount(pendingOrders.length);
-    };
-
-    checkNewOrders();
-    const handleOrderUpdate = () => checkNewOrders();
-    window.addEventListener('storage', handleOrderUpdate);
-    window.addEventListener('orderUpdated', handleOrderUpdate);
-    return () => {
-      window.removeEventListener('storage', handleOrderUpdate);
-      window.removeEventListener('orderUpdated', handleOrderUpdate);
-    };
-  }, []);
+  // ✅ Convex real-time — awtomatikong mag-a-update
+  const allOrders = useQuery(api.orders.getAllOrders) ?? [];
+  const newOrderCount = allOrders.filter(o =>
+    o.orderId && o.items?.length > 0 &&
+    (o.orderStatus === 'pending' || o.orderStatus === 'confirmed')
+  ).length;
 
   const handleLogout = () => {
     if (window.confirm('Are you sure you want to logout?')) {

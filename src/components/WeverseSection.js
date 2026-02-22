@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getProducts } from '../utils/productStorage';
-import { toggleWishlist, isInWishlist } from '../utils/wishlistStorage';
+import { useProducts } from '../utils/productStorage';
+import { useWishlist, useToggleWishlist } from '../context/wishlistUtils';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import LoginModal from './LoginModal';
@@ -9,45 +9,21 @@ import './WeverseSection.css';
 
 const WeverseSection = ({ onProductClick }) => {
   const [activeFilter, setActiveFilter] = useState('all');
-  const [products, setProducts] = useState([]);
-  const [wishlistItems, setWishlistItems] = useState([]);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
   const { showNotification } = useNotification();
 
-  useEffect(() => {
-    loadProducts();
-    loadWishlist();
+  const products = useProducts();
+  const wishlistItems = useWishlist();
+  const toggleWishlist = useToggleWishlist();
 
-    const handleStorageChange = () => {
-      loadWishlist();
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, []);
-
-  const loadProducts = () => {
-    setProducts(getProducts());
-  };
-
-  const loadWishlist = () => {
-    const allProducts = getProducts();
-    const wishlist = allProducts.filter(p => isInWishlist(p.id));
-    setWishlistItems(wishlist.map(p => p.id));
-  };
+  const isWishlisted = (productId) =>
+    wishlistItems.some(item => item.productId === productId);
 
   const groups = [
-    'all',
-    'BTS',
-    'BLACKPINK',
-    'TWICE',
-    'SEVENTEEN',
-    'STRAY KIDS',
-    'EXO',
-    'RED VELVET',
-    'NEWJEANS'
+    'all', 'BTS', 'BLACKPINK', 'TWICE', 'SEVENTEEN',
+    'STRAY KIDS', 'EXO', 'RED VELVET', 'NEWJEANS'
   ];
 
   const filteredProducts =
@@ -55,37 +31,30 @@ const WeverseSection = ({ onProductClick }) => {
       ? products
       : products.filter(p => p.kpopGroup === activeFilter);
 
-  const handleWishlistClick = (e, productId) => {
-    e.stopPropagation(); // Prevent card click
+  const handleWishlistClick = (e, product) => {
+    e.stopPropagation();
 
-    // ✅ CHECK IF USER IS LOGGED IN FOR WISHLIST
     if (!isAuthenticated) {
       setShowLoginModal(true);
-      showNotification('Please login to add to wishlist', 'error');
+      showNotification('Please login to add to favorites', 'error');
       return;
     }
 
-    // Toggle wishlist
-    toggleWishlist(productId);
-    loadWishlist();
-    
-    const isNowInWishlist = isInWishlist(productId);
+    const pid = product._id || product.id;
+    toggleWishlist(product);
     showNotification(
-      isNowInWishlist ? 'Added to wishlist' : 'Removed from wishlist',
+      isWishlisted(pid)
+        ? 'Removed from favorites'
+        : 'Added to favorites',
       'success'
     );
   };
 
-  // ✅ NO LOGIN CHECK HERE - JUST OPEN THE MODAL
   const handleProductClick = (product) => {
-    // Just call parent's onProductClick to open the ProductModal
-    // Login checks will be handled inside ProductModal
-    if (onProductClick) {
-      onProductClick(product);
-    }
+    if (onProductClick) onProductClick(product);
   };
 
-  if (products.length === 0) {
+  if (!products || products.length === 0) {
     return (
       <section className="weverse-section">
         <div style={{ padding: '50px', textAlign: 'center' }}>
@@ -112,43 +81,46 @@ const WeverseSection = ({ onProductClick }) => {
         </div>
 
         <div className="wv-grid">
-          {filteredProducts.map(product => (
-            <div
-              key={product.id}
-              className="wv-card"
-              onClick={() => handleProductClick(product)}
-            >
-              {product.isSale && <div className="wv-sale-badge">SALE</div>}
-
-              {/* ✅ WISHLIST HEART BUTTON - LOGIN CHECK ONLY HERE */}
-              <button
-                className={`wv-card-heart ${wishlistItems.includes(product.id) ? 'active' : ''}`}
-                onClick={(e) => handleWishlistClick(e, product.id)}
-                title={wishlistItems.includes(product.id) ? 'Remove from wishlist' : 'Add to wishlist'}
+          {filteredProducts.map(product => {
+            const pid = product._id || product.id;
+            return (
+              <div
+                key={pid}
+                className="wv-card"
+                onClick={() => handleProductClick(product)}
               >
-                <i className={`fas fa-heart`}></i>
-              </button>
+                {product.isSale && <div className="wv-sale-badge">SALE</div>}
 
-              <div className="wv-card-img">
-                <img src={product.image} alt={product.name} />
-              </div>
+                {/* ⭐ Star favorite button */}
+                <button
+                  className={`wv-card-fav ${isWishlisted(pid) ? 'active' : ''}`}
+                  onClick={(e) => handleWishlistClick(e, product)}
+                  title={isWishlisted(pid) ? 'Remove from favorites' : 'Add to favorites'}
+                >
+                  <i className="fas fa-star"></i>
+                </button>
 
-              <div className="wv-card-info">
-                <div className="wv-card-group">{product.kpopGroup}</div>
-                <div className="wv-card-name">{product.name}</div>
-                <div className="wv-card-price-row">
-                  <span className={`wv-card-price-current ${product.isSale ? 'sale' : ''}`}>
-                    ₱{product.price.toLocaleString()}
-                  </span>
-                  {product.originalPrice > product.price && (
-                    <span className="wv-card-price-original">
-                      ₱{product.originalPrice.toLocaleString()}
+                <div className="wv-card-img">
+                  <img src={product.image} alt={product.name} />
+                </div>
+
+                <div className="wv-card-info">
+                  <div className="wv-card-group">{product.kpopGroup}</div>
+                  <div className="wv-card-name">{product.name}</div>
+                  <div className="wv-card-price-row">
+                    <span className={`wv-card-price-current ${product.isSale ? 'sale' : ''}`}>
+                      ₱{product.price?.toLocaleString()}
                     </span>
-                  )}
+                    {product.originalPrice > product.price && (
+                      <span className="wv-card-price-original">
+                        ₱{product.originalPrice?.toLocaleString()}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         <div className="wv-see-all-row">
@@ -158,7 +130,6 @@ const WeverseSection = ({ onProductClick }) => {
         </div>
       </section>
 
-      {/* ✅ LOGIN MODAL - ONLY FOR WISHLIST */}
       {showLoginModal && <LoginModal onClose={() => setShowLoginModal(false)} />}
     </>
   );

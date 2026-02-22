@@ -1,477 +1,242 @@
-import React, { useState, useEffect } from 'react';
-import './AdminSalesReports.css';
-import { getValidOrders } from '../utils/orderStorage';
-import { getProducts } from '../utils/productStorage';
+import React, { useState } from 'react';
+import './AdminInventory.css';
+import { useProducts, useUpdateProduct } from '../utils/productStorage';
 
-const AdminSalesReports = () => {
-  const [dateRange, setDateRange] = useState({
-    startDate: '2026-01-01',
-    endDate: '2026-02-09'
+const AdminInventory = () => {
+  const products = useProducts() || [];
+  const updateProduct = useUpdateProduct();
+
+  const [activeTab, setActiveTab] = useState('stock');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterCategory, setFilterCategory] = useState('all');
+  const [editingStock, setEditingStock] = useState(null);
+  const [stockValue, setStockValue] = useState('');
+
+  const filteredProducts = products.filter(product => {
+    const matchesSearch =
+      product.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      product.kpopGroup?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = filterCategory === 'all' || product.category === filterCategory;
+    return matchesSearch && matchesCategory;
   });
-  const [viewMode, setViewMode] = useState('Monthly');
-  const [salesData, setSalesData] = useState(null);
-  const [loading, setLoading] = useState(true);
 
-  // Load and calculate real sales data
-  useEffect(() => {
-    calculateSalesData();
-  }, [dateRange]);
+  const lowStockProducts = filteredProducts.filter(p => p.stock <= 10);
 
-  // Listen for order updates
-  useEffect(() => {
-    const handleUpdate = () => {
-      calculateSalesData();
-    };
+  const totalProducts = products.length;
+  const totalStock = products.reduce((sum, p) => sum + (p.stock || 0), 0);
+  const lowStockCount = products.filter(p => p.stock <= 10).length;
+  const outOfStockCount = products.filter(p => p.stock === 0).length;
 
-    window.addEventListener('storage', handleUpdate);
-    window.addEventListener('orderUpdated', handleUpdate);
-    window.addEventListener('productsUpdated', handleUpdate);
-
-    return () => {
-      window.removeEventListener('storage', handleUpdate);
-      window.removeEventListener('orderUpdated', handleUpdate);
-      window.removeEventListener('productsUpdated', handleUpdate);
-    };
-  }, [dateRange]);
-
-  const calculateSalesData = () => {
-    try {
-      setLoading(true);
-      
-      const orders = getValidOrders();
-      const products = getProducts();
-      
-      // Filter orders by date range
-      const filteredOrders = orders.filter(order => {
-        const orderDate = new Date(order.date || order.createdAt || order.orderDate);
-        const start = new Date(dateRange.startDate);
-        const end = new Date(dateRange.endDate);
-        end.setHours(23, 59, 59, 999); // Include end date fully
-        
-        return orderDate >= start && orderDate <= end;
-      });
-
-      // Calculate summary stats
-      const totalRevenue = filteredOrders.reduce((sum, order) => {
-        const orderTotal = parseFloat(order.totalAmount || order.total || 0);
-        // Only count completed orders for revenue
-        if (order.status === 'completed' || order.status === 'Completed' || order.status === 'Delivered') {
-          return sum + orderTotal;
-        }
-        return sum;
-      }, 0);
-
-      const totalOrders = filteredOrders.length;
-      
-      const completedOrders = filteredOrders.filter(order => 
-        order.status === 'completed' || 
-        order.status === 'Completed' || 
-        order.status === 'Delivered'
-      ).length;
-
-      const avgOrderValue = totalOrders > 0 ? totalRevenue / completedOrders : 0;
-
-      // Calculate monthly sales trend (last 6 months)
-      const salesTrend = calculateMonthlySales(orders);
-
-      // Calculate monthly orders volume
-      const ordersVolume = calculateMonthlyOrders(orders);
-
-      // Calculate top selling products
-      const topProducts = calculateTopProducts(filteredOrders, products);
-
-      const data = {
-        summary: {
-          totalRevenue: Math.round(totalRevenue),
-          totalOrders,
-          completedOrders,
-          avgOrderValue: Math.round(avgOrderValue)
-        },
-        salesTrend,
-        ordersVolume,
-        topProducts
-      };
-
-      setSalesData(data);
-      setLoading(false);
-    } catch (error) {
-      console.error('Error calculating sales data:', error);
-      setLoading(false);
-    }
+  const handleStockEdit = (productId, currentStock) => {
+    setEditingStock(productId);
+    setStockValue(String(currentStock));
   };
 
-  // Calculate sales for last 6 months
-  const calculateMonthlySales = (orders) => {
-    const months = ['Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb'];
-    const monthData = {};
-
-    // Initialize months
-    months.forEach(month => {
-      monthData[month] = 0;
-    });
-
-    // Calculate revenue per month
-    orders.forEach(order => {
-      const orderDate = new Date(order.date || order.createdAt || order.orderDate);
-      const monthName = orderDate.toLocaleString('en', { month: 'short' });
-      
-      if (months.includes(monthName)) {
-        const revenue = parseFloat(order.totalAmount || order.total || 0);
-        // Only count completed orders
-        if (order.status === 'completed' || order.status === 'Completed' || order.status === 'Delivered') {
-          monthData[monthName] = (monthData[monthName] || 0) + revenue;
-        }
-      }
-    });
-
-    return months.map(month => ({
-      month,
-      revenue: Math.round(monthData[month] || 0)
-    }));
+  const handleStockSave = async (productId) => {
+    const newStock = parseInt(stockValue) || 0;
+    if (newStock < 0) { alert('Stock cannot be negative'); return; }
+    await updateProduct({ id: productId, stock: newStock });
+    setEditingStock(null);
+    setStockValue('');
   };
 
-  // Calculate orders for last 6 months
-  const calculateMonthlyOrders = (orders) => {
-    const months = ['Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb'];
-    const monthData = {};
-
-    // Initialize months
-    months.forEach(month => {
-      monthData[month] = 0;
-    });
-
-    // Count orders per month
-    orders.forEach(order => {
-      const orderDate = new Date(order.date || order.createdAt || order.orderDate);
-      const monthName = orderDate.toLocaleString('en', { month: 'short' });
-      
-      if (months.includes(monthName)) {
-        monthData[monthName] = (monthData[monthName] || 0) + 1;
-      }
-    });
-
-    return months.map(month => ({
-      month,
-      orders: monthData[month] || 0
-    }));
+  const handleStockCancel = () => {
+    setEditingStock(null);
+    setStockValue('');
   };
 
-  // Calculate top 5 selling products
-  const calculateTopProducts = (orders, products) => {
-    const productSales = {};
-
-    // Aggregate sales by product
-    orders.forEach(order => {
-      if (!order.items || !Array.isArray(order.items)) return;
-
-      order.items.forEach(item => {
-        const productId = item.id || item.productId;
-        const quantity = parseInt(item.quantity || 1);
-        const price = parseFloat(item.price || 0);
-        const revenue = quantity * price;
-
-        if (!productSales[productId]) {
-          productSales[productId] = {
-            id: productId,
-            unitsSold: 0,
-            revenue: 0
-          };
-        }
-
-        // Only count completed orders
-        if (order.status === 'completed' || order.status === 'Completed' || order.status === 'Delivered') {
-          productSales[productId].unitsSold += quantity;
-          productSales[productId].revenue += revenue;
-        }
-      });
-    });
-
-    // Convert to array and add product names
-    const productsArray = Object.values(productSales).map(sale => {
-      const product = products.find(p => p.id === sale.id);
-      return {
-        ...sale,
-        name: product ? product.name : 'Unknown Product'
-      };
-    });
-
-    // Sort by revenue and get top 5
-    const topProducts = productsArray
-      .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 5)
-      .map((product, index) => ({
-        rank: index + 1,
-        name: product.name,
-        unitsSold: product.unitsSold,
-        revenue: Math.round(product.revenue)
-      }));
-
-    return topProducts;
+  const adjustStock = async (product, amount) => {
+    const newStock = Math.max(0, (product.stock || 0) + amount);
+    await updateProduct({ id: product._id, stock: newStock });
   };
 
-  const handleDateChange = (e) => {
-    setDateRange({
-      ...dateRange,
-      [e.target.name]: e.target.value
-    });
+  const getStockStatus = (stock) => {
+    if (stock === 0) return { label: 'Out of Stock', class: 'out-of-stock' };
+    if (stock <= 5) return { label: 'Critical', class: 'critical' };
+    if (stock <= 10) return { label: 'Low Stock', class: 'low-stock' };
+    return { label: 'In Stock', class: 'in-stock' };
   };
-
-  const formatCurrency = (amount) => {
-    return `₱${amount.toLocaleString('en-PH', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
-  };
-
-  const getMaxValue = (data, key) => {
-    const values = data.map(item => item[key]);
-    const max = Math.max(...values);
-    return max > 0 ? max : 1; // Avoid division by zero
-  };
-
-  if (loading) {
-    return (
-      <div className="admin-sales-reports">
-        <div className="loading">
-          <i className="fas fa-spinner fa-spin"></i> Loading sales data...
-        </div>
-      </div>
-    );
-  }
-
-  if (!salesData) {
-    return (
-      <div className="admin-sales-reports">
-        <div className="loading">No sales data available</div>
-      </div>
-    );
-  }
 
   return (
-    <div className="admin-sales-reports">
-      <div className="reports-header">
-        <div>
-          <h1>Sales Report</h1>
-          <p className="subtitle">Track your store's performance with real-time data</p>
+    <div className="admin-inventory-page">
+      <div className="inventory-stats">
+        <div className="stat-card">
+          <div className="stat-icon blue"><i className="fas fa-boxes"></i></div>
+          <div className="stat-info"><h3>{totalProducts}</h3><p>Total Products</p></div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon green"><i className="fas fa-warehouse"></i></div>
+          <div className="stat-info"><h3>{totalStock.toLocaleString()}</h3><p>Total Stock Units</p></div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon orange"><i className="fas fa-exclamation-triangle"></i></div>
+          <div className="stat-info"><h3>{lowStockCount}</h3><p>Low Stock Items</p></div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon red"><i className="fas fa-times-circle"></i></div>
+          <div className="stat-info"><h3>{outOfStockCount}</h3><p>Out of Stock</p></div>
         </div>
       </div>
 
-      {/* Date Filter Section */}
-      <div className="filter-section">
-        <div className="date-inputs">
-          <div className="date-input-group">
-            <label htmlFor="startDate">
-              <svg viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
-              </svg>
-            </label>
-            <input
-              type="date"
-              id="startDate"
-              name="startDate"
-              value={dateRange.startDate}
-              onChange={handleDateChange}
-            />
-          </div>
-          
-          <span className="date-separator">to</span>
-          
-          <div className="date-input-group">
-            <label htmlFor="endDate">
-              <svg viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
-              </svg>
-            </label>
-            <input
-              type="date"
-              id="endDate"
-              name="endDate"
-              value={dateRange.endDate}
-              onChange={handleDateChange}
-            />
-          </div>
-        </div>
-
-        <div className="view-mode-tabs">
-          {['Daily', 'Weekly', 'Monthly'].map(mode => (
-            <button
-              key={mode}
-              className={`mode-tab ${viewMode === mode ? 'active' : ''}`}
-              onClick={() => setViewMode(mode)}
-            >
-              {mode}
-            </button>
-          ))}
-        </div>
+      <div className="page-tabs">
+        <button className={`tab-btn ${activeTab === 'stock' ? 'active' : ''}`} onClick={() => setActiveTab('stock')}>
+          <i className="fas fa-warehouse"></i> All Stock Levels
+        </button>
+        <button className={`tab-btn ${activeTab === 'low' ? 'active' : ''}`} onClick={() => setActiveTab('low')}>
+          <i className="fas fa-exclamation-triangle"></i> Low Stock ({lowStockCount})
+        </button>
       </div>
 
-      {/* Summary Cards */}
-      <div className="summary-cards">
-        <div className="summary-card revenue">
-          <div className="card-icon revenue-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <div className="card-content">
-            <div className="card-value">{formatCurrency(salesData.summary.totalRevenue)}</div>
-            <div className="card-label">Total Revenue</div>
-          </div>
+      <div className="inventory-filters">
+        <div className="search-box">
+          <i className="fas fa-search"></i>
+          <input type="text" placeholder="Search products..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
         </div>
-
-        <div className="summary-card orders">
-          <div className="card-icon orders-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-            </svg>
-          </div>
-          <div className="card-content">
-            <div className="card-value">{salesData.summary.totalOrders}</div>
-            <div className="card-label">Total Orders</div>
-          </div>
-        </div>
-
-        <div className="summary-card completed">
-          <div className="card-icon completed-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <div className="card-content">
-            <div className="card-value">{salesData.summary.completedOrders}</div>
-            <div className="card-label">Completed Orders</div>
-          </div>
-        </div>
-
-        <div className="summary-card average">
-          <div className="card-icon average-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-            </svg>
-          </div>
-          <div className="card-content">
-            <div className="card-value">{formatCurrency(salesData.summary.avgOrderValue)}</div>
-            <div className="card-label">Avg. Order Value</div>
-          </div>
-        </div>
+        <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="filter-select">
+          <option value="all">All Categories</option>
+          <option value="albums">Albums</option>
+          <option value="photocards">Photocards</option>
+          <option value="lightsticks">Lightsticks</option>
+          <option value="apparel">Apparel</option>
+          <option value="accessories">Accessories</option>
+        </select>
       </div>
 
-      {/* Charts Section */}
-      <div className="charts-grid">
-        {/* Sales Trend Chart */}
-        <div className="chart-container">
-          <h3>Sales Trend (Last 6 Months)</h3>
-          <div className="line-chart">
-            <svg viewBox="0 0 600 200" className="chart-svg">
-              {/* Y-axis labels */}
-              <text x="10" y="20" className="axis-label">₱{Math.round(getMaxValue(salesData.salesTrend, 'revenue') / 1000)}k</text>
-              <text x="10" y="70" className="axis-label">₱{Math.round(getMaxValue(salesData.salesTrend, 'revenue') * 0.75 / 1000)}k</text>
-              <text x="10" y="120" className="axis-label">₱{Math.round(getMaxValue(salesData.salesTrend, 'revenue') * 0.5 / 1000)}k</text>
-              <text x="10" y="170" className="axis-label">₱{Math.round(getMaxValue(salesData.salesTrend, 'revenue') * 0.25 / 1000)}k</text>
-              <text x="10" y="195" className="axis-label">₱0k</text>
-
-              {/* Grid lines */}
-              <line x1="50" y1="20" x2="580" y2="20" className="grid-line" />
-              <line x1="50" y1="70" x2="580" y2="70" className="grid-line" />
-              <line x1="50" y1="120" x2="580" y2="120" className="grid-line" />
-              <line x1="50" y1="170" x2="580" y2="170" className="grid-line" />
-
-              {/* Line chart path */}
-              <polyline
-                points={salesData.salesTrend.map((item, index) => {
-                  const x = 80 + (index * 85);
-                  const maxRevenue = getMaxValue(salesData.salesTrend, 'revenue');
-                  const y = maxRevenue > 0 ? 190 - (item.revenue / maxRevenue * 170) : 190;
-                  return `${x},${y}`;
-                }).join(' ')}
-                className="chart-line"
-              />
-
-              {/* Data points */}
-              {salesData.salesTrend.map((item, index) => {
-                const x = 80 + (index * 85);
-                const maxRevenue = getMaxValue(salesData.salesTrend, 'revenue');
-                const y = maxRevenue > 0 ? 190 - (item.revenue / maxRevenue * 170) : 190;
-                return (
-                  <g key={index}>
-                    <circle cx={x} cy={y} r="5" className="data-point" />
-                    <text x={x} y="200" className="x-axis-label" textAnchor="middle">{item.month}</text>
-                  </g>
-                );
-              })}
-            </svg>
+      <div className="tab-content">
+        {activeTab === 'stock' && (
+          <div className="content-section">
+            {filteredProducts.length === 0 ? (
+              <div className="empty-state">
+                <i className="fas fa-box-open"></i>
+                <h3>No products found</h3>
+                <p>Try adjusting your search or filters</p>
+              </div>
+            ) : (
+              <div className="inventory-table-wrapper">
+                <table className="inventory-table">
+                  <thead>
+                    <tr>
+                      <th>Product</th><th>Category</th><th>Group</th>
+                      <th>Price</th><th>Stock</th><th>Status</th><th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredProducts.map(product => {
+                      const status = getStockStatus(product.stock);
+                      return (
+                        <tr key={product._id}>
+                          <td>
+                            <div className="product-cell">
+                              <img src={product.image} alt={product.name} />
+                              <div className="product-info">
+                                <strong>{product.name}</strong>
+                                {product.isPreOrder && <span className="badge pre-order">Pre-Order</span>}
+                                {product.isSale && <span className="badge sale">Sale</span>}
+                              </div>
+                            </div>
+                          </td>
+                          <td><span className="category-badge">{product.category}</span></td>
+                          <td>{product.kpopGroup}</td>
+                          <td className="price-cell">₱{product.price.toLocaleString()}</td>
+                          <td>
+                            {editingStock === product._id ? (
+                              <div className="stock-edit">
+                                <input
+                                  type="number"
+                                  value={stockValue}
+                                  onChange={(e) => setStockValue(e.target.value)}
+                                  onKeyPress={(e) => { if (e.key === 'Enter') handleStockSave(product._id); }}
+                                  autoFocus
+                                />
+                                <button className="save-btn" onClick={() => handleStockSave(product._id)}>
+                                  <i className="fas fa-check"></i>
+                                </button>
+                                <button className="cancel-btn" onClick={handleStockCancel}>
+                                  <i className="fas fa-times"></i>
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="stock-display">
+                                <strong>{product.stock}</strong>
+                                <button className="edit-stock-btn" onClick={() => handleStockEdit(product._id, product.stock)}>
+                                  <i className="fas fa-edit"></i>
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                          <td><span className={`status-badge ${status.class}`}>{status.label}</span></td>
+                          <td>
+                            <div className="action-buttons">
+                              <button className="adjust-btn increase" onClick={() => adjustStock(product, 10)} title="Add 10">
+                                <i className="fas fa-plus"></i> 10
+                              </button>
+                              <button className="adjust-btn decrease" onClick={() => adjustStock(product, -10)} title="Remove 10" disabled={product.stock === 0}>
+                                <i className="fas fa-minus"></i> 10
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
-        </div>
+        )}
 
-        {/* Orders Volume Chart */}
-        <div className="chart-container">
-          <h3>Orders Volume (Last 6 Months)</h3>
-          <div className="bar-chart">
-            <svg viewBox="0 0 600 200" className="chart-svg">
-              {/* Y-axis labels */}
-              <text x="10" y="20" className="axis-label">{getMaxValue(salesData.ordersVolume, 'orders')}</text>
-              <text x="10" y="70" className="axis-label">{Math.round(getMaxValue(salesData.ordersVolume, 'orders') * 0.75)}</text>
-              <text x="10" y="120" className="axis-label">{Math.round(getMaxValue(salesData.ordersVolume, 'orders') * 0.5)}</text>
-              <text x="10" y="170" className="axis-label">{Math.round(getMaxValue(salesData.ordersVolume, 'orders') * 0.25)}</text>
-              <text x="10" y="195" className="axis-label">0</text>
-
-              {/* Grid lines */}
-              <line x1="50" y1="20" x2="580" y2="20" className="grid-line" />
-              <line x1="50" y1="70" x2="580" y2="70" className="grid-line" />
-              <line x1="50" y1="120" x2="580" y2="120" className="grid-line" />
-              <line x1="50" y1="170" x2="580" y2="170" className="grid-line" />
-
-              {/* Bars */}
-              {salesData.ordersVolume.map((item, index) => {
-                const x = 60 + (index * 85);
-                const maxOrders = getMaxValue(salesData.ordersVolume, 'orders');
-                const barHeight = maxOrders > 0 ? (item.orders / maxOrders) * 170 : 0;
-                const y = 190 - barHeight;
-                return (
-                  <g key={index}>
-                    <rect
-                      x={x}
-                      y={y}
-                      width="60"
-                      height={barHeight}
-                      className="bar"
-                    />
-                    <text x={x + 30} y="200" className="x-axis-label" textAnchor="middle">{item.month}</text>
-                  </g>
-                );
-              })}
-            </svg>
-          </div>
-        </div>
-      </div>
-
-      {/* Top Selling Products */}
-      <div className="top-products-section">
-        <h3>Top Selling Products</h3>
-        {salesData.topProducts.length > 0 ? (
-          <div className="products-table-container">
-            <table className="products-table">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Product</th>
-                  <th>Units Sold</th>
-                  <th>Revenue</th>
-                </tr>
-              </thead>
-              <tbody>
-                {salesData.topProducts.map(product => (
-                  <tr key={product.rank}>
-                    <td className="rank-cell">{product.rank}</td>
-                    <td className="product-name">{product.name}</td>
-                    <td>{product.unitsSold}</td>
-                    <td className="revenue-cell">{formatCurrency(product.revenue)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="empty-state">
-            <i className="fas fa-chart-line"></i>
-            <p>No sales data available for the selected period</p>
+        {activeTab === 'low' && (
+          <div className="content-section">
+            {lowStockProducts.length === 0 ? (
+              <div className="empty-state success">
+                <i className="fas fa-check-circle"></i>
+                <h3>All Good!</h3>
+                <p>No low stock products at the moment</p>
+              </div>
+            ) : (
+              <div className="inventory-table-wrapper">
+                <div className="low-stock-alert">
+                  <i className="fas fa-exclamation-triangle"></i>
+                  <p><strong>{lowStockProducts.length} product(s)</strong> need restocking</p>
+                </div>
+                <table className="inventory-table">
+                  <thead>
+                    <tr>
+                      <th>Product</th><th>Category</th><th>Current Stock</th>
+                      <th>Status</th><th>Quick Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lowStockProducts.map(product => {
+                      const status = getStockStatus(product.stock);
+                      return (
+                        <tr key={product._id} className="low-stock-row">
+                          <td>
+                            <div className="product-cell">
+                              <img src={product.image} alt={product.name} />
+                              <strong>{product.name}</strong>
+                            </div>
+                          </td>
+                          <td><span className="category-badge">{product.category}</span></td>
+                          <td><strong className="stock-critical">{product.stock}</strong></td>
+                          <td><span className={`status-badge ${status.class}`}>{status.label}</span></td>
+                          <td>
+                            <div className="action-buttons">
+                              <button className="restock-btn" onClick={() => adjustStock(product, 50)}>
+                                <i className="fas fa-box"></i> Restock +50
+                              </button>
+                              <button className="edit-stock-btn" onClick={() => handleStockEdit(product._id, product.stock)}>
+                                <i className="fas fa-edit"></i> Edit
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -479,4 +244,4 @@ const AdminSalesReports = () => {
   );
 };
 
-export default AdminSalesReports;
+export default AdminInventory;

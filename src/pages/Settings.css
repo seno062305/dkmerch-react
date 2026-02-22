@@ -27,12 +27,12 @@
   font-size: 16px;
 }
 
-/* Tab Navigation */
+/* Tabs */
 .settings-tabs {
   display: flex;
   background: white;
   border-radius: 12px 12px 0 0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
   overflow: hidden;
 }
 
@@ -50,31 +50,19 @@
   align-items: center;
   justify-content: center;
   gap: 10px;
-  position: relative;
   border-bottom: 3px solid transparent;
 }
 
-.settings-tab:hover {
-  background: #f8f9fa;
-  color: var(--primary-color);
-}
+.settings-tab:hover { background: #f8f9fa; color: var(--primary-color); }
+.settings-tab.active { color: var(--primary-color); background: white; border-bottom-color: var(--primary-color); }
+.settings-tab i { font-size: 18px; }
 
-.settings-tab.active {
-  color: var(--primary-color);
-  background: white;
-  border-bottom-color: var(--primary-color);
-}
-
-.settings-tab i {
-  font-size: 18px;
-}
-
-/* Tab Content */
+/* Content */
 .settings-content {
   background: white;
   padding: 40px;
   border-radius: 0 0 12px 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
 
 .settings-form h2 {
@@ -89,7 +77,7 @@
   font-size: 14px;
 }
 
-/* Form Groups */
+/* Form groups */
 .form-group {
   margin-bottom: 25px;
 }
@@ -110,6 +98,7 @@
   font-size: 15px;
   transition: all 0.3s ease;
   background: white;
+  box-sizing: border-box;
 }
 
 .form-control:focus {
@@ -131,33 +120,28 @@
   font-size: 12px;
 }
 
-/* Input with Badge/Button */
+.email-change-note {
+  display: block;
+  margin-top: 6px;
+  color: #856404;
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.email-change-note i { margin-right: 4px; }
+
+/* Verification code row */
 .input-with-badge {
   display: flex;
   gap: 10px;
   align-items: center;
 }
 
-.input-with-badge .form-control {
-  flex: 1;
-}
-
-.verified-badge {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--success-color);
-  font-weight: 600;
-  font-size: 14px;
-  white-space: nowrap;
-  padding: 8px 16px;
-  background: #d4edda;
-  border-radius: 6px;
-}
-
-.verified-badge i {
-  font-size: 16px;
-}
+.input-with-badge .form-control { flex: 1; }
 
 .verify-btn {
   padding: 10px 20px;
@@ -172,18 +156,151 @@
   white-space: nowrap;
 }
 
-.verify-btn:hover:not(:disabled) {
-  background: #e63e7d;
-  transform: translateY(-2px);
+.verify-btn:hover:not(:disabled) { background: #e63e7d; transform: translateY(-2px); }
+.verify-btn:disabled { background: #ccc; cursor: not-allowed; transform: none; }
+
+/* ── Password input with show/hide toggle ── */
+.pw-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
 }
 
-.verify-btn:disabled {
-  background: #ccc;
-  cursor: not-allowed;
-  transform: none;
+.pw-input {
+  padding-right: 48px !important;
 }
 
-/* Save Button */
+.pw-valid {
+  border-color: #10b981 !important;
+}
+
+.pw-toggle-btn {
+  position: absolute;
+  right: 14px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--gray-color);
+  font-size: 16px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  transition: color 0.2s;
+}
+
+.pw-toggle-btn:hover { color: var(--primary-color); }
+
+/* ── Strength bar ── */
+.pw-strength-wrap {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pw-strength-bar {
+  flex: 1;
+  height: 4px;
+  background: #e5e7eb;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.pw-strength-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: all 0.3s ease;
+}
+
+.pw-strength-label {
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* ── Requirements checklist ── */
+.pw-requirements {
+  margin-top: 12px;
+  padding: 14px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  animation: fadeInDown 0.3s ease;
+}
+
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.pw-req-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #374151;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.pw-req-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pw-req-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #6b7280;
+  transition: color 0.2s;
+}
+
+.pw-req-item i {
+  font-size: 14px;
+  color: #9ca3af;
+  transition: color 0.2s;
+  width: 16px;
+  text-align: center;
+}
+
+.pw-req-item.pw-req-valid { color: #10b981; font-weight: 500; }
+.pw-req-item.pw-req-valid i { color: #10b981; }
+
+/* ── Password valid / match messages ── */
+.pw-success-msg,
+.pw-match-msg {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+  border: 1px solid #6ee7b7;
+  border-radius: 8px;
+  color: #065f46;
+  font-size: 13px;
+  font-weight: 600;
+  animation: fadeInDown 0.3s ease;
+}
+
+.pw-success-msg i,
+.pw-match-msg i { color: #10b981; font-size: 15px; }
+
+/* Save message */
+.save-message {
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.save-message.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+.save-message.error   { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+
+/* Save button */
 .btn-save {
   margin-top: 20px;
   padding: 14px 32px;
@@ -193,103 +310,28 @@
   gap: 10px;
 }
 
-.btn-save i {
-  font-size: 16px;
-}
+.btn-save:disabled { opacity: 0.7; cursor: not-allowed; }
 
-/* Responsive Design */
+/* Responsive */
 @media (max-width: 768px) {
-  .settings-page {
-    padding: 20px 0;
-  }
-
-  .settings-header h1 {
-    font-size: 28px;
-  }
-
-  .settings-header p {
-    font-size: 14px;
-  }
-
-  .settings-tabs {
-    border-radius: 8px 8px 0 0;
-  }
-
-  .settings-tab {
-    padding: 15px 10px;
-    font-size: 14px;
-    flex-direction: column;
-    gap: 5px;
-  }
-
-  .settings-tab i {
-    font-size: 20px;
-  }
-
-  .settings-content {
-    padding: 25px 20px;
-    border-radius: 0 0 8px 8px;
-  }
-
-  .settings-form h2 {
-    font-size: 20px;
-  }
-
-  .input-with-badge {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .verified-badge,
-  .verify-btn {
-    width: 100%;
-    justify-content: center;
-  }
-
-  .btn-save {
-    width: 100%;
-    justify-content: center;
-  }
+  .settings-page { padding: 20px 0; }
+  .settings-header h1 { font-size: 28px; }
+  .settings-tabs { border-radius: 8px 8px 0 0; }
+  .settings-tab { padding: 15px 10px; font-size: 14px; flex-direction: column; gap: 5px; }
+  .settings-content { padding: 25px 20px; border-radius: 0 0 8px 8px; }
+  .settings-form h2 { font-size: 20px; }
+  .input-with-badge { flex-direction: column; align-items: stretch; }
+  .verify-btn { width: 100%; justify-content: center; }
+  .btn-save { width: 100%; justify-content: center; }
 }
 
 @media (max-width: 480px) {
-  .settings-container {
-    padding: 0 15px;
-  }
-
-  .settings-header {
-    margin-bottom: 25px;
-  }
-
-  .settings-header h1 {
-    font-size: 24px;
-  }
-
-  .settings-content {
-    padding: 20px 15px;
-  }
-
-  .settings-tab {
-    padding: 12px 8px;
-    font-size: 12px;
-  }
-
-  .settings-tab i {
-    font-size: 18px;
-  }
-
-  .form-control {
-    padding: 10px 14px;
-    font-size: 14px;
-  }
-
-  .verify-btn {
-    padding: 8px 16px;
-    font-size: 13px;
-  }
-
-  .btn-save {
-    padding: 12px 24px;
-    font-size: 14px;
-  }
+  .settings-container { padding: 0 15px; }
+  .settings-header { margin-bottom: 25px; }
+  .settings-header h1 { font-size: 24px; }
+  .settings-content { padding: 20px 15px; }
+  .settings-tab { padding: 12px 8px; font-size: 12px; }
+  .form-control { padding: 10px 14px; font-size: 14px; }
+  .verify-btn { padding: 8px 16px; font-size: 13px; }
+  .btn-save { padding: 12px 24px; font-size: 14px; }
 }

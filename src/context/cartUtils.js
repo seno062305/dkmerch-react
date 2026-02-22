@@ -1,34 +1,62 @@
-export const CART_KEY = 'dkmerch_cart';
+import { useQuery, useMutation } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import { useAuth } from "./AuthContext";
 
-export const getCart = () => {
-  return JSON.parse(localStorage.getItem(CART_KEY)) || [];
+export const useCart = () => {
+  const { user } = useAuth();
+  const userId = user?.id || user?.email || "guest";
+  return useQuery(api.cart.getCart, { userId }) ?? [];
 };
 
-export const saveCart = (cart) => {
-  localStorage.setItem(CART_KEY, JSON.stringify(cart));
+export const useAddToCart = () => {
+  const mutation = useMutation(api.cart.addToCart);
+  const { user } = useAuth();
+  return (product) => {
+    const userId = user?.id || user?.email || "guest";
+    return mutation({
+      userId,
+      productId: product.id || product._id,
+      name: product.name,
+      price: product.price,
+      image: product.image,
+    });
+  };
 };
 
-export const addToCart = (product) => {
-  const cart = getCart();
-  const existing = cart.find(item => item.id === product.id);
-
-  if (existing) {
-    existing.qty += 1;
-  } else {
-    cart.push({ ...product, qty: 1 });
-  }
-
-  saveCart(cart);
+export const useRemoveFromCart = () => {
+  const mutation = useMutation(api.cart.removeFromCart);
+  const { user } = useAuth();
+  return (productId) => {
+    const userId = user?.id || user?.email || "guest";
+    return mutation({ userId, productId });
+  };
 };
 
-export const removeFromCart = (id) => {
-  const cart = getCart().filter(item => item.id !== id);
-  saveCart(cart);
+export const useUpdateCartQuantity = () => {
+  const mutation = useMutation(api.cart.updateQty);
+  const { user } = useAuth();
+  return (productId, qty) => {
+    const userId = user?.id || user?.email || "guest";
+    return mutation({ userId, productId, qty });
+  };
 };
 
-export const updateQty = (id, qty) => {
-  const cart = getCart().map(item =>
-    item.id === id ? { ...item, qty } : item
-  );
-  saveCart(cart);
+export const useClearCart = () => {
+  const mutation = useMutation(api.cart.clearCart);
+  const { user } = useAuth();
+  return () => {
+    const userId = user?.id || user?.email || "guest";
+    return mutation({ userId });
+  };
 };
+
+export const useCartCount = () => {
+  const cart = useCart();
+  return cart.reduce((sum, item) => sum + (item.qty ?? item.quantity ?? 1), 0);
+};
+
+// Legacy stubs
+export const addToCart = () => console.warn("Use useAddToCart() hook instead.");
+export const removeFromCart = () => console.warn("Use useRemoveFromCart() hook instead.");
+export const getCart = () => [];
+export const getCartCount = () => 0;
