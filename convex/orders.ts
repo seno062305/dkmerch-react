@@ -65,7 +65,7 @@ export const createOrder = mutation({
   },
 });
 
-// ✅ FIXED: now accepts both status AND orderStatus
+// ✅ FIXED: saves timestamp for each status change
 export const updateOrderStatus = mutation({
   args: {
     orderId: v.string(),
@@ -78,8 +78,16 @@ export const updateOrderStatus = mutation({
       .first();
     if (!order) return { success: false };
 
+    const now = new Date().toISOString();
     const updates: any = { status };
     if (orderStatus !== undefined) updates.orderStatus = orderStatus;
+
+    // ✅ Save accurate timestamps per status
+    if (orderStatus === 'confirmed')        updates.confirmedAt       = now;
+    if (orderStatus === 'shipped')          updates.shippedAt         = now;
+    if (orderStatus === 'out_for_delivery') updates.outForDeliveryAt  = now;
+    if (orderStatus === 'completed')        updates.deliveryConfirmedAt = now;
+    if (orderStatus === 'cancelled')        updates.cancelledAt       = now;
 
     await db.patch(order._id, updates);
     return { success: true };
@@ -108,9 +116,20 @@ export const updateOrderFields = mutation({
       .withIndex("by_orderId", q => q.eq("orderId", orderId))
       .first();
     if (!order) return { success: false };
-    const filtered = Object.fromEntries(
+
+    const now = new Date().toISOString();
+    const filtered: any = Object.fromEntries(
       Object.entries(updates).filter(([, v]) => v !== undefined)
     );
+
+    // ✅ Auto-save timestamps based on orderStatus changes
+    if (filtered.orderStatus === 'confirmed')        filtered.confirmedAt      = now;
+    if (filtered.orderStatus === 'shipped')          filtered.shippedAt        = now;
+    if (filtered.orderStatus === 'out_for_delivery') filtered.outForDeliveryAt = now;
+    if (filtered.orderStatus === 'completed' || filtered.deliveryOtpVerified)
+      filtered.deliveryConfirmedAt = filtered.deliveryConfirmedAt || now;
+    if (filtered.orderStatus === 'cancelled')        filtered.cancelledAt      = now;
+
     await db.patch(order._id, filtered);
     return { success: true };
   },

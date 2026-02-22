@@ -9,7 +9,7 @@ const TrackOrder = () => {
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
   const [searchParams] = useSearchParams();
-  const orderIdParam = searchParams.get('order');
+  const orderIdParam = searchParams.get('order') || searchParams.get('orderId');
 
   const [filter, setFilter] = useState('processing');
   const [selectedOrderId, setSelectedOrderId] = useState(null);
@@ -17,7 +17,6 @@ const TrackOrder = () => {
   const [searchEmail, setSearchEmail] = useState('');
   const [showTrackedOrders, setShowTrackedOrders] = useState(false);
   const [lightboxImg, setLightboxImg] = useState(null);
-
   const [removeConfirm, setRemoveConfirm] = useState(null);
   const [hiddenOrders, setHiddenOrders] = useState(() => {
     try { return JSON.parse(localStorage.getItem('hiddenDeliveredOrders') || '[]'); } catch { return []; }
@@ -25,16 +24,17 @@ const TrackOrder = () => {
 
   const orders      = useUserOrders(isAuthenticated ? user?.email : null) || [];
   const emailOrders = useOrdersByEmail(searchEmail) || [];
-
-  // ✅ Include both regular + pre-order products for fallback lookup
   const regularProducts  = useProducts() || [];
   const preOrderProducts = usePreOrderProducts() || [];
-  const products         = [...regularProducts, ...preOrderProducts];
+  const products = [...regularProducts, ...preOrderProducts];
 
+  // ✅ FIX: selectedOrder now correctly searches BOTH orders and emailOrders
+  const allAvailableOrders = [...orders, ...emailOrders];
   const selectedOrder = selectedOrderId
-    ? (orders.find(o => o._id === selectedOrderId) || emailOrders.find(o => o._id === selectedOrderId))
+    ? allAvailableOrders.find(o => o._id === selectedOrderId)
     : null;
 
+  // Auto-open modal for logged-in users via URL param
   useEffect(() => {
     if (orderIdParam && orders.length > 0 && !selectedOrderId) {
       const found = orders.find(o => o.orderId === orderIdParam);
@@ -42,20 +42,26 @@ const TrackOrder = () => {
     }
   }, [orderIdParam, orders]);
 
+  // ✅ FIX: Auto-open modal for GUEST users via URL param after emailOrders loads
+  useEffect(() => {
+    if (orderIdParam && emailOrders.length > 0 && !selectedOrderId) {
+      const found = emailOrders.find(o => o.orderId === orderIdParam);
+      if (found) setSelectedOrderId(found._id);
+    }
+  }, [orderIdParam, emailOrders]);
+
   const handleCloseModal = () => setSelectedOrderId(null);
   const handleOpenModal  = (order) => setSelectedOrderId(order._id);
-
-  const getProductById = (id) => products.find(p => p._id === id || p.id === id);
+  const getProductById   = (id) => products.find(p => p._id === id || p.id === id);
 
   const getStatusClass = (status) => {
     const map = {
       'Processing': 'status-processing', 'Confirmed': 'status-confirmed',
-      'Shipped': 'status-shipped', 'In Transit': 'status-transit',
-      'Out for Delivery': 'status-delivery', 'out_for_delivery': 'status-delivery',
-      'Delivered': 'status-delivered', 'Cancelled': 'status-cancelled',
-      'pending': 'status-processing', 'confirmed': 'status-confirmed',
-      'shipped': 'status-shipped', 'completed': 'status-delivered',
-      'cancelled': 'status-cancelled',
+      'Shipped': 'status-shipped', 'Out for Delivery': 'status-delivery',
+      'out_for_delivery': 'status-delivery', 'Delivered': 'status-delivered',
+      'Cancelled': 'status-cancelled', 'pending': 'status-processing',
+      'confirmed': 'status-confirmed', 'shipped': 'status-shipped',
+      'completed': 'status-delivered', 'cancelled': 'status-cancelled',
     };
     return map[status] || 'status-processing';
   };
@@ -72,19 +78,82 @@ const TrackOrder = () => {
     return labels[s] || s;
   };
 
+  // ✅ Timeline uses actual saved timestamps from Convex
   const getTimelineSteps = (order) => {
-    const status = order.orderStatus || order.status || 'pending';
-    const norm = status.toLowerCase().replace(/ /g, '_');
-    if (norm === 'cancelled') return [
-      { label: 'Order Placed', icon: 'fa-shopping-cart', completed: true },
-      { label: 'Cancelled', icon: 'fa-times-circle', completed: true, isCancelled: true, cancelReason: order.cancelReason },
-    ];
+    const status = (order.orderStatus || order.status || 'pending').toLowerCase().replace(/ /g, '_');
+
+    const fmt = (ts) => ts
+      ? new Date(ts).toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+      : null;
+
+    const placedAt   = fmt(order._creationTime);
+    const paidAt     = fmt(order.paidAt);
+    const confirmedAt = fmt(order.confirmedAt);
+    const shippedAt  = fmt(order.shippedAt);
+    const outForDeliveryAt = fmt(order.outForDeliveryAt);
+    const deliveredAt = fmt(order.deliveryConfirmedAt);
+
+    if (status === 'cancelled') {
+      return [
+        { label: 'Order Placed',  icon: 'fa-shopping-cart', completed: true, time: placedAt },
+        { label: 'Payment',       icon: 'fa-credit-card',   completed: !!order.paidAt, time: paidAt },
+        { label: 'Cancelled',     icon: 'fa-times-circle',  completed: true, isCancelled: true, cancelReason: order.cancelReason, time: null },
+      ];
+    }
+
     return [
-      { label: 'Order Placed', icon: 'fa-shopping-cart', completed: true },
-      { label: 'Confirmed', icon: 'fa-check-circle', completed: ['confirmed','shipped','in_transit','out_for_delivery','delivered','completed'].includes(norm) },
-      { label: 'Shipped', icon: 'fa-box', completed: ['shipped','in_transit','out_for_delivery','delivered','completed'].includes(norm) },
-      { label: 'Out for Delivery', icon: 'fa-shipping-fast', completed: ['out_for_delivery','delivered','completed'].includes(norm) },
-      { label: 'Delivered', icon: 'fa-check-double', completed: ['delivered','completed'].includes(norm) },
+      {
+        label: 'Order Placed',
+        icon: 'fa-shopping-cart',
+        completed: true,
+        time: placedAt,
+        desc: 'Your order has been placed successfully.',
+      },
+      {
+        label: 'Payment Confirmed',
+        icon: 'fa-credit-card',
+        completed: order.paymentStatus === 'paid',
+        time: paidAt,
+        desc: order.paymentStatus === 'paid' ? 'Payment received via PayMongo.' : 'Waiting for payment confirmation.',
+      },
+      {
+        label: 'Order Confirmed',
+        icon: 'fa-check-circle',
+        completed: ['confirmed','shipped','out_for_delivery','delivered','completed'].includes(status),
+        time: confirmedAt,
+        desc: ['confirmed','shipped','out_for_delivery','delivered','completed'].includes(status)
+          ? 'Admin has confirmed and is preparing your order.'
+          : 'Waiting for admin to confirm your order.',
+      },
+      {
+        label: 'Rider Assigned',
+        icon: 'fa-motorcycle',
+        completed: ['shipped','out_for_delivery','delivered','completed'].includes(status),
+        time: shippedAt,
+        desc: order.riderInfo
+          ? `${order.riderInfo.name} (${order.riderInfo.plate}) will deliver your order.`
+          : ['shipped','out_for_delivery','delivered','completed'].includes(status)
+            ? 'A rider has been assigned to your order.'
+            : 'Waiting for rider assignment.',
+      },
+      {
+        label: 'Out for Delivery',
+        icon: 'fa-shipping-fast',
+        completed: ['out_for_delivery','delivered','completed'].includes(status),
+        time: outForDeliveryAt,
+        desc: ['out_for_delivery','delivered','completed'].includes(status)
+          ? 'Your rider is on the way to deliver your order!'
+          : 'Waiting for rider to pick up your order.',
+      },
+      {
+        label: 'Delivered',
+        icon: 'fa-check-double',
+        completed: ['delivered','completed'].includes(status),
+        time: deliveredAt,
+        desc: ['delivered','completed'].includes(status)
+          ? 'Your order has been delivered successfully!'
+          : 'Waiting for delivery confirmation.',
+      },
     ];
   };
 
@@ -101,16 +170,14 @@ const TrackOrder = () => {
   };
 
   const FILTERS = [
-    { key: 'processing', label: 'Processing' },
-    { key: 'confirmed', label: 'Confirmed' },
-    { key: 'shipped', label: 'Shipped' },
+    { key: 'processing',       label: 'Processing' },
+    { key: 'confirmed',        label: 'Confirmed' },
     { key: 'out for delivery', label: 'Out for Delivery' },
-    { key: 'delivered', label: 'Delivered' },
-    { key: 'cancelled', label: 'Cancelled' },
+    { key: 'delivered',        label: 'Delivered' },
+    { key: 'cancelled',        label: 'Cancelled' },
   ];
 
-  const visibleOrders = orders.filter(o => !hiddenOrders.includes(o._id));
-
+  const visibleOrders  = orders.filter(o => !hiddenOrders.includes(o._id));
   const filteredOrders = visibleOrders.filter(o =>
     getDisplayStatus(o).toLowerCase() === filter.toLowerCase()
   );
@@ -122,7 +189,6 @@ const TrackOrder = () => {
     setShowTrackedOrders(true);
   };
 
-  // ✅ Check if order has any pre-order items — checks item data first, then fallback to products list
   const getPreOrderReleaseDate = (order) => {
     if (!order.items) return null;
     for (const item of order.items) {
@@ -134,37 +200,24 @@ const TrackOrder = () => {
   };
 
   const OrderCard = ({ order, onViewDetails }) => {
-    const ordDate = order._creationTime ? new Date(order._creationTime) : null;
+    const ordDate    = order._creationTime ? new Date(order._creationTime) : null;
     const orderStatus = getDisplayStatus(order);
-    const statusKey = order.orderStatus || order.status || 'pending';
-    const firstItem = order.items?.[0];
+    const statusKey  = order.orderStatus || order.status || 'pending';
+    const firstItem  = order.items?.[0];
     const firstProduct = firstItem ? getProductById(firstItem.id) : null;
-    const imgSrc = firstItem?.image || firstProduct?.image;
-    const itemName = firstItem?.name || firstProduct?.name;
+    const imgSrc     = firstItem?.image || firstProduct?.image;
+    const itemName   = firstItem?.name || firstProduct?.name;
     const extraCount = (order.items?.length || 1) - 1;
-    const delivered = isDelivered(order);
+    const delivered  = isDelivered(order);
     const releaseDate = getPreOrderReleaseDate(order);
 
     return (
       <div className="order-card">
-        <div
-          className="order-card-img"
-          onClick={() => imgSrc && setLightboxImg(imgSrc)}
-          title={imgSrc ? 'Click to view image' : ''}
-        >
-          {imgSrc
-            ? <img src={imgSrc} alt={itemName} />
-            : <i className="fas fa-box order-no-img"></i>
-          }
-          {imgSrc && (
-            <div className="order-img-zoom"><i className="fas fa-search-plus"></i></div>
-          )}
-          {extraCount > 0 && (
-            <span className="order-extra-badge">+{extraCount}</span>
-          )}
-          <span className={`order-status-overlay ${getStatusClass(statusKey)}`}>
-            {orderStatus}
-          </span>
+        <div className="order-card-img" onClick={() => imgSrc && setLightboxImg(imgSrc)} title={imgSrc ? 'Click to view image' : ''}>
+          {imgSrc ? <img src={imgSrc} alt={itemName} /> : <i className="fas fa-box order-no-img"></i>}
+          {imgSrc && <div className="order-img-zoom"><i className="fas fa-search-plus"></i></div>}
+          {extraCount > 0 && <span className="order-extra-badge">+{extraCount}</span>}
+          <span className={`order-status-overlay ${getStatusClass(statusKey)}`}>{orderStatus}</span>
         </div>
 
         <div className="order-card-info">
@@ -174,16 +227,10 @@ const TrackOrder = () => {
             {extraCount > 0 && <span className="order-and-more"> +{extraCount} more</span>}
           </p>
 
-          {/* ✅ Pre-order release date badge */}
           {releaseDate && (
             <div className="order-card-preorder-badge">
               <i className="fas fa-calendar-alt"></i>
-              <span>
-                Expected:{' '}
-                {new Date(releaseDate).toLocaleDateString('en-PH', {
-                  year: 'numeric', month: 'long', day: 'numeric'
-                })}
-              </span>
+              <span>Expected: {new Date(releaseDate).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
             </div>
           )}
 
@@ -203,18 +250,12 @@ const TrackOrder = () => {
             <span className="order-card-price">₱{order.total?.toLocaleString()}</span>
           </div>
 
-          <button
-            className="btn btn-primary btn-small order-view-btn"
-            onClick={() => onViewDetails(order)}
-          >
+          <button className="btn btn-primary btn-small order-view-btn" onClick={() => onViewDetails(order)}>
             <i className="fas fa-search"></i> View Details
           </button>
 
           {delivered && (
-            <button
-              className="btn order-remove-btn"
-              onClick={() => setRemoveConfirm(order._id)}
-            >
+            <button className="btn order-remove-btn" onClick={() => setRemoveConfirm(order._id)}>
               <i className="fas fa-trash-alt"></i> Remove
             </button>
           )}
@@ -236,11 +277,7 @@ const TrackOrder = () => {
           <section className="track-order-page">
             <div className="orders-filter">
               {FILTERS.map(f => (
-                <button
-                  key={f.key}
-                  className={`filter-btn ${filter === f.key ? 'active' : ''}`}
-                  onClick={() => setFilter(f.key)}
-                >
+                <button key={f.key} className={`filter-btn ${filter === f.key ? 'active' : ''}`} onClick={() => setFilter(f.key)}>
                   {f.label}
                 </button>
               ))}
@@ -266,31 +303,21 @@ const TrackOrder = () => {
         </div>
 
         {selectedOrder && (
-          <TrackingModal
-            order={selectedOrder}
-            products={products}
-            onClose={handleCloseModal}
-            getTimelineSteps={getTimelineSteps}
-            getStatusClass={getStatusClass}
-            getDisplayStatus={getDisplayStatus}
-          />
+          <TrackingModal order={selectedOrder} products={products} onClose={handleCloseModal}
+            getTimelineSteps={getTimelineSteps} getStatusClass={getStatusClass} getDisplayStatus={getDisplayStatus} />
         )}
-
         {lightboxImg && (
           <div className="order-lightbox" onClick={() => setLightboxImg(null)}>
-            <button className="lightbox-close" onClick={() => setLightboxImg(null)}>
-              <i className="fas fa-times"></i>
-            </button>
+            <button className="lightbox-close" onClick={() => setLightboxImg(null)}><i className="fas fa-times"></i></button>
             <img src={lightboxImg} alt="Product" onClick={e => e.stopPropagation()} />
           </div>
         )}
-
         {removeConfirm && (
           <div className="remove-confirm-overlay" onClick={() => setRemoveConfirm(null)}>
             <div className="remove-confirm-dialog" onClick={e => e.stopPropagation()}>
               <div className="remove-confirm-icon"><i className="fas fa-trash-alt"></i></div>
               <h3>Remove Order?</h3>
-              <p>Are you sure you want to remove this delivered order from your list? This action cannot be undone.</p>
+              <p>Are you sure you want to remove this delivered order from your list?</p>
               <div className="remove-confirm-actions">
                 <button className="btn btn-outline" onClick={() => setRemoveConfirm(null)}>Cancel</button>
                 <button className="btn btn-danger" onClick={() => handleRemoveOrder(removeConfirm)}>
@@ -304,7 +331,7 @@ const TrackOrder = () => {
     );
   }
 
-  // Guest view
+  // ✅ Guest view — now correctly shows timeline with full Convex data
   return (
     <main className="trackorder-main">
       <div className="page-header">
@@ -321,7 +348,9 @@ const TrackOrder = () => {
               <form onSubmit={handleFindMyOrders}>
                 <div className="form-group">
                   <label htmlFor="tracking-email">Email Address</label>
-                  <input type="email" id="tracking-email" className="form-control" placeholder="Enter your email address" value={trackingEmail} onChange={(e) => setTrackingEmail(e.target.value)} required />
+                  <input type="email" id="tracking-email" className="form-control"
+                    placeholder="Enter your email address"
+                    value={trackingEmail} onChange={(e) => setTrackingEmail(e.target.value)} required />
                   <small>Enter the email you used when placing your order</small>
                 </div>
                 <button type="submit" className="btn btn-primary"><i className="fas fa-search"></i> Find My Orders</button>
@@ -359,35 +388,25 @@ const TrackOrder = () => {
           )}
         </section>
       </div>
+
+      {/* ✅ FIX: Modal now renders for guest users — selectedOrder searches emailOrders too */}
       {selectedOrder && (
-        <TrackingModal
-          order={selectedOrder}
-          products={products}
-          onClose={handleCloseModal}
-          getTimelineSteps={getTimelineSteps}
-          getStatusClass={getStatusClass}
-          getDisplayStatus={getDisplayStatus}
-        />
-      )}
-      {lightboxImg && (
-        <div className="order-lightbox" onClick={() => setLightboxImg(null)}>
-          <button className="lightbox-close" onClick={() => setLightboxImg(null)}>
-            <i className="fas fa-times"></i>
-          </button>
-          <img src={lightboxImg} alt="Product" onClick={e => e.stopPropagation()} />
-        </div>
+        <TrackingModal order={selectedOrder} products={products} onClose={handleCloseModal}
+          getTimelineSteps={getTimelineSteps} getStatusClass={getStatusClass} getDisplayStatus={getDisplayStatus} />
       )}
     </main>
   );
 };
 
+// ─── TRACKING MODAL ────────────────────────────────────────────────────────────
 const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusClass, getDisplayStatus }) => {
   const updateOrderOtp = useUpdateOrderOtp();
   const [generatingOtp, setGeneratingOtp] = useState(false);
   const [localOtp, setLocalOtp] = useState(order.deliveryOtp || null);
 
-  const isCancelled      = ['cancelled'].includes((order.orderStatus || order.status || '').toLowerCase());
-  const isOutForDelivery = ['out_for_delivery'].includes((order.orderStatus || order.status || '').toLowerCase());
+  const isCancelled      = (order.orderStatus || order.status || '').toLowerCase() === 'cancelled';
+  const isOutForDelivery = (order.orderStatus || order.status || '').toLowerCase() === 'out_for_delivery';
+  const isCompleted      = ['delivered','completed'].includes((order.orderStatus || order.status || '').toLowerCase());
   const timelineSteps    = getTimelineSteps(order);
 
   useEffect(() => {
@@ -423,23 +442,34 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
         <div className="tracking-result">
           <div className="result-header">
             <h2>Order #{order.orderId?.slice(-8) || 'N/A'}</h2>
-            <div className={`status-badge ${getStatusClass(order.orderStatus || order.status)}`}>{getDisplayStatus(order)}</div>
+            <div className={`status-badge ${getStatusClass(order.orderStatus || order.status)}`}>
+              {getDisplayStatus(order)}
+            </div>
           </div>
 
-          {!isCancelled && (
-            <div className="delivery-estimate">
-              <i className="fas fa-truck"></i>
-              <div><strong>Estimated Delivery</strong><p>To be determined by admin</p></div>
+          {/* Rider info banner */}
+          {order.riderInfo && !isCancelled && (
+            <div className="rider-info-banner">
+              <div className="rider-info-icon"><i className="fas fa-motorcycle"></i></div>
+              <div className="rider-info-details">
+                <strong>Your Rider: {order.riderInfo.name}</strong>
+                <span>{order.riderInfo.vehicle} • {order.riderInfo.plate}</span>
+                {order.riderInfo.phone && <span><i className="fas fa-phone"></i> {order.riderInfo.phone}</span>}
+              </div>
             </div>
           )}
 
           {isCancelled && (
             <div className="cancelled-banner">
               <div className="cancelled-banner-icon"><i className="fas fa-ban"></i></div>
-              <div className="cancelled-banner-text"><strong>Order Cancelled</strong><p>This order has been cancelled.</p></div>
+              <div className="cancelled-banner-text">
+                <strong>Order Cancelled</strong>
+                <p>{order.cancelReason || 'This order has been cancelled.'}</p>
+              </div>
             </div>
           )}
 
+          {/* OTP Section */}
           {isOutForDelivery && (
             <div className="customer-otp-section">
               {!localOtp ? (
@@ -457,7 +487,9 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
                     <div className="otp-step"><span className="otp-step-num">3</span><span>Rider enters the code to complete the delivery</span></div>
                   </div>
                   <button className={`otp-generate-btn ${generatingOtp ? 'generating' : ''}`} onClick={handleGenerateOtp} disabled={generatingOtp}>
-                    {generatingOtp ? <><i className="fas fa-spinner fa-spin"></i> Generating OTP...</> : <><i className="fas fa-key"></i> Generate My OTP</>}
+                    {generatingOtp
+                      ? <><i className="fas fa-spinner fa-spin"></i> Generating OTP...</>
+                      : <><i className="fas fa-key"></i> Generate My OTP</>}
                   </button>
                   <p className="otp-generate-warning"><i className="fas fa-exclamation-triangle"></i> Only generate this when your rider has arrived.</p>
                 </div>
@@ -479,23 +511,30 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
             </div>
           )}
 
+          {/* ✅ ACCURATE TIMELINE with real timestamps */}
           <div className="tracking-timeline">
             <h3>Order Timeline</h3>
             <div className="timeline">
               {timelineSteps.map((step, index) => (
                 <div key={index} className={`timeline-item ${step.completed ? 'completed' : ''} ${step.isCancelled ? 'cancelled-step' : ''}`}>
-                  <div className="timeline-marker"><i className={`fas ${step.icon}`}></i></div>
+                  <div className="timeline-marker">
+                    <i className={`fas ${step.icon}`}></i>
+                  </div>
                   <div className="timeline-content">
                     <h4>{step.label}</h4>
-                    <p>{step.completed ? (step.isCancelled ? 'Cancelled by admin' : 'Completed') : 'Pending'}</p>
+                    {step.time && step.completed && (
+                      <span className="timeline-timestamp">
+                        <i className="fas fa-clock"></i> {step.time}
+                      </span>
+                    )}
+                    <p className={step.completed ? 'timeline-desc-done' : 'timeline-desc-pending'}>
+                      {step.desc || (step.completed ? 'Completed' : 'Pending')}
+                    </p>
                     {step.isCancelled && step.cancelReason && (
                       <div className="timeline-cancel-reason">
-                        <div className="timeline-cancel-reason-label"><i className="fas fa-comment-alt"></i> Reason from admin:</div>
+                        <div className="timeline-cancel-reason-label"><i className="fas fa-comment-alt"></i> Reason:</div>
                         <div className="timeline-cancel-reason-text">{step.cancelReason}</div>
                       </div>
-                    )}
-                    {step.isCancelled && !step.cancelReason && (
-                      <div className="timeline-cancel-reason no-reason"><i className="fas fa-info-circle"></i> No reason provided by admin.</div>
                     )}
                   </div>
                 </div>
@@ -503,6 +542,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
             </div>
           </div>
 
+          {/* Order Items */}
           <div className="order-items-timeline">
             <h3>Order Items</h3>
             {order.items?.map((item, index) => {
@@ -517,9 +557,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
                     {isPreOrder && releaseDate && (
                       <span className="item-preorder-release">
                         <i className="fas fa-calendar-alt"></i>{' '}
-                        Expected: {new Date(releaseDate).toLocaleDateString('en-PH', {
-                          year: 'numeric', month: 'long', day: 'numeric'
-                        })}
+                        Expected: {new Date(releaseDate).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}
                       </span>
                     )}
                     <span>Qty: {qty}</span>
