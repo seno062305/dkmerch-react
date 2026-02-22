@@ -42,6 +42,7 @@ export const AuthProvider = ({ children }) => {
           name: result.user.name,
           username: result.user.username,
           email: result.user.email,
+          phone: result.user.phone || '',
           role: result.user.role,
         };
         localStorage.setItem("authUser", JSON.stringify(sessionUser));
@@ -95,6 +96,15 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // ✅ NEW: Update local user state + localStorage after profile save
+  const updateUser = (updatedFields) => {
+    setUser(prev => {
+      const updated = { ...prev, ...updatedFields };
+      localStorage.setItem("authUser", JSON.stringify(updated));
+      return updated;
+    });
+  };
+
   const logout = () => {
     localStorage.removeItem("authUser");
     setUser(null);
@@ -105,7 +115,7 @@ export const AuthProvider = ({ children }) => {
   if (!isReady) return null;
 
   return (
-    <AuthContext.Provider value={{ user, role, isAuthenticated, login, register, logout }}>
+    <AuthContext.Provider value={{ user, role, isAuthenticated, login, register, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

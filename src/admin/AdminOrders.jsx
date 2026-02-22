@@ -8,7 +8,6 @@ const AdminOrders = () => {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // ✅ Convex real-time query
   const orders = useQuery(api.orders.getAllOrders) || [];
   const updateOrderStatusMutation = useMutation(api.orders.updateOrderStatus);
   const updateOrderFieldsMutation = useMutation(api.orders.updateOrderFields);
@@ -16,15 +15,24 @@ const AdminOrders = () => {
 
   const validOrders = orders.filter(o => o.orderId && o.items?.length > 0);
 
+  // ✅ Tabs now include "paid" for newly paid orders awaiting admin confirmation
+  const tabCounts = {
+    paid: validOrders.filter(o => o.paymentStatus === 'paid' && (!o.orderStatus || o.orderStatus === 'pending' || o.orderStatus === 'confirmed')).length,
+    pending: validOrders.filter(o => o.orderStatus === 'pending').length,
+  };
+
   const filteredOrders = validOrders.filter(order => {
-    const matchesTab = activeTab === 'all' || order.orderStatus === activeTab;
+    let matchesTab = true;
+    if (activeTab === 'paid') {
+      matchesTab = order.paymentStatus === 'paid' && (!o.orderStatus || order.orderStatus === 'pending' || order.orderStatus === 'confirmed');
+    } else if (activeTab !== 'all') {
+      matchesTab = order.orderStatus === activeTab;
+    }
     const matchesSearch = !searchTerm || [
       order.orderId, order.customerName, order.email
     ].some(f => f?.toLowerCase().includes(searchTerm.toLowerCase()));
     return matchesTab && matchesSearch;
   });
-
-  const getPendingCount = () => validOrders.filter(o => o.orderStatus === 'pending').length;
 
   const getStatusColor = (status) => {
     const colors = {
@@ -50,19 +58,24 @@ const AdminOrders = () => {
     return statusMap[adminStatus] || 'Processing';
   };
 
-  const handleUpdateStatus = async (orderId, newStatus) => {
-    await updateOrderStatusMutation({
-      orderId,
-      status: mapStatusToTrackingStatus(newStatus),
-      orderStatus: newStatus,
-    });
-    // Update selectedOrder state if it's the one being changed
-    if (selectedOrder?.orderId === orderId) {
-      setSelectedOrder(prev => ({
-        ...prev,
-        orderStatus: newStatus,
-        status: mapStatusToTrackingStatus(newStatus),
-      }));
+  // ✅ FIXED: now sends both status AND orderStatus correctly
+  const handleUpdateStatus = async (orderId, newOrderStatus) => {
+    try {
+      await updateOrderStatusMutation({
+        orderId,
+        status: mapStatusToTrackingStatus(newOrderStatus),
+        orderStatus: newOrderStatus,
+      });
+      if (selectedOrder?.orderId === orderId) {
+        setSelectedOrder(prev => ({
+          ...prev,
+          orderStatus: newOrderStatus,
+          status: mapStatusToTrackingStatus(newOrderStatus),
+        }));
+      }
+    } catch (err) {
+      console.error('Failed to update status:', err);
+      alert('Failed to update order status. Please try again.');
     }
   };
 
@@ -74,21 +87,24 @@ const AdminOrders = () => {
   };
 
   const handleCancelWithReason = async (orderId, reason) => {
-    await updateOrderFieldsMutation({
-      orderId,
-      fields: {
+    try {
+      await updateOrderFieldsMutation({
+        orderId,
         cancelReason: reason,
         orderStatus: 'cancelled',
         status: 'Cancelled',
-      },
-    });
-    if (selectedOrder?.orderId === orderId) {
-      setSelectedOrder(prev => ({
-        ...prev,
-        orderStatus: 'cancelled',
-        status: 'Cancelled',
-        cancelReason: reason,
-      }));
+      });
+      if (selectedOrder?.orderId === orderId) {
+        setSelectedOrder(prev => ({
+          ...prev,
+          orderStatus: 'cancelled',
+          status: 'Cancelled',
+          cancelReason: reason,
+        }));
+      }
+    } catch (err) {
+      console.error('Failed to cancel order:', err);
+      alert('Failed to cancel order. Please try again.');
     }
   };
 
@@ -98,7 +114,8 @@ const AdminOrders = () => {
       <div className="orders-tabs">
         {[
           { key: 'all', icon: 'fa-list', label: 'All Orders' },
-          { key: 'pending', icon: 'fa-clock', label: `Pending${getPendingCount() > 0 ? ` (${getPendingCount()})` : ''}` },
+          { key: 'paid', icon: 'fa-peso-sign', label: `Paid & Awaiting${tabCounts.paid > 0 ? ` (${tabCounts.paid})` : ''}` },
+          { key: 'pending', icon: 'fa-clock', label: `Pending${tabCounts.pending > 0 ? ` (${tabCounts.pending})` : ''}` },
           { key: 'confirmed', icon: 'fa-check-circle', label: 'Confirmed' },
           { key: 'shipped', icon: 'fa-box', label: 'Shipped' },
           { key: 'out_for_delivery', icon: 'fa-shipping-fast', label: 'Out for Delivery' },
@@ -112,6 +129,15 @@ const AdminOrders = () => {
             <i className={`fas ${t.icon}`}></i> {t.label}
           </button>
         ))}
+      </div>
+
+      {/* Info banner for admin */}
+      <div className="admin-flow-info">
+        <i className="fas fa-info-circle"></i>
+        <span>
+          <strong>Order Flow:</strong> Customer pays via PayMongo → appears in <strong>Paid & Awaiting</strong> tab →
+          Admin confirms → Riders can see & request pickup → Admin approves rider → Rider delivers with OTP + photo
+        </span>
       </div>
 
       {/* Search */}
@@ -143,9 +169,9 @@ const AdminOrders = () => {
                   <th>CUSTOMER</th>
                   <th>ITEMS</th>
                   <th>TOTAL</th>
+                  <th>PAYMENT</th>
                   <th>STATUS</th>
                   <th>RIDER</th>
-                  <th>PROOF</th>
                   <th>DATE</th>
                   <th>ACTIONS</th>
                 </tr>
@@ -163,6 +189,11 @@ const AdminOrders = () => {
                     <td>{order.items.length} item(s)</td>
                     <td><strong>₱{(order.total || 0).toLocaleString()}</strong></td>
                     <td>
+                      <span className={`payment-badge ${order.paymentStatus === 'paid' ? 'paid' : 'pending'}`}>
+                        {order.paymentStatus === 'paid' ? '✅ Paid' : '⏳ Pending'}
+                      </span>
+                    </td>
+                    <td>
                       <span className="status-badge" style={{ backgroundColor: getStatusColor(order.orderStatus) }}>
                         {getStatusLabel(order.orderStatus)}
                       </span>
@@ -173,11 +204,6 @@ const AdminOrders = () => {
                           <strong>{order.riderInfo.name}</strong>
                           <div style={{ color: '#888' }}>{order.riderInfo.plate}</div>
                         </div>
-                      ) : <span style={{ color: '#ccc', fontSize: '12px' }}>—</span>}
-                    </td>
-                    <td>
-                      {order.deliveryProofPhoto ? (
-                        <span className="proof-badge"><i className="fas fa-check-circle"></i> With Proof</span>
                       ) : <span style={{ color: '#ccc', fontSize: '12px' }}>—</span>}
                     </td>
                     <td>
@@ -213,36 +239,35 @@ const AdminOrders = () => {
   );
 };
 
-// ─── BUTTON RULES ────────────────────────────────────────────────────────────
-const getButtonRules = (currentStatus) => {
+// ─── BUTTON RULES ─────────────────────────────────────────────────────────────
+// Flow: paid → confirmed (admin) → shipped/out_for_delivery (rider) → completed (rider via OTP)
+const getButtonRules = (currentStatus, paymentStatus) => {
+  const isPaid = paymentStatus === 'paid';
   const rules = {
-    pending:          { confirm_order: true,  cancel: true,  complete: false, shipped: false, out_for_delivery: false },
-    confirmed:        { confirm_order: false, cancel: true,  complete: false, shipped: false, out_for_delivery: false },
-    shipped:          { confirm_order: false, cancel: true,  complete: false, shipped: false, out_for_delivery: false },
-    out_for_delivery: { confirm_order: false, cancel: true,  complete: false, shipped: false, out_for_delivery: false },
-    completed:        { confirm_order: false, cancel: false, complete: false, shipped: false, out_for_delivery: false },
-    cancelled:        { confirm_order: false, cancel: false, complete: false, shipped: false, out_for_delivery: false },
+    pending:          { confirm_order: isPaid, cancel: true },
+    confirmed:        { confirm_order: false,  cancel: true },
+    shipped:          { confirm_order: false,  cancel: false },
+    out_for_delivery: { confirm_order: false,  cancel: false },
+    completed:        { confirm_order: false,  cancel: false },
+    cancelled:        { confirm_order: false,  cancel: false },
   };
   return rules[currentStatus] || rules['pending'];
 };
 
-// ─── ORDER MODAL ─────────────────────────────────────────────────────────────
+// ─── ORDER MODAL ───────────────────────────────────────────────────────────────
 const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDelete, getStatusColor, getStatusLabel }) => {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [proofExpanded, setProofExpanded] = useState(false);
-
-  // Use live reviews from localStorage still (not yet migrated)
-  const allReviews = JSON.parse(localStorage.getItem('product_reviews')) || [];
-  const productIds = order.items?.map(item => item.id) || [];
-  const productReviews = allReviews.filter(r => productIds.includes(r.productId));
 
   const subtotal = order.subtotal || 0;
   const shippingFee = order.shippingFee || 0;
   const total = order.total || (subtotal + shippingFee);
 
   const currentStatus = order.orderStatus || 'pending';
-  const allowed = getButtonRules(currentStatus);
+  const paymentStatus = order.paymentStatus || 'pending';
+  const allowed = getButtonRules(currentStatus, paymentStatus);
   const isDone = currentStatus === 'completed' || currentStatus === 'cancelled';
+  const isRiderManaged = currentStatus === 'shipped' || currentStatus === 'out_for_delivery';
 
   const hasDeliveryProof = !!(order.deliveryProofPhoto);
   const otpVerified = !!(order.deliveryOtpVerified);
@@ -252,37 +277,66 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
     setShowCancelModal(false);
   };
 
-  const allStatusButtons = [
-    { key: 'pending',          targetStatus: 'pending',          icon: 'fa-clock',         label: 'Pending',          className: 'pending',      actionKey: null },
-    { key: 'confirm',          targetStatus: 'confirmed',        icon: 'fa-check-circle',  label: 'Confirmed',        className: 'confirmed',    actionKey: 'confirm_order' },
-    { key: 'complete',         targetStatus: 'completed',        icon: 'fa-check-double',  label: 'Completed',        className: 'completed',    actionKey: 'complete' },
-    { key: 'cancel',           targetStatus: 'cancelled',        icon: 'fa-times-circle',  label: 'Cancelled',        className: 'cancelled',    actionKey: 'cancel' },
-    { key: 'shipped',          targetStatus: 'shipped',          icon: 'fa-box',           label: 'Shipped',          className: 'shipped',      actionKey: 'shipped',          riderManaged: true },
-    { key: 'out_for_delivery', targetStatus: 'out_for_delivery', icon: 'fa-shipping-fast', label: 'Out for Delivery', className: 'out-delivery', actionKey: 'out_for_delivery', riderManaged: true },
-  ];
-
-  const getBlockReason = (btn) => {
-    if (btn.riderManaged) return 'Auto via rider';
-    if (currentStatus === btn.targetStatus) return 'Current status';
-    if (isDone) return currentStatus === 'completed' ? 'Order completed' : 'Order cancelled';
-    if (!allowed[btn.actionKey]) return 'Not available';
-    return null;
-  };
-
   return (
     <div className="order-modal-overlay" onClick={onClose}>
       <div className="order-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <div>
             <h2>Order #{order.orderId?.slice(-8) || 'N/A'}</h2>
-            <span className="status-badge" style={{ backgroundColor: getStatusColor(order.orderStatus) }}>
-              {getStatusLabel(order.orderStatus)}
-            </span>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
+              <span className="status-badge" style={{ backgroundColor: getStatusColor(order.orderStatus) }}>
+                {getStatusLabel(order.orderStatus)}
+              </span>
+              <span className={`payment-badge ${paymentStatus === 'paid' ? 'paid' : 'pending'}`}>
+                {paymentStatus === 'paid' ? '✅ Paid' : '⏳ Payment Pending'}
+              </span>
+            </div>
           </div>
           <button className="close-btn" onClick={onClose}><i className="fas fa-times"></i></button>
         </div>
 
         <div className="modal-body">
+
+          {/* ── PAYMENT NOTICE ─────────────────────────────── */}
+          {paymentStatus !== 'paid' && (
+            <div className="flow-notice warning">
+              <i className="fas fa-exclamation-triangle"></i>
+              <div>
+                <strong>Payment not yet confirmed</strong>
+                <p>This order has not been paid via PayMongo. Do not confirm until payment is verified.</p>
+              </div>
+            </div>
+          )}
+
+          {paymentStatus === 'paid' && currentStatus === 'pending' && (
+            <div className="flow-notice success">
+              <i className="fas fa-check-circle"></i>
+              <div>
+                <strong>Payment received! Action needed.</strong>
+                <p>Customer has paid. Click <strong>Confirm Order</strong> below to start processing. Once confirmed, riders can request pickup.</p>
+              </div>
+            </div>
+          )}
+
+          {paymentStatus === 'paid' && currentStatus === 'confirmed' && (
+            <div className="flow-notice info">
+              <i className="fas fa-motorcycle"></i>
+              <div>
+                <strong>Awaiting rider pickup request</strong>
+                <p>Riders can now see and request this order. Once a rider requests, you'll need to approve them in the <strong>Pickup Requests</strong> tab.</p>
+              </div>
+            </div>
+          )}
+
+          {isRiderManaged && (
+            <div className="flow-notice purple">
+              <i className="fas fa-shipping-fast"></i>
+              <div>
+                <strong>Rider is handling delivery</strong>
+                <p>The assigned rider will notify the customer and confirm delivery via OTP + photo proof.</p>
+              </div>
+            </div>
+          )}
 
           {/* Customer Info */}
           <div className="modal-section">
@@ -314,7 +368,9 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
               <h3><i className="fas fa-shield-alt"></i> Proof of Delivery</h3>
               <div className="pod-card">
                 <div className={`pod-otp-row ${otpVerified ? 'verified' : 'unverified'}`}>
-                  <div className="pod-otp-icon"><i className={`fas ${otpVerified ? 'fa-check-circle' : 'fa-times-circle'}`}></i></div>
+                  <div className="pod-otp-icon">
+                    <i className={`fas ${otpVerified ? 'fa-check-circle' : 'fa-times-circle'}`}></i>
+                  </div>
                   <div className="pod-otp-text">
                     <strong>OTP Verification</strong>
                     <span>{otpVerified ? 'Customer OTP was verified by rider ✅' : 'OTP not verified'}</span>
@@ -324,7 +380,9 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                 {order.deliveryConfirmedAt && (
                   <div className="pod-timestamp">
                     <i className="fas fa-clock"></i>
-                    <span>Confirmed on {new Date(order.deliveryConfirmedAt).toLocaleString('en-PH', { month: 'long', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                    <span>Confirmed on {new Date(order.deliveryConfirmedAt).toLocaleString('en-PH', {
+                      month: 'long', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                    })}</span>
                   </div>
                 )}
                 {hasDeliveryProof && (
@@ -346,12 +404,6 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                     )}
                   </div>
                 )}
-                {!hasDeliveryProof && otpVerified && (
-                  <div className="pod-timestamp">
-                    <i className="fas fa-image"></i>
-                    <span style={{ color: '#94a3b8' }}>No photo proof uploaded (optional)</span>
-                  </div>
-                )}
               </div>
             </div>
           )}
@@ -363,7 +415,11 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
               <div className="info-item"><label>Order ID</label><strong>#{order.orderId || 'N/A'}</strong></div>
               <div className="info-item"><label>Order Date</label><span>{order._creationTime ? new Date(order._creationTime).toLocaleString('en-PH') : 'N/A'}</span></div>
               <div className="info-item"><label>Payment Method</label><span>{order.paymentMethod || 'N/A'}</span></div>
-              <div className="info-item"><label>Order Status</label><span className="status-badge" style={{ backgroundColor: getStatusColor(order.orderStatus) }}>{getStatusLabel(order.orderStatus)}</span></div>
+              <div className="info-item"><label>Payment Status</label>
+                <span className={`payment-badge ${paymentStatus === 'paid' ? 'paid' : 'pending'}`}>
+                  {paymentStatus === 'paid' ? '✅ Paid' : '⏳ Pending'}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -375,7 +431,8 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                 order.items.map((item, index) => (
                   <div key={index} className="order-item-card">
                     <div className="item-image">
-                      <img src={item.image} alt={item.name || 'Product'} onError={(e) => { e.target.onerror = null; e.target.src = 'https://via.placeholder.com/80x80?text=No+Image'; }} />
+                      <img src={item.image} alt={item.name || 'Product'}
+                        onError={(e) => { e.target.onerror = null; e.target.src = 'https://via.placeholder.com/80x80?text=No+Image'; }} />
                     </div>
                     <div className="item-details">
                       <strong>{item.name || 'N/A'}</strong>
@@ -388,91 +445,79 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
             </div>
           </div>
 
-          {/* Product Reviews */}
-          {productReviews.length > 0 && (
-            <div className="modal-section">
-              <h3><i className="fas fa-star"></i> Product Reviews ({productReviews.length})</h3>
-              <div className="reviews-list">
-                {productReviews.map((review) => (
-                  <div key={review.id} className="review-card">
-                    <div className="review-card-header">
-                      <div className="review-product-info">
-                        <img src={review.productImage} alt={review.productName} className="review-product-image" onError={(e) => { e.target.onerror = null; e.target.src = 'https://via.placeholder.com/50x50?text=No+Image'; }} />
-                        <div>
-                          <strong className="review-product-name">{review.productName}</strong>
-                          <div className="review-stars">{[1,2,3,4,5].map(star => <i key={star} className={`fas fa-star ${star <= review.rating ? 'filled' : ''}`}></i>)}</div>
-                        </div>
-                      </div>
-                      <span className="review-date">{new Date(review.createdAt).toLocaleDateString('en-PH')}</span>
-                    </div>
-                    <div className="review-card-body">
-                      <p className="review-text">{review.review}</p>
-                      <div className="review-customer"><i className="fas fa-user-circle"></i><span>{review.userName}</span></div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
           {/* Order Summary */}
           <div className="modal-section">
             <h3><i className="fas fa-calculator"></i> Order Summary</h3>
             <div className="order-totals">
-              <div className="total-row"><span>Subtotal ({order.items?.length || 0} items):</span><strong>₱{subtotal.toLocaleString()}</strong></div>
+              <div className="total-row"><span>Subtotal:</span><strong>₱{subtotal.toLocaleString()}</strong></div>
               <div className="total-row"><span>Shipping Fee:</span><strong>₱{shippingFee.toLocaleString()}</strong></div>
               <div className="total-row grand-total"><span>Total Amount:</span><strong>₱{total.toLocaleString()}</strong></div>
             </div>
           </div>
 
-          {/* Status Management */}
+          {/* ── STATUS MANAGEMENT ──────────────────────────── */}
           <div className="modal-section">
             <h3><i className="fas fa-tasks"></i> Update Order Status</h3>
+
             {isDone && (
               <div className={`status-done-notice ${currentStatus}`}>
                 <i className={`fas ${currentStatus === 'completed' ? 'fa-check-circle' : 'fa-ban'}`}></i>
-                <span>{currentStatus === 'completed' ? 'This order has been completed. No further actions available.' : 'This order has been cancelled. No further actions available.'}</span>
+                <span>{currentStatus === 'completed'
+                  ? 'Order completed successfully.'
+                  : 'Order has been cancelled.'}</span>
               </div>
             )}
-            {(currentStatus === 'shipped' || currentStatus === 'out_for_delivery') && (
+
+            {!isDone && !isRiderManaged && (
+              <div className="status-buttons">
+                {/* CONFIRM ORDER */}
+                <div className="status-btn-wrapper">
+                  <button
+                    className={`status-btn confirmed ${currentStatus === 'confirmed' ? 'is-current' : ''} ${!allowed.confirm_order ? 'is-blocked' : ''}`}
+                    onClick={() => allowed.confirm_order && onUpdateStatus(order.orderId, 'confirmed')}
+                    disabled={!allowed.confirm_order}
+                    title={
+                      currentStatus === 'confirmed' ? 'Already confirmed'
+                      : paymentStatus !== 'paid' ? 'Cannot confirm — payment not yet received'
+                      : 'Confirm this order'
+                    }
+                  >
+                    <i className="fas fa-check-circle"></i>
+                    <span>Confirm Order</span>
+                    {currentStatus === 'confirmed' && <span className="current-indicator">✓ Current</span>}
+                  </button>
+                  {paymentStatus !== 'paid' && currentStatus !== 'confirmed' && (
+                    <div className="block-reason"><i className="fas fa-lock"></i> Awaiting payment</div>
+                  )}
+                  {currentStatus === 'confirmed' && (
+                    <div className="block-reason" style={{ color: '#17a2b8' }}><i className="fas fa-check"></i> Already confirmed</div>
+                  )}
+                </div>
+
+                {/* CANCEL */}
+                {allowed.cancel && (
+                  <div className="status-btn-wrapper">
+                    <button
+                      className="status-btn cancelled"
+                      onClick={() => setShowCancelModal(true)}
+                    >
+                      <i className="fas fa-times-circle"></i>
+                      <span>Cancel Order</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {isRiderManaged && (
               <div className="rider-managed-notice">
                 <i className="fas fa-motorcycle"></i>
                 <div>
-                  <strong>Rider-managed status</strong>
-                  <p>{currentStatus === 'out_for_delivery' ? 'Rider is on the way! The order will be automatically marked as Completed once the rider confirms delivery via OTP with the customer.' : 'This order is Shipped and is handled by the assigned rider. You may still Cancel if needed.'}</p>
+                  <strong>Handled by rider</strong>
+                  <p>Status will be updated automatically as the rider delivers the order. Rider uses OTP + photo to confirm delivery.</p>
                 </div>
               </div>
             )}
-            <div className="status-buttons">
-              {allStatusButtons.map((btn) => {
-                const isCurrent = currentStatus === btn.targetStatus;
-                const blockReason = getBlockReason(btn);
-                const isClickable = !blockReason && btn.actionKey;
-                const handleClick = () => {
-                  if (!isClickable) return;
-                  if (btn.targetStatus === 'cancelled') setShowCancelModal(true);
-                  else onUpdateStatus(order.orderId, btn.targetStatus);
-                };
-                return (
-                  <div key={btn.key} className="status-btn-wrapper">
-                    <button
-                      className={`status-btn ${btn.className} ${isCurrent ? 'is-current' : ''} ${!isClickable ? 'is-blocked' : ''}`}
-                      onClick={handleClick}
-                      disabled={!isClickable}
-                      title={blockReason || `Set to ${btn.label}`}
-                    >
-                      <i className={`fas ${btn.icon}`}></i>
-                      <span>{btn.label}</span>
-                      {btn.riderManaged && <span className="rider-badge-sm">🛵 via rider</span>}
-                      {isCurrent && <span className="current-indicator">✓ Current</span>}
-                    </button>
-                    {blockReason && !isCurrent && (
-                      <div className="block-reason"><i className="fas fa-lock"></i> {blockReason}</div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
           </div>
 
           {/* Cancellation Reason */}
@@ -535,7 +580,7 @@ const CancelReasonModal = ({ order, onConfirm, onClose }) => {
           <button className="close-btn" onClick={onClose}><i className="fas fa-times"></i></button>
         </div>
         <div className="cancel-reason-body">
-          <p className="cancel-reason-prompt">Please select or enter a reason for cancelling this order. This will be recorded and visible in the order details.</p>
+          <p className="cancel-reason-prompt">Please select or enter a reason for cancelling this order.</p>
           <div className="cancel-presets">
             {CANCEL_PRESETS.map((preset) => (
               <button
@@ -574,3 +619,5 @@ const CancelReasonModal = ({ order, onConfirm, onClose }) => {
 };
 
 export default AdminOrders;
+
+/* Additional CSS to add to AdminOrders.css */

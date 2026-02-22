@@ -1327,3 +1327,109 @@
   .order-modal { border-radius: 12px; }
   .modal-body { padding: 16px; }
 }
+/* ── ADD THESE TO AdminOrders.css ── */
+
+/* Flow info banner at top of page */
+.admin-flow-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: #eff6ff;
+  border: 1.5px solid #bfdbfe;
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin-bottom: 20px;
+  font-size: 13px;
+  color: #1e40af;
+  line-height: 1.6;
+}
+
+.admin-flow-info i {
+  color: #2563eb;
+  font-size: 16px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* Payment status badge in table */
+.payment-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.payment-badge.paid {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.payment-badge.pending {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+/* Flow notices inside modal */
+.flow-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px 18px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.flow-notice i {
+  font-size: 20px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.flow-notice strong {
+  display: block;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.flow-notice p {
+  margin: 0;
+  font-size: 13px;
+  opacity: 0.9;
+}
+
+.flow-notice.warning {
+  background: #fff7ed;
+  border: 1.5px solid #fed7aa;
+  color: #c2410c;
+}
+
+.flow-notice.warning i { color: #ea580c; }
+
+.flow-notice.success {
+  background: #f0fdf4;
+  border: 1.5px solid #86efac;
+  color: #14532d;
+}
+
+.flow-notice.success i { color: #16a34a; }
+
+.flow-notice.info {
+  background: #eff6ff;
+  border: 1.5px solid #bfdbfe;
+  color: #1e3a8a;
+}
+
+.flow-notice.info i { color: #2563eb; }
+
+.flow-notice.purple {
+  background: #f5f3ff;
+  border: 1.5px solid #ddd6fe;
+  color: #4c1d95;
+}
+
+.flow-notice.purple i { color: #7c3aed; }

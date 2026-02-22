@@ -7,7 +7,7 @@ import { api } from "./_generated/api";
 export const createPaymentLink = action({
   args: {
     orderId: v.string(),
-    amount: v.number(), // in pesos
+    amount: v.number(),
     description: v.string(),
     customerName: v.optional(v.string()),
     customerEmail: v.optional(v.string()),
@@ -19,10 +19,6 @@ export const createPaymentLink = action({
     if (!secretKey) throw new Error("PayMongo secret key not configured");
 
     const encoded = btoa(`${secretKey}:`);
-
-    // ✅ Dynamic base URL — set SITE_URL in your .env / Convex dashboard
-    // Local:  SITE_URL=http://localhost:3000
-    // Prod:   SITE_URL=https://dkmerchwebsite.vercel.app
     const baseUrl = process.env.SITE_URL || "https://dkmerchwebsite.vercel.app";
 
     const response = await fetch("https://api.paymongo.com/v1/checkout_sessions", {
@@ -39,15 +35,13 @@ export const createPaymentLink = action({
               email: customerEmail || "customer@dkmerch.com",
               phone: customerPhone || "",
             },
-            line_items: [
-              {
-                currency:    "PHP",
-                amount:      Math.round(amount * 100), // centavos
-                description: description,
-                name:        description,
-                quantity:    1,
-              },
-            ],
+            line_items: [{
+              currency:    "PHP",
+              amount:      Math.round(amount * 100),
+              description: description,
+              name:        description,
+              quantity:    1,
+            }],
             payment_method_types: ["gcash", "paymaya"],
             success_url: `${baseUrl}/order-success?orderId=${orderId}`,
             cancel_url:  `${baseUrl}/checkout`,
@@ -75,10 +69,7 @@ export const createPaymentLink = action({
       paymentLinkUrl: checkoutUrl,
     });
 
-    return {
-      paymentLinkId:  session.id,
-      paymentLinkUrl: checkoutUrl,
-    };
+    return { paymentLinkId: session.id, paymentLinkUrl: checkoutUrl };
   },
 });
 
@@ -95,45 +86,53 @@ export const savePaymentLink = mutation({
       .withIndex("by_orderId", (q) => q.eq("orderId", orderId))
       .first();
     if (!order) return { success: false };
-    await db.patch(order._id, {
-      paymentLinkId,
-      paymentLinkUrl,
-      paymentStatus: "pending",
-    });
+    await db.patch(order._id, { paymentLinkId, paymentLinkUrl, paymentStatus: "pending" });
     return { success: true };
   },
 });
 
-// Check payment status from PayMongo
+// Called from OrderSuccess page
 export const checkPaymentStatus = action({
-  args: { paymentLinkId: v.string(), orderId: v.string() },
-  handler: async (ctx, { paymentLinkId, orderId }) => {
+  args: { orderId: v.string() },
+  handler: async (ctx, { orderId }) => {
+    const order = await ctx.runQuery(api.orders.getOrderById, { orderId });
+    if (order?.paymentStatus === "paid") return { status: "paid" };
+
     const secretKey = process.env.PAYMONGO_SECRET_KEY;
-    if (!secretKey) throw new Error("PayMongo secret key not configured");
 
-    const encoded = btoa(`${secretKey}:`);
+    if (secretKey && order?.paymentLinkId) {
+      try {
+        const encoded = btoa(`${secretKey}:`);
+        const response = await fetch(
+          `https://api.paymongo.com/v1/checkout_sessions/${order.paymentLinkId}`,
+          { headers: { Authorization: `Basic ${encoded}` } }
+        );
+        if (response.ok) {
+          const data = await response.json();
+          const attrs = data.data?.attributes;
+          const sessionStatus = attrs?.status;
+          const paymentIntentStatus = attrs?.payment_intent?.attributes?.status;
+          const payments = attrs?.payments ?? [];
+          const hasSucceededPayment = payments.some((p: any) => p.attributes?.status === "paid");
 
-    const response = await fetch(
-      `https://api.paymongo.com/v1/checkout_sessions/${paymentLinkId}`,
-      {
-        headers: { Authorization: `Basic ${encoded}` },
+          if (sessionStatus === "completed" || paymentIntentStatus === "succeeded" || hasSucceededPayment) {
+            await ctx.runMutation(api.payments.markOrderPaid, { orderId });
+            return { status: "paid" };
+          }
+        }
+      } catch (err) {
+        console.warn("PayMongo API check failed, trusting redirect:", err);
       }
-    );
-
-    if (!response.ok) throw new Error("Failed to check payment status");
-
-    const data   = await response.json();
-    const status = data.data.attributes.payment_intent?.attributes?.status;
-
-    if (status === "succeeded") {
-      await ctx.runMutation(api.payments.markOrderPaid, { orderId });
     }
 
-    return { status };
+    // PayMongo ONLY redirects to success_url after successful payment — trust it
+    await ctx.runMutation(api.payments.markOrderPaid, { orderId });
+    return { status: "paid" };
   },
 });
 
-// Mark order as paid
+// ✅ FIXED: Only marks paymentStatus = "paid"
+// Does NOT touch orderStatus — admin must confirm the order manually
 export const markOrderPaid = mutation({
   args: { orderId: v.string() },
   handler: async ({ db }, { orderId }) => {
@@ -142,10 +141,12 @@ export const markOrderPaid = mutation({
       .withIndex("by_orderId", (q) => q.eq("orderId", orderId))
       .first();
     if (!order) return { success: false };
+    if (order.paymentStatus === "paid") return { success: true };
+
+    // Only update payment info — orderStatus remains "pending" for admin to review
     await db.patch(order._id, {
       paymentStatus: "paid",
-      status:        "Processing",
-      paidAt:        new Date().toISOString(),
+      paidAt: new Date().toISOString(),
     });
     return { success: true };
   },

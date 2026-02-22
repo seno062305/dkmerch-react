@@ -70,6 +70,9 @@ export default defineSchema({
         price: v.number(),
         image: v.string(),
         quantity: v.number(),
+        // ✅ Added pre-order fields
+        isPreOrder: v.optional(v.boolean()),
+        releaseDate: v.optional(v.union(v.string(), v.null())),
       })
     ),
     total: v.number(),

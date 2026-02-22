@@ -26,10 +26,16 @@ const WeverseSection = ({ onProductClick }) => {
     'STRAY KIDS', 'EXO', 'RED VELVET', 'NEWJEANS'
   ];
 
-  const filteredProducts =
+  // ✅ Filter by group then sort by top selling (salesCount or totalSold)
+  const filteredProducts = (
     activeFilter === 'all'
-      ? products
-      : products.filter(p => p.kpopGroup === activeFilter);
+      ? [...products]
+      : [...products].filter(p => p.kpopGroup === activeFilter)
+  ).sort((a, b) => {
+    const aSales = a.salesCount || a.totalSold || 0;
+    const bSales = b.salesCount || b.totalSold || 0;
+    return bSales - aSales;
+  });
 
   const handleWishlistClick = (e, product) => {
     e.stopPropagation();
@@ -68,6 +74,15 @@ const WeverseSection = ({ onProductClick }) => {
   return (
     <>
       <section className="weverse-section" id="collections">
+
+        {/* ✅ Top Selling label */}
+        <div className="wv-section-header">
+          <h2 className="wv-section-title">
+            <i className="fas fa-fire"></i> Top Selling
+          </h2>
+          <p className="wv-section-sub">Most loved by our K-Pop community</p>
+        </div>
+
         <div className="wv-filter-bar">
           {groups.map(group => (
             <button
@@ -81,14 +96,22 @@ const WeverseSection = ({ onProductClick }) => {
         </div>
 
         <div className="wv-grid">
-          {filteredProducts.map(product => {
+          {filteredProducts.map((product, index) => {
             const pid = product._id || product.id;
+            const salesCount = product.salesCount || product.totalSold || 0;
             return (
               <div
                 key={pid}
                 className="wv-card"
                 onClick={() => handleProductClick(product)}
               >
+                {/* ✅ Top seller rank badge for top 3 */}
+                {index < 3 && salesCount > 0 && (
+                  <div className={`wv-rank-badge rank-${index + 1}`}>
+                    {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
+                  </div>
+                )}
+
                 {product.isSale && <div className="wv-sale-badge">SALE</div>}
 
                 {/* ⭐ Star favorite button */}
@@ -117,6 +140,12 @@ const WeverseSection = ({ onProductClick }) => {
                       </span>
                     )}
                   </div>
+                  {/* ✅ Show sold count if available */}
+                  {salesCount > 0 && (
+                    <div className="wv-card-sold">
+                      <i className="fas fa-shopping-bag"></i> {salesCount} sold
+                    </div>
+                  )}
                 </div>
               </div>
             );

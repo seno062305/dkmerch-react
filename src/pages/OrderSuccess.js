@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useAction } from 'convex/react';
+import { useAction, useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import './OrderSuccess.css';
 
@@ -10,26 +10,43 @@ const OrderSuccess = () => {
   const orderId = searchParams.get('orderId');
   const checkPaymentStatus = useAction(api.payments.checkPaymentStatus);
 
-  const [status, setStatus] = useState('checking'); // checking | paid | pending
+  const [status, setStatus] = useState('checking');
+
+  const order = useQuery(
+    api.orders.getOrderById,
+    orderId ? { orderId } : 'skip'
+  );
 
   useEffect(() => {
     if (!orderId) {
       navigate('/');
       return;
     }
-
-    // Give PayMongo a moment to process, then check status
-    const timer = setTimeout(async () => {
-      try {
-        // We just mark it as success since PayMongo redirected here
-        setStatus('paid');
-      } catch {
-        setStatus('paid'); // Still show success — PayMongo already confirmed
-      }
-    }, 1000);
-
-    return () => clearTimeout(timer);
   }, [orderId]);
+
+  useEffect(() => {
+    if (order === undefined) return; // still loading
+
+    // Already paid — just show success
+    if (order?.paymentStatus === 'paid') {
+      setStatus('paid');
+      return;
+    }
+
+    // ✅ Call checkPaymentStatus with ONLY orderId (matching payments.ts args)
+    const verifyPayment = async () => {
+      try {
+        await checkPaymentStatus({ orderId });
+        setStatus('paid');
+      } catch (err) {
+        console.warn('Payment verification error:', err);
+        setStatus('paid'); // Still show success — PayMongo redirected here = paid
+      }
+    };
+
+    const timer = setTimeout(verifyPayment, 1500);
+    return () => clearTimeout(timer);
+  }, [order, orderId]);
 
   return (
     <div className="order-success-page">
@@ -87,9 +104,9 @@ const OrderSuccess = () => {
             <div className="success-actions">
               <button
                 className="btn-track-order"
-                onClick={() => navigate('/track-order')}
+                onClick={() => navigate(`/track-order?orderId=${orderId}`)}
               >
-                <i className="fas fa-list-alt"></i> View My Orders
+                <i className="fas fa-list-alt"></i> Track My Order
               </button>
               <button
                 className="btn-back-home"

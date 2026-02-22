@@ -17,23 +17,37 @@ import './AdminDashboard.css';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend);
 
+// ✅ Orders that count as "sales" — paid via PayMongo or delivered
+const isSaleOrder = (o) => {
+  const status = (o.status || '').toLowerCase();
+  const orderStatus = (o.orderStatus || '').toLowerCase();
+  const paymentStatus = (o.paymentStatus || '').toLowerCase();
+  return (
+    paymentStatus === 'paid' ||
+    status === 'paid' ||
+    status === 'delivered' ||
+    status === 'completed' ||
+    orderStatus === 'completed' ||
+    orderStatus === 'confirmed' ||
+    orderStatus === 'processing' ||
+    orderStatus === 'out_for_delivery'
+  );
+};
+
 const AdminDashboard = () => {
-  const [timeRange, setTimeRange] = useState('weekly');
+  const [timeRange, setTimeRange] = useState('daily');
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [showProductModal, setShowProductModal] = useState(false);
 
-  // ✅ All from Convex — real-time
-  const allOrders   = useQuery(api.orders.getAllOrders)   ?? [];
-  const allUsers    = useQuery(api.users.getAllUsers)     ?? [];
+  const allOrders   = useQuery(api.orders.getAllOrders)    ?? [];
+  const allUsers    = useQuery(api.users.getAllUsers)      ?? [];
   const allProducts = useQuery(api.products.getAllProducts) ?? [];
 
-  // Prevent body scroll when modal is open
   useEffect(() => {
     document.body.style.overflow = showProductModal ? 'hidden' : 'unset';
     return () => { document.body.style.overflow = 'unset'; };
   }, [showProductModal]);
 
-  // ── VALID ORDERS ──────────────────────────────────────────────────────────
   const validOrders = useMemo(() =>
     allOrders.filter(o => o.orderId && o.items?.length > 0),
     [allOrders]
@@ -41,21 +55,27 @@ const AdminDashboard = () => {
 
   // ── STATS ─────────────────────────────────────────────────────────────────
   const stats = useMemo(() => {
-    const completedOrders = validOrders.filter(o =>
-      o.orderStatus === 'completed' || o.status === 'Delivered'
-    );
-    const pendingOrders = validOrders.filter(o =>
-      o.orderStatus === 'pending' || o.orderStatus === 'confirmed'
-    );
-    const totalSales = completedOrders.reduce((sum, o) => sum + (o.total || 0), 0);
-    const lowStockProducts = allProducts.filter(p => p.stock < 10);
+    // ✅ Count paid + delivered + completed as sales
+    const saleOrders = validOrders.filter(isSaleOrder);
+    const pendingOrders = validOrders.filter(o => {
+      const status = (o.status || '').toLowerCase();
+      const orderStatus = (o.orderStatus || '').toLowerCase();
+      const paymentStatus = (o.paymentStatus || '').toLowerCase();
+      return (
+        paymentStatus !== 'paid' &&
+        status !== 'paid' &&
+        (orderStatus === 'pending' || status === 'pending')
+      );
+    });
+    const totalSales = saleOrders.reduce((sum, o) => sum + (o.total || 0), 0);
+    const lowStockProducts = allProducts.filter(p => (p.stock ?? 0) < 10);
     const regularUsers = allUsers.filter(u => u.role !== 'admin');
 
     return {
       totalSales,
       totalOrders: validOrders.length,
       pendingOrders: pendingOrders.length,
-      completedOrders: completedOrders.length,
+      saleOrders: saleOrders.length,
       totalUsers: regularUsers.length,
       totalProducts: allProducts.length,
       lowStockProducts: lowStockProducts.length,
@@ -64,13 +84,11 @@ const AdminDashboard = () => {
 
   // ── SALES CHART DATA ──────────────────────────────────────────────────────
   const salesData = useMemo(() => {
-    const completedOrders = validOrders.filter(o =>
-      o.orderStatus === 'completed' || o.status === 'Delivered'
-    );
+    // ✅ Use all paid/completed orders for chart
+    const saleOrders = validOrders.filter(isSaleOrder);
 
-    // Build date → sales map using Convex _creationTime
     const salesByDate = {};
-    completedOrders.forEach(order => {
+    saleOrders.forEach(order => {
       const date = new Date(order._creationTime);
       const dateKey = date.toISOString().split('T')[0];
       salesByDate[dateKey] = (salesByDate[dateKey] || 0) + (order.total || 0);
@@ -82,7 +100,10 @@ const AdminDashboard = () => {
       const date = new Date();
       date.setDate(date.getDate() - i);
       const dateKey = date.toISOString().split('T')[0];
-      daily.push({ date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), sales: salesByDate[dateKey] || 0 });
+      daily.push({
+        date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        sales: salesByDate[dateKey] || 0
+      });
     }
 
     // Weekly — last 4 weeks
@@ -108,7 +129,10 @@ const AdminDashboard = () => {
       const monthSales = Object.keys(salesByDate)
         .filter(k => k.startsWith(monthKey))
         .reduce((sum, k) => sum + salesByDate[k], 0);
-      monthly.push({ date: date.toLocaleDateString('en-US', { month: 'short' }), sales: monthSales });
+      monthly.push({
+        date: date.toLocaleDateString('en-US', { month: 'short' }),
+        sales: monthSales
+      });
     }
 
     return { daily, weekly, monthly };
@@ -116,12 +140,11 @@ const AdminDashboard = () => {
 
   // ── TOP PRODUCTS ──────────────────────────────────────────────────────────
   const topProducts = useMemo(() => {
-    const completedOrders = validOrders.filter(o =>
-      o.orderStatus === 'completed' || o.status === 'Delivered'
-    );
+    // ✅ Count from all paid/completed orders
+    const saleOrders = validOrders.filter(isSaleOrder);
 
     const productSales = {};
-    completedOrders.forEach(order => {
+    saleOrders.forEach(order => {
       order.items.forEach(item => {
         const pid = item.id;
         if (!productSales[pid]) {
@@ -196,8 +219,12 @@ const AdminDashboard = () => {
   };
 
   const getStatusBadgeClass = (status) => {
-    const map = { completed: 'status-completed', pending: 'status-pending', confirmed: 'status-confirmed', cancelled: 'status-cancelled' };
-    return map[status?.toLowerCase()] || 'status-pending';
+    const s = (status || '').toLowerCase();
+    if (s === 'completed' || s === 'delivered') return 'status-completed';
+    if (s === 'paid') return 'status-confirmed';
+    if (s === 'confirmed' || s === 'processing') return 'status-confirmed';
+    if (s === 'cancelled') return 'status-cancelled';
+    return 'status-pending';
   };
 
   return (
@@ -209,7 +236,7 @@ const AdminDashboard = () => {
           <div className="stat-details">
             <h3>Total Sales</h3>
             <p className="stat-value">₱{stats.totalSales.toLocaleString()}</p>
-            <span className="stat-label">From {stats.completedOrders} completed orders</span>
+            <span className="stat-label">From {stats.saleOrders} paid orders</span>
           </div>
         </div>
         <div className="stat-card orders">
@@ -296,8 +323,8 @@ const AdminDashboard = () => {
                     </div>
                     <div className="order-details">
                       <div className="order-total">₱{(order.total || 0).toLocaleString()}</div>
-                      <span className={`order-status ${getStatusBadgeClass(order.orderStatus || order.status)}`}>
-                        {(order.orderStatus || order.status || 'pending').toUpperCase()}
+                      <span className={`order-status ${getStatusBadgeClass(order.paymentStatus || order.orderStatus || order.status)}`}>
+                        {(order.paymentStatus || order.orderStatus || order.status || 'pending').toUpperCase()}
                       </span>
                     </div>
                   </div>

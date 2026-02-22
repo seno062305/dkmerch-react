@@ -45,6 +45,8 @@ export const createOrder = mutation({
       price: v.number(),
       image: v.string(),
       quantity: v.number(),
+      isPreOrder: v.optional(v.boolean()),
+      releaseDate: v.optional(v.union(v.string(), v.null())),
     })),
     total: v.number(),
     subtotal: v.optional(v.number()),
@@ -63,14 +65,23 @@ export const createOrder = mutation({
   },
 });
 
+// ✅ FIXED: now accepts both status AND orderStatus
 export const updateOrderStatus = mutation({
-  args: { orderId: v.string(), status: v.string() },
-  handler: async ({ db }, { orderId, status }) => {
+  args: {
+    orderId: v.string(),
+    status: v.string(),
+    orderStatus: v.optional(v.string()),
+  },
+  handler: async ({ db }, { orderId, status, orderStatus }) => {
     const order = await db.query("orders")
       .withIndex("by_orderId", q => q.eq("orderId", orderId))
       .first();
     if (!order) return { success: false };
-    await db.patch(order._id, { status });
+
+    const updates: any = { status };
+    if (orderStatus !== undefined) updates.orderStatus = orderStatus;
+
+    await db.patch(order._id, updates);
     return { success: true };
   },
 });
