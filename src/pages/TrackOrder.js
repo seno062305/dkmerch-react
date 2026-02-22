@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useUserOrders, useOrdersByEmail, useUpdateOrderOtp } from '../utils/orderStorage';
@@ -16,7 +16,7 @@ const TrackOrder = () => {
   const [trackingEmail, setTrackingEmail] = useState('');
   const [searchEmail, setSearchEmail] = useState('');
   const [showTrackedOrders, setShowTrackedOrders] = useState(false);
-  const [lightboxImg, setLightboxImg] = useState(null);
+  const [lightboxData, setLightboxData] = useState(null); // { images: [], index: 0 }
   const [removeConfirm, setRemoveConfirm] = useState(null);
   const [hiddenOrders, setHiddenOrders] = useState(() => {
     try { return JSON.parse(localStorage.getItem('hiddenDeliveredOrders') || '[]'); } catch { return []; }
@@ -160,9 +160,23 @@ const TrackOrder = () => {
     setRemoveConfirm(null);
   };
 
+  // Open lightbox with all images of an order, starting at a given index
+  const openLightbox = (images, startIndex = 0) => {
+    setLightboxData({ images, index: startIndex });
+  };
+
+  const closeLightbox = () => setLightboxData(null);
+
+  const lightboxNext = () => {
+    setLightboxData(prev => ({ ...prev, index: (prev.index + 1) % prev.images.length }));
+  };
+
+  const lightboxPrev = () => {
+    setLightboxData(prev => ({ ...prev, index: (prev.index - 1 + prev.images.length) % prev.images.length }));
+  };
+
   const visibleOrders = orders.filter(o => !hiddenOrders.includes(o._id));
 
-  // ✅ Tab buckets
   const activeOrders    = visibleOrders.filter(o => !isDelivered(o) && !isCancelledOrder(o));
   const deliveredOrders = visibleOrders.filter(o => isDelivered(o));
   const cancelledOrders = visibleOrders.filter(o => isCancelledOrder(o));
@@ -197,31 +211,109 @@ const TrackOrder = () => {
     return null;
   };
 
+  // ─── ORDER CARD ─────────────────────────────────────────────────────────────
   const OrderCard = ({ order, onViewDetails }) => {
-    const ordDate      = order._creationTime ? new Date(order._creationTime) : null;
-    const orderStatus  = getDisplayStatus(order);
-    const statusKey    = order.orderStatus || order.status || 'pending';
-    const firstItem    = order.items?.[0];
-    const firstProduct = firstItem ? getProductById(firstItem.id) : null;
-    const imgSrc       = firstItem?.image || firstProduct?.image;
-    const itemName     = firstItem?.name || firstProduct?.name;
-    const extraCount   = (order.items?.length || 1) - 1;
-    const delivered    = isDelivered(order);
-    const releaseDate  = getPreOrderReleaseDate(order);
+    const scrollRef = useRef(null);
+    const [activeImgIdx, setActiveImgIdx] = useState(0);
+    const ordDate     = order._creationTime ? new Date(order._creationTime) : null;
+    const orderStatus = getDisplayStatus(order);
+    const statusKey   = order.orderStatus || order.status || 'pending';
+    const delivered   = isDelivered(order);
+    const releaseDate = getPreOrderReleaseDate(order);
+
+    // Collect all item images
+    const itemImages = (order.items || []).map(item => {
+      const product = getProductById(item.id);
+      return {
+        src: item.image || product?.image || null,
+        name: item.name || product?.name || 'Item',
+      };
+    }).filter(i => i.src);
+
+    const hasImages = itemImages.length > 0;
+
+    const scrollTo = (idx) => {
+      setActiveImgIdx(idx);
+      if (scrollRef.current) {
+        const child = scrollRef.current.children[idx];
+        if (child) child.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+      }
+    };
+
+    const handleImgClick = (idx) => {
+      openLightbox(itemImages.map(i => i.src), idx);
+    };
 
     return (
       <div className="order-card">
-        <div className="order-card-img" onClick={() => imgSrc && setLightboxImg(imgSrc)} title={imgSrc ? 'Click to view image' : ''}>
-          {imgSrc ? <img src={imgSrc} alt={itemName} /> : <i className="fas fa-box order-no-img"></i>}
-          {imgSrc && <div className="order-img-zoom"><i className="fas fa-search-plus"></i></div>}
-          {extraCount > 0 && <span className="order-extra-badge">+{extraCount}</span>}
+        {/* ── Multi-image strip ── */}
+        <div className="order-card-img-wrap">
           <span className={`order-status-overlay ${getStatusClass(statusKey)}`}>{orderStatus}</span>
+
+          {hasImages ? (
+            <>
+              <div className="order-img-strip" ref={scrollRef}>
+                {itemImages.map((img, idx) => (
+                  <div
+                    key={idx}
+                    className={`order-img-slide ${idx === activeImgIdx ? 'active' : ''}`}
+                    onClick={() => handleImgClick(idx)}
+                    title="Click to enlarge"
+                  >
+                    <img src={img.src} alt={img.name} />
+                    <div className="order-img-zoom"><i className="fas fa-search-plus"></i></div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Dot indicators — only show if more than 1 image */}
+              {itemImages.length > 1 && (
+                <div className="order-img-dots">
+                  {itemImages.map((_, idx) => (
+                    <button
+                      key={idx}
+                      className={`order-img-dot ${idx === activeImgIdx ? 'active' : ''}`}
+                      onClick={() => scrollTo(idx)}
+                      aria-label={`Image ${idx + 1}`}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {/* Arrow nav — only if more than 1 */}
+              {itemImages.length > 1 && (
+                <>
+                  <button
+                    className="order-img-arrow order-img-arrow-left"
+                    onClick={() => scrollTo((activeImgIdx - 1 + itemImages.length) % itemImages.length)}
+                    aria-label="Previous image"
+                  >
+                    <i className="fas fa-chevron-left"></i>
+                  </button>
+                  <button
+                    className="order-img-arrow order-img-arrow-right"
+                    onClick={() => scrollTo((activeImgIdx + 1) % itemImages.length)}
+                    aria-label="Next image"
+                  >
+                    <i className="fas fa-chevron-right"></i>
+                  </button>
+                </>
+              )}
+            </>
+          ) : (
+            <div className="order-no-img-wrap">
+              <i className="fas fa-box order-no-img"></i>
+            </div>
+          )}
         </div>
+
         <div className="order-card-info">
           <p className="order-card-id">Order #{order.orderId?.slice(-8) || 'N/A'}</p>
           <p className="order-card-name">
-            {itemName}
-            {extraCount > 0 && <span className="order-and-more"> +{extraCount} more</span>}
+            {order.items?.[0]?.name || getProductById(order.items?.[0]?.id)?.name || 'Order'}
+            {(order.items?.length || 1) > 1 && (
+              <span className="order-and-more"> +{order.items.length - 1} more</span>
+            )}
           </p>
           {releaseDate && (
             <div className="order-card-preorder-badge">
@@ -256,6 +348,65 @@ const TrackOrder = () => {
     );
   };
 
+  // ─── LIGHTBOX ────────────────────────────────────────────────────────────────
+  const Lightbox = () => {
+    if (!lightboxData) return null;
+    const { images, index } = lightboxData;
+    const hasMultiple = images.length > 1;
+
+    useEffect(() => {
+      const onKey = (e) => {
+        if (e.key === 'Escape') closeLightbox();
+        if (e.key === 'ArrowRight' && hasMultiple) lightboxNext();
+        if (e.key === 'ArrowLeft'  && hasMultiple) lightboxPrev();
+      };
+      window.addEventListener('keydown', onKey);
+      return () => window.removeEventListener('keydown', onKey);
+    }, [hasMultiple]);
+
+    return (
+      <div className="order-lightbox" onClick={closeLightbox}>
+        <button className="lightbox-close" onClick={closeLightbox}>
+          <i className="fas fa-times"></i>
+        </button>
+
+        {hasMultiple && (
+          <button className="lightbox-arrow lightbox-arrow-left" onClick={(e) => { e.stopPropagation(); lightboxPrev(); }}>
+            <i className="fas fa-chevron-left"></i>
+          </button>
+        )}
+
+        <img
+          src={images[index]}
+          alt={`Item ${index + 1}`}
+          onClick={e => e.stopPropagation()}
+        />
+
+        {hasMultiple && (
+          <button className="lightbox-arrow lightbox-arrow-right" onClick={(e) => { e.stopPropagation(); lightboxNext(); }}>
+            <i className="fas fa-chevron-right"></i>
+          </button>
+        )}
+
+        {hasMultiple && (
+          <div className="lightbox-dots">
+            {images.map((_, i) => (
+              <button
+                key={i}
+                className={`lightbox-dot ${i === index ? 'active' : ''}`}
+                onClick={(e) => { e.stopPropagation(); setLightboxData(prev => ({ ...prev, index: i })); }}
+              />
+            ))}
+          </div>
+        )}
+
+        {hasMultiple && (
+          <div className="lightbox-counter">{index + 1} / {images.length}</div>
+        )}
+      </div>
+    );
+  };
+
   if (isAuthenticated && user) {
     const activeTab = FILTERS.find(f => f.key === filter);
 
@@ -269,8 +420,6 @@ const TrackOrder = () => {
         </div>
         <div className="container">
           <section className="track-order-page">
-
-            {/* ✅ Tab bar with active indicator + count badges */}
             <div className="orders-tab-bar">
               {FILTERS.map(f => (
                 <button
@@ -289,7 +438,6 @@ const TrackOrder = () => {
               ))}
             </div>
 
-            {/* ✅ Context bar — shows what tab you're on + order count */}
             <div className="tab-context-bar">
               <i className={`fas ${activeTab?.icon}`}></i>
               <span>
@@ -329,12 +477,7 @@ const TrackOrder = () => {
           <TrackingModal order={selectedOrder} products={products} onClose={handleCloseModal}
             getTimelineSteps={getTimelineSteps} getStatusClass={getStatusClass} getDisplayStatus={getDisplayStatus} />
         )}
-        {lightboxImg && (
-          <div className="order-lightbox" onClick={() => setLightboxImg(null)}>
-            <button className="lightbox-close" onClick={() => setLightboxImg(null)}><i className="fas fa-times"></i></button>
-            <img src={lightboxImg} alt="Product" onClick={e => e.stopPropagation()} />
-          </div>
-        )}
+        <Lightbox />
         {removeConfirm && (
           <div className="remove-confirm-overlay" onClick={() => setRemoveConfirm(null)}>
             <div className="remove-confirm-dialog" onClick={e => e.stopPropagation()}>
@@ -417,6 +560,7 @@ const TrackOrder = () => {
         <TrackingModal order={selectedOrder} products={products} onClose={handleCloseModal}
           getTimelineSteps={getTimelineSteps} getStatusClass={getStatusClass} getDisplayStatus={getDisplayStatus} />
       )}
+      <Lightbox />
     </main>
   );
 };

@@ -863,3 +863,211 @@
     font-size: 10px;
   }
 }
+
+/* =============================================
+   ORDER CARD — MULTI-IMAGE CAROUSEL
+   ============================================= */
+
+/* Wrapper replaces old order-card-img */
+.order-card-img-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: #f8f9fa;
+  overflow: hidden;
+}
+
+/* Horizontal scroll strip */
+.order-img-strip {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.order-img-strip::-webkit-scrollbar { display: none; }
+
+/* Each slide */
+.order-img-slide {
+  flex: 0 0 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 15px;
+  scroll-snap-align: start;
+  cursor: pointer;
+  position: relative;
+  box-sizing: border-box;
+}
+
+.order-img-slide img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transition: transform 0.35s ease;
+}
+
+.order-img-slide:hover img { transform: scale(1.06); }
+
+/* Zoom overlay on hover */
+.order-img-slide .order-img-zoom {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.22s;
+}
+.order-img-slide:hover .order-img-zoom { opacity: 1; }
+.order-img-slide .order-img-zoom i { font-size: 26px; color: white; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4)); }
+
+/* No-image placeholder */
+.order-no-img-wrap {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Arrow buttons on card */
+.order-img-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.85);
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: #333;
+  cursor: pointer;
+  z-index: 5;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+  transition: background 0.18s, transform 0.18s;
+  opacity: 0;
+}
+
+.order-card:hover .order-img-arrow { opacity: 1; }
+
+.order-img-arrow:hover {
+  background: white;
+  transform: translateY(-50%) scale(1.08);
+}
+
+.order-img-arrow-left  { left: 8px; }
+.order-img-arrow-right { right: 8px; }
+
+/* Dot indicators */
+.order-img-dots {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 5px;
+  z-index: 5;
+}
+
+.order-img-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.55);
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.order-img-dot.active {
+  background: white;
+  transform: scale(1.3);
+}
+
+/* =============================================
+   LIGHTBOX — WITH ARROWS & DOTS
+   ============================================= */
+
+.lightbox-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.15);
+  border: none;
+  color: white;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, transform 0.2s;
+  z-index: 10;
+}
+
+.lightbox-arrow:hover {
+  background: rgba(255,255,255,0.3);
+  transform: translateY(-50%) scale(1.08);
+}
+
+.lightbox-arrow-left  { left: 24px; }
+.lightbox-arrow-right { right: 24px; }
+
+.lightbox-dots {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  z-index: 10;
+}
+
+.lightbox-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.4);
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.lightbox-dot.active {
+  background: white;
+  transform: scale(1.3);
+}
+
+.lightbox-counter {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.45);
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 14px;
+  border-radius: 20px;
+  z-index: 10;
+}
+
+@media (max-width: 600px) {
+  .lightbox-arrow { width: 38px; height: 38px; font-size: 15px; }
+  .lightbox-arrow-left  { left: 10px; }
+  .lightbox-arrow-right { right: 10px; }
+}
