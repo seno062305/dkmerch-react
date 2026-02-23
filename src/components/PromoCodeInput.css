@@ -1,0 +1,214 @@
+/* ══════════════════════════
+   PROMO CODE INPUT
+══════════════════════════ */
+.promo-input-wrapper {
+  background: #fdf2f8;
+  border: 1.5px solid #f9a8d4;
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin: 16px 0;
+  transition: all 0.2s ease;
+}
+
+.promo-input-wrapper.applied {
+  background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+  border-color: #86efac;
+}
+
+.promo-input-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #be185d;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 10px;
+}
+
+.promo-input-label i { font-size: 11px; }
+
+.promo-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.promo-input-field {
+  flex: 1;
+  padding: 9px 14px;
+  border: 1.5px solid #e9d5ff;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+  letter-spacing: 1px;
+  background: white;
+  transition: all 0.2s ease;
+  color: #1a1a1a;
+  text-transform: uppercase;
+  min-width: 0;
+}
+
+.promo-input-field::placeholder {
+  font-family: inherit;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: #c4b5fd;
+}
+
+.promo-input-field:focus {
+  outline: none;
+  border-color: #ec4899;
+  box-shadow: 0 0 0 3px rgba(236, 72, 153, 0.1);
+}
+
+.promo-input-field.promo-input-error {
+  border-color: #f87171;
+  box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.1);
+}
+
+.promo-input-field.promo-input-success {
+  border-color: #4ade80;
+  box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.1);
+}
+
+.promo-apply-btn {
+  padding: 9px 18px;
+  background: linear-gradient(135deg, #ec4899, #f472b6);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 62px;
+}
+
+.promo-apply-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(236, 72, 153, 0.35);
+}
+
+.promo-apply-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.promo-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.promo-msg {
+  font-size: 12px;
+  margin: 8px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 500;
+}
+
+.promo-msg-error { color: #dc2626; }
+.promo-msg-success { color: #16a34a; }
+
+.promo-applied-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.promo-applied-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.promo-applied-icon { font-size: 20px; flex-shrink: 0; }
+
+.promo-applied-code {
+  display: block;
+  font-size: 14px;
+  font-weight: 800;
+  color: #15803d;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 1px;
+}
+
+.promo-applied-desc {
+  display: block;
+  font-size: 11px;
+  color: #22c55e;
+  margin-top: 2px;
+}
+
+.promo-remove-btn {
+  padding: 6px 14px;
+  background: white;
+  border: 1.5px solid #86efac;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #dc2626;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.promo-remove-btn:hover {
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+
+.promo-savings-row {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed #86efac;
+  font-size: 13px;
+  color: #16a34a;
+  text-align: right;
+}
+
+.promo-savings-row strong {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.promo-discount-badge {
+  display: inline-block;
+  background: linear-gradient(135deg, #ec4899, #f472b6);
+  color: white;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 20px;
+  letter-spacing: 0.3px;
+}
+
+.current-price.sale-price { color: #16a34a; }
+
+@media (max-width: 480px) {
+  .promo-input-wrapper { padding: 12px; }
+  .promo-input-field { padding: 8px 10px; font-size: 13px; }
+  .promo-apply-btn { padding: 8px 14px; font-size: 12px; min-width: 56px; }
+  .promo-applied-info { flex-wrap: wrap; }
+  .promo-savings-row { text-align: left; }
+}

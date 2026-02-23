@@ -32,7 +32,7 @@
   z-index: 1;
 }
 
-/* Promo slide: colorful gradient overlay instead */
+/* Promo slide: colorful gradient overlay */
 .carousel-slide.promo-slide::before {
   background: linear-gradient(
     135deg,
@@ -58,6 +58,9 @@
   text-align: center;
   max-width: 800px;
   padding: 0 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .carousel-content h1 {
@@ -69,12 +72,93 @@
 
 .carousel-content p {
   font-size: 20px;
-  margin-bottom: 30px;
+  margin-bottom: 20px;
   opacity: 0.9;
   text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
 }
 
-/* ── Promo slide extras ── */
+/* ── Promo group display (big name) ── */
+.promo-group-display {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.promo-group-icon {
+  font-size: 36px;
+}
+
+.promo-group-name {
+  font-size: 52px;
+  font-weight: 900;
+  color: white;
+  text-shadow: 2px 2px 8px rgba(0,0,0,0.4);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+/* ── Countdown Timer ── */
+.promo-countdown {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 8px 0 16px;
+  flex-wrap: wrap;
+}
+
+.promo-countdown.expired {
+  font-size: 14px;
+  color: rgba(255,255,255,0.8);
+  font-style: italic;
+}
+
+.countdown-label {
+  font-size: 13px;
+  color: rgba(255,255,255,0.85);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.countdown-blocks {
+  display: flex;
+  gap: 6px;
+}
+
+.countdown-block {
+  background: rgba(0,0,0,0.3);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.25);
+  border-radius: 8px;
+  padding: 6px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 42px;
+}
+
+.countdown-num {
+  font-size: 20px;
+  font-weight: 800;
+  color: #fde68a;
+  line-height: 1;
+  font-family: 'Courier New', monospace;
+  text-shadow: 0 0 10px rgba(253,230,138,0.5);
+}
+
+.countdown-unit {
+  font-size: 10px;
+  color: rgba(255,255,255,0.7);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 2px;
+}
+
+/* ── Promo badge ── */
 .promo-badge {
   display: inline-block;
   background: rgba(255, 255, 255, 0.2);
@@ -87,7 +171,7 @@
   text-transform: uppercase;
   padding: 6px 16px;
   border-radius: 20px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   animation: pulse-badge 2s ease-in-out infinite;
 }
 
@@ -96,13 +180,97 @@
   50%       { opacity: 0.85; transform: scale(1.03); }
 }
 
-.promo-valid-until {
-  font-size: 14px !important;
-  opacity: 0.8 !important;
-  margin-top: -16px !important;
-  margin-bottom: 12px !important;
+/* Group icon row */
+.promo-group-icon {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
+.group-emoji {
+  font-size: 32px;
+}
+
+.group-name-label {
+  font-size: 36px;
+  font-weight: 900;
+  color: white;
+  letter-spacing: 1px;
+  text-shadow: 2px 2px 8px rgba(0,0,0,0.4);
+  text-transform: uppercase;
+}
+
+/* ── COUNTDOWN TIMER ── */
+.promo-countdown {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 14px;
+  padding: 10px 20px;
+}
+
+.countdown-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  white-space: nowrap;
+}
+
+.countdown-units {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.countdown-unit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.countdown-num {
+  font-size: 28px;
+  font-weight: 900;
+  color: #fde68a;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 12px rgba(253, 230, 138, 0.6);
+  min-width: 42px;
+  text-align: center;
+}
+
+.countdown-sub {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.countdown-separator {
+  font-size: 24px;
+  font-weight: 900;
+  color: rgba(253, 230, 138, 0.7);
+  align-self: flex-start;
+  margin-top: 2px;
+  line-height: 1;
+}
+
+.promo-expired-label {
+  font-size: 13px !important;
+  color: rgba(255, 255, 255, 0.7) !important;
+  margin-bottom: 12px !important;
+  opacity: 1 !important;
+}
+
+/* Promo code pill */
 .promo-code-pill {
   display: inline-flex;
   align-items: center;
@@ -112,7 +280,7 @@
   border: 2px dashed rgba(255, 255, 255, 0.6);
   border-radius: 12px;
   padding: 8px 20px;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
   font-size: 18px;
 }
 
@@ -129,7 +297,7 @@
   text-shadow: 0 0 10px rgba(253, 230, 138, 0.5);
 }
 
-/* Promo button style */
+/* Promo button */
 .btn-promo {
   background: white !important;
   color: #9333ea !important;
@@ -143,11 +311,24 @@
   transform: translateY(-2px) scale(1.02) !important;
 }
 
+/* Login hint */
+.promo-login-hint {
+  font-size: 12px !important;
+  opacity: 0.75 !important;
+  margin-top: 10px !important;
+  margin-bottom: 0 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.promo-login-hint i { font-size: 11px; }
+
 /* ── Progress bar ── */
 .carousel-progress-bar {
   position: absolute;
-  bottom: 0;
-  left: 0;
+  bottom: 0; left: 0;
   width: 100%;
   height: 3px;
   background: rgba(255, 255, 255, 0.2);
@@ -177,6 +358,7 @@
   padding: 0 20px;
   z-index: 3;
   pointer-events: none;
+  box-sizing: border-box;
 }
 
 .carousel-btn {
@@ -203,7 +385,7 @@
 /* ── Dots ── */
 .carousel-dots {
   position: absolute;
-  bottom: 20px;
+  bottom: 16px;
   left: 0;
   width: 100%;
   display: flex;
@@ -226,11 +408,8 @@
   transform: scale(1.2);
 }
 
-.carousel-dot:hover {
-  background-color: white;
-}
+.carousel-dot:hover { background-color: white; }
 
-/* Promo dot is slightly larger / different shape */
 .carousel-dot.promo-dot {
   width: 14px; height: 14px;
   border-radius: 4px;
@@ -246,29 +425,50 @@
    RESPONSIVE
 ══════════════════════════════════════ */
 @media (max-width: 992px) {
-  .hero-carousel { height: 500px; }
+  .hero-carousel { height: 520px; }
   .carousel-content h1 { font-size: 36px; }
   .carousel-content p { font-size: 18px; }
+  .group-name-label { font-size: 28px; }
   .promo-code-pill strong { font-size: 18px; }
+  .countdown-num { font-size: 24px; min-width: 36px; }
 }
 
 @media (max-width: 768px) {
-  .hero-carousel { height: 420px; }
+  .hero-carousel { height: 440px; }
   .carousel-content h1 { font-size: 28px; }
   .carousel-content p { font-size: 15px; }
   .carousel-btn { width: 40px; height: 40px; font-size: 16px; }
   .promo-badge { font-size: 11px; padding: 5px 12px; }
   .promo-code-pill { font-size: 14px; padding: 6px 14px; }
   .promo-code-pill strong { font-size: 16px; }
+  .group-name-label { font-size: 24px; }
+  .group-emoji { font-size: 26px; }
+  .promo-countdown { padding: 8px 14px; gap: 8px; }
+  .countdown-num { font-size: 20px; min-width: 30px; }
+  .countdown-label { font-size: 10px; }
+  .countdown-separator { font-size: 18px; }
 }
 
 @media (max-width: 576px) {
-  .hero-carousel { height: 380px; }
-  .carousel-content h1 { font-size: 22px; margin-bottom: 12px; }
-  .carousel-content p { font-size: 13px; margin-bottom: 16px; }
+  .hero-carousel { height: 420px; }
+  .carousel-content { padding: 0 14px; }
+  .carousel-content h1 { font-size: 22px; margin-bottom: 10px; }
+  .carousel-content p { font-size: 13px; margin-bottom: 10px; }
   .carousel-dots { bottom: 8px; }
   .carousel-dot { width: 10px; height: 10px; }
   .promo-code-pill { padding: 5px 10px; gap: 5px; }
   .promo-code-pill strong { font-size: 14px; letter-spacing: 1px; }
-  .promo-valid-until { font-size: 12px !important; }
+  .group-name-label { font-size: 20px; }
+  .group-emoji { font-size: 22px; }
+  .promo-countdown { padding: 7px 12px; gap: 6px; border-radius: 10px; }
+  .countdown-num { font-size: 18px; min-width: 26px; }
+  .countdown-sub { font-size: 8px; }
+  .countdown-separator { font-size: 16px; }
+  .promo-login-hint { font-size: 11px !important; }
+}
+
+@media (max-width: 400px) {
+  .hero-carousel { height: 400px; }
+  .countdown-label { display: none; }
+  .countdown-num { font-size: 16px; min-width: 22px; }
 }
