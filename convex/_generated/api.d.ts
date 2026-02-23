@@ -14,6 +14,7 @@ import type * as orders from "../orders.js";
 import type * as payments from "../payments.js";
 import type * as pickupRequests from "../pickupRequests.js";
 import type * as products from "../products.js";
+import type * as promos from "../promos.js";
 import type * as riders from "../riders.js";
 import type * as sendEmail from "../sendEmail.js";
 import type * as users from "../users.js";
@@ -32,6 +33,7 @@ declare const fullApi: ApiFromModules<{
   payments: typeof payments;
   pickupRequests: typeof pickupRequests;
   products: typeof products;
+  promos: typeof promos;
   riders: typeof riders;
   sendEmail: typeof sendEmail;
   users: typeof users;

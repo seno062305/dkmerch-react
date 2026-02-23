@@ -88,12 +88,10 @@ export default defineSchema({
     deliveryOtpVerified: v.optional(v.boolean()),
     deliveryProofPhoto: v.optional(v.string()),
     cancelReason: v.optional(v.string()),
-    // PayMongo payment fields
     paymentStatus: v.optional(v.string()),
     paymentLinkId: v.optional(v.string()),
     paymentLinkUrl: v.optional(v.string()),
     paidAt: v.optional(v.string()),
-    // ✅ FIXED: Timestamp fields for accurate order timeline
     confirmedAt: v.optional(v.string()),
     shippedAt: v.optional(v.string()),
     outForDeliveryAt: v.optional(v.string()),
@@ -106,12 +104,15 @@ export default defineSchema({
   // ── PROMOS ───────────────────────────────────────
   promos: defineTable({
     code: v.string(),
-    discount: v.number(),
-    type: v.string(),
+    name: v.string(),                        // ✅ Promo display name
+    discount: v.number(),                    // percentage (1–9999, stored as whole number e.g. 25 = 25%)
+    maxDiscount: v.number(),                 // max peso discount (e.g. 500)
+    type: v.string(),                        // "percentage"
     minOrder: v.optional(v.number()),
     maxUses: v.optional(v.number()),
     usedCount: v.number(),
-    expiryDate: v.optional(v.string()),
+    startDate: v.optional(v.string()),       // ✅ ISO date string
+    endDate: v.optional(v.string()),         // ✅ ISO date string (was expiryDate)
     isActive: v.boolean(),
   }).index("by_code", ["code"]),
 

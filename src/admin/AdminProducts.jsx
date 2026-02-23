@@ -1,386 +1,433 @@
-import React, { useState, useRef } from 'react';
-import './AdminProducts.css';
-import { useProducts, useAddProduct, useUpdateProduct, useDeleteProduct } from '../utils/productStorage';
-import { usePreOrderProducts } from '../utils/productStorage';
+import React, { useState } from 'react';
+import { useQuery, useMutation } from 'convex/react';
+import { api } from '../../convex/_generated/api';
+import './AdminPromos.css';
 
-const emptyForm = {
-  name: '',
-  category: 'albums',
-  kpopGroup: 'BTS',
-  price: '',
-  originalPrice: '',
-  image: '',
-  stock: '',
-  description: '',
-  isSale: false,
-  isPreOrder: false,
-  releaseDate: '',
+// ── Validation helpers ──
+const MAX_DISCOUNT_DIGITS = 4; // max 9999
+const validateDiscount = (val) => {
+  const num = Number(val);
+  if (!val || isNaN(num)) return 'Required.';
+  if (num < 1) return 'Must be at least 1%.';
+  if (num > 100) return 'Cannot exceed 100%.';
+  if (String(Math.floor(num)).length > MAX_DISCOUNT_DIGITS) return 'Max 4 digits.';
+  return '';
+};
+const validateMaxDiscount = (val) => {
+  const num = Number(val);
+  if (!val || isNaN(num)) return 'Required.';
+  if (num < 1) return 'Must be at least ₱1.';
+  if (String(Math.floor(num)).length > MAX_DISCOUNT_DIGITS) return 'Max 4 digits (up to ₱9999).';
+  return '';
+};
+const validateDates = (startDate, endDate) => {
+  if (!startDate) return { start: 'Required.', end: '' };
+  if (!endDate) return { start: '', end: 'Required.' };
+  if (endDate < startDate) return { start: '', end: 'End date must be after start date.' };
+  return { start: '', end: '' };
 };
 
-const AdminProducts = () => {
-  // Fetch both regular + preorder products for the catalog
-  const regularProducts   = useProducts() || [];
-  const preOrderProducts  = usePreOrderProducts() || [];
-  const products          = [...regularProducts, ...preOrderProducts];
+const EMPTY_FORM = {
+  code: '', name: '', discount: '', maxDiscount: '',
+  startDate: '', endDate: '', isActive: true
+};
 
-  const addProduct    = useAddProduct();
-  const updateProduct = useUpdateProduct();
-  const deleteProduct = useDeleteProduct();
+const AdminPromos = () => {
+  const promos = useQuery(api.promos.getAllPromos) || [];
+  const createPromo = useMutation(api.promos.createPromo);
+  const updatePromo = useMutation(api.promos.updatePromo);
+  const deletePromo = useMutation(api.promos.deletePromo);
+  const toggleStatus = useMutation(api.promos.togglePromoStatus);
 
-  const [form, setForm]           = useState(emptyForm);
-  const [editingId, setEditingId] = useState(null);
-  const [searchTerm, setSearchTerm]         = useState('');
-  const [filterCategory, setFilterCategory] = useState('all');
-  const fileInputRef = useRef(null);
+  const [showModal, setShowModal] = useState(false);
+  const [editingPromo, setEditingPromo] = useState(null);
+  const [formData, setFormData] = useState(EMPTY_FORM);
+  const [errors, setErrors] = useState({});
+  const [serverMsg, setServerMsg] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleChange = (e) => {
+  const today = new Date().toISOString().split('T')[0];
+
+  // ── Input change ──
+  const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setForm(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value,
-      // Clear releaseDate if Pre-Order is unchecked
-      ...(name === 'isPreOrder' && !checked ? { releaseDate: '' } : {}),
-    }));
+
+    // Enforce max 4 digits for discount fields while typing
+    if (name === 'discount' || name === 'maxDiscount') {
+      const digitsOnly = value.replace(/\D/g, '');
+      if (digitsOnly.length > MAX_DISCOUNT_DIGITS) return;
+    }
+
+    setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
+    setErrors(prev => ({ ...prev, [name]: '' }));
+    setServerMsg('');
   };
 
-  const handleFileSelect = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setForm(prev => ({ ...prev, image: `/images/${file.name}` }));
+  // ── Validate form ──
+  const validate = () => {
+    const newErrors = {};
+    if (!formData.code.trim()) newErrors.code = 'Promo code is required.';
+    if (!formData.name.trim()) newErrors.name = 'Promo name is required.';
+
+    const discountErr = validateDiscount(formData.discount);
+    if (discountErr) newErrors.discount = discountErr;
+
+    const maxDiscountErr = validateMaxDiscount(formData.maxDiscount);
+    if (maxDiscountErr) newErrors.maxDiscount = maxDiscountErr;
+
+    const dateErrs = validateDates(formData.startDate, formData.endDate);
+    if (dateErrs.start) newErrors.startDate = dateErrs.start;
+    if (dateErrs.end) newErrors.endDate = dateErrs.end;
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
+  // ── Submit ──
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!validate()) return;
+    setSubmitting(true);
+    setServerMsg('');
 
-    if (!form.name || !form.price || !form.image) {
-      alert('Name, Price, and Image are required');
-      return;
+    try {
+      const payload = {
+        code: formData.code.toUpperCase().trim(),
+        name: formData.name.trim(),
+        discount: Number(formData.discount),
+        maxDiscount: Number(formData.maxDiscount),
+        startDate: formData.startDate,
+        endDate: formData.endDate,
+        isActive: formData.isActive,
+      };
+
+      if (editingPromo) {
+        await updatePromo({ id: editingPromo._id, ...payload });
+        setServerMsg('✅ Promo updated!');
+      } else {
+        const result = await createPromo(payload);
+        if (!result.success) {
+          setServerMsg(`❌ ${result.message}`);
+          setSubmitting(false);
+          return;
+        }
+        setServerMsg('✅ Promo created!');
+      }
+      resetForm();
+    } catch (err) {
+      setServerMsg('❌ Something went wrong. Try again.');
+    } finally {
+      setSubmitting(false);
     }
-    if (form.isPreOrder && !form.releaseDate) {
-      alert('Please set a Release Date for Pre-Order items');
-      return;
-    }
-
-    const productData = {
-      name:          form.name,
-      category:      form.category,
-      kpopGroup:     form.kpopGroup,
-      price:         Number(form.price),
-      originalPrice: form.originalPrice ? Number(form.originalPrice) : Number(form.price),
-      stock:         Number(form.stock || 0),
-      image:         form.image,
-      description:   form.description || '',
-      isSale:        Boolean(form.isSale),
-      isPreOrder:    Boolean(form.isPreOrder),
-      releaseDate:   form.isPreOrder ? form.releaseDate : '',
-      status:        form.isPreOrder ? 'preorder' : form.isSale ? 'sale' : 'available',
-    };
-
-    if (editingId) {
-      await updateProduct({ id: editingId, ...productData });
-      setEditingId(null);
-    } else {
-      await addProduct(productData);
-    }
-
-    setForm(emptyForm);
   };
 
-  const handleEdit = (product) => {
-    setForm({
-      name:          product.name || '',
-      category:      product.category || 'albums',
-      kpopGroup:     product.kpopGroup || 'BTS',
-      price:         String(product.price || ''),
-      originalPrice: String(product.originalPrice || ''),
-      stock:         String(product.stock || ''),
-      image:         product.image || '',
-      description:   product.description || '',
-      isSale:        product.isSale || false,
-      isPreOrder:    product.isPreOrder || false,
-      releaseDate:   product.releaseDate || '',
+  const handleEdit = (promo) => {
+    setEditingPromo(promo);
+    setFormData({
+      code: promo.code,
+      name: promo.name,
+      discount: String(promo.discount),
+      maxDiscount: String(promo.maxDiscount),
+      startDate: promo.startDate || '',
+      endDate: promo.endDate || '',
+      isActive: promo.isActive,
     });
-    setEditingId(product._id);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleCancelEdit = () => {
-    setEditingId(null);
-    setForm(emptyForm);
+    setErrors({});
+    setServerMsg('');
+    setShowModal(true);
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Delete this product?')) return;
-    await deleteProduct({ id });
+    if (!window.confirm('Delete this promo?')) return;
+    await deletePromo({ id });
   };
 
-  const filteredProducts = products.filter(product => {
-    const matchesSearch =
-      product.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.kpopGroup?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = filterCategory === 'all' || product.category === filterCategory;
-    return matchesSearch && matchesCategory;
-  });
-
-  const totalProducts  = products.length;
-  const totalValue     = products.reduce((sum, p) => sum + (p.price * p.stock), 0);
-  const onSaleCount    = products.filter(p => p.isSale).length;
-  const preOrderCount  = products.filter(p => p.isPreOrder).length;
-
-  // Format release date for display
-  const formatReleaseDate = (dateStr) => {
-    if (!dateStr) return null;
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' });
+  const handleToggle = async (id) => {
+    await toggleStatus({ id });
   };
 
-  // Today's date as min value for date picker
-  const today = new Date().toISOString().split('T')[0];
+  const resetForm = () => {
+    setFormData(EMPTY_FORM);
+    setEditingPromo(null);
+    setErrors({});
+    setServerMsg('');
+    setShowModal(false);
+  };
+
+  const formatPeriod = (startDate, endDate) => {
+    if (!startDate || !endDate) return '—';
+    return `${startDate} – ${endDate}`;
+  };
+
+  const isExpired = (promo) => promo.endDate && promo.endDate < today;
+  const isNotStarted = (promo) => promo.startDate && promo.startDate > today;
+
+  const getStatusLabel = (promo) => {
+    if (!promo.isActive) return { label: 'Inactive', cls: 'badge-inactive' };
+    if (isExpired(promo)) return { label: 'Expired', cls: 'badge-expired' };
+    if (isNotStarted(promo)) return { label: 'Upcoming', cls: 'badge-upcoming' };
+    return { label: 'Active', cls: 'badge-active' };
+  };
+
+  // ── Icons ──
+  const TagIcon = () => (
+    <svg className="tag-icon" viewBox="0 0 20 20" fill="currentColor">
+      <path fillRule="evenodd" d="M17.707 9.293a1 1 0 010 1.414l-7 7a1 1 0 01-1.414 0l-7-7A.997.997 0 012 10V5a3 3 0 013-3h5c.256 0 .512.098.707.293l7 7zM5 6a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+    </svg>
+  );
+  const EditIcon = () => (
+    <svg viewBox="0 0 20 20" fill="currentColor">
+      <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+    </svg>
+  );
+  const DeleteIcon = () => (
+    <svg viewBox="0 0 20 20" fill="currentColor">
+      <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+    </svg>
+  );
 
   return (
-    <div className="admin-products-page">
-      <div className="products-stats">
-        <div className="stat-card">
-          <div className="stat-icon purple"><i className="fas fa-box"></i></div>
-          <div className="stat-info"><h3>{totalProducts}</h3><p>Total Products</p></div>
+    <div className="admin-promos">
+      <div className="promos-header">
+        <div>
+          <h1>Promos</h1>
+          <p className="subtitle">Manage promotional discounts</p>
         </div>
-        <div className="stat-card">
-          <div className="stat-icon green"><i className="fas fa-peso-sign"></i></div>
-          <div className="stat-info"><h3>₱{totalValue.toLocaleString()}</h3><p>Total Inventory Value</p></div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon orange"><i className="fas fa-tag"></i></div>
-          <div className="stat-info"><h3>{onSaleCount}</h3><p>On Sale</p></div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon blue"><i className="fas fa-clock"></i></div>
-          <div className="stat-info"><h3>{preOrderCount}</h3><p>Pre-Orders</p></div>
-        </div>
+        <button className="create-btn" onClick={() => { setShowModal(true); setEditingPromo(null); setFormData(EMPTY_FORM); setErrors({}); setServerMsg(''); }}>
+          + Create Promo
+        </button>
       </div>
 
-      <div className="admin-product-form-wrapper">
-        <form className="admin-product-form" onSubmit={handleSubmit}>
-          <div className="form-header">
-            <h2>
-              <i className={editingId ? "fas fa-edit" : "fas fa-plus-circle"}></i>
-              {editingId ? 'Edit Product' : 'Add New Product'}
-            </h2>
-            {editingId && (
-              <button type="button" className="cancel-edit-btn" onClick={handleCancelEdit}>
-                <i className="fas fa-times"></i> Cancel
-              </button>
+      {/* ── DESKTOP TABLE ── */}
+      <div className="promos-table-container">
+        <table className="promos-table">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Name</th>
+              <th>Discount</th>
+              <th>Max Discount</th>
+              <th>Period</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {promos.length === 0 ? (
+              <tr>
+                <td colSpan="7" className="empty-state">No promos yet. Create your first promo!</td>
+              </tr>
+            ) : (
+              promos.map(promo => {
+                const { label, cls } = getStatusLabel(promo);
+                return (
+                  <tr key={promo._id}>
+                    <td><span className="promo-code"><TagIcon />{promo.code}</span></td>
+                    <td>{promo.name}</td>
+                    <td>{promo.discount}%</td>
+                    <td>₱{promo.maxDiscount.toLocaleString()}</td>
+                    <td>{formatPeriod(promo.startDate, promo.endDate)}</td>
+                    <td>
+                      <div className="status-cell">
+                        <label className="toggle-switch">
+                          <input type="checkbox" checked={promo.isActive} onChange={() => handleToggle(promo._id)} />
+                          <span className="toggle-slider"></span>
+                        </label>
+                        <span className={`status-badge ${cls}`}>{label}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <div className="action-buttons">
+                        <button className="edit-btn" onClick={() => handleEdit(promo)} title="Edit"><EditIcon /></button>
+                        <button className="delete-btn" onClick={() => handleDelete(promo._id)} title="Delete"><DeleteIcon /></button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
-          </div>
-
-          <div className="form-grid">
-            <div className="form-group full-width">
-              <label><i className="fas fa-tag"></i> Product Name *</label>
-              <input name="name" placeholder="Enter product name" value={form.name} onChange={handleChange} required />
-            </div>
-
-            <div className="form-group">
-              <label><i className="fas fa-folder"></i> Category *</label>
-              <select name="category" value={form.category} onChange={handleChange}>
-                <option value="albums">Albums</option>
-                <option value="photocards">Photocards</option>
-                <option value="lightsticks">Lightsticks</option>
-                <option value="apparel">Apparel</option>
-                <option value="accessories">Accessories</option>
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label><i className="fas fa-users"></i> K-Pop Group *</label>
-              <select name="kpopGroup" value={form.kpopGroup} onChange={handleChange}>
-                <option>BTS</option>
-                <option>BLACKPINK</option>
-                <option>TWICE</option>
-                <option>SEVENTEEN</option>
-                <option>STRAY KIDS</option>
-                <option>EXO</option>
-                <option>RED VELVET</option>
-                <option>NEWJEANS</option>
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label><i className="fas fa-money-bill-wave"></i> Price *</label>
-              <input type="number" name="price" placeholder="0.00" value={form.price} onChange={handleChange} required />
-            </div>
-
-            <div className="form-group">
-              <label><i className="fas fa-strikethrough"></i> Original Price</label>
-              <input type="number" name="originalPrice" placeholder="0.00" value={form.originalPrice} onChange={handleChange} />
-            </div>
-
-            <div className="form-group">
-              <label><i className="fas fa-warehouse"></i> Stock Quantity *</label>
-              <input type="number" name="stock" placeholder="0" value={form.stock} onChange={handleChange} required />
-            </div>
-
-            {/* IMAGE FIELD */}
-            <div className="form-group full-width">
-              <label><i className="fas fa-image"></i> Product Image *</label>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <input
-                  name="image"
-                  placeholder="/images/product.jpg"
-                  value={form.image}
-                  onChange={handleChange}
-                  required
-                  style={{ flex: 1 }}
-                />
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current.click()}
-                  style={{ padding: '10px 16px', background: '#6c63ff', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', whiteSpace: 'nowrap', fontSize: '14px' }}
-                >
-                  <i className="fas fa-folder-open"></i> Browse
-                </button>
-              </div>
-              <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileSelect} />
-              <small className="helper-text">Click Browse to pick from your images folder, or type the path manually (e.g. /images/product.jpg)</small>
-            </div>
-
-            {form.image && (
-              <div className="form-group full-width">
-                <div className="image-preview">
-                  <img src={form.image} alt="Preview" onError={(e) => e.target.style.display = 'none'} />
-                </div>
-              </div>
-            )}
-
-            <div className="form-group full-width">
-              <label><i className="fas fa-align-left"></i> Product Description</label>
-              <textarea
-                name="description"
-                placeholder="Enter product description..."
-                value={form.description}
-                onChange={handleChange}
-                rows="4"
-                style={{ padding: '12px 16px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '15px', fontFamily: 'inherit', resize: 'vertical', transition: 'all 0.3s ease' }}
-              />
-              <small className="helper-text">Describe the product features and details</small>
-            </div>
-
-            {/* CHECKBOXES */}
-            <div className="form-group full-width">
-              <div className="checkbox-group">
-                <label className="checkbox-label">
-                  <input type="checkbox" name="isSale" checked={form.isSale} onChange={handleChange} />
-                  <span className="checkbox-custom"></span>
-                  <span className="checkbox-text"><i className="fas fa-percent"></i> On Sale</span>
-                </label>
-                <label className="checkbox-label">
-                  <input type="checkbox" name="isPreOrder" checked={form.isPreOrder} onChange={handleChange} />
-                  <span className="checkbox-custom"></span>
-                  <span className="checkbox-text"><i className="fas fa-clock"></i> Pre-Order</span>
-                </label>
-              </div>
-            </div>
-
-            {/* RELEASE DATE — only shows when Pre-Order is checked */}
-            {form.isPreOrder && (
-              <div className="form-group full-width release-date-field">
-                <label><i className="fas fa-calendar-alt"></i> Release Date *</label>
-                <input
-                  type="date"
-                  name="releaseDate"
-                  value={form.releaseDate}
-                  onChange={handleChange}
-                  min={today}
-                  required={form.isPreOrder}
-                />
-                <small className="helper-text">
-                  <i className="fas fa-info-circle"></i> This item will appear in Pre-Order only — not in Collections — until you uncheck Pre-Order.
-                </small>
-              </div>
-            )}
-          </div>
-
-          <div className="form-actions">
-            <button type="submit" className="submit-btn">
-              <i className={editingId ? "fas fa-save" : "fas fa-plus"}></i>
-              {editingId ? 'Update Product' : 'Add Product'}
-            </button>
-          </div>
-        </form>
+          </tbody>
+        </table>
       </div>
 
-      <div className="admin-product-list">
-        <div className="list-header">
-          <h2><i className="fas fa-list"></i> Product Catalog ({filteredProducts.length})</h2>
-          <div className="list-filters">
-            <div className="search-box">
-              <i className="fas fa-search"></i>
-              <input type="text" placeholder="Search products..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-            </div>
-            <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="filter-select">
-              <option value="all">All Categories</option>
-              <option value="albums">Albums</option>
-              <option value="photocards">Photocards</option>
-              <option value="lightsticks">Lightsticks</option>
-              <option value="apparel">Apparel</option>
-              <option value="accessories">Accessories</option>
-            </select>
-          </div>
-        </div>
-
-        {filteredProducts.length === 0 ? (
-          <div className="empty-state">
-            <i className="fas fa-box-open"></i>
-            <h3>No products found</h3>
-            <p>{products.length === 0 ? 'Start by adding your first product above' : 'Try adjusting your search or filters'}</p>
+      {/* ── MOBILE CARD LIST ── */}
+      <div className="promo-cards-list">
+        {promos.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '40px 20px', color: '#999', background: 'white', borderRadius: '12px' }}>
+            No promos yet. Create your first promo!
           </div>
         ) : (
-          <div className="product-grid">
-            {filteredProducts.map(product => (
-              <div key={product._id} className="product-card">
-                <div className="product-image">
-                  <img src={product.image} alt={product.name} />
-                  <div className="product-badges">
-                    {product.isPreOrder && <span className="badge pre-order"><i className="fas fa-clock"></i> Pre-Order</span>}
-                    {product.isSale && !product.isPreOrder && <span className="badge sale"><i className="fas fa-tag"></i> Sale</span>}
+          promos.map(promo => {
+            const { label, cls } = getStatusLabel(promo);
+            return (
+              <div className="promo-card" key={promo._id}>
+                <div className="promo-card-header">
+                  <span className="promo-card-code"><TagIcon />{promo.code}</span>
+                  <div className="promo-card-toggle">
+                    <span className={`status-badge ${cls}`}>{label}</span>
+                    <label className="toggle-switch">
+                      <input type="checkbox" checked={promo.isActive} onChange={() => handleToggle(promo._id)} />
+                      <span className="toggle-slider"></span>
+                    </label>
                   </div>
                 </div>
-                <div className="product-details">
-                  <div className="product-header">
-                    <h3>{product.name}</h3>
-                    <span className="category-tag">{product.category}</span>
-                  </div>
-                  <div className="product-meta">
-                    <span className="group"><i className="fas fa-users"></i> {product.kpopGroup}</span>
-                    <span className="stock"><i className="fas fa-box"></i> Stock: {product.stock}</span>
-                  </div>
-                  {/* Show release date if pre-order */}
-                  {product.isPreOrder && product.releaseDate && (
-                    <div className="release-date-info">
-                      <i className="fas fa-calendar-alt"></i>
-                      Release: {formatReleaseDate(product.releaseDate)}
-                    </div>
-                  )}
-                  <div className="product-pricing">
-                    <div className="price">₱{product.price.toLocaleString()}</div>
-                    {product.originalPrice > product.price && (
-                      <div className="original-price">₱{product.originalPrice.toLocaleString()}</div>
-                    )}
-                  </div>
-                  <div className="product-actions">
-                    <button className="edit-btn" onClick={() => handleEdit(product)}>
-                      <i className="fas fa-edit"></i> Edit
-                    </button>
-                    <button className="delete-btn" onClick={() => handleDelete(product._id)}>
-                      <i className="fas fa-trash"></i> Delete
-                    </button>
-                  </div>
+                <div className="promo-card-body">
+                  <div className="promo-card-field"><label>Name</label><span>{promo.name}</span></div>
+                  <div className="promo-card-field"><label>Discount</label><span>{promo.discount}%</span></div>
+                  <div className="promo-card-field"><label>Max Discount</label><span>₱{promo.maxDiscount.toLocaleString()}</span></div>
+                  <div className="promo-card-field promo-card-period"><label>Period</label><span>{formatPeriod(promo.startDate, promo.endDate)}</span></div>
+                </div>
+                <div className="promo-card-actions">
+                  <button className="edit-btn" onClick={() => handleEdit(promo)} title="Edit"><EditIcon /></button>
+                  <button className="delete-btn" onClick={() => handleDelete(promo._id)} title="Delete"><DeleteIcon /></button>
                 </div>
               </div>
-            ))}
-          </div>
+            );
+          })
         )}
       </div>
+
+      {/* ── MODAL ── */}
+      {showModal && (
+        <div className="modal-overlay" onClick={resetForm}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>{editingPromo ? 'Edit Promo' : 'Create New Promo'}</h2>
+              <button className="close-btn" onClick={resetForm}>×</button>
+            </div>
+
+            <form onSubmit={handleSubmit} noValidate>
+              <div className="form-grid">
+                {/* Code */}
+                <div className="form-group">
+                  <label htmlFor="code">Promo Code <span className="req">*</span></label>
+                  <input
+                    type="text"
+                    id="code"
+                    name="code"
+                    value={formData.code}
+                    onChange={handleInputChange}
+                    placeholder="e.g., SUMMER25"
+                    className={errors.code ? 'input-error' : ''}
+                    style={{ textTransform: 'uppercase' }}
+                    maxLength={20}
+                  />
+                  {errors.code && <span className="field-error">{errors.code}</span>}
+                </div>
+
+                {/* Name */}
+                <div className="form-group">
+                  <label htmlFor="name">Promo Name <span className="req">*</span></label>
+                  <input
+                    type="text"
+                    id="name"
+                    name="name"
+                    value={formData.name}
+                    onChange={handleInputChange}
+                    placeholder="e.g., Summer Sale"
+                    className={errors.name ? 'input-error' : ''}
+                    maxLength={50}
+                  />
+                  {errors.name && <span className="field-error">{errors.name}</span>}
+                </div>
+
+                {/* Discount % */}
+                <div className="form-group">
+                  <label htmlFor="discount">Discount (%) <span className="req">*</span></label>
+                  <input
+                    type="number"
+                    id="discount"
+                    name="discount"
+                    value={formData.discount}
+                    onChange={handleInputChange}
+                    min="1"
+                    max="100"
+                    placeholder="e.g., 25"
+                    className={errors.discount ? 'input-error' : ''}
+                  />
+                  <span className="field-hint">1–100%, max 4 digits</span>
+                  {errors.discount && <span className="field-error">{errors.discount}</span>}
+                </div>
+
+                {/* Max Discount ₱ */}
+                <div className="form-group">
+                  <label htmlFor="maxDiscount">Max Discount (₱) <span className="req">*</span></label>
+                  <input
+                    type="number"
+                    id="maxDiscount"
+                    name="maxDiscount"
+                    value={formData.maxDiscount}
+                    onChange={handleInputChange}
+                    min="1"
+                    max="9999"
+                    placeholder="e.g., 500"
+                    className={errors.maxDiscount ? 'input-error' : ''}
+                  />
+                  <span className="field-hint">Max ₱9999 (4 digits)</span>
+                  {errors.maxDiscount && <span className="field-error">{errors.maxDiscount}</span>}
+                </div>
+
+                {/* Start Date */}
+                <div className="form-group">
+                  <label htmlFor="startDate">Start Date <span className="req">*</span></label>
+                  <input
+                    type="date"
+                    id="startDate"
+                    name="startDate"
+                    value={formData.startDate}
+                    onChange={handleInputChange}
+                    className={errors.startDate ? 'input-error' : ''}
+                  />
+                  {errors.startDate && <span className="field-error">{errors.startDate}</span>}
+                </div>
+
+                {/* End Date */}
+                <div className="form-group">
+                  <label htmlFor="endDate">End Date <span className="req">*</span></label>
+                  <input
+                    type="date"
+                    id="endDate"
+                    name="endDate"
+                    value={formData.endDate}
+                    onChange={handleInputChange}
+                    min={formData.startDate || today}
+                    className={errors.endDate ? 'input-error' : ''}
+                  />
+                  {errors.endDate && <span className="field-error">{errors.endDate}</span>}
+                </div>
+              </div>
+
+              {/* Active checkbox */}
+              <div className="form-group checkbox-group">
+                <label>
+                  <input
+                    type="checkbox"
+                    name="isActive"
+                    checked={formData.isActive}
+                    onChange={handleInputChange}
+                  />
+                  <span>Active (users can use this promo)</span>
+                </label>
+              </div>
+
+              {serverMsg && (
+                <div className={`server-msg ${serverMsg.startsWith('✅') ? 'msg-success' : 'msg-error'}`}>
+                  {serverMsg}
+                </div>
+              )}
+
+              <div className="modal-actions">
+                <button type="button" className="cancel-btn" onClick={resetForm}>Cancel</button>
+                <button type="submit" className="submit-btn" disabled={submitting}>
+                  {submitting ? 'Saving…' : editingPromo ? 'Update Promo' : 'Create Promo'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-export default AdminProducts;
+export default AdminPromos;

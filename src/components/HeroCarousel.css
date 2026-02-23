@@ -1,4 +1,6 @@
-/* Hero Carousel */
+/* ══════════════════════════════════════
+   HERO CAROUSEL
+══════════════════════════════════════ */
 .hero-carousel {
   position: relative;
   overflow: hidden;
@@ -21,15 +23,23 @@
   justify-content: center;
 }
 
+/* Default dark overlay */
 .carousel-slide::before {
   content: '';
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+  top: 0; left: 0; width: 100%; height: 100%;
   background: linear-gradient(rgba(26, 26, 46, 0.7), rgba(26, 26, 46, 0.8));
   z-index: 1;
+}
+
+/* Promo slide: colorful gradient overlay instead */
+.carousel-slide.promo-slide::before {
+  background: linear-gradient(
+    135deg,
+    rgba(147, 51, 234, 0.75) 0%,
+    rgba(236, 72, 153, 0.75) 50%,
+    rgba(239, 68, 68, 0.6) 100%
+  );
 }
 
 .carousel-slide img {
@@ -37,10 +47,10 @@
   height: 100%;
   object-fit: cover;
   position: absolute;
-  top: 0;
-  left: 0;
+  top: 0; left: 0;
 }
 
+/* ── Carousel Content ── */
 .carousel-content {
   position: relative;
   z-index: 2;
@@ -64,6 +74,99 @@
   text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
 }
 
+/* ── Promo slide extras ── */
+.promo-badge {
+  display: inline-block;
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: white;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 6px 16px;
+  border-radius: 20px;
+  margin-bottom: 16px;
+  animation: pulse-badge 2s ease-in-out infinite;
+}
+
+@keyframes pulse-badge {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.85; transform: scale(1.03); }
+}
+
+.promo-valid-until {
+  font-size: 14px !important;
+  opacity: 0.8 !important;
+  margin-top: -16px !important;
+  margin-bottom: 12px !important;
+}
+
+.promo-code-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(10px);
+  border: 2px dashed rgba(255, 255, 255, 0.6);
+  border-radius: 12px;
+  padding: 8px 20px;
+  margin-bottom: 24px;
+  font-size: 18px;
+}
+
+.promo-code-pill span {
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: 500;
+}
+
+.promo-code-pill strong {
+  color: #fde68a;
+  font-size: 22px;
+  letter-spacing: 2px;
+  font-family: 'Courier New', monospace;
+  text-shadow: 0 0 10px rgba(253, 230, 138, 0.5);
+}
+
+/* Promo button style */
+.btn-promo {
+  background: white !important;
+  color: #9333ea !important;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2) !important;
+}
+
+.btn-promo:hover {
+  background: #fde68a !important;
+  color: #7c3aed !important;
+  transform: translateY(-2px) scale(1.02) !important;
+}
+
+/* ── Progress bar ── */
+.carousel-progress-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.2);
+  z-index: 4;
+}
+
+.carousel-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ec4899, #a855f7);
+  width: 0%;
+  animation: progress-fill linear forwards;
+}
+
+@keyframes progress-fill {
+  from { width: 0%; }
+  to   { width: 100%; }
+}
+
+/* ── Nav buttons ── */
 .carousel-nav {
   position: absolute;
   top: 50%;
@@ -73,11 +176,11 @@
   justify-content: space-between;
   padding: 0 20px;
   z-index: 3;
+  pointer-events: none;
 }
 
 .carousel-btn {
-  width: 50px;
-  height: 50px;
+  width: 50px; height: 50px;
   border-radius: 50%;
   background-color: rgba(255, 255, 255, 0.2);
   border: none;
@@ -87,15 +190,17 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: var(--transition);
+  transition: all 0.3s ease;
   backdrop-filter: blur(5px);
+  pointer-events: all;
 }
 
 .carousel-btn:hover {
-  background-color: var(--primary-color);
+  background-color: var(--primary-color, #ec4899);
   transform: scale(1.1);
 }
 
+/* ── Dots ── */
 .carousel-dots {
   position: absolute;
   bottom: 20px;
@@ -108,17 +213,16 @@
 }
 
 .carousel-dot {
-  width: 12px;
-  height: 12px;
+  width: 12px; height: 12px;
   border-radius: 50%;
   background-color: rgba(255, 255, 255, 0.5);
   border: none;
   cursor: pointer;
-  transition: var(--transition);
+  transition: all 0.3s ease;
 }
 
 .carousel-dot.active {
-  background-color: var(--primary-color);
+  background-color: var(--primary-color, #ec4899);
   transform: scale(1.2);
 }
 
@@ -126,61 +230,45 @@
   background-color: white;
 }
 
-/* Responsive */
+/* Promo dot is slightly larger / different shape */
+.carousel-dot.promo-dot {
+  width: 14px; height: 14px;
+  border-radius: 4px;
+  background-color: rgba(253, 230, 138, 0.6);
+}
+
+.carousel-dot.promo-dot.active {
+  background-color: #fde68a;
+  box-shadow: 0 0 8px rgba(253, 230, 138, 0.8);
+}
+
+/* ══════════════════════════════════════
+   RESPONSIVE
+══════════════════════════════════════ */
 @media (max-width: 992px) {
-  .hero-carousel {
-    height: 500px;
-  }
-  
-  .carousel-content h1 {
-    font-size: 36px;
-  }
-  
-  .carousel-content p {
-    font-size: 18px;
-  }
+  .hero-carousel { height: 500px; }
+  .carousel-content h1 { font-size: 36px; }
+  .carousel-content p { font-size: 18px; }
+  .promo-code-pill strong { font-size: 18px; }
 }
 
 @media (max-width: 768px) {
-  .hero-carousel {
-    height: 400px;
-  }
-  
-  .carousel-content h1 {
-    font-size: 32px;
-  }
-  
-  .carousel-content p {
-    font-size: 16px;
-  }
-  
-  .carousel-btn {
-    width: 40px;
-    height: 40px;
-    font-size: 18px;
-  }
+  .hero-carousel { height: 420px; }
+  .carousel-content h1 { font-size: 28px; }
+  .carousel-content p { font-size: 15px; }
+  .carousel-btn { width: 40px; height: 40px; font-size: 16px; }
+  .promo-badge { font-size: 11px; padding: 5px 12px; }
+  .promo-code-pill { font-size: 14px; padding: 6px 14px; }
+  .promo-code-pill strong { font-size: 16px; }
 }
 
 @media (max-width: 576px) {
-  .hero-carousel {
-    height: 350px;
-  }
-  
-  .carousel-content h1 {
-    font-size: 28px;
-  }
-  
-  .carousel-content p {
-    font-size: 14px;
-    margin-bottom: 20px;
-  }
-  
-  .carousel-dots {
-    bottom: 10px;
-  }
-  
-  .carousel-dot {
-    width: 10px;
-    height: 10px;
-  }
+  .hero-carousel { height: 380px; }
+  .carousel-content h1 { font-size: 22px; margin-bottom: 12px; }
+  .carousel-content p { font-size: 13px; margin-bottom: 16px; }
+  .carousel-dots { bottom: 8px; }
+  .carousel-dot { width: 10px; height: 10px; }
+  .promo-code-pill { padding: 5px 10px; gap: 5px; }
+  .promo-code-pill strong { font-size: 14px; letter-spacing: 1px; }
+  .promo-valid-until { font-size: 12px !important; }
 }
