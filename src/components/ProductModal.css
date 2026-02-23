@@ -394,3 +394,42 @@
   .current-price { font-size: 24px; }
   .stars-input i { font-size: 24px; }
 }
+
+/* ── Promo indicator on modal image ── */
+.modal-promo-img-badge {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  background: linear-gradient(135deg, #ec4899, #a855f7);
+  color: white;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 6px 16px;
+  border-radius: 20px;
+  letter-spacing: 0.5px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  animation: promo-badge-pop 0.3s ease;
+  box-shadow: 0 4px 14px rgba(236, 72, 153, 0.4);
+}
+
+@keyframes promo-badge-pop {
+  0%   { transform: scale(0.7); opacity: 0; }
+  80%  { transform: scale(1.05); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.promo-price { color: #16a34a !important; }
+
+.discount-badge-inline {
+  display: inline-block;
+  background: linear-gradient(135deg, #ec4899, #f472b6);
+  color: white;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 20px;
+  letter-spacing: 0.3px;
+}

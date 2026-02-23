@@ -1028,3 +1028,173 @@ html { scroll-behavior: smooth; }
   margin-left: 10px;
   vertical-align: middle;
 }
+
+/* ══════════════════════════════════════
+   ADD THESE TO THE BOTTOM OF Checkout.css
+══════════════════════════════════════ */
+
+/* ── Promo Code Section (Checkout) ── */
+.promo-input-checkout-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.promo-input-checkout {
+  flex: 1;
+  padding: 13px 16px;
+  border: 2px solid #e9d5ff;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  background: white;
+  color: #1a1a1a;
+  transition: var(--transition-smooth);
+  outline: none;
+}
+
+.promo-input-checkout::placeholder {
+  font-family: 'Inter', sans-serif;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: #c4b5fd;
+  text-transform: none;
+  font-size: 13px;
+}
+
+.promo-input-checkout:focus {
+  border-color: #ec4899;
+  box-shadow: 0 0 0 4px rgba(236, 72, 153, 0.08);
+}
+
+.promo-input-checkout.promo-input-error {
+  border-color: var(--error-red);
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+}
+
+.promo-apply-checkout {
+  padding: 13px 24px;
+  background: linear-gradient(135deg, #ec4899, #f472b6);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.promo-apply-checkout:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(236, 72, 153, 0.35);
+}
+
+.promo-apply-checkout:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.promo-error-checkout {
+  margin: 10px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--error-red);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Applied promo card in checkout */
+.promo-applied-checkout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+  border: 1.5px solid #86efac;
+  border-radius: var(--radius-md);
+  padding: 14px 18px;
+}
+
+.promo-applied-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.promo-applied-icon { font-size: 22px; flex-shrink: 0; }
+
+.promo-applied-code {
+  display: block;
+  font-size: 16px;
+  font-weight: 800;
+  color: #15803d;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 1.5px;
+}
+
+.promo-applied-desc {
+  display: block;
+  font-size: 12px;
+  color: #4ade80;
+  margin-top: 3px;
+  font-weight: 500;
+}
+
+.promo-remove-checkout {
+  padding: 8px 16px;
+  background: white;
+  border: 1.5px solid #86efac;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--error-red);
+  cursor: pointer;
+  transition: var(--transition-smooth);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.promo-remove-checkout:hover {
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+
+/* Promo row in order summary totals */
+.summary-row.promo-discount-row {
+  color: #16a34a;
+  font-weight: 600;
+  padding: 8px 0;
+  background: #f0fdf4;
+  margin: 0 -4px;
+  padding: 8px 4px;
+  border-radius: 6px;
+}
+
+/* Promo savings banner below total */
+.promo-savings-checkout {
+  margin: 12px 0;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #fdf2f8, #fce7f3);
+  border: 1px solid #f9a8d4;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  color: #be185d;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: slideDown 0.3s ease;
+}
+
+.promo-savings-checkout i { font-size: 15px; flex-shrink: 0; }
+.promo-savings-checkout strong { color: #9d174d; }

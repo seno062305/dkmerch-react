@@ -51,6 +51,13 @@ export const createOrder = mutation({
     total: v.number(),
     subtotal: v.optional(v.number()),
     shippingFee: v.optional(v.number()),
+    // ── PROMO FIELDS ──
+    promoCode:       v.optional(v.string()),
+    promoName:       v.optional(v.string()),
+    discountAmount:  v.optional(v.number()),
+    discountPercent: v.optional(v.number()),
+    finalTotal:      v.optional(v.number()),
+    // ──────────────────
     status: v.string(),
     orderStatus: v.optional(v.string()),
     shippingAddress: v.optional(v.string()),
@@ -65,7 +72,6 @@ export const createOrder = mutation({
   },
 });
 
-// ✅ FIXED: saves timestamp for each status change
 export const updateOrderStatus = mutation({
   args: {
     orderId: v.string(),
@@ -82,7 +88,6 @@ export const updateOrderStatus = mutation({
     const updates: any = { status };
     if (orderStatus !== undefined) updates.orderStatus = orderStatus;
 
-    // ✅ Save accurate timestamps per status
     if (orderStatus === 'confirmed')        updates.confirmedAt       = now;
     if (orderStatus === 'shipped')          updates.shippedAt         = now;
     if (orderStatus === 'out_for_delivery') updates.outForDeliveryAt  = now;
@@ -122,7 +127,6 @@ export const updateOrderFields = mutation({
       Object.entries(updates).filter(([, v]) => v !== undefined)
     );
 
-    // ✅ Auto-save timestamps based on orderStatus changes
     if (filtered.orderStatus === 'confirmed')        filtered.confirmedAt      = now;
     if (filtered.orderStatus === 'shipped')          filtered.shippedAt        = now;
     if (filtered.orderStatus === 'out_for_delivery') filtered.outForDeliveryAt = now;

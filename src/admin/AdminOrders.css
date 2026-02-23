@@ -1433,3 +1433,139 @@
 }
 
 .flow-notice.purple i { color: #7c3aed; }
+
+/* ══════════════════════════════════════
+   ADD THESE TO THE BOTTOM OF AdminOrders.css
+══════════════════════════════════════ */
+
+/* ── Promo pill in modal header ── */
+.promo-admin-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: linear-gradient(135deg, #fdf2f8, #fce7f3);
+  border: 1.5px solid #f9a8d4;
+  color: #be185d;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 0.5px;
+}
+
+.promo-admin-pill i { font-size: 11px; }
+
+/* ── Promo card in order modal ── */
+.promo-admin-card {
+  background: linear-gradient(135deg, #fdf2f8, #fce7f3);
+  border: 1.5px solid #f9a8d4;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.promo-admin-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid #f9a8d4;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.promo-admin-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: linear-gradient(135deg, #ec4899, #f472b6);
+  color: white;
+  font-size: 14px;
+  font-weight: 800;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 1.5px;
+}
+
+.promo-admin-badge i { font-size: 12px; }
+
+.promo-admin-group {
+  font-size: 13px;
+  font-weight: 700;
+  color: #9d174d;
+  background: #fce7f3;
+  border: 1px solid #f9a8d4;
+  padding: 4px 12px;
+  border-radius: 20px;
+}
+
+.promo-admin-details {
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.promo-admin-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  padding: 6px 0;
+  border-bottom: 1px dashed #fce7f3;
+}
+
+.promo-admin-row:last-child { border-bottom: none; }
+.promo-admin-row span { color: #6b7280; font-weight: 500; }
+.promo-admin-row strong { color: #1a1a1a; font-weight: 700; }
+
+.promo-admin-row.discount strong {
+  color: #16a34a;
+  font-size: 16px;
+}
+
+.promo-admin-row.final {
+  background: white;
+  margin: 4px -4px 0;
+  padding: 10px 4px 6px;
+  border-radius: 8px;
+}
+
+.promo-admin-row.final strong {
+  color: #ec4899;
+  font-size: 17px;
+  font-weight: 800;
+}
+
+/* ── Promo discount row in order totals ── */
+.total-row.promo-discount-admin-row {
+  color: #16a34a;
+}
+
+.total-row.promo-discount-admin-row strong {
+  color: #16a34a;
+  font-size: 16px;
+}
+
+/* ── Promo savings note at bottom of totals ── */
+.promo-admin-savings-note {
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: #fdf2f8;
+  border: 1px solid #f9a8d4;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #9d174d;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.5;
+}
+
+.promo-admin-savings-note i {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: #ec4899;
+}
+
+.promo-admin-savings-note strong { color: #be185d; }

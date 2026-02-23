@@ -77,6 +77,13 @@ export default defineSchema({
     total: v.number(),
     subtotal: v.optional(v.number()),
     shippingFee: v.optional(v.number()),
+    // ── PROMO FIELDS ──────────────────────────────
+    promoCode:      v.optional(v.string()),   // e.g. "DKMERCH25"
+    promoName:      v.optional(v.string()),   // e.g. "BTS"
+    discountAmount: v.optional(v.number()),   // peso amount deducted e.g. ₱100
+    discountPercent: v.optional(v.number()),  // percentage e.g. 25
+    finalTotal:     v.optional(v.number()),   // total AFTER discount (what was charged to PayMongo)
+    // ─────────────────────────────────────────────
     status: v.string(),
     orderStatus: v.optional(v.string()),
     shippingAddress: v.optional(v.string()),
@@ -104,15 +111,15 @@ export default defineSchema({
   // ── PROMOS ───────────────────────────────────────
   promos: defineTable({
     code: v.string(),
-    name: v.string(),                        // ✅ Promo display name
-    discount: v.number(),                    // percentage (1–9999, stored as whole number e.g. 25 = 25%)
-    maxDiscount: v.number(),                 // max peso discount (e.g. 500)
-    type: v.string(),                        // "percentage"
+    name: v.string(),
+    discount: v.number(),
+    maxDiscount: v.number(),
+    type: v.string(),
     minOrder: v.optional(v.number()),
     maxUses: v.optional(v.number()),
     usedCount: v.number(),
-    startDate: v.optional(v.string()),       // ✅ ISO date string
-    endDate: v.optional(v.string()),         // ✅ ISO date string (was expiryDate)
+    startDate: v.optional(v.string()),
+    endDate: v.optional(v.string()),
     isActive: v.boolean(),
   }).index("by_code", ["code"]),
 

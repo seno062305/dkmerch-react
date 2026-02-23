@@ -44,6 +44,46 @@
   box-shadow: 0 4px 12px rgba(236, 72, 153, 0.4);
 }
 
+/* ── Group Tag (table cell) ── */
+.group-tag {
+  display: inline-block;
+  background: linear-gradient(135deg, #fdf2f8, #fce7f3);
+  color: #be185d;
+  border: 1px solid #f9a8d4;
+  border-radius: 20px;
+  padding: 3px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+/* ── Group Select Dropdown ── */
+.group-select {
+  padding: 10px 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  width: 100%;
+  box-sizing: border-box;
+  background-color: white;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 20px;
+  padding-right: 40px;
+}
+
+.group-select:focus {
+  outline: none;
+  border-color: #ec4899;
+  box-shadow: 0 0 0 3px rgba(236, 72, 153, 0.1);
+}
+
 /* ── DESKTOP TABLE ── */
 .promos-table-container {
   background: white;
@@ -110,6 +150,54 @@
   font-size: 15px;
 }
 
+/* Group chip badge in table */
+.group-chip {
+  display: inline-block;
+  background: linear-gradient(135deg, rgba(236,72,153,0.1), rgba(168,85,247,0.1));
+  color: #9333ea;
+  border: 1px solid rgba(168,85,247,0.3);
+  border-radius: 20px;
+  padding: 3px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Group select dropdown */
+.group-select {
+  padding: 10px 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  width: 100%;
+  box-sizing: border-box;
+  background-color: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  appearance: auto;
+}
+
+.group-select:focus {
+  outline: none;
+  border-color: #ec4899;
+  box-shadow: 0 0 0 3px rgba(236, 72, 153, 0.1);
+}
+
+.group-select.input-error {
+  border-color: #ef4444;
+}
+
+/* Empty cards msg */
+.empty-cards-msg {
+  text-align: center;
+  padding: 40px 20px;
+  color: #999;
+  background: white;
+  border-radius: 12px;
+  font-size: 15px;
+}
+
 /* Toggle Switch */
 .toggle-switch {
   position: relative;
@@ -127,10 +215,7 @@
 .toggle-slider {
   position: absolute;
   cursor: pointer;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  top: 0; left: 0; right: 0; bottom: 0;
   background-color: #ccc;
   transition: 0.3s;
   border-radius: 26px;
@@ -156,6 +241,27 @@
   transform: translateX(22px);
 }
 
+/* Status Badges */
+.status-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge-active   { background: #dcfce7; color: #166534; }
+.badge-inactive { background: #f3f4f6; color: #6b7280; }
+.badge-expired  { background: #fee2e2; color: #991b1b; }
+.badge-upcoming { background: #fef3c7; color: #92400e; }
+
 /* Action Buttons */
 .action-buttons {
   display: flex;
@@ -175,31 +281,11 @@
   transition: all 0.2s ease;
 }
 
-.edit-btn {
-  background-color: #f3f4f6;
-  color: #6b7280;
-}
-
-.edit-btn:hover {
-  background-color: #e5e7eb;
-  color: #374151;
-}
-
-.delete-btn {
-  background-color: #fef2f2;
-  color: #ef4444;
-}
-
-.delete-btn:hover {
-  background-color: #fee2e2;
-  color: #dc2626;
-}
-
-.edit-btn svg,
-.delete-btn svg {
-  width: 16px;
-  height: 16px;
-}
+.edit-btn { background-color: #f3f4f6; color: #6b7280; }
+.edit-btn:hover { background-color: #e5e7eb; color: #374151; }
+.delete-btn { background-color: #fef2f2; color: #ef4444; }
+.delete-btn:hover { background-color: #fee2e2; color: #dc2626; }
+.edit-btn svg, .delete-btn svg { width: 16px; height: 16px; }
 
 /* ── MOBILE CARD VIEW ── */
 .promo-cards-list {
@@ -241,11 +327,6 @@
   flex-shrink: 0;
 }
 
-.promo-card-toggle span {
-  font-size: 12px;
-  color: #6b7280;
-}
-
 .promo-card-body {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -269,9 +350,7 @@
   font-weight: 500;
 }
 
-.promo-card-period {
-  grid-column: 1 / -1;
-}
+.promo-card-period { grid-column: 1 / -1; }
 
 .promo-card-actions {
   display: flex;
@@ -284,10 +363,7 @@
 /* Modal */
 .modal-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  top: 0; left: 0; right: 0; bottom: 0;
   background-color: rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
@@ -295,6 +371,7 @@
   z-index: 1000;
   padding: 20px;
   box-sizing: border-box;
+  overflow-y: auto;
 }
 
 .modal-content {
@@ -312,21 +389,22 @@
   justify-content: space-between;
   align-items: center;
   padding: 24px 24px 20px;
-  border-bottom: 1px solid #e5e5e5;
+  background: linear-gradient(135deg, #9333ea, #ec4899);
+  border-radius: 16px 16px 0 0;
 }
 
 .modal-header h2 {
   font-size: 20px;
   font-weight: 600;
-  color: #1a1a1a;
+  color: white;
   margin: 0;
 }
 
 .close-btn {
-  background: none;
+  background: rgba(255,255,255,0.2);
   border: none;
-  font-size: 32px;
-  color: #999;
+  font-size: 24px;
+  color: white;
   cursor: pointer;
   width: 36px;
   height: 36px;
@@ -339,8 +417,7 @@
 }
 
 .close-btn:hover {
-  background-color: #f5f5f5;
-  color: #666;
+  background: rgba(255,255,255,0.3);
 }
 
 .modal-content form {
@@ -366,9 +443,12 @@
   margin-bottom: 8px;
 }
 
+.req { color: #ec4899; }
+
 .form-group input[type="text"],
 .form-group input[type="number"],
-.form-group input[type="date"] {
+.form-group input[type="date"],
+.group-select {
   padding: 10px 14px;
   border: 1px solid #d1d5db;
   border-radius: 8px;
@@ -379,10 +459,28 @@
   box-sizing: border-box;
 }
 
-.form-group input:focus {
+.form-group input:focus, .group-select:focus {
   outline: none;
   border-color: #ec4899;
   box-shadow: 0 0 0 3px rgba(236, 72, 153, 0.1);
+}
+
+.input-error {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1) !important;
+}
+
+.field-hint {
+  font-size: 11px;
+  color: #9ca3af;
+  margin-top: 4px;
+}
+
+.field-error {
+  font-size: 11px;
+  color: #ef4444;
+  margin-top: 4px;
+  font-weight: 500;
 }
 
 .checkbox-group {
@@ -409,6 +507,17 @@
   font-size: 14px;
 }
 
+.server-msg {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  margin-top: 12px;
+}
+
+.msg-success { background: #dcfce7; color: #166534; }
+.msg-error { background: #fee2e2; color: #991b1b; }
+
 .modal-actions {
   display: flex;
   gap: 12px;
@@ -418,8 +527,7 @@
   border-top: 1px solid #e5e5e5;
 }
 
-.cancel-btn,
-.submit-btn {
+.cancel-btn, .submit-btn {
   padding: 10px 20px;
   border-radius: 8px;
   font-size: 14px;
@@ -429,14 +537,8 @@
   border: none;
 }
 
-.cancel-btn {
-  background-color: #f3f4f6;
-  color: #6b7280;
-}
-
-.cancel-btn:hover {
-  background-color: #e5e7eb;
-}
+.cancel-btn { background-color: #f3f4f6; color: #6b7280; }
+.cancel-btn:hover { background-color: #e5e7eb; }
 
 .submit-btn {
   background: linear-gradient(135deg, #ec4899 0%, #f472b6 100%);
@@ -444,71 +546,36 @@
   box-shadow: 0 2px 8px rgba(236, 72, 153, 0.3);
 }
 
-.submit-btn:hover {
+.submit-btn:hover:not(:disabled) {
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(236, 72, 153, 0.4);
 }
 
+.submit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
 /* ══════════════════════════
    RESPONSIVE
 ══════════════════════════ */
-
 @media (max-width: 768px) {
-  .admin-promos {
-    padding: 16px;
-    background-color: #f5f5f5;
-    min-height: 100vh;
-  }
-
-  .promos-header {
-    flex-direction: column;
-    gap: 14px;
-    align-items: flex-start;
-    margin-bottom: 20px;
-  }
-
+  .admin-promos { padding: 16px; }
+  .promos-header { flex-direction: column; gap: 14px; align-items: flex-start; margin-bottom: 20px; }
   .promos-header h1 { font-size: 26px; }
-
-  .create-btn {
-    width: 100%;
-    text-align: center;
-  }
-
-  /* Hide table, show cards */
+  .create-btn { width: 100%; text-align: center; }
   .promos-table-container { display: none; }
   .promo-cards-list { display: flex; }
-
   .form-grid { grid-template-columns: 1fr; gap: 14px; }
 }
 
 @media (max-width: 480px) {
   .admin-promos { padding: 12px; }
-
   .promos-header h1 { font-size: 22px; }
-
   .modal-overlay { padding: 0; align-items: flex-end; }
-
-  .modal-content {
-    border-radius: 16px 16px 0 0;
-    max-height: 92vh;
-  }
-
-  .modal-header { padding: 16px 16px 14px; }
+  .modal-content { border-radius: 16px 16px 0 0; max-height: 92vh; }
+  .modal-header { padding: 16px 16px 14px; border-radius: 16px 16px 0 0; }
   .modal-header h2 { font-size: 17px; }
-
   .modal-content form { padding: 14px; }
-
-  .modal-actions {
-    flex-direction: column-reverse;
-    gap: 8px;
-  }
-
-  .cancel-btn,
-  .submit-btn {
-    width: 100%;
-    text-align: center;
-  }
-
+  .modal-actions { flex-direction: column-reverse; gap: 8px; }
+  .cancel-btn, .submit-btn { width: 100%; text-align: center; }
   .promo-card-body { grid-template-columns: 1fr; }
   .promo-card-period { grid-column: 1; }
 }
