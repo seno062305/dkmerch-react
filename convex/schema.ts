@@ -28,6 +28,7 @@ export default defineSchema({
     description: v.optional(v.string()),
     status: v.optional(v.string()),
     releaseDate: v.optional(v.string()),
+    releaseTime: v.optional(v.string()), // ✅ NEW: "HH:MM" format e.g. "01:00"
     kpopGroup: v.optional(v.string()),
     originalPrice: v.optional(v.number()),
     isSale: v.optional(v.boolean()),
@@ -115,10 +116,10 @@ export default defineSchema({
     minOrder: v.optional(v.number()),
     maxUses: v.optional(v.number()),
     usedCount: v.number(),
-    startDate: v.optional(v.string()),   // "YYYY-MM-DD"
-    startTime: v.optional(v.string()),   // "HH:MM" 24h e.g. "10:00"
-    endDate: v.optional(v.string()),     // "YYYY-MM-DD"
-    endTime: v.optional(v.string()),     // "HH:MM" 24h e.g. "17:00"
+    startDate: v.optional(v.string()),
+    startTime: v.optional(v.string()),
+    endDate: v.optional(v.string()),
+    endTime: v.optional(v.string()),
     isActive: v.boolean(),
   }).index("by_code", ["code"]),
 
@@ -153,4 +154,26 @@ export default defineSchema({
     approvedAt: v.optional(v.string()),
     rejectedAt: v.optional(v.string()),
   }).index("by_rider", ["riderId"]),
+
+  // ── PRE-ORDER REQUESTS (per user) ──────────────────────────────────────
+  // ✅ NEW TABLE: Ini-track dito ang pre-orders ng bawat user
+  preOrderRequests: defineTable({
+    userId: v.string(),
+    productId: v.string(),
+    userEmail: v.string(),
+    userName: v.string(),
+    productName: v.string(),
+    productImage: v.string(),
+    productPrice: v.number(),
+    releaseDate: v.string(),         // "YYYY-MM-DD"
+    releaseTime: v.string(),         // "HH:MM" 24hr e.g. "01:00" (PHT)
+    releaseTimestampMs: v.number(),  // ✅ UTC ms — server-side, hindi madadaya ng user device
+    isAvailable: v.boolean(),        // true kapag nag-release na
+    addedToCart: v.boolean(),        // true kapag na-add na sa cart ng user
+    notifiedAt: v.union(v.string(), v.null()), // ISO string ng oras na na-notify
+    preOrderedAt: v.string(),        // ISO string ng oras na nag-pre-order
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_product", ["userId", "productId"])
+    .index("by_product", ["productId"]),
 });

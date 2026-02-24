@@ -452,3 +452,89 @@ body.search-open { overflow: hidden; }
   .header-actions { gap: 0.3rem; }
   .header-action-item i { font-size: 1.2rem; }
 }
+
+/* ─────────────────────────────────────────────────────────────────
+   IDAGDAG LANG SA DULO NG IYONG EXISTING Header.css
+   Huwag palitan ang buong file — i-paste mo lang ito sa ibaba.
+───────────────────────────────────────────────────────────────── */
+
+/* ── Pre-Order dot indicator sa account button (sa tabi ng pangalan) ── */
+.preorder-dot-indicator {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  background: #fc1268;
+  border-radius: 50%;
+  border: 2px solid white;
+  box-shadow: 0 0 6px rgba(252, 18, 104, 0.7);
+  animation: dotPulse 1.4s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes dotPulse {
+  0%, 100% { box-shadow: 0 0 4px rgba(252, 18, 104, 0.5); transform: scale(1); }
+  50%       { box-shadow: 0 0 10px rgba(252, 18, 104, 0.9); transform: scale(1.2); }
+}
+
+/* ── My Pre-Orders dropdown item ── */
+.preorder-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1.5rem;
+  color: #333;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+  font-size: 0.95rem;
+  position: relative;
+}
+
+.preorder-dropdown-item i.fa-clock { width: 20px; text-align: center; font-size: 1.1rem; color: #7c3aed; }
+
+.preorder-dropdown-item:hover {
+  background: #f8f9fa;
+  color: #9c27b0;
+}
+
+/* Kapag may available na pre-order — highlight ang item */
+.preorder-dropdown-item.has-available {
+  background: linear-gradient(135deg, #fff0f9, #f5f0ff);
+  border-left: 3px solid #fc1268;
+}
+
+.preorder-dropdown-item.has-available:hover {
+  background: linear-gradient(135deg, #ffe4f1, #ede0ff);
+}
+
+/* ── "Available!" badge sa loob ng dropdown item ── */
+.preorder-available-badge {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fc1268;
+  background: rgba(252, 18, 104, 0.1);
+  padding: 3px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(252, 18, 104, 0.3);
+  animation: availablePulse 1.5s ease-in-out infinite;
+  white-space: nowrap;
+}
+
+.preorder-available-badge i {
+  font-size: 7px;
+  color: #fc1268;
+}
+
+@keyframes availablePulse {
+  0%, 100% { background: rgba(252, 18, 104, 0.08); }
+  50%       { background: rgba(252, 18, 104, 0.18); }
+}
+

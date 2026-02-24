@@ -31,6 +31,7 @@ export const addProduct = mutation({
     description: v.optional(v.string()),
     status: v.optional(v.string()),
     releaseDate: v.optional(v.string()),
+    releaseTime: v.optional(v.string()), // ✅ NEW
     kpopGroup: v.optional(v.string()),
     originalPrice: v.optional(v.number()),
     isSale: v.optional(v.boolean()),
@@ -53,6 +54,7 @@ export const updateProduct = mutation({
     description: v.optional(v.string()),
     status: v.optional(v.string()),
     releaseDate: v.optional(v.string()),
+    releaseTime: v.optional(v.string()), // ✅ NEW
     kpopGroup: v.optional(v.string()),
     originalPrice: v.optional(v.number()),
     isSale: v.optional(v.boolean()),

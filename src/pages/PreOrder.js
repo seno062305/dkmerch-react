@@ -1,33 +1,51 @@
+// src/pages/PreOrder.js
 import React, { useState } from 'react';
 import './PreOrder.css';
 import { usePreOrderProducts } from '../utils/productStorage';
-import { useAddToCart } from '../context/cartUtils';
 import { useToggleWishlist } from '../context/wishlistUtils';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
-import ProductModal from '../components/ProductModal';
+import { useMutation, useQuery } from 'convex/react';
+import { api } from '../../convex/_generated/api';
 import LoginModal from '../components/LoginModal';
 
-const formatReleaseDate = (dateStr) => {
+// ── Helpers ────────────────────────────────────────────────────────────────
+const fmt12 = (timeStr) => {
+  if (!timeStr) return null;
+  const [h, m] = timeStr.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 || 12;
+  return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+};
+
+const fmtDate = (dateStr) => {
   if (!dateStr) return null;
-  const date = new Date(dateStr);
+  const date = new Date(dateStr + 'T00:00:00');
   return date.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' });
 };
 
-const PreOrder = () => {
-  const [selectedGroup, setSelectedGroup]     = useState('all');
-  const [selectedProduct, setSelectedProduct] = useState(null);
-  const [showLoginModal, setShowLoginModal]   = useState(false);
+const fmtDateTime = (dateStr, timeStr) => {
+  if (!dateStr) return null;
+  const datePart = fmtDate(dateStr);
+  const timePart = fmt12(timeStr);
+  if (datePart && timePart) return `${datePart} at ${timePart}`;
+  return datePart;
+};
 
-  const { isAuthenticated }  = useAuth();
+// ── Main Component ─────────────────────────────────────────────────────────
+const PreOrder = () => {
+  const [selectedGroup, setSelectedGroup] = useState('all');
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [loadingId, setLoadingId] = useState(null);
+
+  const { isAuthenticated, user } = useAuth();
   const { showNotification } = useNotification();
+  const toggleWishlist = useToggleWishlist();
+  const placePreOrder = useMutation(api.preOrderRequests.placePreOrder);
 
   const preOrderProducts = usePreOrderProducts();
-  const addToCart        = useAddToCart();
-  const toggleWishlist   = useToggleWishlist();
-
   const groups = ['all', ...new Set(preOrderProducts.map(p => p.kpopGroup).filter(Boolean))];
-
   const filteredProducts = selectedGroup === 'all'
     ? preOrderProducts
     : preOrderProducts.filter(p => p.kpopGroup === selectedGroup);
@@ -37,13 +55,27 @@ const PreOrder = () => {
     setShowLoginModal(true);
   };
 
-  const handleAddToCart = async (product) => {
+  // ✅ Pre-order → goes to preOrderRequests table, NOT cart
+  const handlePreOrder = async (product) => {
     if (!isAuthenticated) { handleRequireLogin(); return; }
+    setLoadingId(product._id);
     try {
-      await addToCart(product);
-      showNotification(`${product.name} added to cart!`, 'success');
+      const result = await placePreOrder({
+        userId: user._id,
+        productId: product._id,
+        userEmail: user.email,
+        userName: user.name,
+      });
+      if (result.success) {
+        showNotification(`${product.name} pre-ordered! You'll be emailed when it's available.`, 'success');
+        setSelectedProduct(null);
+      } else {
+        showNotification(result.message || 'Pre-order failed.', 'error');
+      }
     } catch {
-      showNotification('Failed to add to cart', 'error');
+      showNotification('Pre-order failed. Please try again.', 'error');
+    } finally {
+      setLoadingId(null);
     }
   };
 
@@ -91,70 +123,203 @@ const PreOrder = () => {
         ) : (
           <div className="preorder-grid">
             {filteredProducts.map(product => (
-              <div
+              <PreOrderCard
                 key={product._id || product.id}
-                className="preorder-card"
-                onClick={() => setSelectedProduct(product)}
-              >
-                <div className="preorder-badge">PRE-ORDER</div>
-
-                <div className="preorder-image">
-                  <img src={product.image} alt={product.name} />
-                </div>
-
-                <div className="preorder-info">
-                  <div className="product-group">{product.kpopGroup}</div>
-                  <h3 className="product-name">{product.name}</h3>
-
-                  {/* Release date — shown prominently */}
-                  {product.releaseDate && (
-                    <div className="release-date-badge">
-                      <i className="fas fa-calendar-alt"></i>
-                      Expected: {formatReleaseDate(product.releaseDate)}
-                    </div>
-                  )}
-
-                  <div className="product-price">
-                    <span className="current-price">₱{product.price?.toLocaleString()}</span>
-                    {product.isSale && product.originalPrice > product.price && (
-                      <>
-                        <span className="original-price">₱{product.originalPrice?.toLocaleString()}</span>
-                        <span className="discount">
-                          {Math.round((1 - product.price / product.originalPrice) * 100)}% OFF
-                        </span>
-                      </>
-                    )}
-                  </div>
-
-                  <div className="stock-info">
-                    <i className="fas fa-box"></i>
-                    <span>{product.stock > 0 ? `${product.stock} slots remaining` : 'Out of stock'}</span>
-                  </div>
-
-                  <button
-                    className="btn btn-primary"
-                    onClick={(e) => { e.stopPropagation(); setSelectedProduct(product); }}
-                  >
-                    <i className="fas fa-shopping-cart"></i> Pre-Order Now
-                  </button>
-                </div>
-              </div>
+                product={product}
+                userId={user?._id}
+                isAuthenticated={isAuthenticated}
+                loadingId={loadingId}
+                onPreOrder={handlePreOrder}
+                onOpenModal={() => setSelectedProduct(product)}
+                fmtDateTime={fmtDateTime}
+                fmtDate={fmtDate}
+                fmt12={fmt12}
+              />
             ))}
           </div>
         )}
       </section>
 
+      {/* ── Inline Pre-Order Modal ── */}
       {selectedProduct && (
-        <ProductModal
+        <PreOrderModal
           product={selectedProduct}
+          userId={user?._id}
+          isAuthenticated={isAuthenticated}
+          loadingId={loadingId}
           onClose={() => setSelectedProduct(null)}
+          onPreOrder={handlePreOrder}
           onRequireLogin={handleRequireLogin}
-          onAddToCart={handleAddToCart}
           onAddToWishlist={handleAddToWishlist}
+          fmtDateTime={fmtDateTime}
         />
       )}
+
       {showLoginModal && <LoginModal onClose={() => setShowLoginModal(false)} />}
     </main>
+  );
+};
+
+// ── Card ───────────────────────────────────────────────────────────────────
+const PreOrderCard = ({
+  product, userId, isAuthenticated, loadingId,
+  onPreOrder, onOpenModal, fmtDateTime, fmtDate, fmt12
+}) => {
+  // ✅ FIX: Pass releaseTime so same product with new time = new pre-order allowed
+  const isPreOrdered = useQuery(
+    api.preOrderRequests.isProductPreOrdered,
+    isAuthenticated && userId
+      ? { userId, productId: product._id, releaseTime: product.releaseTime || '00:00' }
+      : 'skip'
+  );
+
+  const releaseLabel = fmtDateTime(product.releaseDate, product.releaseTime);
+
+  return (
+    <div className="preorder-card" onClick={onOpenModal}>
+      <div className="preorder-badge">PRE-ORDER</div>
+
+      <div className="preorder-image">
+        <img src={product.image} alt={product.name} />
+      </div>
+
+      <div className="preorder-info">
+        <div className="product-group">{product.kpopGroup}</div>
+        <h3 className="product-name">{product.name}</h3>
+
+        {/* ✅ Release date + time on card */}
+        {releaseLabel && (
+          <div className="release-date-badge">
+            <i className="fas fa-calendar-alt"></i>
+            {releaseLabel}
+          </div>
+        )}
+
+        <div className="product-price">
+          <span className="current-price">₱{product.price?.toLocaleString()}</span>
+          {product.isSale && product.originalPrice > product.price && (
+            <>
+              <span className="original-price">₱{product.originalPrice?.toLocaleString()}</span>
+              <span className="discount">
+                {Math.round((1 - product.price / product.originalPrice) * 100)}% OFF
+              </span>
+            </>
+          )}
+        </div>
+
+        <div className="stock-info">
+          <i className="fas fa-box"></i>
+          <span>{product.stock > 0 ? `${product.stock} slots remaining` : 'Out of stock'}</span>
+        </div>
+
+        <button
+          className={`btn ${isPreOrdered ? 'btn-preordered' : 'btn-primary'}`}
+          disabled={isPreOrdered || loadingId === product._id}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!isPreOrdered) onPreOrder(product);
+          }}
+        >
+          {isPreOrdered
+            ? <><i className="fas fa-check"></i> Pre-Ordered</>
+            : loadingId === product._id
+              ? <><i className="fas fa-spinner fa-spin"></i> Processing...</>
+              : <><i className="fas fa-clock"></i> Pre-Order Now</>
+          }
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ── Modal ──────────────────────────────────────────────────────────────────
+const PreOrderModal = ({
+  product, userId, isAuthenticated, loadingId,
+  onClose, onPreOrder, onRequireLogin, onAddToWishlist, fmtDateTime
+}) => {
+  // ✅ FIX: Pass releaseTime here too
+  const isPreOrdered = useQuery(
+    api.preOrderRequests.isProductPreOrdered,
+    isAuthenticated && userId
+      ? { userId, productId: product._id, releaseTime: product.releaseTime || '00:00' }
+      : 'skip'
+  );
+
+  const releaseLabel = fmtDateTime(product.releaseDate, product.releaseTime);
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="preorder-modal-content" onClick={e => e.stopPropagation()}>
+        <button className="preorder-modal-close" onClick={onClose}>
+          <i className="fas fa-times"></i>
+        </button>
+
+        <div className="preorder-modal-image">
+          <img src={product.image} alt={product.name} />
+        </div>
+
+        <div className="preorder-modal-info">
+          <div className="product-group">{product.kpopGroup}</div>
+          <h2 className="preorder-modal-name">{product.name}</h2>
+
+          {releaseLabel && (
+            <div className="preorder-modal-release">
+              <i className="fas fa-calendar-alt"></i>
+              <span><strong>Release:</strong> {releaseLabel}</span>
+            </div>
+          )}
+
+          <div className="preorder-modal-price">₱{product.price?.toLocaleString()}</div>
+
+          {product.description && (
+            <p className="preorder-modal-desc">{product.description}</p>
+          )}
+
+          <div className="preorder-modal-stock">
+            <i className="fas fa-box"></i>
+            <span>{product.stock > 0 ? `${product.stock} slots remaining` : 'Out of stock'}</span>
+          </div>
+
+          <div className="preorder-modal-actions">
+            <button
+              className={`btn ${isPreOrdered ? 'btn-preordered' : 'btn-primary'}`}
+              style={{ width: '100%' }}
+              disabled={isPreOrdered || loadingId === product._id}
+              onClick={() => {
+                if (!isAuthenticated) { onRequireLogin(); return; }
+                if (!isPreOrdered) onPreOrder(product);
+              }}
+            >
+              {isPreOrdered
+                ? <><i className="fas fa-check"></i> Pre-Ordered — We'll notify you!</>
+                : loadingId === product._id
+                  ? <><i className="fas fa-spinner fa-spin"></i> Processing...</>
+                  : <><i className="fas fa-clock"></i> Pre-Order Now</>
+              }
+            </button>
+
+            <button
+              className="btn btn-outline"
+              style={{ width: '100%' }}
+              onClick={() => {
+                if (!isAuthenticated) { onRequireLogin(); return; }
+                onAddToWishlist(product);
+              }}
+            >
+              <i className="fas fa-star"></i> Add to Wishlist
+            </button>
+          </div>
+
+          {isPreOrdered && (
+            <div className="preorder-notice">
+              <i className="fas fa-bell"></i>
+              You'll receive an email when this item is ready to purchase.{' '}
+              <a href="/my-preorders">View My Pre-Orders →</a>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 };
 

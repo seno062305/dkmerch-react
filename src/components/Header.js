@@ -23,6 +23,12 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
   const allProductsRaw = useQuery(api.products.getAllProducts);
   const allProducts = React.useMemo(() => allProductsRaw || [], [allProductsRaw]);
 
+  // ✅ NEW: Check kung may available na pre-order si user (para sa badge)
+  const hasAvailable = useQuery(
+    api.preOrderRequests.hasAvailablePreOrder,
+    isAuthenticated && user?._id ? { userId: user._id } : 'skip'
+  );
+
   useEffect(() => {
     if (!location.hash) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -211,6 +217,8 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
                 <button className="account-btn" onClick={() => setShowAccountDropdown(!showAccountDropdown)}>
                   <i className="fas fa-user-circle"></i>
                   <span>{user?.name || 'Account'}</span>
+                  {/* ✅ NEW: Dot indicator kapag may available na pre-order */}
+                  {hasAvailable && <span className="preorder-dot-indicator" title="You have items ready to add to cart!"></span>}
                   <i className={`fas fa-chevron-down dropdown-arrow ${showAccountDropdown ? 'rotate' : ''}`}></i>
                 </button>
                 {showAccountDropdown && (
@@ -222,7 +230,22 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
                         <div className="user-email">{user?.email}</div>
                       </div>
                     </div>
-                    {/* ✅ Settings and Logout lang */}
+
+                    {/* ✅ NEW: My Pre-Orders link — above Settings */}
+                    <Link
+                      to="/my-preorders"
+                      className={`dropdown-item preorder-dropdown-item ${hasAvailable ? 'has-available' : ''}`}
+                      onClick={() => setShowAccountDropdown(false)}
+                    >
+                      <i className="fas fa-clock"></i>
+                      My Pre-Orders
+                      {hasAvailable && (
+                        <span className="preorder-available-badge">
+                          <i className="fas fa-circle"></i> Available!
+                        </span>
+                      )}
+                    </Link>
+
                     <Link to="/settings" className="dropdown-item" onClick={() => setShowAccountDropdown(false)}>
                       <i className="fas fa-cog"></i> Settings
                     </Link>

@@ -15,10 +15,10 @@ const emptyForm = {
   isSale: false,
   isPreOrder: false,
   releaseDate: '',
+  releaseTime: '',  // ✅ NEW: e.g. "01:00"
 };
 
 const AdminProducts = () => {
-  // Fetch both regular + preorder products for the catalog
   const regularProducts   = useProducts() || [];
   const preOrderProducts  = usePreOrderProducts() || [];
   const products          = [...regularProducts, ...preOrderProducts];
@@ -38,8 +38,7 @@ const AdminProducts = () => {
     setForm(prev => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value,
-      // Clear releaseDate if Pre-Order is unchecked
-      ...(name === 'isPreOrder' && !checked ? { releaseDate: '' } : {}),
+      ...(name === 'isPreOrder' && !checked ? { releaseDate: '', releaseTime: '' } : {}),
     }));
   };
 
@@ -51,13 +50,16 @@ const AdminProducts = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     if (!form.name || !form.price || !form.image) {
       alert('Name, Price, and Image are required');
       return;
     }
     if (form.isPreOrder && !form.releaseDate) {
       alert('Please set a Release Date for Pre-Order items');
+      return;
+    }
+    if (form.isPreOrder && !form.releaseTime) {
+      alert('Please set a Release Time for Pre-Order items');
       return;
     }
 
@@ -73,6 +75,7 @@ const AdminProducts = () => {
       isSale:        Boolean(form.isSale),
       isPreOrder:    Boolean(form.isPreOrder),
       releaseDate:   form.isPreOrder ? form.releaseDate : '',
+      releaseTime:   form.isPreOrder ? form.releaseTime : '',  // ✅ NEW
       status:        form.isPreOrder ? 'preorder' : form.isSale ? 'sale' : 'available',
     };
 
@@ -82,7 +85,6 @@ const AdminProducts = () => {
     } else {
       await addProduct(productData);
     }
-
     setForm(emptyForm);
   };
 
@@ -99,6 +101,7 @@ const AdminProducts = () => {
       isSale:        product.isSale || false,
       isPreOrder:    product.isPreOrder || false,
       releaseDate:   product.releaseDate || '',
+      releaseTime:   product.releaseTime || '',  // ✅ NEW
     });
     setEditingId(product._id);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -127,14 +130,16 @@ const AdminProducts = () => {
   const onSaleCount    = products.filter(p => p.isSale).length;
   const preOrderCount  = products.filter(p => p.isPreOrder).length;
 
-  // Format release date for display
-  const formatReleaseDate = (dateStr) => {
+  const formatReleaseDateTime = (dateStr, timeStr) => {
     if (!dateStr) return null;
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' });
+    const time = timeStr || '00:00';
+    const date = new Date(`${dateStr}T${time}:00`);
+    return date.toLocaleString('en-PH', {
+      year: 'numeric', month: 'long', day: 'numeric',
+      hour: 'numeric', minute: '2-digit', hour12: true,
+    });
   };
 
-  // Today's date as min value for date picker
   const today = new Date().toISOString().split('T')[0];
 
   return (
@@ -218,7 +223,6 @@ const AdminProducts = () => {
               <input type="number" name="stock" placeholder="0" value={form.stock} onChange={handleChange} required />
             </div>
 
-            {/* IMAGE FIELD */}
             <div className="form-group full-width">
               <label><i className="fas fa-image"></i> Product Image *</label>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -239,7 +243,7 @@ const AdminProducts = () => {
                 </button>
               </div>
               <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileSelect} />
-              <small className="helper-text">Click Browse to pick from your images folder, or type the path manually (e.g. /images/product.jpg)</small>
+              <small className="helper-text">Click Browse to pick from your images folder, or type the path manually.</small>
             </div>
 
             {form.image && (
@@ -260,10 +264,8 @@ const AdminProducts = () => {
                 rows="4"
                 style={{ padding: '12px 16px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '15px', fontFamily: 'inherit', resize: 'vertical', transition: 'all 0.3s ease' }}
               />
-              <small className="helper-text">Describe the product features and details</small>
             </div>
 
-            {/* CHECKBOXES */}
             <div className="form-group full-width">
               <div className="checkbox-group">
                 <label className="checkbox-label">
@@ -279,22 +281,47 @@ const AdminProducts = () => {
               </div>
             </div>
 
-            {/* RELEASE DATE — only shows when Pre-Order is checked */}
+            {/* ✅ UPDATED: Release Date AND Time — kapag Pre-Order checked */}
             {form.isPreOrder && (
-              <div className="form-group full-width release-date-field">
-                <label><i className="fas fa-calendar-alt"></i> Release Date *</label>
-                <input
-                  type="date"
-                  name="releaseDate"
-                  value={form.releaseDate}
-                  onChange={handleChange}
-                  min={today}
-                  required={form.isPreOrder}
-                />
-                <small className="helper-text">
-                  <i className="fas fa-info-circle"></i> This item will appear in Pre-Order only — not in Collections — until you uncheck Pre-Order.
-                </small>
-              </div>
+              <>
+                <div className="form-group release-date-field">
+                  <label><i className="fas fa-calendar-alt"></i> Release Date *</label>
+                  <input
+                    type="date"
+                    name="releaseDate"
+                    value={form.releaseDate}
+                    onChange={handleChange}
+                    min={today}
+                    required={form.isPreOrder}
+                  />
+                </div>
+
+                <div className="form-group release-time-field">
+                  <label><i className="fas fa-clock"></i> Release Time *</label>
+                  <input
+                    type="time"
+                    name="releaseTime"
+                    value={form.releaseTime}
+                    onChange={handleChange}
+                    required={form.isPreOrder}
+                  />
+                  <small className="helper-text">
+                    <i className="fas fa-info-circle"></i> e.g. 01:00 AM — Users will be emailed at exactly this time.
+                  </small>
+                </div>
+
+                {form.releaseDate && form.releaseTime && (
+                  <div className="form-group full-width">
+                    <div className="release-preview">
+                      <i className="fas fa-bell"></i>
+                      <span>
+                        Users will be notified on{' '}
+                        <strong>{formatReleaseDateTime(form.releaseDate, form.releaseTime)}</strong>
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -307,6 +334,7 @@ const AdminProducts = () => {
         </form>
       </div>
 
+      {/* Product List */}
       <div className="admin-product-list">
         <div className="list-header">
           <h2><i className="fas fa-list"></i> Product Catalog ({filteredProducts.length})</h2>
@@ -352,11 +380,10 @@ const AdminProducts = () => {
                     <span className="group"><i className="fas fa-users"></i> {product.kpopGroup}</span>
                     <span className="stock"><i className="fas fa-box"></i> Stock: {product.stock}</span>
                   </div>
-                  {/* Show release date if pre-order */}
                   {product.isPreOrder && product.releaseDate && (
                     <div className="release-date-info">
                       <i className="fas fa-calendar-alt"></i>
-                      Release: {formatReleaseDate(product.releaseDate)}
+                      Release: {formatReleaseDateTime(product.releaseDate, product.releaseTime)}
                     </div>
                   )}
                   <div className="product-pricing">

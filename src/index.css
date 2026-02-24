@@ -130,7 +130,175 @@ button {
   padding: 20px;
 }
 
-/* Responsive */
+.modal-content {
+  background-color: white;
+  border-radius: var(--border-radius);
+  width: 100%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  animation: modalFadeIn 0.3s ease;
+}
+
+@keyframes modalFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-50px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.modal-header {
+  padding: 20px;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-title {
+  font-size: 24px;
+  color: var(--dark-color);
+  margin: 0;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 28px;
+  color: var(--gray-color);
+  cursor: pointer;
+  transition: var(--transition);
+  line-height: 1;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-close:hover {
+  color: var(--dark-color);
+  transform: scale(1.1);
+}
+
+/* ═══════════════════════════════════════════
+   STICKY FOOTER FIX
+   ═══════════════════════════════════════════ */
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.App {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.home-page {
+  flex: 1;
+}
+
+footer {
+  flex-shrink: 0;
+  margin-top: auto;
+}
+
+/* ═══════════════════════════════════════════
+   END OF FOOTER FIX
+   ═══════════════════════════════════════════ */
+
+/* Notification styles */
+.notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: var(--dark-color);
+  color: white;
+  padding: 15px 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transform: translateX(120%);
+  transition: transform 0.3s ease;
+}
+
+.notification.show {
+  transform: translateX(0);
+}
+
+.notification i {
+  color: var(--success-color);
+  font-size: 20px;
+}
+
+.notification span {
+  font-weight: 600;
+}
+
+/* ✅ UNIFIED WHITE PAGE HEADER — applies to all main pages */
+.preorder-main .page-header,
+.trackorder-main .page-header,
+.wishlist-main .page-header,
+.collections-main .page-header,
+.help-main .page-header,
+.mypreorders-main .page-header {
+  background: #f8f6f6 !important;
+  background-image: none !important;
+  border-bottom: 1px solid #e0e0e0;
+  padding: 50px 0;
+  margin-bottom: 0;
+}
+
+.preorder-main .page-title,
+.trackorder-main .page-title,
+.wishlist-main .page-title,
+.collections-main .page-title,
+.help-main .page-title,
+.mypreorders-main .page-title {
+  color: var(--dark-color) !important;
+  -webkit-text-fill-color: var(--dark-color) !important;
+  text-shadow: none !important;
+  background: none !important;
+  font-size: 32px !important;
+}
+
+.preorder-main .page-description,
+.trackorder-main .page-description,
+.wishlist-main .page-description,
+.collections-main .page-description,
+.help-main .page-description,
+.mypreorders-main .page-description {
+  color: var(--gray-color) !important;
+  opacity: 1 !important;
+  font-size: 15px !important;
+}
+
+@media (max-width: 576px) {
+  .notification {
+    top: 10px;
+    right: 10px;
+    left: 10px;
+    padding: 12px 15px;
+  }
+}
+
 @media (max-width: 992px) {
   .container { padding: 0 15px; }
   .page-title { font-size: 36px; }
@@ -146,39 +314,3 @@ button {
   .container { padding: 0 10px; }
   .page-title { font-size: 28px; }
 }
-
-/* ✅ UNIFIED WHITE PAGE HEADER — applies to all main pages */
-.preorder-main .page-header,
-.trackorder-main .page-header,
-.wishlist-main .page-header,
-.collections-main .page-header,
-.help-main .page-header {
-  background: #f8f6f6 !important;
-  background-image: none !important;
-  border-bottom: 1px solid #e0e0e0;
-  padding: 50px 0;
-  margin-bottom: 0;
-}
-
-.preorder-main .page-title,
-.trackorder-main .page-title,
-.wishlist-main .page-title,
-.collections-main .page-title,
-.help-main .page-title {
-  color: var(--dark-color) !important;
-  -webkit-text-fill-color: var(--dark-color) !important;
-  text-shadow: none !important;
-  background: none !important;
-  font-size: 32px !important;
-}
-
-.preorder-main .page-description,
-.trackorder-main .page-description,
-.wishlist-main .page-description,
-.collections-main .page-description,
-.help-main .page-description {
-  color: var(--gray-color) !important;
-  opacity: 1 !important;
-  font-size: 15px !important;
-}
-

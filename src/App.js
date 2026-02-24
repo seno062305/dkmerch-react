@@ -14,7 +14,8 @@ import PreOrder from './pages/PreOrder';
 import TrackOrder from './pages/TrackOrder';
 import Help from './pages/Help';
 import Settings from './pages/Settings';
-import PromoRedirect from './pages/PromoRedirect'; // ✅ NEW
+import PromoRedirect from './pages/PromoRedirect';
+import MyPreOrders from './pages/MyPreOrders'; // ✅ NEW
 
 import LoginModal from './components/LoginModal';
 import CartModal from './components/CartModal';
@@ -43,6 +44,13 @@ const RiderRoute = ({ children }) => {
   return children;
 };
 
+// ✅ NEW: Protected route para sa logged-in users lang
+const ProtectedRoute = ({ children }) => {
+  const { isAuthenticated } = useAuth();
+  if (!isAuthenticated) return <Navigate to="/" replace />;
+  return children;
+};
+
 function AppContent() {
   const location = useLocation();
   const { role } = useAuth();
@@ -67,7 +75,7 @@ function AppContent() {
 
   const isAdminRoute = location.pathname.startsWith('/admin');
   const isRiderRoute = location.pathname.startsWith('/rider');
-  const isPromoRoute = location.pathname.startsWith('/promo'); // ✅ NEW
+  const isPromoRoute = location.pathname.startsWith('/promo');
   const hideHeaderFooter = isAdminRoute || isRiderRoute || isPromoRoute;
 
   const handleOpenProductModal = (product) => {
@@ -96,9 +104,14 @@ function AppContent() {
         <Route path="/settings" element={<Settings />} />
         <Route path="/my-orders" element={<Navigate to="/track-order" replace />} />
         <Route path="/order-success" element={<OrderSuccess />} />
-
-        {/* ✅ Promo redirect page — checks expiry before showing site */}
         <Route path="/promo/:code" element={<PromoRedirect />} />
+
+        {/* ✅ NEW: My Pre-Orders page — protected, login required */}
+        <Route path="/my-preorders" element={
+          <ProtectedRoute>
+            <MyPreOrders />
+          </ProtectedRoute>
+        } />
 
         <Route path="/rider" element={
           <RiderRoute>

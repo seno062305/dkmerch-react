@@ -9,10 +9,12 @@
  */
 
 import type * as cart from "../cart.js";
+import type * as crons from "../crons.js";
 import type * as init from "../init.js";
 import type * as orders from "../orders.js";
 import type * as payments from "../payments.js";
 import type * as pickupRequests from "../pickupRequests.js";
+import type * as preOrderRequests from "../preOrderRequests.js";
 import type * as products from "../products.js";
 import type * as promos from "../promos.js";
 import type * as riders from "../riders.js";
@@ -28,10 +30,12 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   cart: typeof cart;
+  crons: typeof crons;
   init: typeof init;
   orders: typeof orders;
   payments: typeof payments;
   pickupRequests: typeof pickupRequests;
+  preOrderRequests: typeof preOrderRequests;
   products: typeof products;
   promos: typeof promos;
   riders: typeof riders;
