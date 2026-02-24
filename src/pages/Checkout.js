@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { useProducts, usePreOrderProducts, useUpdateProduct } from '../utils/productStorage';
@@ -9,7 +9,6 @@ import { useMutation, useQuery, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import './Checkout.css';
 
-// Shipping: ₱10 base + ₱10 per pc, FREE if 10+ pcs
 const calcShipping = (totalPcs) => {
   if (totalPcs === 0) return 0;
   if (totalPcs >= 10) return 0;
@@ -17,9 +16,10 @@ const calcShipping = (totalPcs) => {
 };
 
 const Checkout = () => {
-  const navigate = useNavigate();
+  const navigate  = useNavigate();
+  const location  = useLocation();
   const { user, isAuthenticated } = useAuth();
-  const { showNotification } = useNotification();
+  const { showNotification }      = useNotification();
 
   const regularProducts  = useProducts() || [];
   const preOrderProducts = usePreOrderProducts() || [];
@@ -30,7 +30,6 @@ const Checkout = () => {
   const clearCart     = useClearCart();
   const updateProduct = useUpdateProduct();
 
-  // Convex hooks
   const savedProfile = useQuery(
     api.users.getProfile,
     user?._id || user?.id ? { userId: user?._id || user?.id } : 'skip'
@@ -39,26 +38,18 @@ const Checkout = () => {
   const sendOrderConfirmation = useAction(api.sendEmail.sendOrderConfirmation);
   const createPaymentLink     = useAction(api.payments.createPaymentLink);
 
-  // ── Fetch all promos for validation ──────────────────────────────
-  const allPromos = useQuery(api.promos.getAllPromos) ?? [];
-
   const [loading, setLoading]                   = useState(false);
   const [isEditingContact, setIsEditingContact] = useState(false);
   const [isEditingAddress, setIsEditingAddress] = useState(false);
   const [errors, setErrors]                     = useState({ phone: '', zipCode: '' });
 
-  // ── Promo state ───────────────────────────────────────────────────
-  const [promoInput, setPromoInput]     = useState('');
-  const [promoError, setPromoError]     = useState('');
-  const [appliedPromo, setAppliedPromo] = useState(null);
-  // appliedPromo = { code, name, discount, maxDiscount, discountAmount }
+  // Promo summary from cart (via nav state) — read-only, no input here
+  const cartPromo = location.state?.appliedPromo || null;
 
   const [formData, setFormData] = useState({
     fullName: '', email: '', phone: '',
-    address: '', city: '', zipCode: '',
-    notes: ''
+    address: '', city: '', zipCode: '', notes: ''
   });
-
   const [savedContact, setSavedContact] = useState({ fullName: '', email: '', phone: '' });
   const [savedAddress, setSavedAddress] = useState({ address: '', city: '', zipCode: '' });
 
@@ -68,7 +59,6 @@ const Checkout = () => {
       navigate('/');
       return;
     }
-
     const profile = savedProfile;
     const init = {
       fullName: profile?.fullName || user?.name  || '',
@@ -79,15 +69,11 @@ const Checkout = () => {
       zipCode:  profile?.zipCode  || '',
       notes:    ''
     };
-
     setFormData(init);
     setSavedContact({ fullName: init.fullName, email: init.email, phone: init.phone });
     setSavedAddress({ address: init.address, city: init.city, zipCode: init.zipCode });
-
-    const contactMissing = !init.fullName || !init.email || !init.phone;
-    const addressMissing = !init.address  || !init.city  || !init.zipCode;
-    setIsEditingContact(contactMissing);
-    setIsEditingAddress(addressMissing);
+    setIsEditingContact(!init.fullName || !init.email || !init.phone);
+    setIsEditingAddress(!init.address  || !init.city  || !init.zipCode);
   }, [isAuthenticated, navigate, showNotification, user, savedProfile]);
 
   useEffect(() => {
@@ -97,53 +83,38 @@ const Checkout = () => {
     }
   }, [cartItems.length, products.length]);
 
-  const getProductById    = (id) => products.find(p => p._id === id || p.id === id);
-  const getQty            = (item) => item.qty ?? item.quantity ?? 1;
-  const getTotalPcs       = () => cartItems.reduce((sum, item) => sum + getQty(item), 0);
+  // ── Helpers ──────────────────────────────────────────────────────
+  const getProductById = (id) => products.find(p => p._id === id || p.id === id);
+  const getQty         = (item) => item.qty ?? item.quantity ?? 1;
+  const getTotalPcs    = () => cartItems.reduce((sum, item) => sum + getQty(item), 0);
+
+  // Use saved finalPrice (discounted) if available, else original product price
+  const getEffectivePrice = (item, product) => {
+    if (item.finalPrice !== undefined && item.finalPrice !== null) return item.finalPrice;
+    return product?.price ?? 0;
+  };
+
+  // Subtotal = sum of effective (already-discounted) prices
   const calculateSubtotal = () =>
     cartItems.reduce((total, item) => {
       const product = getProductById(item.productId || item.id);
-      return total + (product ? product.price * getQty(item) : 0);
+      return total + getEffectivePrice(item, product) * getQty(item);
     }, 0);
 
-  const shippingFee = calcShipping(getTotalPcs());
+  // Total peso saved = original price - effective price, across all promo items
+  const calculateTotalDiscount = () =>
+    cartItems.reduce((total, item) => {
+      if (!item.promoCode) return total;
+      const product = getProductById(item.productId || item.id);
+      const originalPrice = product?.price ?? item.price ?? 0;
+      const finalPrice    = item.finalPrice ?? originalPrice;
+      return total + (originalPrice - finalPrice) * getQty(item);
+    }, 0);
 
-  // ── Totals with promo ─────────────────────────────────────────────
-  const subtotal       = calculateSubtotal();
-  const discountAmount = appliedPromo?.discountAmount ?? 0;
-  const finalTotal     = Math.max(0, subtotal + shippingFee - discountAmount);
-
-  // ── Promo helpers ─────────────────────────────────────────────────
-  const handleApplyPromo = () => {
-    const trimmed = promoInput.trim().toUpperCase();
-    setPromoError('');
-
-    if (!trimmed) { setPromoError('Please enter a promo code.'); return; }
-    if (!allPromos.length) { setPromoError('Loading promos, please try again.'); return; }
-
-    const today = new Date().toISOString().split('T')[0];
-    const promo = allPromos.find(p => p.code === trimmed);
-
-    if (!promo)          { setPromoError('Invalid promo code.'); return; }
-    if (!promo.isActive) { setPromoError('This promo is no longer active.'); return; }
-    if (promo.startDate && promo.startDate > today) { setPromoError('This promo has not started yet.'); return; }
-    if (promo.endDate   && promo.endDate   < today) { setPromoError('This promo has expired.'); return; }
-
-    const discount = Math.min(
-      Math.floor(subtotal * (promo.discount / 100)),
-      promo.maxDiscount
-    );
-
-    setAppliedPromo({ ...promo, discountAmount: discount });
-    setPromoInput('');
-    showNotification(`Promo applied! You save ₱${discount.toLocaleString()} 🎉`, 'success');
-  };
-
-  const handleRemovePromo = () => {
-    setAppliedPromo(null);
-    setPromoInput('');
-    setPromoError('');
-  };
+  const subtotal      = calculateSubtotal();
+  const shippingFee   = calcShipping(getTotalPcs());
+  const totalDiscount = calculateTotalDiscount();
+  const finalTotal    = subtotal + shippingFee; // subtotal is already discounted per item
 
   // ── Validation ────────────────────────────────────────────────────
   const validatePhone = (phone) => {
@@ -195,10 +166,8 @@ const Checkout = () => {
     if (!formData.email.trim())    { showNotification('Please enter your email', 'error'); return; }
     const phoneErr = validatePhone(formData.phone);
     if (phoneErr) { setErrors(prev => ({ ...prev, phone: phoneErr })); return; }
-
     setSavedContact({ fullName: formData.fullName, email: formData.email, phone: formData.phone });
     setIsEditingContact(false);
-
     try {
       await saveProfile({
         userId: user?._id || user?.id,
@@ -214,10 +183,8 @@ const Checkout = () => {
     if (!formData.city.trim())    { showNotification('Please enter your city', 'error'); return; }
     const zipErr = validateZipCode(formData.zipCode);
     if (zipErr) { setErrors(prev => ({ ...prev, zipCode: zipErr })); return; }
-
     setSavedAddress({ address: formData.address, city: formData.city, zipCode: formData.zipCode });
     setIsEditingAddress(false);
-
     try {
       await saveProfile({
         userId: user?._id || user?.id,
@@ -228,16 +195,15 @@ const Checkout = () => {
     } catch { showNotification('Address saved locally', 'success'); }
   };
 
+  // ── Submit ────────────────────────────────────────────────────────
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     if (!isFormReady()) {
       showNotification('Please fill in and save all required fields', 'error');
       if (!isContactComplete()) setIsEditingContact(true);
       if (!isAddressComplete()) setIsEditingAddress(true);
       return;
     }
-
     for (const item of cartItems) {
       const product = getProductById(item.productId || item.id);
       if (!product) { showNotification('Product not found', 'error'); return; }
@@ -249,47 +215,52 @@ const Checkout = () => {
 
     setLoading(true);
     try {
+      // Deduct stock
       for (const item of cartItems) {
         const product = getProductById(item.productId || item.id);
         if (product) await updateProduct({ id: product._id, stock: product.stock - getQty(item) });
       }
 
       const orderId  = `DK-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
-      const totalPcs = getTotalPcs();
-      const shipping = calcShipping(totalPcs);
-      // finalTotal = subtotal + shipping - discount (this is what PayMongo charges)
-      const orderFinalTotal = Math.max(0, subtotal + shipping - discountAmount);
+      const shipping = calcShipping(getTotalPcs());
 
+      // Order items use effective (discounted) price
       const orderItems = cartItems.map(item => {
         const product = getProductById(item.productId || item.id);
         return {
           id:          item.productId || item.id,
           name:        product?.name  || 'Unknown',
-          price:       product?.price || 0,
-          quantity:    getQty(item),
+          price:       getEffectivePrice(item, product), // discounted price per unit
           image:       product?.image || '',
+          quantity:    getQty(item),
           isPreOrder:  product?.isPreOrder  || false,
           releaseDate: product?.releaseDate || null,
         };
       });
 
-      // Save order with promo fields
+      // Original subtotal (before discount) for record-keeping
+      const originalSubtotal = cartItems.reduce((total, item) => {
+        const product = getProductById(item.productId || item.id);
+        return total + (product?.price ?? 0) * getQty(item);
+      }, 0);
+
+      // Promo summary from first promo item in cart
+      const promoItem = cartItems.find(i => i.promoCode);
+
       await createOrder({
         orderId,
         email:           savedContact.email,
         customerName:    savedContact.fullName,
         phone:           savedContact.phone,
         items:           orderItems,
-        total:           subtotal + shipping,       // original total before discount
-        subtotal,
+        total:           originalSubtotal + shipping,   // original, pre-discount
+        subtotal:        originalSubtotal,
         shippingFee:     shipping,
-        // ── promo ──
-        ...(appliedPromo && {
-          promoCode:       appliedPromo.code,
-          promoName:       appliedPromo.name,
-          discountAmount,
-          discountPercent: appliedPromo.discount,
-          finalTotal:      orderFinalTotal,
+        ...(totalDiscount > 0 && promoItem && {
+          promoCode:       promoItem.promoCode,
+          discountAmount:  totalDiscount,
+          discountPercent: promoItem.promoDiscount,
+          finalTotal,
         }),
         status:          'Pending Payment',
         orderStatus:     'pending',
@@ -299,41 +270,34 @@ const Checkout = () => {
         paymentStatus:   'pending',
       });
 
-      // PayMongo charges the DISCOUNTED amount
+      // PayMongo charges the DISCOUNTED finalTotal
       const { paymentLinkUrl } = await createPaymentLink({
         orderId,
-        amount:        orderFinalTotal,   // ← discounted total!
-        description:   `DKMerch Order ${orderId}${appliedPromo ? ` (Promo: ${appliedPromo.code})` : ''}`,
+        amount:        finalTotal,
+        description:   `DKMerch Order ${orderId}${promoItem ? ` (Promo: ${promoItem.promoCode})` : ''}`,
         customerName:  savedContact.fullName,
         customerEmail: savedContact.email,
         customerPhone: savedContact.phone,
       });
 
-      // Email receipt with promo info
       try {
         await sendOrderConfirmation({
           to:   savedContact.email,
           name: savedContact.fullName,
           orderId,
-          items: orderItems.map(item => ({
-            name: item.name, price: item.price, quantity: item.quantity,
-          })),
-          total:           subtotal + shipping,
-          promoCode:       appliedPromo?.code,
-          promoName:       appliedPromo?.name,
-          discountAmount:  discountAmount > 0 ? discountAmount : undefined,
-          finalTotal:      orderFinalTotal,
-          shippingFee:     shipping,
+          items: orderItems.map(i => ({ name: i.name, price: i.price, quantity: i.quantity })),
+          total:          originalSubtotal + shipping,
+          promoCode:      promoItem?.promoCode,
+          discountAmount: totalDiscount > 0 ? totalDiscount : undefined,
+          finalTotal,
+          shippingFee:    shipping,
         });
-      } catch (emailErr) {
-        console.warn('Order confirmation email failed:', emailErr);
-      }
+      } catch (emailErr) { console.warn('Email failed:', emailErr); }
 
       await clearCart();
       setLoading(false);
       showNotification('Order created! Redirecting to payment... 💳', 'success');
       setTimeout(() => { window.location.href = paymentLinkUrl; }, 1500);
-
     } catch (error) {
       setLoading(false);
       showNotification('Error placing order. Please try again.', 'error');
@@ -341,7 +305,64 @@ const Checkout = () => {
     }
   };
 
-  const totalPcs = getTotalPcs();
+  // ── Grouped cart items ────────────────────────────────────────────
+  const promoCartItems    = cartItems.filter(i => !!i.promoCode);
+  const nonPromoCartItems = cartItems.filter(i => !i.promoCode);
+  const totalPcs          = getTotalPcs();
+
+  // ── Render one summary item ───────────────────────────────────────
+  const renderSummaryItem = (item) => {
+    const product = getProductById(item.productId || item.id);
+    if (!product) return null;
+    const qty            = getQty(item);
+    const hasPromo       = !!item.promoCode;
+    const effectivePrice = getEffectivePrice(item, product);
+    const itemTotal      = effectivePrice * qty;
+    const originalTotal  = product.price * qty;
+
+    return (
+      <div key={item._id || `${item.productId}-${item.promoCode || 'nopromo'}`}
+           className={`summary-item${hasPromo ? ' summary-item-promo' : ''}`}>
+        <img src={product.image} alt={product.name} />
+        <div className="item-details">
+          <p className="item-name">
+            {product.name}
+            {product.isPreOrder && <span className="item-preorder-badge">PRE-ORDER</span>}
+            {hasPromo && (
+              <span className="item-promo-tag">
+                <i className="fas fa-tag"></i> {item.promoDiscount}% OFF
+              </span>
+            )}
+          </p>
+          <p className="item-meta">{product.kpopGroup}</p>
+          {product.isPreOrder && product.releaseDate && (
+            <p className="item-release-date">
+              <i className="fas fa-calendar-alt"></i>{' '}
+              Expected: {new Date(product.releaseDate).toLocaleDateString('en-PH', {
+                year: 'numeric', month: 'long', day: 'numeric'
+              })}
+            </p>
+          )}
+          <p className="item-qty">Qty: {qty}</p>
+          {product.stock < qty && (
+            <p className="item-error">⚠️ Only {product.stock} in stock</p>
+          )}
+        </div>
+
+        {/* Price column */}
+        <div className="item-price-col">
+          <div className={`item-price${hasPromo ? ' item-price-promo' : ''}`}>
+            ₱{itemTotal.toLocaleString()}
+          </div>
+          {hasPromo && (
+            <div className="item-price-original-small">
+              ₱{originalTotal.toLocaleString()}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="checkout-page">
@@ -355,7 +376,7 @@ const Checkout = () => {
           <div className="checkout-grid">
             <div className="checkout-details">
 
-              {/* ── CONTACT INFORMATION ── */}
+              {/* ── CONTACT ── */}
               <div className="checkout-section">
                 <div className="section-header">
                   <h2>
@@ -376,7 +397,6 @@ const Checkout = () => {
                     </button>
                   )}
                 </div>
-
                 {!isEditingContact ? (
                   <div className="info-display-grid">
                     <div className="info-display-item">
@@ -414,7 +434,7 @@ const Checkout = () => {
                 )}
               </div>
 
-              {/* ── SHIPPING ADDRESS ── */}
+              {/* ── ADDRESS ── */}
               <div className="checkout-section">
                 <div className="section-header">
                   <h2>
@@ -435,7 +455,6 @@ const Checkout = () => {
                     </button>
                   )}
                 </div>
-
                 {!isEditingAddress ? (
                   <div className="info-display-grid">
                     <div className="info-display-item info-display-full">
@@ -473,47 +492,33 @@ const Checkout = () => {
                 )}
               </div>
 
-              {/* ── PROMO CODE ── */}
-              <div className="checkout-section">
-                <h2>Promo Code <span className="notes-optional">(Optional)</span></h2>
-
-                {appliedPromo ? (
+              {/* ── PROMO APPLIED — read-only from cart ── */}
+              {totalDiscount > 0 && (
+                <div className="checkout-section">
+                  <h2>Promo Applied</h2>
                   <div className="promo-applied-checkout">
                     <div className="promo-applied-left">
                       <span className="promo-applied-icon">🎉</span>
                       <div>
-                        <span className="promo-applied-code">{appliedPromo.code}</span>
+                        <span className="promo-applied-code">
+                          {cartItems.find(i => i.promoCode)?.promoCode}
+                        </span>
                         <span className="promo-applied-desc">
-                          {appliedPromo.discount}% off · Max ₱{appliedPromo.maxDiscount?.toLocaleString()} · <strong style={{ color: '#16a34a' }}>−₱{discountAmount.toLocaleString()}</strong>
+                          {cartItems.find(i => i.promoCode)?.promoDiscount}% off applied on promo items ·{' '}
+                          <strong style={{ color: '#16a34a' }}>
+                            You save ₱{totalDiscount.toLocaleString()}
+                          </strong>
                         </span>
                       </div>
                     </div>
-                    <button type="button" className="promo-remove-checkout" onClick={handleRemovePromo}>
-                      <i className="fas fa-times"></i> Remove
-                    </button>
+                    <span className="promo-checkout-applied-badge">
+                      <i className="fas fa-check-circle"></i> Applied in Cart
+                    </span>
                   </div>
-                ) : (
-                  <div className="promo-input-checkout-row">
-                    <input
-                      type="text"
-                      className={`promo-input-checkout ${promoError ? 'promo-input-error' : ''}`}
-                      placeholder="Enter promo code (e.g. DKMERCH25)"
-                      value={promoInput}
-                      onChange={(e) => { setPromoInput(e.target.value.toUpperCase()); setPromoError(''); }}
-                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleApplyPromo(); } }}
-                      maxLength={20}
-                    />
-                    <button type="button" className="promo-apply-checkout" onClick={handleApplyPromo} disabled={!promoInput.trim()}>
-                      Apply
-                    </button>
-                  </div>
-                )}
-                {promoError && (
-                  <p className="promo-error-checkout"><i className="fas fa-times-circle"></i> {promoError}</p>
-                )}
-              </div>
+                </div>
+              )}
 
-              {/* ── PAYMENT INFO ── */}
+              {/* ── PAYMENT ── */}
               <div className="checkout-section">
                 <h2>Payment</h2>
                 <div className="payment-info-notice">
@@ -532,7 +537,7 @@ const Checkout = () => {
                 </div>
               </div>
 
-              {/* ── ORDER NOTES ── */}
+              {/* ── NOTES ── */}
               <div className="checkout-section">
                 <h2>Order Notes <span className="notes-optional">(Optional)</span></h2>
                 <textarea name="notes" value={formData.notes} onChange={handleChange}
@@ -544,71 +549,78 @@ const Checkout = () => {
             <div className="order-summary">
               <div className="summary-card">
                 <h2>Order Summary</h2>
+
                 <div className="summary-items">
-                  {cartItems.map(item => {
-                    const product = getProductById(item.productId || item.id);
-                    if (!product) return null;
-                    const qty = getQty(item);
-                    return (
-                      <div key={item.productId || item.id} className="summary-item">
-                        <img src={product.image} alt={product.name} />
-                        <div className="item-details">
-                          <p className="item-name">
-                            {product.name}
-                            {product.isPreOrder && <span className="item-preorder-badge">PRE-ORDER</span>}
-                          </p>
-                          <p className="item-meta">{product.kpopGroup}</p>
-                          {product.isPreOrder && product.releaseDate && (
-                            <p className="item-release-date">
-                              <i className="fas fa-calendar-alt"></i>{' '}
-                              Expected: {new Date(product.releaseDate).toLocaleDateString('en-PH', {
-                                year: 'numeric', month: 'long', day: 'numeric'
-                              })}
-                            </p>
-                          )}
-                          <p className="item-qty">Qty: {qty}</p>
-                          {product.stock < qty && <p className="item-error">⚠️ Only {product.stock} in stock</p>}
+                  {/* Non-promo items */}
+                  {nonPromoCartItems.length > 0 && (
+                    <>
+                      {promoCartItems.length > 0 && (
+                        <div className="summary-group-label">
+                          <i className="fas fa-shopping-bag"></i> Regular Items
                         </div>
-                        <div className="item-price">₱{(product.price * qty).toLocaleString()}</div>
+                      )}
+                      {nonPromoCartItems.map(item => renderSummaryItem(item))}
+                    </>
+                  )}
+
+                  {/* Promo items */}
+                  {promoCartItems.length > 0 && (
+                    <>
+                      <div className="summary-group-label summary-group-label-promo">
+                        <i className="fas fa-tag"></i> Promo Items
                       </div>
-                    );
-                  })}
+                      {promoCartItems.map(item => renderSummaryItem(item))}
+                    </>
+                  )}
                 </div>
 
                 <div className="summary-divider"></div>
 
                 {totalPcs > 0 && totalPcs < 10 && (
-                  <div style={{ background: '#f0f4ff', borderRadius: '8px', padding: '10px 14px', marginBottom: '12px', fontSize: '13px', color: '#555' }}>
-                    <i className="fas fa-truck" style={{ marginRight: '6px', color: '#6c63ff' }}></i>
+                  <div className="shipping-nudge">
+                    <i className="fas fa-truck"></i>
                     Add <strong>{10 - totalPcs} more pc{10 - totalPcs > 1 ? 's' : ''}</strong> for <strong>FREE shipping!</strong>
                   </div>
                 )}
                 {totalPcs >= 10 && (
-                  <div style={{ background: '#f0fff4', borderRadius: '8px', padding: '10px 14px', marginBottom: '12px', fontSize: '13px', color: '#22863a', fontWeight: 600 }}>
-                    <i className="fas fa-check-circle" style={{ marginRight: '6px' }}></i>
+                  <div className="shipping-nudge shipping-nudge-free">
+                    <i className="fas fa-check-circle"></i>
                     You got FREE shipping!
                   </div>
                 )}
 
                 <div className="summary-totals">
-                  <div className="summary-row"><span>Subtotal</span><span>₱{subtotal.toLocaleString()}</span></div>
+                  {/* Show original total only if there's a discount */}
+                  {totalDiscount > 0 && (
+                    <div className="summary-row summary-row-original">
+                      <span>Original Price</span>
+                      <span className="summary-strikethrough">
+                        ₱{(subtotal + totalDiscount).toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="summary-row">
+                    <span>Subtotal</span>
+                    <span>₱{subtotal.toLocaleString()}</span>
+                  </div>
+
                   <div className="summary-row">
                     <span>Shipping ({totalPcs} pc{totalPcs !== 1 ? 's' : ''})</span>
                     <span>
                       {shippingFee === 0
-                        ? <span style={{ color: '#22863a', fontWeight: 600 }}>FREE</span>
+                        ? <span className="free-shipping-text">FREE</span>
                         : `₱${shippingFee.toLocaleString()}`}
                     </span>
                   </div>
 
-                  {/* ── Promo discount row ── */}
-                  {appliedPromo && discountAmount > 0 && (
+                  {totalDiscount > 0 && (
                     <div className="summary-row promo-discount-row">
                       <span>
                         <i className="fas fa-tag" style={{ marginRight: '6px', color: '#ec4899' }}></i>
-                        Promo ({appliedPromo.code})
+                        Promo Discount
                       </span>
-                      <span style={{ color: '#16a34a', fontWeight: 700 }}>−₱{discountAmount.toLocaleString()}</span>
+                      <span className="promo-discount-amount">−₱{totalDiscount.toLocaleString()}</span>
                     </div>
                   )}
 
@@ -617,10 +629,10 @@ const Checkout = () => {
                     <span>₱{finalTotal.toLocaleString()}</span>
                   </div>
 
-                  {appliedPromo && discountAmount > 0 && (
+                  {totalDiscount > 0 && (
                     <div className="promo-savings-checkout">
                       <i className="fas fa-piggy-bank"></i>
-                      You're saving <strong>₱{discountAmount.toLocaleString()}</strong> with promo <strong>{appliedPromo.code}</strong>!
+                      You're saving <strong>₱{totalDiscount.toLocaleString()}</strong> with your promo!
                     </div>
                   )}
                 </div>
@@ -629,18 +641,16 @@ const Checkout = () => {
                   type="submit"
                   className={`btn btn-primary btn-checkout${!isFormReady() || loading ? ' btn-checkout-disabled' : ''}`}
                   disabled={loading || !isFormReady()}
-                  title={!isFormReady() ? 'Please save your contact info and address first' : ''}
                 >
                   {loading
                     ? <><i className="fas fa-spinner fa-spin"></i> Processing...</>
                     : !isFormReady()
                       ? <><i className="fas fa-lock"></i> Complete Your Info First</>
-                      : <>Pay ₱{finalTotal.toLocaleString()} Securely</>
-                  }
+                      : <>Pay ₱{finalTotal.toLocaleString()} Securely</>}
                 </button>
 
                 {!isFormReady() && !loading && (
-                  <p style={{ textAlign: 'center', fontSize: '12px', color: '#e05', marginTop: '8px' }}>
+                  <p className="form-incomplete-hint">
                     <i className="fas fa-exclamation-circle"></i>{' '}
                     {isEditingContact
                       ? 'Click "Save" on Contact Information to continue.'

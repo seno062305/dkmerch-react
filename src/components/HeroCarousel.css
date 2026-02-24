@@ -439,3 +439,164 @@
   .fs-xl { width: 24px; height: 24px; }
   .fs-lg { display: none; }
 }
+
+/* ── PASTE THESE INTO HeroCarousel.css (add at the bottom) ── */
+
+/* End-time chip shown below countdown */
+.promo-endtime-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0,0,0,0.3);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 20px;
+  padding: 5px 14px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.85);
+  margin-bottom: 10px;
+  letter-spacing: 0.3px;
+}
+
+.promo-endtime-chip strong {
+  color: #fde68a;
+  font-weight: 700;
+}
+
+/* "until X:XX PM" label inline with countdown */
+.countdown-until {
+  font-size: 11px;
+  color: rgba(255,255,255,0.7);
+  font-weight: 600;
+  margin-left: 4px;
+  white-space: nowrap;
+}
+
+/* ══ ADD TO BOTTOM OF HeroCarousel.css ══ */
+
+/* ── Promo Schedule Bar ── */
+.promo-schedule-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0,0,0,0.3);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 20px;
+  padding: 6px 14px;
+  margin-bottom: 10px;
+  max-width: 100%;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.promo-schedule-icon { font-size: 14px; flex-shrink: 0; }
+
+.promo-schedule-text {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.9);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.promo-schedule-text strong { color: #fde68a; }
+.promo-schedule-sep { color: rgba(255,255,255,0.5); font-size: 14px; }
+
+@media (max-width: 576px) {
+  .promo-schedule-bar { padding: 5px 10px; }
+  .promo-schedule-text { font-size: 11px; }
+}
+
+
+/* ══ ADD TO BOTTOM OF AdminPromos.css ══ */
+
+/* Tabs */
+.promo-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 24px;
+  border-bottom: 2px solid #e5e7eb;
+}
+.promo-tab {
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  background: none;
+  color: #9ca3af;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: all 0.2s;
+  border-radius: 6px 6px 0 0;
+}
+.promo-tab:hover { color: #ec4899; background: #fdf2f8; }
+.promo-tab.active { color: #ec4899; border-bottom-color: #ec4899; background: white; }
+
+/* Time input */
+.field-optional { font-weight: 400; font-size: 11px; color: #9ca3af; margin-left: 4px; }
+.time-input-wrapper { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.time-input {
+  padding: 10px 14px; border: 1px solid #d1d5db;
+  border-radius: 8px; font-size: 14px; font-family: inherit;
+  transition: all 0.2s; box-sizing: border-box;
+}
+.time-input:focus { outline: none; border-color: #ec4899; box-shadow: 0 0 0 3px rgba(236,72,153,0.1); }
+.time-input.input-error { border-color: #ef4444; }
+.time-preview {
+  font-size: 12px; color: #7c3aed; font-weight: 600;
+  background: #f5f3ff; border: 1px solid #c4b5fd;
+  border-radius: 8px; padding: 5px 10px;
+}
+.time-preview strong { color: #5b21b6; }
+
+/* Schedule summary pill */
+.schedule-summary {
+  background: linear-gradient(135deg, #fdf2f8, #f5f3ff);
+  border: 1px solid #e9d5ff;
+  border-radius: 10px;
+  padding: 10px 16px;
+  font-size: 13px;
+  color: #374151;
+  font-weight: 500;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.sched-arrow { color: #9ca3af; font-weight: 400; }
+
+/* Period cell */
+.period-cell { font-size: 12px; white-space: nowrap; }
+
+/* Send codes tab */
+.send-codes-tab { background: white; border-radius: 12px; padding: 28px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.send-tab-title { font-size: 20px; font-weight: 700; color: #1a1a1a; margin: 0 0 6px; }
+.send-tab-subtitle { color: #6b7280; font-size: 14px; margin: 0 0 24px; }
+.send-form { display: flex; flex-direction: column; gap: 20px; }
+.send-form-group { display: flex; flex-direction: column; gap: 6px; }
+.send-form-group label { font-size: 13px; font-weight: 600; color: #374151; }
+.recipients-textarea { padding: 10px 14px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical; transition: all 0.2s; }
+.recipients-textarea:focus { outline: none; border-color: #ec4899; box-shadow: 0 0 0 3px rgba(236,72,153,0.1); }
+.promo-preview-card { background: #fdf2f8; border: 1.5px solid #f9a8d4; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+.ppc-row { display: flex; align-items: center; gap: 12px; font-size: 13px; }
+.ppc-row span { color: #9ca3af; font-weight: 600; min-width: 60px; text-transform: uppercase; font-size: 11px; letter-spacing: 0.4px; }
+.ppc-row strong { color: #1a1a1a; }
+.ppc-code { font-family: 'Courier New', monospace !important; color: #ec4899 !important; font-size: 15px !important; letter-spacing: 1px; }
+.ppc-message-preview { margin-top: 8px; border-top: 1px dashed #f9a8d4; padding-top: 10px; }
+.ppc-message-preview label { font-size: 11px; font-weight: 700; color: #be185d; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 6px; }
+.ppc-message-preview pre { font-family: inherit; font-size: 13px; color: #374151; white-space: pre-wrap; background: white; border-radius: 8px; padding: 10px 12px; border: 1px solid #e9d5ff; margin: 0; line-height: 1.6; }
+.send-btn { padding: 12px 24px; background: linear-gradient(135deg, #9333ea, #ec4899); color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: 700; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 8px rgba(147,51,234,0.3); align-self: flex-start; }
+.send-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 4px 14px rgba(147,51,234,0.4); }
+.send-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+@media (max-width: 768px) {
+  .send-codes-tab { padding: 16px; }
+  .send-btn { width: 100%; }
+  .time-input-wrapper { flex-direction: column; align-items: flex-start; }
+  .period-cell { font-size: 11px; white-space: normal; }
+}

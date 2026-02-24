@@ -1198,3 +1198,228 @@ html { scroll-behavior: smooth; }
 
 .promo-savings-checkout i { font-size: 15px; flex-shrink: 0; }
 .promo-savings-checkout strong { color: #9d174d; }
+
+/* ══════════════════════════════════════════════════════
+   CHECKOUT ADDITIONS — append to bottom of Checkout.css
+   Covers: grouped items, per-item promo styles,
+           summary group labels, promo-applied read-only,
+           misc utility rows
+══════════════════════════════════════════════════════ */
+
+/* ── Summary group labels ── */
+.summary-group-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  padding: 10px 0 6px;
+  border-bottom: 1px dashed var(--border-light);
+  margin-bottom: 2px;
+}
+
+.summary-group-label-promo {
+  color: #a855f7;
+  margin-top: 10px;
+}
+
+.summary-group-label i { font-size: 11px; }
+
+/* ── Promo item row in summary ── */
+.summary-item-promo {
+  background: linear-gradient(135deg, #fdf4ff 0%, #f0fdf4 100%);
+  border-radius: 8px;
+  padding: 10px 8px !important;
+  margin: 0 -8px;
+}
+
+/* ── Per-item promo badge (inline with name) ── */
+.item-promo-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 9px;
+  font-weight: 800;
+  color: white;
+  background: linear-gradient(135deg, #ec4899, #a855f7);
+  border-radius: 20px;
+  padding: 2px 7px;
+  margin-left: 6px;
+  vertical-align: middle;
+  letter-spacing: 0.3px;
+}
+
+/* ── Price column (right side of summary item) ── */
+.item-price-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex-shrink: 0;
+  gap: 2px;
+}
+
+/* Override old .item-price to work inside .item-price-col */
+.item-price-col .item-price {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--primary-pink) 0%, var(--secondary-purple) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  white-space: nowrap;
+}
+
+.item-price-col .item-price-promo {
+  background: linear-gradient(135deg, #16a34a, #22c55e);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.item-price-original-small {
+  font-size: 11px;
+  color: #bbb;
+  text-decoration: line-through;
+  white-space: nowrap;
+}
+
+/* ── Promo Applied section (read-only) ── */
+.promo-applied-checkout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+  border: 1.5px solid #86efac;
+  border-radius: var(--radius-md);
+  padding: 14px 18px;
+}
+
+.promo-applied-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.promo-applied-icon { font-size: 22px; flex-shrink: 0; }
+
+.promo-applied-code {
+  display: block;
+  font-size: 16px;
+  font-weight: 800;
+  color: #15803d;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 1.5px;
+}
+
+.promo-applied-desc {
+  display: block;
+  font-size: 12px;
+  color: #4ade80;
+  margin-top: 3px;
+  font-weight: 500;
+}
+
+.promo-checkout-applied-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #15803d;
+  background: white;
+  border: 1.5px solid #86efac;
+  border-radius: 20px;
+  padding: 5px 12px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* ── Summary totals extras ── */
+.summary-row-original {
+  color: #94a3b8 !important;
+  font-size: 0.85rem !important;
+}
+
+.summary-strikethrough {
+  text-decoration: line-through !important;
+  color: #bbb !important;
+}
+
+.summary-row.promo-discount-row {
+  color: #16a34a;
+  font-weight: 600;
+  background: #f0fdf4;
+  margin: 4px -4px;
+  padding: 8px 4px;
+  border-radius: 6px;
+}
+
+.promo-discount-amount {
+  color: #16a34a !important;
+  font-weight: 800 !important;
+}
+
+.free-shipping-text {
+  color: #22863a;
+  font-weight: 700;
+}
+
+/* ── Savings banner below total ── */
+.promo-savings-checkout {
+  margin: 12px 0;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #fdf2f8, #fce7f3);
+  border: 1px solid #f9a8d4;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  color: #be185d;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: slideDown 0.3s ease;
+}
+
+.promo-savings-checkout i { font-size: 15px; flex-shrink: 0; }
+.promo-savings-checkout strong { color: #9d174d; }
+
+/* ── Shipping nudge banners ── */
+.shipping-nudge {
+  background: #f0f4ff;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: #555;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.shipping-nudge i { color: #6c63ff; }
+
+.shipping-nudge-free {
+  background: #f0fff4;
+  color: #22863a;
+  font-weight: 600;
+}
+
+.shipping-nudge-free i { color: #22863a; }
+
+/* ── Form incomplete hint ── */
+.form-incomplete-hint {
+  text-align: center;
+  font-size: 12px;
+  color: #e05;
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}

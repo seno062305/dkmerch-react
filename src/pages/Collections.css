@@ -5,7 +5,6 @@
   padding-bottom: 60px;
 }
 
-/* Header — white, matching Pre-Order style */
 .collections-header {
   background: #ffffff;
   color: #1a1f36;
@@ -21,10 +20,7 @@
   color:#22000fea;
 }
 
-.collections-header p {
-  font-size: 16px;
-  color: #6c757d;
-}
+.collections-header p { font-size: 16px; color: #6c757d; }
 
 /* Filters */
 .collections-filters {
@@ -57,11 +53,7 @@
   margin: 0;
 }
 
-.filter-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
+.filter-buttons { display: flex; flex-wrap: wrap; gap: 10px; }
 
 .filter-btn {
   padding: 8px 20px;
@@ -76,37 +68,16 @@
   white-space: nowrap;
 }
 
-.filter-btn:hover {
-  border-color: #111;
-  background: #f5f5f5;
-}
+.filter-btn:hover { border-color: #111; background: #f5f5f5; }
+.filter-btn.active { background: #111; color: #fff; border-color: #111; }
 
-.filter-btn.active {
-  background: #111;
-  color: #fff;
-  border-color: #111;
-}
-
-.filter-divider {
-  width: 1px;
-  height: 30px;
-  background: #ccc;
-  flex-shrink: 0;
-}
+.filter-divider { width: 1px; height: 30px; background: #ccc; flex-shrink: 0; }
 
 /* Results Count */
-.results-count {
-  padding: 20px 40px;
-  border-bottom: 1px solid #eee;
-}
+.results-count { padding: 20px 40px; border-bottom: 1px solid #eee; }
+.results-count p { font-size: 14px; font-weight: 600; color: #666; }
 
-.results-count p {
-  font-size: 14px;
-  font-weight: 600;
-  color: #666;
-}
-
-/* Grid */
+/* Grid — 4 columns default */
 .collections-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -141,11 +112,9 @@
   transform: scale(1.02);
 }
 
-/* SALE badge */
 .collection-sale-badge {
   position: absolute;
-  top: 12px;
-  left: 12px;
+  top: 12px; left: 12px;
   background: var(--primary-color);
   color: white;
   font-size: 11px;
@@ -156,11 +125,9 @@
   text-transform: uppercase;
 }
 
-/* PRE-ORDER badge — teal, same position as SALE */
 .collection-preorder-badge {
   position: absolute;
-  top: 12px;
-  left: 12px;
+  top: 12px; left: 12px;
   background: var(--info-color);
   color: white;
   font-size: 11px;
@@ -232,37 +199,14 @@
   margin-bottom: 8px;
 }
 
-.collection-card-price {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--primary-color);
-}
-
+.collection-card-price { font-size: 15px; font-weight: 700; color: var(--primary-color); }
 .collection-card-price.sale { color: #dc3545; }
-
-.collection-card-price-original {
-  font-size: 12px;
-  color: #999;
-  text-decoration: line-through;
-}
+.collection-card-price-original { font-size: 12px; color: #999; text-decoration: line-through; }
 
 /* No Results */
-.no-results {
-  text-align: center;
-  padding: 80px 20px;
-}
-
-.no-results i {
-  font-size: 64px;
-  color: #ddd;
-  margin-bottom: 20px;
-}
-
-.no-results p {
-  font-size: 18px;
-  color: #666;
-  margin-bottom: 20px;
-}
+.no-results { text-align: center; padding: 80px 20px; }
+.no-results i { font-size: 64px; color: #ddd; margin-bottom: 20px; }
+.no-results p { font-size: 18px; color: #666; margin-bottom: 20px; }
 
 .reset-filters-btn {
   padding: 12px 30px;
@@ -276,22 +220,97 @@
   transition: all 0.3s ease;
 }
 
-.reset-filters-btn:hover {
-  background: #333;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+.reset-filters-btn:hover { background: #333; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+
+/* Promo styles */
+.collections-promo-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(135deg, #fdf2f8, #fce7f3);
+  border: 1.5px solid #f9a8d4;
+  border-radius: 10px;
+  padding: 10px 18px;
+  margin-top: 16px;
+  font-size: 14px;
+  color: #9d174d;
+  line-height: 1.5;
+  max-width: 600px;
 }
 
-/* Responsive */
+.collections-promo-banner i { color: #ec4899; font-size: 15px; flex-shrink: 0; }
+
+.collections-promo-code {
+  font-family: 'Courier New', monospace;
+  font-weight: 800;
+  font-size: 15px;
+  color: #be185d;
+  background: rgba(236, 72, 153, 0.1);
+  padding: 1px 7px;
+  border-radius: 4px;
+  letter-spacing: 1px;
+}
+
+.filter-promo-dot {
+  color: #ec4899;
+  font-size: 8px;
+  margin-left: 4px;
+  vertical-align: super;
+  animation: filter-dot-blink 1.5s ease-in-out infinite;
+}
+
+@keyframes filter-dot-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.collection-card.collection-card-promo { box-shadow: 0 0 0 2px #f9a8d4 inset; }
+.collection-card.collection-card-promo:hover { box-shadow: 0 0 0 2px #ec4899 inset, 0 8px 24px rgba(236, 72, 153, 0.2); }
+
+.collection-promo-badge {
+  position: absolute;
+  bottom: 12px; right: 12px;
+  background: linear-gradient(135deg, #ec4899, #f472b6);
+  color: white;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 20px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  letter-spacing: 0.3px;
+  box-shadow: 0 2px 8px rgba(236, 72, 153, 0.4);
+  animation: coll-promo-float 2s ease-in-out infinite;
+}
+
+@keyframes coll-promo-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
+.collection-promo-badge i { font-size: 10px; }
+
+.collection-promo-hint {
+  font-size: 11px;
+  color: #ec4899;
+  font-weight: 600;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.collection-promo-hint i { font-size: 10px; flex-shrink: 0; }
+.collection-promo-hint strong { font-family: 'Courier New', monospace; color: #be185d; font-size: 12px; letter-spacing: 0.5px; }
+
+/* ── RESPONSIVE ── */
 @media (max-width: 992px) {
-  .filters-single-line {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 20px;
-  }
+  .filters-single-line { flex-direction: column; align-items: flex-start; gap: 20px; }
   .filter-group { width: 100%; }
   .filter-divider { width: 100%; height: 1px; }
-  .collections-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+  .collections-grid { grid-template-columns: repeat(3, 1fr); }
 }
 
 @media (max-width: 768px) {
@@ -299,8 +318,11 @@
   .collections-header h1 { font-size: 28px; }
   .collections-filters { padding: 20px; }
   .results-count { padding: 15px 20px; }
-  .collections-grid { grid-template-columns: repeat(2, 1fr); }
-  .collection-card-img { padding: 12px; }
+  .collections-grid { grid-template-columns: repeat(3, 1fr); }  /* 3 cols on mobile */
+  .collection-card-img { padding: 10px; }
+  .collection-card-info { padding: 10px; }
+  .collection-card-name { font-size: 11px; min-height: 30px; }
+  .collection-card-price { font-size: 13px; }
 }
 
 @media (max-width: 576px) {
@@ -308,10 +330,16 @@
   .collections-header p { font-size: 14px; }
   .filter-buttons { gap: 8px; }
   .filter-btn { padding: 7px 16px; font-size: 12px; }
-  .collection-card-info { padding: 12px; }
-  .collection-card-name { font-size: 12px; min-height: 32px; }
+  .collections-grid { grid-template-columns: repeat(3, 1fr); }  /* still 3 cols */
+  .collection-card-img { padding: 8px; }
+  .collection-card-info { padding: 8px; }
+  .collection-card-name { font-size: 10px; min-height: 26px; }
+  .collection-card-price { font-size: 12px; }
+  .collection-card-group { font-size: 9px; margin-bottom: 4px; }
+  .collection-promo-badge { font-size: 10px; padding: 3px 8px; }
+  .collections-promo-banner { font-size: 12px; padding: 8px 14px; }
+  .collection-promo-hint { display: none; } /* hide hint on tiny screens */
 }
 
-@media (max-width: 400px) {
-  .collections-grid { grid-template-columns: 1fr; }
-}
+/* REMOVED the @media (max-width: 400px) { grid-template-columns: 1fr } 
+   that was causing single column layout */

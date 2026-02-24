@@ -22,25 +22,32 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [hideProductModal, setHideProductModal] = useState(false);
   const [appliedPromo, setAppliedPromo] = useState(null);
+  const [showLightbox, setShowLightbox] = useState(false);
 
   useEffect(() => {
+    setRating(0);
+    setReview('');
+    setHasUserReviewed(false);
+    setAppliedPromo(null);
+
     const reviews = JSON.parse(localStorage.getItem('product_reviews')) || [];
     const productReviews = reviews.filter(r => r.productId === product.id);
     setExistingReviews(productReviews);
+
     if (isAuthenticated && user) {
       const userReview = productReviews.find(r => r.userEmail === user.email);
-      if (userReview) {
-        setHasUserReviewed(true);
-        setRating(userReview.rating);
-        setReview(userReview.review);
-      }
+      if (userReview) setHasUserReviewed(true);
     }
+
     const scrollY = window.scrollY;
     document.body.style.position = 'fixed';
     document.body.style.top = `-${scrollY}px`;
     document.body.style.width = '100%';
     document.body.style.overflow = 'hidden';
     return () => {
+      setRating(0);
+      setReview('');
+      setHasUserReviewed(false);
       document.body.style.position = '';
       document.body.style.top = '';
       document.body.style.width = '';
@@ -54,12 +61,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
     : product.price;
 
   const handleSubmitReview = () => {
-    if (!isAuthenticated) {
-      showNotification('Please login to submit a review', 'error');
-      setHideProductModal(true);
-      setShowLoginModal(true);
-      return;
-    }
+    if (!isAuthenticated) { showNotification('Please login to submit a review', 'error'); setHideProductModal(true); setShowLoginModal(true); return; }
     if (rating === 0) { showNotification('Please select a rating', 'error'); return; }
     if (review.trim() === '') { showNotification('Please write a review', 'error'); return; }
     if (review.length > 250) { showNotification('Review must be 250 characters or less', 'error'); return; }
@@ -70,11 +72,13 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
       rating, review: review.trim(), createdAt: new Date().toISOString()
     };
     const existingIndex = reviews.findIndex(r => r.productId === product.id && r.userEmail === user.email);
-    if (existingIndex !== -1) { reviews[existingIndex] = newReview; showNotification('Review updated successfully!', 'success'); }
-    else { reviews.push(newReview); showNotification('Review submitted successfully!', 'success'); }
+    if (existingIndex !== -1) { reviews[existingIndex] = newReview; showNotification('Review updated!', 'success'); }
+    else { reviews.push(newReview); showNotification('Review submitted!', 'success'); }
     localStorage.setItem('product_reviews', JSON.stringify(reviews));
     setExistingReviews(reviews.filter(r => r.productId === product.id));
     setHasUserReviewed(true);
+    setRating(0);
+    setReview('');
   };
 
   const getAverageRating = () => {
@@ -83,32 +87,17 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
   };
 
   const handleAddToCartClick = () => {
-    if (!isAuthenticated) {
-      showNotification('Please login to add to cart', 'error');
-      setHideProductModal(true);
-      setShowLoginModal(true);
-      return;
-    }
+    if (!isAuthenticated) { showNotification('Please login to add to cart', 'error'); setHideProductModal(true); setShowLoginModal(true); return; }
     onAddToCart({ ...product, appliedPromo, finalPrice: discountedPrice });
   };
 
   const handlePreOrderClick = () => {
-    if (!isAuthenticated) {
-      showNotification('Please login to pre-order', 'error');
-      setHideProductModal(true);
-      setShowLoginModal(true);
-      return;
-    }
+    if (!isAuthenticated) { showNotification('Please login to pre-order', 'error'); setHideProductModal(true); setShowLoginModal(true); return; }
     onAddToCart({ ...product, appliedPromo, finalPrice: discountedPrice });
   };
 
   const handleWishlistClick = () => {
-    if (!isAuthenticated) {
-      showNotification('Please login to add to favorites', 'error');
-      setHideProductModal(true);
-      setShowLoginModal(true);
-      return;
-    }
+    if (!isAuthenticated) { showNotification('Please login to add to favorites', 'error'); setHideProductModal(true); setShowLoginModal(true); return; }
     onAddToWishlist(product);
   };
 
@@ -120,24 +109,40 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
     <>
       <div className="product-modal-overlay" onClick={onClose}>
         <div className="product-modal-content" onClick={(e) => e.stopPropagation()}>
-          <button className="modal-close" onClick={onClose}><i className="fas fa-times"></i></button>
+
+          {/* ── Close button — always fixed on screen ── */}
+          <button className="modal-close" onClick={onClose}>
+            <i className="fas fa-times"></i>
+          </button>
+
+          {/* ══════════════════════════════════════
+              DESKTOP: 2-column grid
+              MOBILE:  image on top, details below
+              ══════════════════════════════════════ */}
           <div className="modal-grid">
-            {/* Image */}
+
+            {/* ── LEFT / TOP: Image ── */}
             <div className="modal-image-section">
               {product.isPreOrder && <div className="pre-order-badge">PRE-ORDER</div>}
               {product.isSale && !product.isPreOrder && <div className="sale-badge">SALE</div>}
-
-              {/* ✅ Promo indicator on image */}
               {appliedPromo && (
                 <div className="modal-promo-img-badge">
                   <i className="fas fa-tag"></i> {appliedPromo.discount}% OFF
                 </div>
               )}
-
-              <img src={product.image} alt={product.name} />
+              {/* Clickable image → lightbox */}
+              <img
+                src={product.image}
+                alt={product.name}
+                className="modal-product-img"
+                onClick={() => setShowLightbox(true)}
+              />
+              <div className="modal-img-tap-hint">
+                <i className="fas fa-search-plus"></i> Tap to zoom
+              </div>
             </div>
 
-            {/* Details */}
+            {/* ── RIGHT / BOTTOM: Details ── */}
             <div className="modal-details-section">
               <div className="modal-product-info">
                 <div className="product-group">{product.kpopGroup}</div>
@@ -182,7 +187,6 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
                   <span>{product.stock > 0 ? `${product.stock} items in stock` : 'Out of stock'}</span>
                 </div>
 
-                {/* Promo Code Input */}
                 {isAuthenticated && (
                   <div className="modal-promo-section">
                     <PromoCodeInput
@@ -228,9 +232,9 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
                 )}
               </div>
 
-              {/* Review Section */}
+              {/* ── Review Section ── */}
               <div className="review-section">
-                <h3><i className="fas fa-star"></i> {hasUserReviewed ? 'Your Review' : 'Rate & Review'}</h3>
+                <h3><i className="fas fa-star"></i> {hasUserReviewed ? 'Update Review' : 'Rate & Review'}</h3>
                 {!isAuthenticated ? (
                   <div className="login-to-review">
                     <i className="fas fa-lock"></i>
@@ -298,6 +302,17 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
           </div>
         </div>
       </div>
+
+      {/* ── Lightbox ── */}
+      {showLightbox && (
+        <div className="modal-lightbox" onClick={() => setShowLightbox(false)}>
+          <button className="modal-lightbox-close" onClick={() => setShowLightbox(false)}>
+            <i className="fas fa-times"></i>
+          </button>
+          <img src={product.image} alt={product.name} onClick={(e) => e.stopPropagation()} />
+        </div>
+      )}
+
       {showLoginModal && <LoginModal onClose={handleLoginModalClose} />}
     </>
   );

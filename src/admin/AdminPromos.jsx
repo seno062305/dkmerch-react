@@ -22,106 +22,115 @@ const validateMaxDiscount = (val) => {
   if (String(Math.floor(num)).length > 4) return 'Max 4 digits (up to ₱9999).';
   return '';
 };
-const validateDates = (startDate, endDate) => {
-  if (!startDate) return { start: 'Required.', end: '' };
-  if (!endDate) return { start: '', end: 'Required.' };
-  if (endDate < startDate) return { start: '', end: 'End date must be after start date.' };
-  return { start: '', end: '' };
+
+const fmt12 = (t) => {
+  if (!t) return '';
+  const [h, m] = t.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 || 12;
+  return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
 };
 
 const EMPTY_FORM = {
   code: '', name: '', discount: '', maxDiscount: '',
-  startDate: '', endDate: '', isActive: true
+  startDate: '', startTime: '', endDate: '', endTime: '',
+  isActive: true,
+};
+
+const PH = 8 * 3600000;
+const toMs = (d, t) => {
+  if (!d) return null;
+  const [y, mo, day] = d.split('-').map(Number);
+  const [h, m] = t ? t.split(':').map(Number) : [0, 0];
+  return Date.UTC(y, mo - 1, day, h, m, 0) - PH;
 };
 
 const AdminPromos = () => {
-  const promos = useQuery(api.promos.getAllPromos) || [];
-  const createPromo = useMutation(api.promos.createPromo);
-  const updatePromo = useMutation(api.promos.updatePromo);
-  const deletePromo = useMutation(api.promos.deletePromo);
+  const promos       = useQuery(api.promos.getAllPromos) || [];
+  const createPromo  = useMutation(api.promos.createPromo);
+  const updatePromo  = useMutation(api.promos.updatePromo);
+  const deletePromo  = useMutation(api.promos.deletePromo);
   const toggleStatus = useMutation(api.promos.togglePromoStatus);
 
-  const [showModal, setShowModal] = useState(false);
+  const [nowMs, setNowMs]               = useState(() => Date.now());
+  const [showModal, setShowModal]       = useState(false);
   const [editingPromo, setEditingPromo] = useState(null);
-  const [formData, setFormData] = useState(EMPTY_FORM);
-  const [errors, setErrors] = useState({});
-  const [serverMsg, setServerMsg] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const [formData, setFormData]         = useState(EMPTY_FORM);
+  const [errors, setErrors]             = useState({});
+  const [serverMsg, setServerMsg]       = useState('');
+  const [submitting, setSubmitting]     = useState(false);
 
-  const today = new Date().toISOString().split('T')[0];
-
-  // Scroll lock when modal open
+  // Auto-refresh status badges every 10 seconds — no manual refresh needed
   useEffect(() => {
-    if (showModal) {
-      const scrollY = window.scrollY;
-      document.body.style.position = 'fixed';
-      document.body.style.top = `-${scrollY}px`;
-      document.body.style.width = '100%';
-      document.body.style.overflow = 'hidden';
-      return () => {
-        document.body.style.position = '';
-        document.body.style.top = '';
-        document.body.style.width = '';
-        document.body.style.overflow = '';
-        window.scrollTo(0, scrollY);
-      };
-    }
+    const id = setInterval(() => setNowMs(Date.now()), 10000);
+    return () => clearInterval(id);
+  }, []);
+
+  const today = new Date(nowMs).toISOString().split('T')[0];
+
+  useEffect(() => {
+    if (!showModal) return;
+    const y = window.scrollY;
+    document.body.style.cssText = `position:fixed;top:-${y}px;width:100%;overflow:hidden`;
+    return () => {
+      document.body.style.cssText = '';
+      window.scrollTo(0, y);
+    };
   }, [showModal]);
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
-    if (name === 'discount' || name === 'maxDiscount') {
-      if (value !== '' && !/^\d+$/.test(value)) return;
-    }
+    if ((name === 'discount' || name === 'maxDiscount') && value !== '' && !/^\d+$/.test(value)) return;
     setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
     setErrors(prev => ({ ...prev, [name]: '' }));
     setServerMsg('');
   };
 
   const validate = () => {
-    const newErrors = {};
-    if (!formData.code.trim()) newErrors.code = 'Promo code is required.';
-    if (!formData.name) newErrors.name = 'Please select a K-Pop group.';
-    const discountErr = validateDiscount(formData.discount);
-    if (discountErr) newErrors.discount = discountErr;
-    const maxDiscountErr = validateMaxDiscount(formData.maxDiscount);
-    if (maxDiscountErr) newErrors.maxDiscount = maxDiscountErr;
-    const dateErrs = validateDates(formData.startDate, formData.endDate);
-    if (dateErrs.start) newErrors.startDate = dateErrs.start;
-    if (dateErrs.end) newErrors.endDate = dateErrs.end;
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    const errs = {};
+    if (!formData.code.trim()) errs.code = 'Promo code is required.';
+    if (!formData.name)        errs.name = 'Please select a K-Pop group.';
+    const de = validateDiscount(formData.discount);
+    if (de) errs.discount = de;
+    const me = validateMaxDiscount(formData.maxDiscount);
+    if (me) errs.maxDiscount = me;
+    if (!formData.startDate) errs.startDate = 'Required.';
+    if (!formData.endDate)   errs.endDate   = 'Required.';
+    if (formData.startDate && formData.endDate && formData.endDate < formData.startDate)
+      errs.endDate = 'End date must be after start date.';
+    if (formData.startDate === formData.endDate && formData.startTime && formData.endTime
+        && formData.startTime >= formData.endTime)
+      errs.endTime = 'End time must be after start time on the same day.';
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
-    setSubmitting(true);
-    setServerMsg('');
+    setSubmitting(true); setServerMsg('');
     try {
       const payload = {
-        code: formData.code.toUpperCase().trim(),
-        name: formData.name,
-        discount: Number(formData.discount),
+        code:        formData.code.toUpperCase().trim(),
+        name:        formData.name,
+        discount:    Number(formData.discount),
         maxDiscount: Number(formData.maxDiscount),
-        startDate: formData.startDate,
-        endDate: formData.endDate,
-        isActive: formData.isActive,
+        startDate:   formData.startDate || undefined,
+        startTime:   formData.startTime || undefined,
+        endDate:     formData.endDate   || undefined,
+        endTime:     formData.endTime   || undefined,
+        isActive:    formData.isActive,
       };
       if (editingPromo) {
         await updatePromo({ id: editingPromo._id, ...payload });
         setServerMsg('✅ Promo updated!');
       } else {
         const result = await createPromo(payload);
-        if (!result.success) {
-          setServerMsg(`❌ ${result.message}`);
-          setSubmitting(false);
-          return;
-        }
-        setServerMsg('✅ Promo created!');
+        if (!result.success) { setServerMsg(`❌ ${result.message}`); setSubmitting(false); return; }
+        setServerMsg('✅ Promo created! Email notification sent to all users.');
       }
-      setTimeout(() => resetForm(), 800);
-    } catch (err) {
+      setTimeout(resetForm, 1200);
+    } catch {
       setServerMsg('❌ Something went wrong. Try again.');
     } finally {
       setSubmitting(false);
@@ -131,17 +140,17 @@ const AdminPromos = () => {
   const handleEdit = (promo) => {
     setEditingPromo(promo);
     setFormData({
-      code: promo.code,
-      name: promo.name,
-      discount: String(promo.discount),
+      code:        promo.code,
+      name:        promo.name,
+      discount:    String(promo.discount),
       maxDiscount: String(promo.maxDiscount),
-      startDate: promo.startDate || '',
-      endDate: promo.endDate || '',
-      isActive: promo.isActive,
+      startDate:   promo.startDate || '',
+      startTime:   promo.startTime || '',
+      endDate:     promo.endDate   || '',
+      endTime:     promo.endTime   || '',
+      isActive:    promo.isActive,
     });
-    setErrors({});
-    setServerMsg('');
-    setShowModal(true);
+    setErrors({}); setServerMsg(''); setShowModal(true);
   };
 
   const handleDelete = async (id) => {
@@ -149,43 +158,31 @@ const AdminPromos = () => {
     await deletePromo({ id });
   };
 
-  const handleToggle = async (id) => { await toggleStatus({ id }); };
-
   const resetForm = () => {
-    setFormData(EMPTY_FORM);
-    setEditingPromo(null);
-    setErrors({});
-    setServerMsg('');
-    setShowModal(false);
+    setFormData(EMPTY_FORM); setEditingPromo(null);
+    setErrors({}); setServerMsg(''); setShowModal(false);
   };
 
-  const formatPeriod = (s, e) => (!s || !e) ? '—' : `${s} – ${e}`;
+  const formatPeriod = (p) => {
+    const s = p.startDate ? `${p.startDate}${p.startTime ? ` ${fmt12(p.startTime)}` : ''}` : '';
+    const e = p.endDate   ? `${p.endDate}${p.endTime     ? ` ${fmt12(p.endTime)}`   : ''}` : '';
+    if (!s && !e) return '—';
+    if (s && e) return `${s} → ${e}`;
+    return s || e;
+  };
 
-  const isExpired = (p) => p.endDate && p.endDate < today;
-  const isNotStarted = (p) => p.startDate && p.startDate > today;
-
-  const getStatusLabel = (promo) => {
+  const getStatus = (promo) => {
     if (!promo.isActive) return { label: 'Inactive', cls: 'badge-inactive' };
-    if (isExpired(promo)) return { label: 'Expired', cls: 'badge-expired' };
-    if (isNotStarted(promo)) return { label: 'Upcoming', cls: 'badge-upcoming' };
+    const startMs = toMs(promo.startDate, promo.startTime || '00:00');
+    const endMs   = toMs(promo.endDate,   promo.endTime   || '23:59');
+    if (endMs   && nowMs > endMs)   return { label: 'Expired',  cls: 'badge-expired'  };
+    if (startMs && nowMs < startMs) return { label: 'Upcoming', cls: 'badge-upcoming' };
     return { label: 'Active', cls: 'badge-active' };
   };
 
-  const TagIcon = () => (
-    <svg className="tag-icon" viewBox="0 0 20 20" fill="currentColor">
-      <path fillRule="evenodd" d="M17.707 9.293a1 1 0 010 1.414l-7 7a1 1 0 01-1.414 0l-7-7A.997.997 0 012 10V5a3 3 0 013-3h5c.256 0 .512.098.707.293l7 7zM5 6a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
-    </svg>
-  );
-  const EditIcon = () => (
-    <svg viewBox="0 0 20 20" fill="currentColor">
-      <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-    </svg>
-  );
-  const DeleteIcon = () => (
-    <svg viewBox="0 0 20 20" fill="currentColor">
-      <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-    </svg>
-  );
+  const TagIcon    = () => <svg className="tag-icon" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M17.707 9.293a1 1 0 010 1.414l-7 7a1 1 0 01-1.414 0l-7-7A.997.997 0 012 10V5a3 3 0 013-3h5c.256 0 .512.098.707.293l7 7zM5 6a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" /></svg>;
+  const EditIcon   = () => <svg viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg>;
+  const DeleteIcon = () => <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" /></svg>;
 
   return (
     <div className="admin-promos">
@@ -195,14 +192,14 @@ const AdminPromos = () => {
           <p className="subtitle">Manage promotional discounts</p>
         </div>
         <button className="create-btn" onClick={() => {
-          setShowModal(true); setEditingPromo(null);
-          setFormData(EMPTY_FORM); setErrors({}); setServerMsg('');
+          setEditingPromo(null); setFormData(EMPTY_FORM);
+          setErrors({}); setServerMsg(''); setShowModal(true);
         }}>
           + Create Promo
         </button>
       </div>
 
-      {/* DESKTOP TABLE */}
+      {/* ── Desktop Table ── */}
       <div className="promos-table-container">
         <table className="promos-table">
           <thead>
@@ -217,167 +214,197 @@ const AdminPromos = () => {
             </tr>
           </thead>
           <tbody>
-            {promos.length === 0 ? (
-              <tr><td colSpan="7" className="empty-state">No promos yet. Create your first promo!</td></tr>
-            ) : (
-              promos.map(promo => {
-                const { label, cls } = getStatusLabel(promo);
-                return (
-                  <tr key={promo._id}>
-                    <td><span className="promo-code"><TagIcon />{promo.code}</span></td>
-                    <td><span className="group-chip">{promo.name}</span></td>
-                    <td>{promo.discount}%</td>
-                    <td>₱{promo.maxDiscount.toLocaleString()}</td>
-                    <td>{formatPeriod(promo.startDate, promo.endDate)}</td>
-                    <td>
-                      <div className="status-cell">
-                        <label className="toggle-switch">
-                          <input type="checkbox" checked={promo.isActive} onChange={() => handleToggle(promo._id)} />
-                          <span className="toggle-slider"></span>
-                        </label>
-                        <span className={`status-badge ${cls}`}>{label}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <div className="action-buttons">
-                        <button className="edit-btn" onClick={() => handleEdit(promo)} title="Edit"><EditIcon /></button>
-                        <button className="delete-btn" onClick={() => handleDelete(promo._id)} title="Delete"><DeleteIcon /></button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
+            {promos.length === 0
+              ? <tr><td colSpan="7" className="empty-state">No promos yet. Create your first promo!</td></tr>
+              : promos.map(promo => {
+                  const { label, cls } = getStatus(promo);
+                  return (
+                    <tr key={promo._id}>
+                      <td><span className="promo-code"><TagIcon />{promo.code}</span></td>
+                      <td><span className="group-chip">{promo.name}</span></td>
+                      <td>{promo.discount}%</td>
+                      <td>₱{promo.maxDiscount.toLocaleString()}</td>
+                      <td className="period-cell">{formatPeriod(promo)}</td>
+                      <td>
+                        <div className="status-cell">
+                          <label className="toggle-switch">
+                            <input type="checkbox" checked={promo.isActive}
+                              onChange={() => toggleStatus({ id: promo._id })} />
+                            <span className="toggle-slider"></span>
+                          </label>
+                          <span className={`status-badge ${cls}`}>{label}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="action-buttons">
+                          <button className="edit-btn" onClick={() => handleEdit(promo)}><EditIcon /></button>
+                          <button className="delete-btn" onClick={() => handleDelete(promo._id)}><DeleteIcon /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+            }
           </tbody>
         </table>
       </div>
 
-      {/* MOBILE CARD LIST */}
+      {/* ── Mobile Card View ── */}
       <div className="promo-cards-list">
-        {promos.length === 0 ? (
-          <div className="empty-cards-msg">No promos yet. Create your first promo!</div>
-        ) : (
-          promos.map(promo => {
-            const { label, cls } = getStatusLabel(promo);
-            return (
-              <div className="promo-card" key={promo._id}>
-                <div className="promo-card-header">
-                  <span className="promo-card-code"><TagIcon />{promo.code}</span>
-                  <div className="promo-card-toggle">
-                    <span className={`status-badge ${cls}`}>{label}</span>
-                    <label className="toggle-switch">
-                      <input type="checkbox" checked={promo.isActive} onChange={() => handleToggle(promo._id)} />
-                      <span className="toggle-slider"></span>
-                    </label>
+        {promos.length === 0
+          ? <div className="empty-cards-msg">No promos yet. Create your first promo!</div>
+          : promos.map(promo => {
+              const { label, cls } = getStatus(promo);
+              return (
+                <div className="promo-card" key={promo._id}>
+                  <div className="promo-card-header">
+                    <span className="promo-card-code"><TagIcon />{promo.code}</span>
+                    <div className="promo-card-toggle">
+                      <span className={`status-badge ${cls}`}>{label}</span>
+                      <label className="toggle-switch">
+                        <input type="checkbox" checked={promo.isActive}
+                          onChange={() => toggleStatus({ id: promo._id })} />
+                        <span className="toggle-slider"></span>
+                      </label>
+                    </div>
+                  </div>
+                  <div className="promo-card-body">
+                    <div className="promo-card-field"><label>K-Pop Group</label><span className="group-chip">{promo.name}</span></div>
+                    <div className="promo-card-field"><label>Discount</label><span>{promo.discount}%</span></div>
+                    <div className="promo-card-field"><label>Max Discount</label><span>₱{promo.maxDiscount.toLocaleString()}</span></div>
+                    <div className="promo-card-field promo-card-period"><label>Period</label><span>{formatPeriod(promo)}</span></div>
+                  </div>
+                  <div className="promo-card-actions">
+                    <button className="edit-btn" onClick={() => handleEdit(promo)}><EditIcon /></button>
+                    <button className="delete-btn" onClick={() => handleDelete(promo._id)}><DeleteIcon /></button>
                   </div>
                 </div>
-                <div className="promo-card-body">
-                  <div className="promo-card-field"><label>K-Pop Group</label><span className="group-chip">{promo.name}</span></div>
-                  <div className="promo-card-field"><label>Discount</label><span>{promo.discount}%</span></div>
-                  <div className="promo-card-field"><label>Max Discount</label><span>₱{promo.maxDiscount.toLocaleString()}</span></div>
-                  <div className="promo-card-field promo-card-period"><label>Period</label><span>{formatPeriod(promo.startDate, promo.endDate)}</span></div>
-                </div>
-                <div className="promo-card-actions">
-                  <button className="edit-btn" onClick={() => handleEdit(promo)}><EditIcon /></button>
-                  <button className="delete-btn" onClick={() => handleDelete(promo._id)}><DeleteIcon /></button>
-                </div>
-              </div>
-            );
-          })
-        )}
+              );
+            })
+        }
       </div>
 
-      {/* MODAL */}
+      {/* ── Modal ── */}
       {showModal && (
         <div className="modal-overlay" onClick={resetForm}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2>{editingPromo ? 'Edit Promo' : 'Create New Promo'}</h2>
               <button className="close-btn" onClick={resetForm}>×</button>
             </div>
-
             <form onSubmit={handleSubmit} noValidate>
               <div className="form-grid">
+
                 <div className="form-group">
-                  <label htmlFor="code">Promo Code <span className="req">*</span></label>
-                  <input
-                    type="text" id="code" name="code"
-                    value={formData.code} onChange={handleInputChange}
-                    placeholder="e.g., SUMMER25"
+                  <label>Promo Code <span className="req">*</span></label>
+                  <input type="text" name="code" value={formData.code}
+                    onChange={handleInputChange} placeholder="e.g., SUMMER25"
                     className={errors.code ? 'input-error' : ''}
-                    style={{ textTransform: 'uppercase' }} maxLength={20}
-                  />
+                    style={{ textTransform: 'uppercase' }} maxLength={20} />
                   {errors.code && <span className="field-error">{errors.code}</span>}
                 </div>
 
-                {/* K-Pop Group Dropdown */}
                 <div className="form-group">
-                  <label htmlFor="name">K-Pop Group <span className="req">*</span></label>
-                  <select
-                    id="name" name="name"
-                    value={formData.name} onChange={handleInputChange}
-                    className={`group-select ${errors.name ? 'input-error' : ''}`}
-                  >
+                  <label>K-Pop Group <span className="req">*</span></label>
+                  <select name="name" value={formData.name} onChange={handleInputChange}
+                    className={`group-select ${errors.name ? 'input-error' : ''}`}>
                     <option value="">— Select a group —</option>
-                    {KPOP_GROUPS.map(g => (
-                      <option key={g} value={g}>{g}</option>
-                    ))}
+                    {KPOP_GROUPS.map(g => <option key={g} value={g}>{g}</option>)}
                   </select>
                   {errors.name && <span className="field-error">{errors.name}</span>}
                 </div>
 
                 <div className="form-group">
-                  <label htmlFor="discount">Discount (%) <span className="req">*</span></label>
-                  <input
-                    type="text" inputMode="numeric" id="discount" name="discount"
-                    value={formData.discount} onChange={handleInputChange}
-                    placeholder="e.g., 25" maxLength={3}
-                    className={errors.discount ? 'input-error' : ''}
-                  />
+                  <label>Discount (%) <span className="req">*</span></label>
+                  <input type="text" inputMode="numeric" name="discount" value={formData.discount}
+                    onChange={handleInputChange} placeholder="e.g., 25" maxLength={3}
+                    className={errors.discount ? 'input-error' : ''} />
                   <span className="field-hint">1–100% only</span>
                   {errors.discount && <span className="field-error">{errors.discount}</span>}
                 </div>
 
                 <div className="form-group">
-                  <label htmlFor="maxDiscount">Max Discount (₱) <span className="req">*</span></label>
-                  <input
-                    type="text" inputMode="numeric" id="maxDiscount" name="maxDiscount"
-                    value={formData.maxDiscount} onChange={handleInputChange}
-                    placeholder="e.g., 500" maxLength={4}
-                    className={errors.maxDiscount ? 'input-error' : ''}
-                  />
+                  <label>Max Discount (₱) <span className="req">*</span></label>
+                  <input type="text" inputMode="numeric" name="maxDiscount" value={formData.maxDiscount}
+                    onChange={handleInputChange} placeholder="e.g., 500" maxLength={4}
+                    className={errors.maxDiscount ? 'input-error' : ''} />
                   <span className="field-hint">Max ₱9999</span>
                   {errors.maxDiscount && <span className="field-error">{errors.maxDiscount}</span>}
                 </div>
 
+                {/* START DATE + TIME */}
                 <div className="form-group">
-                  <label htmlFor="startDate">Start Date <span className="req">*</span></label>
-                  <input
-                    type="date" id="startDate" name="startDate"
-                    value={formData.startDate} onChange={handleInputChange}
-                    className={errors.startDate ? 'input-error' : ''}
-                  />
+                  <label>Start Date <span className="req">*</span></label>
+                  <input type="date" name="startDate" value={formData.startDate}
+                    onChange={handleInputChange}
+                    className={errors.startDate ? 'input-error' : ''} />
                   {errors.startDate && <span className="field-error">{errors.startDate}</span>}
                 </div>
 
                 <div className="form-group">
-                  <label htmlFor="endDate">End Date <span className="req">*</span></label>
-                  <input
-                    type="date" id="endDate" name="endDate"
-                    value={formData.endDate} onChange={handleInputChange}
-                    min={formData.startDate || today}
-                    className={errors.endDate ? 'input-error' : ''}
-                  />
+                  <label>Start Time <span className="field-optional">(optional)</span></label>
+                  <div className="time-input-wrapper">
+                    <input type="time" name="startTime" value={formData.startTime}
+                      onChange={handleInputChange} className="time-input" />
+                    {formData.startTime && (
+                      <span className="time-preview">▶ <strong>{fmt12(formData.startTime)}</strong></span>
+                    )}
+                  </div>
+                  <span className="field-hint">Blank = 12:00 AM</span>
+                </div>
+
+                {/* END DATE + TIME */}
+                <div className="form-group">
+                  <label>End Date <span className="req">*</span></label>
+                  <input type="date" name="endDate" value={formData.endDate}
+                    onChange={handleInputChange} min={formData.startDate || today}
+                    className={errors.endDate ? 'input-error' : ''} />
                   {errors.endDate && <span className="field-error">{errors.endDate}</span>}
                 </div>
+
+                <div className="form-group">
+                  <label>End Time <span className="field-optional">(optional)</span></label>
+                  <div className="time-input-wrapper">
+                    <input type="time" name="endTime" value={formData.endTime}
+                      onChange={handleInputChange}
+                      className={`time-input ${errors.endTime ? 'input-error' : ''}`} />
+                    {formData.endTime && (
+                      <span className="time-preview">⏹ <strong>{fmt12(formData.endTime)}</strong></span>
+                    )}
+                  </div>
+                  <span className="field-hint">Blank = 11:59 PM</span>
+                  {errors.endTime && <span className="field-error">{errors.endTime}</span>}
+                </div>
+
               </div>
 
-              <div className="form-group checkbox-group">
+              {/* Schedule summary */}
+              {(formData.startDate || formData.endDate) && (
+                <div className="schedule-summary">
+                  📅{' '}
+                  {formData.startDate && (
+                    <span>{formData.startDate} • {formData.startTime ? fmt12(formData.startTime) : '12:00 AM'}</span>
+                  )}
+                  {formData.startDate && formData.endDate && <span className="sched-arrow"> → </span>}
+                  {formData.endDate && (
+                    <span>{formData.endDate} • {formData.endTime ? fmt12(formData.endTime) : '11:59 PM'}</span>
+                  )}
+                </div>
+              )}
+
+              <div className="form-group checkbox-group" style={{ marginTop: 12 }}>
                 <label>
-                  <input type="checkbox" name="isActive" checked={formData.isActive} onChange={handleInputChange} />
+                  <input type="checkbox" name="isActive" checked={formData.isActive}
+                    onChange={handleInputChange} />
                   <span>Active (users can use this promo)</span>
                 </label>
               </div>
+
+              {!editingPromo && (
+                <p className="email-notice">
+                  📧 An email notification will be sent to all registered users when this promo is created.
+                </p>
+              )}
 
               {serverMsg && (
                 <div className={`server-msg ${serverMsg.startsWith('✅') ? 'msg-success' : 'msg-error'}`}>

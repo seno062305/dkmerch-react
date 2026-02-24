@@ -1,6 +1,6 @@
 // convex/sendEmail.ts
 import { action, internalAction } from "./_generated/server";
-import { internal } from "./_generated/api";
+import { internal, api } from "./_generated/api";
 import { v } from "convex/values";
 
 // ── BASE EMAIL (internal) ─────────────────────────
@@ -103,7 +103,6 @@ export const sendOrderConfirmation = action({
       })
     ),
     total: v.number(),
-    // ── PROMO FIELDS (optional) ──
     promoCode:      v.optional(v.string()),
     promoName:      v.optional(v.string()),
     discountAmount: v.optional(v.number()),
@@ -128,21 +127,15 @@ export const sendOrderConfirmation = action({
     const chargedAmount  = finalTotal ?? total;
     const hasPromo       = !!(promoCode && discountAmount && discountAmount > 0);
 
-    // Build item rows
-    const itemRows = items
-      .map(
-        (item) => `
-        <tr>
-          <td style="padding: 10px 12px; border-bottom: 1px solid #eee; color: #333; font-size: 14px;">${item.name}</td>
-          <td style="padding: 10px 12px; border-bottom: 1px solid #eee; text-align: center; color: #555; font-size: 14px;">${item.quantity}</td>
-          <td style="padding: 10px 12px; border-bottom: 1px solid #eee; text-align: right; color: #333; font-size: 14px;">₱${(item.price).toLocaleString()}</td>
-          <td style="padding: 10px 12px; border-bottom: 1px solid #eee; text-align: right; color: #fc1268; font-weight: 600; font-size: 14px;">₱${(item.price * item.quantity).toLocaleString()}</td>
-        </tr>
-      `
-      )
-      .join("");
+    const itemRows = items.map((item) => `
+      <tr>
+        <td style="padding: 10px 12px; border-bottom: 1px solid #eee; color: #333; font-size: 14px;">${item.name}</td>
+        <td style="padding: 10px 12px; border-bottom: 1px solid #eee; text-align: center; color: #555; font-size: 14px;">${item.quantity}</td>
+        <td style="padding: 10px 12px; border-bottom: 1px solid #eee; text-align: right; color: #333; font-size: 14px;">₱${(item.price).toLocaleString()}</td>
+        <td style="padding: 10px 12px; border-bottom: 1px solid #eee; text-align: right; color: #fc1268; font-weight: 600; font-size: 14px;">₱${(item.price * item.quantity).toLocaleString()}</td>
+      </tr>
+    `).join("");
 
-    // Build promo row (only if promo was applied)
     const promoRow = hasPromo ? `
       <tr style="background: #f0fdf4;">
         <td colspan="3" style="padding: 10px 12px; color: #15803d; font-size: 14px; font-weight: 600;">
@@ -153,7 +146,6 @@ export const sendOrderConfirmation = action({
       </tr>
     ` : '';
 
-    // Build shipping row
     const shippingRow = `
       <tr>
         <td colspan="3" style="padding: 10px 12px; border-bottom: 1px solid #eee; color: #555; font-size: 14px;">Shipping Fee</td>
@@ -163,32 +155,22 @@ export const sendOrderConfirmation = action({
       </tr>
     `;
 
-    // Promo savings banner
     const promoBanner = hasPromo ? `
-      <div style="background: linear-gradient(135deg, #fdf2f8, #fce7f3); border: 1.5px solid #f9a8d4; border-radius: 10px; padding: 14px 18px; margin: 20px 0; display: flex; align-items: center; gap: 10px;">
-        <span style="font-size: 20px;">🎁</span>
-        <div>
-          <p style="margin: 0; font-size: 14px; font-weight: 700; color: #be185d;">You saved ₱${discountAmount!.toLocaleString()} with promo code ${promoCode}!</p>
-          <p style="margin: 4px 0 0; font-size: 12px; color: #ec4899;">Thank you for being a DKMerch VIP! 💜</p>
-        </div>
+      <div style="background: linear-gradient(135deg, #fdf2f8, #fce7f3); border: 1.5px solid #f9a8d4; border-radius: 10px; padding: 14px 18px; margin: 20px 0;">
+        <p style="margin: 0; font-size: 14px; font-weight: 700; color: #be185d;">🎁 You saved ₱${discountAmount!.toLocaleString()} with promo code ${promoCode}!</p>
+        <p style="margin: 4px 0 0; font-size: 12px; color: #ec4899;">Thank you for being a DKMerch VIP! 💜</p>
       </div>
     ` : '';
 
     const html = `
       <div style="font-family: 'Segoe UI', sans-serif; max-width: 620px; margin: 0 auto; background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.1);">
-
-        <!-- HEADER -->
         <div style="background: linear-gradient(135deg, #fc1268, #9c27b0); padding: 36px 32px; text-align: center;">
           <h1 style="color: white; margin: 0 0 6px; font-size: 28px;">🎉 Order Confirmed!</h1>
           <p style="color: rgba(255,255,255,0.9); margin: 0; font-size: 15px;">DKMerch K-Pop Paradise</p>
         </div>
-
-        <!-- BODY -->
         <div style="padding: 32px;">
           <p style="color: #333; font-size: 16px; margin-top: 0;">Hi <strong>${name}</strong>! Thank you for your order 💜</p>
           <p style="color: #555; font-size: 14px;">Order ID: <strong style="font-family: monospace; font-size: 15px;">${orderId}</strong></p>
-
-          <!-- ITEMS TABLE -->
           <table style="width: 100%; border-collapse: collapse; margin: 20px 0; border: 1px solid #f0f0f0; border-radius: 10px; overflow: hidden;">
             <thead>
               <tr style="background: linear-gradient(135deg, #fc1268, #9c27b0);">
@@ -204,8 +186,6 @@ export const sendOrderConfirmation = action({
               ${promoRow}
             </tbody>
           </table>
-
-          <!-- TOTALS BOX -->
           <div style="background: #f8f9fa; border-radius: 10px; padding: 20px; margin-bottom: 20px;">
             <table style="width: 100%; border-collapse: collapse;">
               <tr>
@@ -223,35 +203,14 @@ export const sendOrderConfirmation = action({
               </tr>
               ` : ''}
               <tr style="border-top: 2px solid #e2e8f0;">
-                <td style="padding: 12px 0 6px; font-size: 18px; font-weight: 700; color: #1a1a1a;">
-                  ${hasPromo ? 'Total Charged' : 'Total'}
-                </td>
-                <td style="padding: 12px 0 6px; text-align: right; font-size: 22px; font-weight: 800; color: #fc1268;">
-                  ₱${chargedAmount.toLocaleString()}
-                </td>
+                <td style="padding: 12px 0 6px; font-size: 18px; font-weight: 700; color: #1a1a1a;">${hasPromo ? 'Total Charged' : 'Total'}</td>
+                <td style="padding: 12px 0 6px; text-align: right; font-size: 22px; font-weight: 800; color: #fc1268;">₱${chargedAmount.toLocaleString()}</td>
               </tr>
-              ${hasPromo ? `
-              <tr>
-                <td colspan="2" style="padding: 0; font-size: 12px; color: #9ca3af; font-style: italic;">
-                  Original total was ₱${total.toLocaleString()} before promo discount.
-                </td>
-              </tr>
-              ` : ''}
             </table>
           </div>
-
-          <!-- PROMO SAVINGS BANNER -->
           ${promoBanner}
-
-          <p style="color: #555; font-size: 14px; line-height: 1.6;">
-            We'll notify you once your order is shipped. You can track your order on our website.
-          </p>
-          <p style="color: #555; font-size: 14px; line-height: 1.6;">
-            If you have any questions, feel free to reach out to us. 💜
-          </p>
+          <p style="color: #555; font-size: 14px; line-height: 1.6;">We'll notify you once your order is shipped. 💜</p>
         </div>
-
-        <!-- FOOTER -->
         <div style="background: #f8f9fa; padding: 16px; text-align: center; border-top: 1px solid #e9ecef;">
           <p style="color: #aaa; font-size: 12px; margin: 0;">© 2026 DKMerch · K-Pop Paradise</p>
         </div>
@@ -265,5 +224,102 @@ export const sendOrderConfirmation = action({
         : `Order Confirmed — ${orderId} | DKMerch`,
       html,
     });
+  },
+});
+
+// ── PROMO NOTIFICATION — blast to all registered users ──
+
+export const sendPromoNotificationToAllUsers = internalAction({
+  args: {
+    promoCode:   v.string(),
+    promoName:   v.string(),
+    discount:    v.number(),
+    maxDiscount: v.number(),
+    startDate:   v.optional(v.string()),
+    startTime:   v.optional(v.string()),
+    endDate:     v.optional(v.string()),
+    endTime:     v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<{ success: boolean; sent: number }> => {
+    const users: { name: string; email: string }[] = await ctx.runQuery(
+      api.users.getAllUsersForPromoNotif, {}
+    );
+
+    if (!users || users.length === 0) return { success: true, sent: 0 };
+
+    const fmt12 = (t: string) => {
+      const [h, m] = t.split(":").map(Number);
+      const ampm = h >= 12 ? "PM" : "AM";
+      const h12 = h % 12 || 12;
+      return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
+    };
+
+    const fmtDate = (d: string) => {
+      const [y, mo, day] = d.split("-").map(Number);
+      const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      return `${months[mo - 1]} ${day}, ${y}`;
+    };
+
+    const startLabel = args.startDate
+      ? `${fmtDate(args.startDate)}${args.startTime ? ` • ${fmt12(args.startTime)}` : ""}`
+      : null;
+    const endLabel = args.endDate
+      ? `${fmtDate(args.endDate)}${args.endTime ? ` • ${fmt12(args.endTime)}` : ""}`
+      : null;
+
+    const scheduleRow = (startLabel || endLabel) ? `
+      <tr>
+        <td colspan="2" style="padding: 0 0 16px; text-align: center;">
+          <span style="display: inline-block; background: rgba(147,51,234,0.1); border: 1px solid rgba(147,51,234,0.3); border-radius: 20px; padding: 6px 16px; font-size: 13px; color: #7c3aed;">
+            📅 ${startLabel ? `<strong>Start:</strong> ${startLabel}` : ""}${startLabel && endLabel ? " &rarr; " : ""}${endLabel ? `<strong>End:</strong> ${endLabel}` : ""}
+          </span>
+        </td>
+      </tr>
+    ` : "";
+
+    let sent = 0;
+    for (const user of users) {
+      if (!user.email) continue;
+
+      const html = `
+        <div style="font-family: 'Segoe UI', sans-serif; max-width: 580px; margin: 0 auto; background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.12);">
+          <div style="background: linear-gradient(135deg, #9333ea, #ec4899, #ef4444); padding: 40px 32px; text-align: center;">
+            <div style="font-size: 48px; margin-bottom: 10px;">🔥</div>
+            <h1 style="color: white; margin: 0 0 8px; font-size: 28px; font-weight: 900; letter-spacing: 1px;">LIMITED TIME PROMO!</h1>
+            <p style="color: rgba(255,255,255,0.9); margin: 0; font-size: 16px;">Exclusive deal for DKMerch shoppers</p>
+          </div>
+          <div style="padding: 36px 32px; text-align: center;">
+            <p style="color: #374151; font-size: 16px; margin: 0 0 24px;">Hi <strong>${user.name}</strong>! 🎉 A new promo is live for <strong>${args.promoName}</strong> fans!</p>
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
+              ${scheduleRow}
+            </table>
+            <div style="background: linear-gradient(135deg, #fdf2f8, #f5f3ff); border: 2px dashed #ec4899; border-radius: 16px; padding: 28px; margin: 0 0 28px;">
+              <p style="color: #6b7280; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 10px;">Your Promo Code</p>
+              <div style="font-family: 'Courier New', monospace; font-size: 36px; font-weight: 900; color: #ec4899; letter-spacing: 4px; margin-bottom: 14px;">${args.promoCode}</div>
+              <div style="background: linear-gradient(135deg, #9333ea, #ec4899); color: white; border-radius: 10px; padding: 12px 20px; display: inline-block; font-size: 18px; font-weight: 700;">
+                ${args.discount}% OFF
+                <span style="font-size: 13px; opacity: 0.85; margin-left: 6px;">(up to ₱${args.maxDiscount.toLocaleString()})</span>
+              </div>
+            </div>
+            <a href="https://dkmerch.com/collections" style="display: inline-block; background: linear-gradient(135deg, #9333ea, #ec4899); color: white; text-decoration: none; padding: 14px 36px; border-radius: 10px; font-size: 16px; font-weight: 700; margin-bottom: 20px;">
+              🛍️ Shop Now at DKMerch
+            </a>
+            <p style="color: #9ca3af; font-size: 13px; margin: 0;">Use code at checkout. Limited time only!</p>
+          </div>
+          <div style="background: #f8f9fa; padding: 16px; text-align: center; border-top: 1px solid #e9ecef;">
+            <p style="color: #aaa; font-size: 12px; margin: 0;">© 2026 DKMerch · K-Pop Paradise · You're receiving this because you have a DKMerch account.</p>
+          </div>
+        </div>
+      `;
+
+      await ctx.runAction(internal.sendEmail.sendEmail, {
+        to: user.email,
+        subject: `🔥 ${args.promoCode} — ${args.discount}% OFF for ${args.promoName} fans! | DKMerch`,
+        html,
+      });
+      sent++;
+    }
+
+    return { success: true, sent };
   },
 });

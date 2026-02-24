@@ -733,3 +733,119 @@
   .actions-cell { gap: 4px; }
   .btn-edit, .btn-suspend, .btn-delete { padding: 6px 8px; font-size: 12px; }
 }
+
+/* ── ADD/REPLACE THESE RESPONSIVE STYLES AT BOTTOM OF AdminUsers.css ── */
+
+/* Base modal overlay — ensure correct centering */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.3s ease;
+  backdrop-filter: blur(4px);
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 16px;
+  padding: 0;
+  width: 100%;
+  max-width: 500px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease;
+  max-height: 92vh;
+  overflow-y: auto;
+}
+
+/* ══════════════════════════
+   RESPONSIVE — Users Modals
+══════════════════════════ */
+
+@media (max-width: 768px) {
+  .modal-overlay {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .modal-content {
+    border-radius: 20px 20px 0 0;
+    max-width: 100%;
+    max-height: 94vh;
+  }
+
+  .modal-header {
+    padding: 16px 18px;
+    border-radius: 20px 20px 0 0;
+  }
+
+  .modal-header h2 { font-size: 17px; }
+
+  .modal-content form { padding: 16px; }
+
+  .form-group { margin-bottom: 16px; }
+  .form-group label { font-size: 13px; }
+  .form-group input,
+  .form-group select { padding: 10px 12px; font-size: 13px; }
+
+  .modal-actions {
+    flex-direction: row;
+    gap: 8px;
+    padding-top: 14px;
+  }
+
+  .btn-cancel, .btn-save,
+  .btn-suspend-confirm, .btn-activate-confirm {
+    flex: 1;
+    padding: 11px 10px;
+    font-size: 13px;
+    justify-content: center;
+  }
+
+  /* Confirm modal — also bottom sheet */
+  .confirm-modal {
+    max-width: 100%;
+    padding: 28px 20px;
+    border-radius: 20px 20px 0 0;
+  }
+
+  .confirm-modal .modal-actions {
+    flex-direction: row;
+    gap: 8px;
+    border-top: 1px solid #eee;
+    padding-top: 14px;
+  }
+
+  .confirm-modal .modal-actions button {
+    flex: 1;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .modal-content form { padding: 14px; }
+  .modal-header { padding: 14px 16px; }
+  .modal-header h2 { font-size: 15px; }
+
+  .form-group input,
+  .form-group select { font-size: 12px; padding: 9px 10px; }
+
+  .password-requirements { padding: 10px; }
+  .password-requirements li { font-size: 11px; }
+
+  .btn-cancel, .btn-save,
+  .btn-suspend-confirm, .btn-activate-confirm {
+    padding: 10px 8px;
+    font-size: 12px;
+  }
+
+  .confirm-modal { padding: 24px 16px; }
+  .confirm-icon  { width: 56px; height: 56px; font-size: 24px; }
+  .confirm-modal h2 { font-size: 17px; }
+  .confirm-modal p  { font-size: 13px; }
+}

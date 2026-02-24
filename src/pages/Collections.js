@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useSearchParams, useNavigate } from 'react-router-dom';
+import { useQuery } from 'convex/react';
+import { api } from '../../convex/_generated/api';
 import { useProducts } from '../utils/productStorage';
 import { useAddToCart } from '../context/cartUtils';
 import { useWishlist, useToggleWishlist } from '../context/wishlistUtils';
@@ -23,8 +25,19 @@ const Collections = () => {
   const addToCartMutation = useAddToCart();
   const toggleWishlistMutation = useToggleWishlist();
 
+  // ✅ Fetch active promo for indicator
+  const activePromos = useQuery(api.promos.getActivePromos) || [];
+  const activePromo = activePromos[0] || null;
+
   const isWishlisted = (productId) =>
     wishlistItems.some(item => item.productId === productId);
+
+  // ✅ Check if product is promo-eligible
+  const isPromoProduct = (product) => {
+    if (!activePromo || !activePromo.isActive) return false;
+    if (!activePromo.name) return false;
+    return product.kpopGroup?.trim().toUpperCase() === activePromo.name.trim().toUpperCase();
+  };
 
   useEffect(() => {
     const filterGroup = location.state?.filterGroup;
@@ -81,6 +94,18 @@ const Collections = () => {
       <div className="collections-header">
         <h1>All Collections</h1>
         <p>Explore our complete K-Pop merchandise collection</p>
+
+        {/* ✅ Active promo banner */}
+        {activePromo && activePromo.isActive && (
+          <div className="collections-promo-banner">
+            <i className="fas fa-tag"></i>
+            <span>
+              <strong>{activePromo.name} Promo Active!</strong> Use code{' '}
+              <span className="collections-promo-code">{activePromo.code}</span> for{' '}
+              {activePromo.discount}% off — max ₱{activePromo.maxDiscount?.toLocaleString()} discount
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="collections-filters">
@@ -100,8 +125,17 @@ const Collections = () => {
             <label>Group:</label>
             <div className="filter-buttons">
               {groups.map(group => (
-                <button key={group} className={`filter-btn ${selectedGroup === group ? 'active' : ''}`} onClick={() => setSelectedGroup(group)}>
+                <button
+                  key={group}
+                  className={`filter-btn ${selectedGroup === group ? 'active' : ''}`}
+                  onClick={() => setSelectedGroup(group)}
+                >
                   {group}
+                  {/* ✅ Promo dot on matching group button */}
+                  {activePromo && activePromo.isActive &&
+                    group.toUpperCase() === activePromo.name?.toUpperCase() && (
+                    <span className="filter-promo-dot" title={`${activePromo.discount}% off!`}>●</span>
+                  )}
                 </button>
               ))}
             </div>
@@ -131,18 +165,25 @@ const Collections = () => {
         <div className="collections-grid">
           {filteredProducts.map(product => {
             const pid = product._id || product.id;
+            const hasPromo = isPromoProduct(product);
             return (
               <div
                 key={pid}
                 data-product-id={pid}
-                className={`collection-card ${highlightedProductId === pid ? 'highlighted' : ''}`}
+                className={`collection-card ${highlightedProductId === pid ? 'highlighted' : ''} ${hasPromo ? 'collection-card-promo' : ''}`}
                 onClick={() => setSelectedProduct(product)}
               >
-                {/* Badges — PRE-ORDER takes priority over SALE */}
                 {product.isPreOrder
                   ? <div className="collection-preorder-badge">PRE-ORDER</div>
                   : product.isSale && <div className="collection-sale-badge">SALE</div>
                 }
+
+                {/* ✅ Promo indicator badge */}
+                {hasPromo && (
+                  <div className="collection-promo-badge">
+                    <i className="fas fa-tag"></i> {activePromo.discount}% OFF
+                  </div>
+                )}
 
                 <div className="collection-card-img">
                   <img src={product.image} alt={product.name} />
@@ -158,6 +199,12 @@ const Collections = () => {
                       <span className="collection-card-price-original">₱{product.originalPrice?.toLocaleString()}</span>
                     )}
                   </div>
+                  {/* ✅ Promo hint */}
+                  {hasPromo && (
+                    <div className="collection-promo-hint">
+                      <i className="fas fa-ticket-alt"></i> Code: <strong>{activePromo.code}</strong>
+                    </div>
+                  )}
                 </div>
               </div>
             );

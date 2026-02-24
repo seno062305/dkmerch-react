@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../context/NotificationContext';
 import { useProducts, usePreOrderProducts } from '../utils/productStorage';
-import { useUpdateCartQuantity, useRemoveFromCart } from '../context/cartUtils';
+import { useUpdateCartQtyById, useRemoveFromCartById } from '../context/cartUtils';
 import './CartModal.css';
 
 const CartModal = ({ cart, onClose }) => {
@@ -13,8 +13,9 @@ const CartModal = ({ cart, onClose }) => {
   const preOrderProducts = usePreOrderProducts() || [];
   const allProducts      = [...regularProducts, ...preOrderProducts];
 
-  const updateCartQuantity = useUpdateCartQuantity();
-  const removeFromCart     = useRemoveFromCart();
+  // ID-based mutations — each cart item has its own _id
+  const updateQtyById     = useUpdateCartQtyById();
+  const removeFromCartById = useRemoveFromCartById();
 
   React.useEffect(() => {
     const scrollY = window.scrollY;
@@ -38,39 +39,73 @@ const CartModal = ({ cart, onClose }) => {
 
   const getQty = (item) => item.qty ?? item.quantity ?? 1;
 
+  // Effective price: use finalPrice if promo was applied
+  const getEffectivePrice = (item, product) => {
+    if (item.finalPrice !== undefined && item.finalPrice !== null) return item.finalPrice;
+    return product?.price ?? 0;
+  };
+
   const getTotalPieces = () =>
     cart.reduce((sum, item) => sum + getQty(item), 0);
 
+  // Subtotal uses effective (discounted) prices
   const calculateSubtotal = () =>
     cart.reduce((total, item) => {
       const product = findProduct(item.productId || item.id);
-      return total + (product ? product.price * getQty(item) : 0);
+      return total + getEffectivePrice(item, product) * getQty(item);
     }, 0);
 
   const calculateShipping = () => {
     if (cart.length === 0) return 0;
     const totalPcs = getTotalPieces();
     if (totalPcs >= 10) return 0;
-    return 10 + (totalPcs * 10);
+    return 10 + totalPcs * 10;
   };
 
-  const calculateTotal = () => calculateSubtotal() + calculateShipping();
+  const calculateTotalDiscount = () =>
+    cart.reduce((total, item) => {
+      if (!item.promoCode) return total;
+      const product = findProduct(item.productId || item.id);
+      const originalPrice = product?.price ?? item.price ?? 0;
+      const finalPrice    = item.finalPrice ?? originalPrice;
+      return total + (originalPrice - finalPrice) * getQty(item);
+    }, 0);
 
-  const handleRemoveItem = async (productId) => {
+  const subtotal      = calculateSubtotal();
+  const shipping      = calculateShipping();
+  const totalDiscount = calculateTotalDiscount();
+  const finalTotal    = subtotal + shipping;
+  const totalPcs      = getTotalPieces();
+
+  // For checkout: collect all unique promos applied
+  const promoItems = cart.filter(i => i.promoCode);
+  const cartPromo  = promoItems.length > 0 ? {
+    code:           promoItems[0].promoCode,
+    discount:       promoItems[0].promoDiscount,
+    discountAmount: totalDiscount,
+  } : null;
+
+  // ── Actions ─────────────────────────────────────
+  const handleRemoveItem = async (item) => {
     if (window.confirm('Remove this item from cart?')) {
-      await removeFromCart(productId);
+      await removeFromCartById(item._id);
     }
   };
 
-  const handleUpdateQty = async (productId, currentQty, change) => {
+  const handleUpdateQty = async (item, change) => {
+    const product = findProduct(item.productId || item.id);
+    const currentQty = getQty(item);
     const newQty = currentQty + change;
-    const product = findProduct(productId);
-    if (newQty < 1) { handleRemoveItem(productId); return; }
+
+    if (newQty < 1) {
+      handleRemoveItem(item);
+      return;
+    }
     if (product && newQty > product.stock) {
       showNotification(`Only ${product.stock} item(s) available in stock`, 'error');
       return;
     }
-    await updateCartQuantity(productId, newQty);
+    await updateQtyById(item._id, newQty);
   };
 
   const handleCheckout = () => {
@@ -83,11 +118,109 @@ const CartModal = ({ cart, onClose }) => {
       return;
     }
     onClose();
-    navigate('/checkout');
+    navigate('/checkout', { state: { appliedPromo: cartPromo } });
   };
 
-  const totalPcs = getTotalPieces();
-  const shipping  = calculateShipping();
+  // ── Render a single cart item ────────────────────
+  const renderCartItem = (item) => {
+    const productId      = item.productId || item.id;
+    const product        = findProduct(productId);
+    if (!product) return null;
+
+    const qty            = getQty(item);
+    const atMaxStock     = qty >= product.stock;
+    const hasPromo       = !!item.promoCode;
+    const effectivePrice = getEffectivePrice(item, product);
+    const itemTotal      = effectivePrice * qty;
+    const originalTotal  = product.price * qty;
+    const savedAmount    = hasPromo ? originalTotal - itemTotal : 0;
+
+    return (
+      <div key={item._id} className={`cart-item${hasPromo ? ' cart-item-promo' : ''}`}>
+        <div className="cart-item-image">
+          <img src={product.image} alt={product.name} />
+          {hasPromo && (
+            <div className="cart-item-promo-badge">
+              <i className="fas fa-tag"></i> {item.promoDiscount}% OFF
+            </div>
+          )}
+        </div>
+
+        <div className="cart-item-details">
+          <div className="cart-item-name-row">
+            <div className="cart-item-name">
+              {product.name}
+              {product.isPreOrder && (
+                <span className="cart-preorder-badge">PRE-ORDER</span>
+              )}
+            </div>
+            <div className="cart-item-stock-info">{product.stock} available</div>
+          </div>
+
+          <div className="cart-item-meta">{product.kpopGroup} • {product.category}</div>
+
+          {product.isPreOrder && product.releaseDate && (
+            <div className="cart-preorder-release">
+              <i className="fas fa-calendar-alt"></i>
+              Expected: {new Date(product.releaseDate).toLocaleDateString('en-PH', {
+                year: 'numeric', month: 'long', day: 'numeric'
+              })}
+            </div>
+          )}
+
+          {/* Price row */}
+          <div className="cart-item-price-row">
+            <span className={`cart-item-price${hasPromo ? ' cart-item-price-discounted' : ''}`}>
+              ₱{itemTotal.toLocaleString()}
+            </span>
+            {hasPromo && (
+              <>
+                <span className="cart-item-price-original">
+                  ₱{originalTotal.toLocaleString()}
+                </span>
+                <span className="cart-item-saved-badge">
+                  Save ₱{savedAmount.toLocaleString()}
+                </span>
+              </>
+            )}
+          </div>
+
+          {/* Promo tag */}
+          {hasPromo && (
+            <div className="cart-item-promo-tag">
+              <i className="fas fa-tag"></i> {item.promoCode}
+            </div>
+          )}
+
+          {atMaxStock && (
+            <div className="stock-limit-notice">
+              <i className="fas fa-info-circle"></i>
+              <span>Maximum stock reached</span>
+            </div>
+          )}
+
+          <div className="cart-item-actions">
+            <div className="quantity-controls">
+              <button className="quantity-btn minus" onClick={() => handleUpdateQty(item, -1)}>-</button>
+              <span className="quantity-display">{qty}</span>
+              <button
+                className={`quantity-btn plus${atMaxStock ? ' disabled' : ''}`}
+                onClick={() => handleUpdateQty(item, 1)}
+                disabled={atMaxStock}
+              >+</button>
+            </div>
+            <button className="remove-item" onClick={() => handleRemoveItem(item)}>
+              <i className="fas fa-trash"></i> Remove
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Separate promo and non-promo items for grouped display
+  const promoCartItems    = cart.filter(i => !!i.promoCode);
+  const nonPromoCartItems = cart.filter(i => !i.promoCode);
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -107,70 +240,30 @@ const CartModal = ({ cart, onClose }) => {
           ) : (
             <>
               <div className="cart-items">
-                {cart.map(item => {
-                  const productId = item.productId || item.id;
-                  const product   = findProduct(productId);
-                  if (!product) return null;
-
-                  const qty        = getQty(item);
-                  const atMaxStock = qty >= product.stock;
-
-                  return (
-                    <div key={productId} className="cart-item">
-                      <div className="cart-item-image">
-                        <img src={product.image} alt={product.name} />
+                {/* Non-promo items first */}
+                {nonPromoCartItems.length > 0 && (
+                  <>
+                    {promoCartItems.length > 0 && (
+                      <div className="cart-group-label">
+                        <i className="fas fa-shopping-bag"></i> Regular Items
                       </div>
-                      <div className="cart-item-details">
-                        <div className="cart-item-name-row">
-                          <div className="cart-item-name">
-                            {product.name}
-                            {product.isPreOrder && (
-                              <span className="cart-preorder-badge">PRE-ORDER</span>
-                            )}
-                          </div>
-                          <div className="cart-item-stock-info">{product.stock} available</div>
-                        </div>
+                    )}
+                    {nonPromoCartItems.map(item => renderCartItem(item))}
+                  </>
+                )}
 
-                        <div className="cart-item-meta">{product.kpopGroup} • {product.category}</div>
-
-                        {product.isPreOrder && product.releaseDate && (
-                          <div className="cart-preorder-release">
-                            <i className="fas fa-calendar-alt"></i>
-                            Expected: {new Date(product.releaseDate).toLocaleDateString('en-PH', {
-                              year: 'numeric', month: 'long', day: 'numeric'
-                            })}
-                          </div>
-                        )}
-
-                        <div className="cart-item-price">₱{(product.price * qty).toLocaleString()}</div>
-
-                        {atMaxStock && (
-                          <div className="stock-limit-notice">
-                            <i className="fas fa-info-circle"></i>
-                            <span>Maximum stock reached</span>
-                          </div>
-                        )}
-
-                        <div className="cart-item-actions">
-                          <div className="quantity-controls">
-                            <button className="quantity-btn minus" onClick={() => handleUpdateQty(productId, qty, -1)}>-</button>
-                            <span className="quantity-display">{qty}</span>
-                            <button
-                              className={`quantity-btn plus ${atMaxStock ? 'disabled' : ''}`}
-                              onClick={() => handleUpdateQty(productId, qty, 1)}
-                              disabled={atMaxStock}
-                            >+</button>
-                          </div>
-                          <button className="remove-item" onClick={() => handleRemoveItem(productId)}>
-                            <i className="fas fa-trash"></i> Remove
-                          </button>
-                        </div>
-                      </div>
+                {/* Promo items group */}
+                {promoCartItems.length > 0 && (
+                  <>
+                    <div className="cart-group-label cart-group-label-promo">
+                      <i className="fas fa-tag"></i> Promo Items
                     </div>
-                  );
-                })}
+                    {promoCartItems.map(item => renderCartItem(item))}
+                  </>
+                )}
               </div>
 
+              {/* Summary */}
               <div className="cart-summary">
                 {totalPcs < 10 && (
                   <div className="shipping-notice">
@@ -185,10 +278,20 @@ const CartModal = ({ cart, onClose }) => {
                   </div>
                 )}
 
+                {totalDiscount > 0 && (
+                  <div className="summary-row cart-original-row">
+                    <span>Original Price:</span>
+                    <span className="cart-original-amount">
+                      ₱{(subtotal + totalDiscount).toLocaleString()}
+                    </span>
+                  </div>
+                )}
+
                 <div className="summary-row">
                   <span>Subtotal:</span>
-                  <span>₱{calculateSubtotal().toLocaleString()}</span>
+                  <span>₱{subtotal.toLocaleString()}</span>
                 </div>
+
                 <div className="summary-row">
                   <span>Shipping ({totalPcs} pc{totalPcs > 1 ? 's' : ''}):</span>
                   <span>
@@ -197,10 +300,28 @@ const CartModal = ({ cart, onClose }) => {
                       : `₱${shipping.toLocaleString()}`}
                   </span>
                 </div>
+
+                {totalDiscount > 0 && (
+                  <div className="summary-row cart-discount-row">
+                    <span>
+                      <i className="fas fa-tag" style={{ marginRight: '5px', color: '#ec4899' }}></i>
+                      Promo Discount:
+                    </span>
+                    <span className="cart-discount-amount">−₱{totalDiscount.toLocaleString()}</span>
+                  </div>
+                )}
+
                 <div className="summary-row summary-total">
                   <span>Total:</span>
-                  <span>₱{calculateTotal().toLocaleString()}</span>
+                  <span>₱{finalTotal.toLocaleString()}</span>
                 </div>
+
+                {totalDiscount > 0 && (
+                  <div className="cart-savings-badge">
+                    <i className="fas fa-piggy-bank"></i>
+                    You're saving <strong>₱{totalDiscount.toLocaleString()}</strong> with your promo!
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -209,7 +330,9 @@ const CartModal = ({ cart, onClose }) => {
         {cart.length > 0 && (
           <div className="modal-footer">
             <button className="btn btn-primary" onClick={handleCheckout}>
-              Proceed to Checkout
+              {totalDiscount > 0
+                ? `Checkout · ₱${finalTotal.toLocaleString()}`
+                : 'Proceed to Checkout'}
             </button>
           </div>
         )}

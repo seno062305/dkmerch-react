@@ -196,3 +196,17 @@ export const seedAdmin = mutation({
     return { success: true };
   },
 });
+
+// ── ADD THIS AT THE BOTTOM OF convex/users.ts ──
+// Used by sendEmail.ts to get all user emails for promo notification blast
+
+export const getAllUsersForPromoNotif = query({
+  args: {},
+  handler: async ({ db }) => {
+    const users = await db.query("users").collect();
+    // Only return name + email — nothing sensitive
+    return users
+      .filter(u => u.email && u.role !== "admin")
+      .map(u => ({ name: u.name ?? u.fullName ?? "there", email: u.email }));
+  },
+});

@@ -7,7 +7,7 @@ import { useNotification } from '../context/NotificationContext';
 import LoginModal from './LoginModal';
 import './WeverseSection.css';
 
-const WeverseSection = ({ onProductClick }) => {
+const WeverseSection = ({ onProductClick, activePromo }) => {
   const [activeFilter, setActiveFilter] = useState('all');
   const [showLoginModal, setShowLoginModal] = useState(false);
   const navigate = useNavigate();
@@ -21,12 +21,18 @@ const WeverseSection = ({ onProductClick }) => {
   const isWishlisted = (productId) =>
     wishlistItems.some(item => item.productId === productId);
 
+  // ✅ Check if a product is eligible for the active promo
+  const isPromoProduct = (product) => {
+    if (!activePromo || !activePromo.isActive) return false;
+    if (!activePromo.name) return false;
+    return product.kpopGroup?.trim().toUpperCase() === activePromo.name.trim().toUpperCase();
+  };
+
   const groups = [
     'all', 'BTS', 'BLACKPINK', 'TWICE', 'SEVENTEEN',
     'STRAY KIDS', 'EXO', 'RED VELVET', 'NEWJEANS'
   ];
 
-  // ✅ Filter by group then sort by top selling (salesCount or totalSold)
   const filteredProducts = (
     activeFilter === 'all'
       ? [...products]
@@ -39,19 +45,15 @@ const WeverseSection = ({ onProductClick }) => {
 
   const handleWishlistClick = (e, product) => {
     e.stopPropagation();
-
     if (!isAuthenticated) {
       setShowLoginModal(true);
       showNotification('Please login to add to favorites', 'error');
       return;
     }
-
     const pid = product._id || product.id;
     toggleWishlist(product);
     showNotification(
-      isWishlisted(pid)
-        ? 'Removed from favorites'
-        : 'Added to favorites',
+      isWishlisted(pid) ? 'Removed from favorites' : 'Added to favorites',
       'success'
     );
   };
@@ -74,13 +76,22 @@ const WeverseSection = ({ onProductClick }) => {
   return (
     <>
       <section className="weverse-section" id="collections">
-
-        {/* ✅ Top Selling label */}
         <div className="wv-section-header">
           <h2 className="wv-section-title">
             <i className="fas fa-fire"></i> Top Selling
           </h2>
           <p className="wv-section-sub">Most loved by our K-Pop community</p>
+          {/* ✅ Active promo banner */}
+          {activePromo && activePromo.isActive && (
+            <div className="wv-promo-banner">
+              <i className="fas fa-tag"></i>
+              <span>
+                <strong>{activePromo.name} Promo:</strong> Use code{' '}
+                <span className="wv-promo-code">{activePromo.code}</span> for{' '}
+                {activePromo.discount}% off {activePromo.name} merch!
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="wv-filter-bar">
@@ -91,6 +102,11 @@ const WeverseSection = ({ onProductClick }) => {
               onClick={() => setActiveFilter(group)}
             >
               {group === 'all' ? 'All' : group}
+              {/* ✅ Promo dot on group tab if it has active promo */}
+              {activePromo && activePromo.isActive &&
+                group.toUpperCase() === activePromo.name?.toUpperCase() && (
+                <span className="wv-tab-promo-dot" title={`${activePromo.discount}% off!`}>●</span>
+              )}
             </button>
           ))}
         </div>
@@ -99,13 +115,14 @@ const WeverseSection = ({ onProductClick }) => {
           {filteredProducts.map((product, index) => {
             const pid = product._id || product.id;
             const salesCount = product.salesCount || product.totalSold || 0;
+            const hasPromo = isPromoProduct(product);
+
             return (
               <div
                 key={pid}
-                className="wv-card"
+                className={`wv-card ${hasPromo ? 'wv-card-promo' : ''}`}
                 onClick={() => handleProductClick(product)}
               >
-                {/* ✅ Top seller rank badge for top 3 */}
                 {index < 3 && salesCount > 0 && (
                   <div className={`wv-rank-badge rank-${index + 1}`}>
                     {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
@@ -114,7 +131,13 @@ const WeverseSection = ({ onProductClick }) => {
 
                 {product.isSale && <div className="wv-sale-badge">SALE</div>}
 
-                {/* ⭐ Star favorite button */}
+                {/* ✅ Promo indicator badge */}
+                {hasPromo && (
+                  <div className="wv-promo-badge">
+                    <i className="fas fa-tag"></i> {activePromo.discount}% OFF
+                  </div>
+                )}
+
                 <button
                   className={`wv-card-fav ${isWishlisted(pid) ? 'active' : ''}`}
                   onClick={(e) => handleWishlistClick(e, product)}
@@ -140,10 +163,15 @@ const WeverseSection = ({ onProductClick }) => {
                       </span>
                     )}
                   </div>
-                  {/* ✅ Show sold count if available */}
                   {salesCount > 0 && (
                     <div className="wv-card-sold">
                       <i className="fas fa-shopping-bag"></i> {salesCount} sold
+                    </div>
+                  )}
+                  {/* ✅ Promo hint below price */}
+                  {hasPromo && (
+                    <div className="wv-card-promo-hint">
+                      <i className="fas fa-ticket-alt"></i> Promo available · use <strong>{activePromo.code}</strong>
                     </div>
                   )}
                 </div>

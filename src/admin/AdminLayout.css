@@ -21,18 +21,9 @@
   flex-direction: column;
 }
 
-.admin-sidebar::-webkit-scrollbar {
-  width: 6px;
-}
-
-.admin-sidebar::-webkit-scrollbar-track {
-  background: #f0f0f0;
-}
-
-.admin-sidebar::-webkit-scrollbar-thumb {
-  background: #ddd;
-  border-radius: 3px;
-}
+.admin-sidebar::-webkit-scrollbar { width: 6px; }
+.admin-sidebar::-webkit-scrollbar-track { background: #f0f0f0; }
+.admin-sidebar::-webkit-scrollbar-thumb { background: #ddd; border-radius: 3px; }
 
 /* Logo */
 .admin-logo-container {
@@ -100,9 +91,7 @@
   color: var(--primary-color, #fc1268);
 }
 
-.admin-nav-link:hover i {
-  color: var(--primary-color, #fc1268);
-}
+.admin-nav-link:hover i { color: var(--primary-color, #fc1268); }
 
 .admin-nav-link.active {
   background: linear-gradient(135deg, #fc1268, #e0105a);
@@ -110,9 +99,7 @@
   box-shadow: 0 4px 12px rgba(252, 18, 104, 0.25);
 }
 
-.admin-nav-link.active i {
-  color: white;
-}
+.admin-nav-link.active i { color: white; }
 
 /* Order Badge */
 .order-badge {
@@ -169,13 +156,8 @@
   touch-action: manipulation;
 }
 
-.admin-logout-btn:hover {
-  background: #ffe0ec;
-}
-
-.admin-logout-btn i {
-  font-size: 16px;
-}
+.admin-logout-btn:hover { background: #ffe0ec; }
+.admin-logout-btn i { font-size: 16px; }
 
 /* Main Content Area */
 .admin-content {
@@ -184,7 +166,6 @@
   padding: 40px;
   min-height: 100vh;
   background: #f5f5f5;
-  /* Critical: ensure content is above nothing but below modals */
   position: relative;
   z-index: 1;
 }
@@ -211,32 +192,24 @@
   touch-action: manipulation;
 }
 
-.mobile-menu-toggle:hover {
-  transform: scale(1.1);
-}
+.mobile-menu-toggle:hover { transform: scale(1.1); }
+.mobile-menu-toggle i { font-size: 18px; }
 
-.mobile-menu-toggle i {
-  font-size: 18px;
-}
-
-/* Mobile Overlay — sits UNDER sidebar, ABOVE content */
+/* Mobile Overlay */
 .mobile-overlay {
   display: none;
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  top: 0; left: 0; right: 0; bottom: 0;
   background: rgba(0, 0, 0, 0.5);
   z-index: 999;
   opacity: 0;
   transition: opacity 0.3s ease;
-  pointer-events: none; /* don't block clicks when hidden */
+  pointer-events: none;
 }
 
 .mobile-overlay.active {
   opacity: 1;
-  pointer-events: auto; /* intercept clicks to close sidebar */
+  pointer-events: auto;
 }
 
 /* ── Responsive ── */
@@ -246,13 +219,11 @@
 }
 
 @media (max-width: 768px) {
-  .mobile-menu-toggle {
-    display: flex;
-  }
+  .mobile-menu-toggle { display: flex; }
 
   .admin-sidebar {
     transform: translateX(-100%);
-    width: 260px;
+    width: 260px;        /* ← fixed width, NOT 100% */
     z-index: 1000;
   }
 
@@ -260,18 +231,14 @@
     transform: translateX(0);
   }
 
-  .mobile-overlay {
-    display: block;
-  }
+  .mobile-overlay { display: block; }
 
   .admin-content {
     margin-left: 0;
-    /* top padding gives room for the hamburger button */
     padding: 72px 20px 20px 20px;
     z-index: 1;
   }
 
-  /* All interactive elements in content must be easily tappable */
   .admin-content button,
   .admin-content select,
   .admin-content input,
@@ -280,7 +247,6 @@
     -webkit-tap-highlight-color: transparent;
   }
 
-  /* Dropdowns / selects need explicit z-index to appear above sibling cards */
   .admin-content select {
     position: relative;
     z-index: 10;
@@ -288,10 +254,9 @@
 }
 
 @media (max-width: 576px) {
-  .admin-sidebar { width: 240px; }
+  .admin-sidebar { width: 240px; }   /* ← still NOT fullscreen */
   .admin-content { padding: 68px 14px 14px 14px; }
 }
 
-@media (max-width: 400px) {
-  .admin-sidebar { width: 100%; }
-}
+/* REMOVED the @media (max-width: 400px) { width: 100% } rule
+   that was causing fullscreen sidebar */

@@ -8,7 +8,6 @@
     overflow: hidden;
 }
 
-/* ✅ Section header */
 .wv-section-header {
     padding: 24px 24px 0;
     background: #fff;
@@ -24,9 +23,7 @@
     gap: 8px;
 }
 
-.wv-section-title i {
-    color: #fc1268;
-}
+.wv-section-title i { color: #fc1268; }
 
 .wv-section-sub {
     font-size: 13px;
@@ -63,18 +60,10 @@
     white-space: nowrap;
 }
 
-.wv-filter-tab:hover {
-    border-color: #333;
-    background: #f0f0f0;
-}
+.wv-filter-tab:hover { border-color: #333; background: #f0f0f0; }
+.wv-filter-tab.active { background: #111; color: #fff; border-color: #111; }
 
-.wv-filter-tab.active {
-    background: #111;
-    color: #fff;
-    border-color: #111;
-}
-
-/* Grid */
+/* Grid — 4 columns desktop */
 .wv-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -98,11 +87,9 @@
     box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
 
-/* ✅ Rank badge */
 .wv-rank-badge {
     position: absolute;
-    top: 8px;
-    left: 8px;
+    top: 8px; left: 8px;
     font-size: 20px;
     z-index: 11;
     filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
@@ -110,8 +97,7 @@
 
 .wv-sale-badge {
     position: absolute;
-    top: 8px;
-    left: 8px;
+    top: 8px; left: 8px;
     background: var(--primary-color);
     color: white;
     font-size: 11px;
@@ -122,18 +108,13 @@
     text-transform: uppercase;
 }
 
-/* If both rank and sale badge exist, offset sale badge */
-.wv-rank-badge + .wv-sale-badge {
-    left: 38px;
-}
+.wv-rank-badge + .wv-sale-badge { left: 38px; }
 
-/* ⭐ Favorite star button */
+/* Favorite star */
 .wv-card-fav {
     position: absolute;
-    top: 12px;
-    right: 12px;
-    width: 36px;
-    height: 36px;
+    top: 12px; right: 12px;
+    width: 36px; height: 36px;
     background: rgba(255, 255, 255, 0.92);
     border-radius: 50%;
     display: flex;
@@ -148,30 +129,11 @@
     box-shadow: 0 2px 8px rgba(0,0,0,0.12);
 }
 
-.wv-card:hover .wv-card-fav {
-    opacity: 1;
-    transform: scale(1);
-}
-
-.wv-card-fav.active {
-    opacity: 1;
-    transform: scale(1);
-}
-
-.wv-card-fav i {
-    font-size: 16px;
-    color: #ccc;
-    transition: all 0.2s ease;
-}
-
-.wv-card-fav:hover i {
-    color: #f5a623;
-    transform: scale(1.15) rotate(-5deg);
-}
-
-.wv-card-fav.active i {
-    color: #f5a623;
-}
+.wv-card:hover .wv-card-fav { opacity: 1; transform: scale(1); }
+.wv-card-fav.active { opacity: 1; transform: scale(1); }
+.wv-card-fav i { font-size: 16px; color: #ccc; transition: all 0.2s ease; }
+.wv-card-fav:hover i { color: #f5a623; transform: scale(1.15) rotate(-5deg); }
+.wv-card-fav.active i { color: #f5a623; }
 
 /* Image */
 .wv-card-img {
@@ -191,14 +153,10 @@
     transition: transform 0.35s ease;
 }
 
-.wv-card:hover .wv-card-img img {
-    transform: scale(1.04);
-}
+.wv-card:hover .wv-card-img img { transform: scale(1.04); }
 
 /* Card info */
-.wv-card-info {
-    padding: 10px 12px 14px;
-}
+.wv-card-info { padding: 10px 12px 14px; }
 
 .wv-card-group {
     font-size: 11px;
@@ -230,23 +188,10 @@
     flex-wrap: wrap;
 }
 
-.wv-card-price-original {
-    font-size: 11px;
-    color: #999;
-    text-decoration: line-through;
-}
+.wv-card-price-original { font-size: 11px; color: #999; text-decoration: line-through; }
+.wv-card-price-current { font-size: 14px; font-weight: 700; color: var(--primary-color); }
+.wv-card-price-current.sale { color: #dc3545; }
 
-.wv-card-price-current {
-    font-size: 14px;
-    font-weight: 700;
-    color: var(--primary-color);
-}
-
-.wv-card-price-current.sale {
-    color: #dc3545;
-}
-
-/* ✅ Sold count */
 .wv-card-sold {
     font-size: 11px;
     color: #999;
@@ -255,11 +200,7 @@
     gap: 4px;
     margin-top: 2px;
 }
-
-.wv-card-sold i {
-    font-size: 10px;
-    color: #fc1268;
-}
+.wv-card-sold i { font-size: 10px; color: #fc1268; }
 
 /* See All */
 .wv-see-all-row {
@@ -284,16 +225,101 @@
     transition: var(--transition);
 }
 
-.wv-see-all:hover {
-    border-color: #111;
-    background: #f5f5f5;
+.wv-see-all:hover { border-color: #111; background: #f5f5f5; }
+
+/* ── Promo styles ── */
+.wv-promo-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(135deg, #fdf2f8, #fce7f3);
+  border: 1.5px solid #f9a8d4;
+  border-radius: 10px;
+  padding: 10px 16px;
+  margin-top: 8px;
+  margin-bottom: 4px;
+  font-size: 13px;
+  color: #9d174d;
+  line-height: 1.5;
 }
 
-/* Responsive */
+.wv-promo-banner i { color: #ec4899; font-size: 14px; flex-shrink: 0; }
+
+.wv-promo-code {
+  font-family: 'Courier New', monospace;
+  font-weight: 800;
+  font-size: 14px;
+  color: #be185d;
+  background: rgba(236, 72, 153, 0.1);
+  padding: 1px 6px;
+  border-radius: 4px;
+  letter-spacing: 1px;
+}
+
+.wv-tab-promo-dot {
+  color: #ec4899;
+  font-size: 8px;
+  margin-left: 4px;
+  vertical-align: super;
+  animation: promo-dot-blink 1.5s ease-in-out infinite;
+}
+
+@keyframes promo-dot-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.wv-card.wv-card-promo {
+  box-shadow: 0 0 0 2px #f9a8d4, 0 2px 8px rgba(236, 72, 153, 0.15);
+}
+.wv-card.wv-card-promo:hover {
+  box-shadow: 0 0 0 2px #ec4899, 0 6px 16px rgba(236, 72, 153, 0.25);
+}
+
+.wv-promo-badge {
+  position: absolute;
+  bottom: 10px; left: 10px;
+  background: linear-gradient(135deg, #ec4899, #f472b6);
+  color: white;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 3px 9px;
+  border-radius: 20px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  letter-spacing: 0.3px;
+  box-shadow: 0 2px 6px rgba(236, 72, 153, 0.4);
+  animation: promo-badge-float 2s ease-in-out infinite;
+}
+
+@keyframes promo-badge-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
+.wv-promo-badge i { font-size: 9px; }
+
+.wv-card-promo-hint {
+  font-size: 10px;
+  color: #ec4899;
+  font-weight: 600;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  line-height: 1.4;
+}
+
+.wv-card-promo-hint i { font-size: 9px; flex-shrink: 0; }
+.wv-card-promo-hint strong { color: #be185d; font-family: 'Courier New', monospace; font-size: 11px; }
+
+/* ── RESPONSIVE ── */
 @media (max-width: 992px) {
     .weverse-section { margin: 20px; }
     .wv-grid {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(3, 1fr);  /* 3 cols on tablet */
         gap: 12px;
         padding: 16px;
     }
@@ -301,14 +327,34 @@
 
 @media (max-width: 768px) {
     .wv-section-title { font-size: 18px; }
-}
-
-@media (max-width: 576px) {
-    .weverse-section { margin: 10px; }
     .wv-grid {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(3, 1fr);  /* 3 cols on mobile */
         gap: 8px;
         padding: 12px;
     }
-    .wv-section-header { padding: 16px 16px 0; }
+    .wv-card-name { font-size: 11px; min-height: 30px; }
+    .wv-card-price-current { font-size: 12px; }
+    .wv-card-info { padding: 6px 8px 10px; }
+    .wv-card-img { padding: 8px; }
+    .wv-card-fav { width: 28px; height: 28px; opacity: 1; transform: scale(1); }
+    .wv-card-fav i { font-size: 13px; }
+}
+
+@media (max-width: 576px) {
+    .weverse-section { margin: 8px; }
+    .wv-grid {
+        grid-template-columns: repeat(3, 1fr);  /* still 3 cols on small phones */
+        gap: 6px;
+        padding: 8px;
+    }
+    .wv-section-header { padding: 12px 12px 0; }
+    .wv-card-group { font-size: 9px; margin-bottom: 3px; }
+    .wv-card-name { font-size: 10px; min-height: 26px; -webkit-line-clamp: 2; }
+    .wv-card-price-current { font-size: 11px; }
+    .wv-card-price-original { font-size: 9px; }
+    .wv-card-info { padding: 5px 6px 8px; }
+    .wv-card-img { padding: 6px; }
+    .wv-card-sold { display: none; } /* hide on tiny screens to save space */
+    .wv-promo-banner { font-size: 12px; padding: 8px 12px; }
+    .wv-promo-badge { font-size: 9px; padding: 2px 7px; }
 }

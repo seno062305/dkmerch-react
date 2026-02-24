@@ -1569,3 +1569,126 @@
 }
 
 .promo-admin-savings-note strong { color: #be185d; }
+
+/* ── ADD/REPLACE THESE RESPONSIVE STYLES AT BOTTOM OF AdminOrders.css ── */
+
+/* Order Modal — full responsive */
+.order-modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 16px;
+  animation: fadeInOverlay 0.3s ease;
+  box-sizing: border-box;
+}
+
+.order-modal {
+  background: white;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 900px;
+  max-height: 92vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease;
+}
+
+/* Cancel reason modal */
+.cancel-reason-overlay {
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.cancel-reason-modal {
+  width: 100%;
+  max-width: 520px;
+  max-height: 92vh;
+  overflow-y: auto;
+}
+
+/* ══════════════════════════
+   RESPONSIVE — Orders Modal
+══════════════════════════ */
+
+@media (max-width: 768px) {
+  .order-modal-overlay {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .order-modal {
+    border-radius: 20px 20px 0 0;
+    max-height: 94vh;
+    max-width: 100%;
+  }
+
+  .modal-header {
+    padding: 16px 16px 14px;
+  }
+
+  .modal-header h2 { font-size: 18px; }
+
+  .modal-body { padding: 16px; }
+
+  .order-info-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .status-buttons { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+
+  .order-item-card {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .item-image img { width: 56px; height: 56px; }
+  .item-subtotal  { width: 100%; text-align: left; font-size: 14px; margin-top: 4px; }
+
+  .cancel-reason-overlay { padding: 0; align-items: flex-end; }
+  .cancel-reason-modal   { border-radius: 20px 20px 0 0; max-width: 100%; max-height: 92vh; }
+
+  .promo-admin-card { font-size: 13px; }
+  .promo-admin-row  { font-size: 13px; }
+}
+
+@media (max-width: 576px) {
+  .modal-header h2 { font-size: 16px; }
+  .modal-section h3 { font-size: 13px; }
+
+  .order-info-grid { grid-template-columns: 1fr; gap: 10px; padding: 12px; }
+
+  .status-buttons { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .status-btn     { min-height: 60px; padding: 10px 6px; font-size: 11px; }
+  .status-btn i   { font-size: 16px; }
+
+  .total-row.grand-total { font-size: 16px; }
+
+  .flow-notice { padding: 12px 14px; font-size: 13px; }
+  .flow-notice i { font-size: 16px; }
+
+  .pod-photo-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+
+  .cancel-reason-footer { flex-direction: column-reverse; }
+  .cancel-go-back-btn, .cancel-confirm-btn { width: 100%; justify-content: center; }
+  .cancel-presets { gap: 6px; }
+  .cancel-preset-chip { font-size: 12px; padding: 7px 12px; }
+
+  .modal-actions { justify-content: center; }
+  .delete-order-btn { width: 100%; justify-content: center; }
+
+  .promo-admin-top { flex-wrap: wrap; gap: 8px; }
+  .promo-admin-badge { font-size: 12px; }
+}
+
+@media (max-width: 400px) {
+  .order-info-grid { padding: 10px; }
+  .modal-body      { padding: 12px; }
+  .status-buttons  { grid-template-columns: 1fr; }
+}

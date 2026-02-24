@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import HeroCarousel from '../components/HeroCarousel';
@@ -9,22 +9,66 @@ import { useAddToCart } from '../context/cartUtils';
 import { useToggleWishlist, useWishlist } from '../context/wishlistUtils';
 import { useNotification } from '../context/NotificationContext';
 
+const PH_OFFSET_MS = 8 * 60 * 60 * 1000;
+
+function toUtcMs(dateStr, timeStr) {
+  if (!dateStr) return null;
+  const [y, mo, d] = dateStr.split('-').map(Number);
+  const [h, m] = timeStr ? timeStr.split(':').map(Number) : [0, 0];
+  return Date.UTC(y, mo - 1, d, h, m, 0) - PH_OFFSET_MS;
+}
+
+// Pick best promo:
+// - isActive = admin kill switch only. If false, never show.
+// - Time window is automatic — no manual toggling needed.
+// - If multiple valid promos, show the one expiring soonest.
+function pickActivePromo(promos, nowMs) {
+  if (!promos || promos.length === 0) return null;
+
+  const valid = promos.filter(p => {
+    if (!p.isActive) return false; // admin disabled it
+
+    const startMs = toUtcMs(p.startDate, p.startTime || '00:00');
+    const endMs   = toUtcMs(p.endDate,   p.endTime   || '23:59');
+
+    if (startMs && nowMs < startMs) return false; // not started yet
+    if (endMs   && nowMs > endMs)   return false; // already expired
+
+    return true;
+  });
+
+  if (valid.length === 0) return null;
+
+  return valid.sort((a, b) => {
+    const aEnd = toUtcMs(a.endDate, a.endTime || '23:59') ?? Infinity;
+    const bEnd = toUtcMs(b.endDate, b.endTime || '23:59') ?? Infinity;
+    return aEnd - bEnd;
+  })[0];
+}
+
 const Home = () => {
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const { showNotification } = useNotification();
 
-  const addToCartMutation = useAddToCart();
+  const addToCartMutation      = useAddToCart();
   const toggleWishlistMutation = useToggleWishlist();
-  const wishlistItems = useWishlist();
+  const wishlistItems          = useWishlist();
 
-  // ── Fetch active promos from Convex ──
-  const activePromos = useQuery(api.promos.getActivePromos) || [];
-  const activePromo = activePromos[0] || null; // show the first active promo
+  // getAllPromos — so we can do real-time client-side time filtering
+  const allPromos = useQuery(api.promos.getAllPromos) || [];
+
+  // Re-check every 10 seconds — catches promo start/end automatically
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 10000);
+    return () => clearInterval(id);
+  }, []);
+
+  const activePromo = pickActivePromo(allPromos, nowMs);
 
   const isWishlisted = (productId) =>
     wishlistItems.some(item => item.productId === productId);
 
-  // ── Static slides ──
   const staticSlides = [
     {
       image: 'https://images.unsplash.com/photo-1540039155733-5bb30b53aa14?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80',
@@ -49,23 +93,24 @@ const Home = () => {
     },
   ];
 
-  // ── Build promo slide if there's an active promo ──
   const promoSlide = activePromo
     ? {
         image: 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80',
-        title: `🎉 ${activePromo.name}`,
+        title: `🎉 ${activePromo.name} Promo`,
         description: `Use code: ${activePromo.code} · ${activePromo.discount}% off · Max ₱${activePromo.maxDiscount.toLocaleString()} discount`,
         buttonText: 'Shop Now',
         buttonIcon: 'tag',
         isPromo: true,
-        promoCode: activePromo.code,
-        promoEndDate: activePromo.endDate,
-        // Longer auto-slide duration for promo so users can read it
+        promoCode:      activePromo.code,
+        promoGroup:     activePromo.name,
+        promoStartDate: activePromo.startDate,
+        promoStartTime: activePromo.startTime,
+        promoEndDate:   activePromo.endDate,
+        promoEndTime:   activePromo.endTime,
         duration: 8000,
       }
     : null;
 
-  // Promo slide goes FIRST, then static slides
   const carouselSlides = promoSlide
     ? [promoSlide, ...staticSlides]
     : staticSlides;
@@ -94,7 +139,7 @@ const Home = () => {
     <div className="home-page">
       <HeroCarousel slides={carouselSlides} />
       <LogoMarquee />
-      <WeverseSection onProductClick={setSelectedProduct} />
+      <WeverseSection onProductClick={setSelectedProduct} activePromo={activePromo} />
 
       {selectedProduct && (
         <ProductModal

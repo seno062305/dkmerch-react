@@ -3,7 +3,6 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
-  // ── USERS ──────────────────────────────────────
   users: defineTable({
     name: v.string(),
     username: v.string(),
@@ -20,7 +19,6 @@ export default defineSchema({
     .index("by_email", ["email"])
     .index("by_username", ["username"]),
 
-  // ── PRODUCTS ────────────────────────────────────
   products: defineTable({
     name: v.string(),
     price: v.number(),
@@ -36,7 +34,6 @@ export default defineSchema({
     isPreOrder: v.optional(v.boolean()),
   }),
 
-  // ── CART ────────────────────────────────────────
   cart: defineTable({
     userId: v.string(),
     productId: v.string(),
@@ -44,9 +41,12 @@ export default defineSchema({
     price: v.number(),
     image: v.string(),
     qty: v.number(),
+    finalPrice: v.optional(v.number()),
+    promoCode: v.optional(v.string()),
+    discountAmount: v.optional(v.number()),
+    promoDiscount: v.optional(v.number()),
   }).index("by_user", ["userId"]),
 
-  // ── WISHLIST ─────────────────────────────────────
   wishlist: defineTable({
     userId: v.string(),
     productId: v.string(),
@@ -57,7 +57,6 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_user_product", ["userId", "productId"]),
 
-  // ── ORDERS ───────────────────────────────────────
   orders: defineTable({
     orderId: v.string(),
     email: v.string(),
@@ -77,13 +76,11 @@ export default defineSchema({
     total: v.number(),
     subtotal: v.optional(v.number()),
     shippingFee: v.optional(v.number()),
-    // ── PROMO FIELDS ──────────────────────────────
-    promoCode:      v.optional(v.string()),   // e.g. "DKMERCH25"
-    promoName:      v.optional(v.string()),   // e.g. "BTS"
-    discountAmount: v.optional(v.number()),   // peso amount deducted e.g. ₱100
-    discountPercent: v.optional(v.number()),  // percentage e.g. 25
-    finalTotal:     v.optional(v.number()),   // total AFTER discount (what was charged to PayMongo)
-    // ─────────────────────────────────────────────
+    promoCode:       v.optional(v.string()),
+    promoName:       v.optional(v.string()),
+    discountAmount:  v.optional(v.number()),
+    discountPercent: v.optional(v.number()),
+    finalTotal:      v.optional(v.number()),
     status: v.string(),
     orderStatus: v.optional(v.string()),
     shippingAddress: v.optional(v.string()),
@@ -118,12 +115,13 @@ export default defineSchema({
     minOrder: v.optional(v.number()),
     maxUses: v.optional(v.number()),
     usedCount: v.number(),
-    startDate: v.optional(v.string()),
-    endDate: v.optional(v.string()),
+    startDate: v.optional(v.string()),   // "YYYY-MM-DD"
+    startTime: v.optional(v.string()),   // "HH:MM" 24h e.g. "10:00"
+    endDate: v.optional(v.string()),     // "YYYY-MM-DD"
+    endTime: v.optional(v.string()),     // "HH:MM" 24h e.g. "17:00"
     isActive: v.boolean(),
   }).index("by_code", ["code"]),
 
-  // ── RIDER APPLICATIONS ───────────────────────────
   riderApplications: defineTable({
     fullName: v.string(),
     email: v.string(),
@@ -140,7 +138,6 @@ export default defineSchema({
     .index("by_email", ["email"])
     .index("by_status", ["status"]),
 
-  // ── PICKUP REQUESTS ──────────────────────────────
   pickupRequests: defineTable({
     orderId: v.string(),
     riderId: v.string(),
