@@ -60,7 +60,6 @@ const AdminPromos = () => {
   const [serverMsg, setServerMsg]       = useState('');
   const [submitting, setSubmitting]     = useState(false);
 
-  // Auto-refresh status badges every 10 seconds — no manual refresh needed
   useEffect(() => {
     const id = setInterval(() => setNowMs(Date.now()), 10000);
     return () => clearInterval(id);
@@ -127,9 +126,9 @@ const AdminPromos = () => {
       } else {
         const result = await createPromo(payload);
         if (!result.success) { setServerMsg(`❌ ${result.message}`); setSubmitting(false); return; }
-        setServerMsg('✅ Promo created! Email notification sent to all users.');
+        setServerMsg('✅ Promo created! Email notification sent to all users automatically.');
       }
-      setTimeout(resetForm, 1200);
+      setTimeout(resetForm, 1500);
     } catch {
       setServerMsg('❌ Something went wrong. Try again.');
     } finally {
@@ -189,7 +188,7 @@ const AdminPromos = () => {
       <div className="promos-header">
         <div>
           <h1>Promos</h1>
-          <p className="subtitle">Manage promotional discounts</p>
+          <p className="subtitle">Create a promo → email blast auto-sends to all users 📧</p>
         </div>
         <button className="create-btn" onClick={() => {
           setEditingPromo(null); setFormData(EMPTY_FORM);
@@ -332,7 +331,6 @@ const AdminPromos = () => {
                   {errors.maxDiscount && <span className="field-error">{errors.maxDiscount}</span>}
                 </div>
 
-                {/* START DATE + TIME */}
                 <div className="form-group">
                   <label>Start Date <span className="req">*</span></label>
                   <input type="date" name="startDate" value={formData.startDate}
@@ -353,7 +351,6 @@ const AdminPromos = () => {
                   <span className="field-hint">Blank = 12:00 AM</span>
                 </div>
 
-                {/* END DATE + TIME */}
                 <div className="form-group">
                   <label>End Date <span className="req">*</span></label>
                   <input type="date" name="endDate" value={formData.endDate}
@@ -378,7 +375,6 @@ const AdminPromos = () => {
 
               </div>
 
-              {/* Schedule summary */}
               {(formData.startDate || formData.endDate) && (
                 <div className="schedule-summary">
                   📅{' '}
@@ -402,7 +398,7 @@ const AdminPromos = () => {
 
               {!editingPromo && (
                 <p className="email-notice">
-                  📧 An email notification will be sent to all registered users when this promo is created.
+                  📧 Email blast will be sent automatically to all registered users when this promo is created.
                 </p>
               )}
 

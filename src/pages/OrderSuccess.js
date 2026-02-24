@@ -33,19 +33,36 @@ const OrderSuccess = () => {
       return;
     }
 
-    // ✅ Call checkPaymentStatus with ONLY orderId (matching payments.ts args)
-    const verifyPayment = async () => {
-      try {
-        await checkPaymentStatus({ orderId });
-        setStatus('paid');
-      } catch (err) {
-        console.warn('Payment verification error:', err);
-        setStatus('paid'); // Still show success — PayMongo redirected here = paid
+    // Retry up to 5x with increasing delay to wait for PayMongo to populate payments[]
+    // PayMongo sometimes takes a few seconds to attach payment method info
+    const verifyWithRetry = async () => {
+      const delays = [1500, 2000, 2500, 3000, 3000]; // total ~12 seconds max
+      for (let attempt = 0; attempt < delays.length; attempt++) {
+        await new Promise(res => setTimeout(res, delays[attempt]));
+        try {
+          const result = await checkPaymentStatus({ orderId });
+          // If we got a specific payment method, we're done
+          if (result?.paymentMethod && result.paymentMethod !== '') {
+            setStatus('paid');
+            return;
+          }
+          // If status is paid but no method yet, keep retrying (except last attempt)
+          if (result?.status === 'paid' && attempt === delays.length - 1) {
+            setStatus('paid');
+            return;
+          }
+        } catch (err) {
+          console.warn(`Payment verification attempt ${attempt + 1} failed:`, err);
+          if (attempt === delays.length - 1) {
+            // Last attempt failed — still show success (PayMongo redirect = paid)
+            setStatus('paid');
+          }
+        }
       }
+      setStatus('paid');
     };
 
-    const timer = setTimeout(verifyPayment, 1500);
-    return () => clearTimeout(timer);
+    verifyWithRetry();
   }, [order, orderId]);
 
   return (

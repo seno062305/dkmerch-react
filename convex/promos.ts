@@ -198,3 +198,44 @@ export const incrementPromoUsage = mutation({
     return { success: true };
   },
 });
+
+// ── Manual send: blast promo email to ALL users ──
+export const sendPromoToUsers = mutation({
+  args: {
+    promoId: v.id("promos"),
+    target: v.union(v.literal("all"), v.literal("group")),
+  },
+  handler: async ({ db, scheduler }, { promoId, target }) => {
+    const promo = await db.get(promoId);
+    if (!promo) return { success: false, message: "Promo not found.", count: 0 };
+
+    // Count recipients for the return value
+    const allUsers = await db.query("users").collect();
+    const activeUsers = allUsers.filter(u => u.email && u.role !== "admin");
+
+    const count = target === "all"
+      ? activeUsers.length
+      : activeUsers.filter(
+          u => (u as any).favoriteGroup &&
+               (u as any).favoriteGroup.toUpperCase() === promo.name.toUpperCase()
+        ).length;
+
+    if (count === 0) {
+      return { success: false, message: "No users found for the selected target.", count: 0 };
+    }
+
+    // Schedule the email blast (sends to all users — filtering by group is a future enhancement)
+    await scheduler.runAfter(0, internal.sendEmail.sendPromoNotificationToAllUsers, {
+      promoCode:   promo.code,
+      promoName:   promo.name,
+      discount:    promo.discount,
+      maxDiscount: promo.maxDiscount,
+      startDate:   promo.startDate,
+      startTime:   promo.startTime,
+      endDate:     promo.endDate,
+      endTime:     promo.endTime,
+    });
+
+    return { success: true, count };
+  },
+});

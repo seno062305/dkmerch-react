@@ -1,5 +1,5 @@
 // convex/users.ts
-import { query, mutation } from "./_generated/server";
+import { query, mutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 
 // ── QUERIES ──────────────────────────────────────
@@ -45,6 +45,17 @@ export const getProfile = query({
       };
     } catch {}
     return null;
+  },
+});
+
+// ── Internal query for promo email blast ──
+export const getAllUsersForPromoNotif = internalQuery({
+  args: {},
+  handler: async ({ db }) => {
+    const users = await db.query("users").collect();
+    return users
+      .filter(u => u.email && u.role !== "admin")
+      .map(u => ({ name: u.name ?? u.fullName ?? "there", email: u.email }));
   },
 });
 
@@ -147,7 +158,6 @@ export const updateUserRole = mutation({
   },
 });
 
-// ✅ Updated — includes phone, name, username, password, role, status
 export const updateUserProfile = mutation({
   args: {
     id: v.id("users"),
@@ -197,16 +207,22 @@ export const seedAdmin = mutation({
   },
 });
 
-// ── ADD THIS AT THE BOTTOM OF convex/users.ts ──
-// Used by sendEmail.ts to get all user emails for promo notification blast
+export const resetPasswordByEmail = mutation({
+  args: {
+    email: v.string(),
+    newPassword: v.string(),
+  },
+  handler: async ({ db }, { email, newPassword }) => {
+    const user = await db
+      .query("users")
+      .withIndex("by_email", q => q.eq("email", email))
+      .first();
 
-export const getAllUsersForPromoNotif = query({
-  args: {},
-  handler: async ({ db }) => {
-    const users = await db.query("users").collect();
-    // Only return name + email — nothing sensitive
-    return users
-      .filter(u => u.email && u.role !== "admin")
-      .map(u => ({ name: u.name ?? u.fullName ?? "there", email: u.email }));
+    if (!user) {
+      return { success: false, message: "No account found with that email." };
+    }
+
+    await db.patch(user._id, { password: newPassword });
+    return { success: true, message: "Password reset successfully!" };
   },
 });

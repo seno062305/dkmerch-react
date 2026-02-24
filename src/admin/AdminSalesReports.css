@@ -31,24 +31,24 @@
   gap: 10px;
 }
 
-/* Filter Section */
+/* ── Filter Section ── */
 .filter-section {
   background: white;
-  padding: 18px 20px;
+  padding: 16px 20px;
   border-radius: 12px;
   margin-bottom: 25px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  gap: 16px;
   flex-wrap: wrap;
+  gap: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .date-inputs {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
@@ -65,12 +65,11 @@
 .date-input-group label {
   display: flex;
   align-items: center;
-  flex-shrink: 0;
 }
 
 .date-input-group svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   color: #6b7280;
 }
 
@@ -82,46 +81,44 @@
   outline: none;
   font-family: inherit;
   cursor: pointer;
-  min-width: 0;
 }
 
 .date-separator {
   color: #9ca3af;
   font-size: 14px;
-  white-space: nowrap;
 }
 
-.view-mode-tabs {
-  display: flex;
-  gap: 4px;
-  background-color: #f3f4f6;
-  padding: 4px;
+.reset-date-btn {
+  padding: 8px 14px;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
   border-radius: 8px;
-  flex-shrink: 0;
-}
-
-.mode-tab {
-  padding: 8px 16px;
-  border: none;
-  background: transparent;
+  font-size: 13px;
   color: #6b7280;
-  font-size: 14px;
-  font-weight: 500;
-  border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.reset-date-btn:hover {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.server-time-badge {
+  font-size: 12px;
+  color: #6b7280;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  padding: 6px 12px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   white-space: nowrap;
 }
 
-.mode-tab:hover { color: #374151; }
-
-.mode-tab.active {
-  background: white;
-  color: #1f2937;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-}
-
-/* Summary Cards */
+/* ── Summary Cards ── */
 .summary-cards {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -131,16 +128,19 @@
 
 .summary-card {
   background: white;
-  padding: 18px;
+  padding: 20px;
   border-radius: 12px;
   display: flex;
   gap: 14px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  transition: transform 0.2s ease;
   align-items: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.summary-card:hover { transform: translateY(-2px); }
+.summary-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
 
 .card-icon {
   width: 46px;
@@ -170,11 +170,11 @@
 }
 
 .card-value {
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 700;
   color: #1a1a1a;
   line-height: 1.2;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -186,7 +186,7 @@
   font-weight: 500;
 }
 
-/* Charts Grid */
+/* ── Charts ── */
 .charts-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -196,10 +196,10 @@
 
 .chart-container {
   background: white;
-  padding: 20px;
+  padding: 24px;
   border-radius: 12px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
+  min-width: 0;
 }
 
 .chart-container h3 {
@@ -218,6 +218,7 @@
 .chart-svg {
   width: 100%;
   height: 100%;
+  overflow: visible;
 }
 
 .axis-label {
@@ -232,39 +233,7 @@
   font-weight: 500;
 }
 
-.grid-line {
-  stroke: #f3f4f6;
-  stroke-width: 1;
-}
-
-.chart-line {
-  fill: none;
-  stroke: url(#lineGradient);
-  stroke-width: 3;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.data-point {
-  fill: #ec4899;
-  stroke: white;
-  stroke-width: 3;
-  transition: r 0.2s ease;
-}
-
-.data-point:hover { r: 7; }
-
-.bar {
-  fill: #8b5cf6;
-  transition: all 0.2s ease;
-}
-
-.bar:hover {
-  fill: #7c3aed;
-  opacity: 0.8;
-}
-
-/* Top Products Section */
+/* ── Top Products ── */
 .top-products-section {
   background: white;
   padding: 24px;
@@ -273,10 +242,10 @@
 }
 
 .top-products-section h3 {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   color: #1a1a1a;
-  margin: 0 0 20px 0;
+  margin: 0 0 16px 0;
 }
 
 .products-table-container {
@@ -287,6 +256,7 @@
 .products-table {
   width: 100%;
   border-collapse: collapse;
+  min-width: 400px;
 }
 
 .products-table thead {
@@ -294,18 +264,17 @@
 }
 
 .products-table th {
-  padding: 14px 16px;
+  padding: 12px 16px;
   text-align: left;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: #666;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   border-bottom: 1px solid #e5e5e5;
-  white-space: nowrap;
 }
 
-.products-table th:first-child { width: 50px; text-align: center; }
+.products-table th:first-child  { width: 50px; text-align: center; }
 .products-table th:nth-child(3),
 .products-table th:nth-child(4) { text-align: right; }
 
@@ -314,7 +283,9 @@
   transition: background-color 0.2s ease;
 }
 
-.products-table tbody tr:hover { background-color: #fafafa; }
+.products-table tbody tr:hover {
+  background-color: #fafafa;
+}
 
 .products-table td {
   padding: 14px 16px;
@@ -322,102 +293,136 @@
   color: #333;
 }
 
-.rank-cell { text-align: center; font-weight: 600; color: #6b7280; font-size: 15px; }
-.product-name { font-weight: 500; color: #1f2937; }
+.rank-cell {
+  text-align: center;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.product-name {
+  font-weight: 500;
+  color: #1f2937;
+}
 
 .products-table td:nth-child(3),
 .products-table td:nth-child(4) { text-align: right; }
 
-.revenue-cell { font-weight: 600; color: #059669; }
-
-.empty-state { text-align: center; padding: 40px 20px; color: #999; }
-.empty-state i { font-size: 48px; display: block; margin-bottom: 12px; }
-.empty-state p { font-size: 14px; }
-
-/* ══════════════════════════
-   RESPONSIVE
-══════════════════════════ */
-
-@media (max-width: 1200px) {
-  .summary-cards { grid-template-columns: repeat(2, 1fr); }
-  .charts-grid { grid-template-columns: 1fr; }
+.revenue-cell {
+  font-weight: 600;
+  color: #059669;
 }
 
-@media (max-width: 768px) {
-  .admin-sales-reports { padding: 16px; }
+.empty-state {
+  text-align: center;
+  padding: 50px 20px;
+  color: #9ca3af;
+}
 
-  .reports-header h1 { font-size: 24px; }
+.empty-state i {
+  font-size: 40px;
+  margin-bottom: 12px;
+  display: block;
+}
+
+.empty-state p {
+  margin: 0;
+  font-size: 14px;
+}
+
+/* ── Responsive ── */
+@media (max-width: 1200px) {
+  .summary-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .charts-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .admin-sales-reports {
+    padding: 20px 16px;
+  }
 
   .filter-section {
     flex-direction: column;
-    align-items: stretch;
+    align-items: flex-start;
+  }
+
+  .server-time-badge {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .summary-cards {
+    grid-template-columns: repeat(2, 1fr);
     gap: 12px;
-    padding: 14px 16px;
+  }
+
+  .card-value {
+    font-size: 18px;
+  }
+}
+
+@media (max-width: 600px) {
+  .reports-header h1 {
+    font-size: 24px;
   }
 
   .date-inputs {
     flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
     width: 100%;
   }
 
   .date-input-group {
     width: 100%;
-    box-sizing: border-box;
-    justify-content: flex-start;
   }
 
-  .date-input-group input[type="date"] {
-    flex: 1;
+  .reset-date-btn {
     width: 100%;
+    text-align: center;
   }
-
-  .date-separator { text-align: center; }
-
-  .view-mode-tabs { width: 100%; }
-  .mode-tab { flex: 1; text-align: center; padding: 8px 10px; font-size: 13px; }
 
   .summary-cards {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
-    margin-bottom: 16px;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
   }
 
-  .summary-card { padding: 14px; gap: 12px; }
-  .card-icon { width: 40px; height: 40px; }
-  .card-icon svg { width: 18px; height: 18px; }
-  .card-value { font-size: 18px; }
-  .card-label { font-size: 11px; }
+  .summary-card {
+    padding: 14px;
+    gap: 10px;
+  }
 
-  .charts-grid { gap: 14px; margin-bottom: 16px; }
-  .chart-container { padding: 16px; }
-  .chart-container h3 { font-size: 14px; margin-bottom: 12px; }
+  .card-icon {
+    width: 38px;
+    height: 38px;
+  }
 
-  .top-products-section { padding: 16px; }
-  .top-products-section h3 { font-size: 16px; }
+  .card-icon svg {
+    width: 18px;
+    height: 18px;
+  }
 
-  .products-table { min-width: 500px; }
-  .products-table th,
-  .products-table td { padding: 10px 12px; font-size: 13px; }
+  .card-value {
+    font-size: 16px;
+  }
+
+  .card-label {
+    font-size: 11px;
+  }
+
+  .chart-container {
+    padding: 16px;
+  }
+
+  .top-products-section {
+    padding: 16px;
+  }
 }
 
-@media (max-width: 480px) {
-  .admin-sales-reports { padding: 12px; }
-
-  .reports-header h1 { font-size: 20px; }
-  .subtitle { font-size: 13px; }
-
-  .summary-cards { gap: 10px; }
-  .summary-card { padding: 12px; gap: 10px; }
-  .card-icon { width: 36px; height: 36px; border-radius: 8px; }
-  .card-icon svg { width: 16px; height: 16px; }
-  .card-value { font-size: 16px; }
-
-  .chart-container { padding: 12px; }
-  .line-chart, .bar-chart { height: 160px; }
-
-  .top-products-section { padding: 12px; }
-  .products-table th,
-  .products-table td { padding: 8px 10px; font-size: 12px; }
+@media (max-width: 400px) {
+  .summary-cards {
+    grid-template-columns: 1fr;
+  }
 }

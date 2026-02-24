@@ -1,41 +1,81 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import './AdminOrders.css';
 
+// ── Date helpers ──────────────────────────────────────────────────
+const toDateStr = (ms) => new Date(ms).toISOString().split('T')[0];
+const today     = toDateStr(Date.now());
+const thirtyDaysAgo = toDateStr(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+// Detect payment method label from saved data
+const getPaymentMethodLabel = (order) => {
+  const raw = (order.paymentMethod || '').toLowerCase();
+  if (raw === 'gcash' || raw.includes('gcash'))   return { label: 'GCash', icon: 'fa-mobile-alt',  color: '#007fff' };
+  if (raw === 'maya'  || raw.includes('maya') || raw.includes('paymaya')) return { label: 'Maya', icon: 'fa-wallet', color: '#00b4aa' };
+  if (raw === 'card'  || raw.includes('card'))    return { label: 'Card',  icon: 'fa-credit-card', color: '#6366f1' };
+  // Fallback for old orders saved before the fix (paymentMethod = 'paymongo')
+  if (raw.includes('paymongo') || raw.includes('online')) return { label: 'GCash / Maya', icon: 'fa-money-bill-wave', color: '#6b7280' };
+  return { label: order.paymentMethod || '—', icon: 'fa-money-bill', color: '#9ca3af' };
+};
+
 const AdminOrders = () => {
-  const [activeTab, setActiveTab] = useState('all');
+  const [activeTab,    setActiveTab]    = useState('all');
   const [selectedOrder, setSelectedOrder] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm,   setSearchTerm]   = useState('');
+  const [startDate,    setStartDate]    = useState('');
+  const [endDate,      setEndDate]      = useState('');
 
   const orders = useQuery(api.orders.getAllOrders) || [];
   const updateOrderStatusMutation = useMutation(api.orders.updateOrderStatus);
   const updateOrderFieldsMutation = useMutation(api.orders.updateOrderFields);
-  const deleteOrderMutation = useMutation(api.orders.deleteOrder);
+  const deleteOrderMutation       = useMutation(api.orders.deleteOrder);
 
   const validOrders = orders.filter(o => o.orderId && o.items?.length > 0);
 
   const tabCounts = {
-    paid: validOrders.filter(o =>
-      o.paymentStatus === 'paid' && (!o.orderStatus || o.orderStatus === 'pending')
-    ).length,
+    paid:    validOrders.filter(o => o.paymentStatus === 'paid' && (!o.orderStatus || o.orderStatus === 'pending')).length,
     pending: validOrders.filter(o => o.orderStatus === 'pending').length,
   };
 
-  const filteredOrders = validOrders.filter(order => {
-    let matchesTab = true;
-    if (activeTab === 'paid') {
-      matchesTab = order.paymentStatus === 'paid' && (!order.orderStatus || order.orderStatus === 'pending');
-    } else if (activeTab !== 'all') {
-      matchesTab = order.orderStatus === activeTab;
-    }
-    const matchesSearch =
-      !searchTerm ||
-      [order.orderId, order.customerName, order.email].some(f =>
-        f?.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    return matchesTab && matchesSearch;
-  });
+  const filteredOrders = useMemo(() => {
+    return validOrders.filter(order => {
+      // Tab filter
+      let matchesTab = true;
+      if (activeTab === 'paid') {
+        matchesTab = order.paymentStatus === 'paid' && (!order.orderStatus || order.orderStatus === 'pending');
+      } else if (activeTab !== 'all') {
+        matchesTab = order.orderStatus === activeTab;
+      }
+
+      // Search filter
+      const matchesSearch =
+        !searchTerm ||
+        [order.orderId, order.customerName, order.email].some(f =>
+          f?.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+
+      // Date filter
+      let matchesDate = true;
+      if (startDate || endDate) {
+        const orderDate = new Date(order._creationTime || order.createdAt || 0);
+        if (startDate) {
+          const start = new Date(startDate);
+          start.setHours(0, 0, 0, 0);
+          if (orderDate < start) matchesDate = false;
+        }
+        if (endDate) {
+          const end = new Date(endDate);
+          end.setHours(23, 59, 59, 999);
+          if (orderDate > end) matchesDate = false;
+        }
+      }
+
+      return matchesTab && matchesSearch && matchesDate;
+    });
+  }, [validOrders, activeTab, searchTerm, startDate, endDate]);
+
+
 
   const getStatusColor = (status) => {
     const colors = {
@@ -65,14 +105,14 @@ const AdminOrders = () => {
     try {
       await updateOrderStatusMutation({
         orderId,
-        status: mapStatusToTrackingStatus(newOrderStatus),
+        status:      mapStatusToTrackingStatus(newOrderStatus),
         orderStatus: newOrderStatus,
       });
       if (selectedOrder?.orderId === orderId) {
         setSelectedOrder(prev => ({
           ...prev,
           orderStatus: newOrderStatus,
-          status: mapStatusToTrackingStatus(newOrderStatus),
+          status:      mapStatusToTrackingStatus(newOrderStatus),
         }));
       }
     } catch (err) {
@@ -93,14 +133,14 @@ const AdminOrders = () => {
       await updateOrderFieldsMutation({
         orderId,
         cancelReason: reason,
-        orderStatus: 'cancelled',
-        status: 'Cancelled',
+        orderStatus:  'cancelled',
+        status:       'Cancelled',
       });
       if (selectedOrder?.orderId === orderId) {
         setSelectedOrder(prev => ({
           ...prev,
-          orderStatus: 'cancelled',
-          status: 'Cancelled',
+          orderStatus:  'cancelled',
+          status:       'Cancelled',
           cancelReason: reason,
         }));
       }
@@ -110,12 +150,16 @@ const AdminOrders = () => {
     }
   };
 
+  const clearDateFilter = () => { setStartDate(''); setEndDate(''); };
+
   return (
     <div className="admin-orders-page">
+
+      {/* ── Tabs ── */}
       <div className="orders-tabs">
         {[
           { key: 'all',              icon: 'fa-list',          label: 'All Orders' },
-          { key: 'paid',             icon: 'fa-peso-sign',     label: `Paid & Awaiting${tabCounts.paid > 0 ? ` (${tabCounts.paid})` : ''}` },
+          { key: 'paid',             icon: 'fa-peso-sign',     label: `Paid & Awaiting${tabCounts.paid    > 0 ? ` (${tabCounts.paid})`    : ''}` },
           { key: 'pending',          icon: 'fa-clock',         label: `Pending${tabCounts.pending > 0 ? ` (${tabCounts.pending})` : ''}` },
           { key: 'confirmed',        icon: 'fa-check-circle',  label: 'Confirmed' },
           { key: 'out_for_delivery', icon: 'fa-shipping-fast', label: 'Out for Delivery' },
@@ -127,6 +171,7 @@ const AdminOrders = () => {
         ))}
       </div>
 
+      {/* ── Flow info ── */}
       <div className="admin-flow-info">
         <i className="fas fa-info-circle"></i>
         <span>
@@ -137,6 +182,7 @@ const AdminOrders = () => {
         </span>
       </div>
 
+      {/* ── Filters ── */}
       <div className="orders-filters">
         <div className="filter-group">
           <input
@@ -144,11 +190,48 @@ const AdminOrders = () => {
             className="search-input"
             placeholder="Search by Order ID, Customer Name, or Email..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={e => setSearchTerm(e.target.value)}
           />
+        </div>
+
+        {/* Date filter */}
+        <div className="date-filter-group">
+          <div className="date-filter-inputs">
+            <div className="date-filter-item">
+              <label htmlFor="orderStart"><i className="fas fa-calendar"></i></label>
+              <input
+                type="date"
+                id="orderStart"
+                value={startDate}
+                max={endDate || today}
+                onChange={e => setStartDate(e.target.value)}
+                placeholder="Start date"
+              />
+            </div>
+            <span className="date-filter-sep">to</span>
+            <div className="date-filter-item">
+              <label htmlFor="orderEnd"><i className="fas fa-calendar"></i></label>
+              <input
+                type="date"
+                id="orderEnd"
+                value={endDate}
+                min={startDate}
+                max={today}
+                onChange={e => setEndDate(e.target.value)}
+              />
+            </div>
+            {(startDate || endDate) && (
+              <button className="date-filter-clear" onClick={clearDateFilter}>
+                <i className="fas fa-times"></i> Clear
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
+
+
+      {/* ── Table ── */}
       <div className="orders-container">
         {filteredOrders.length === 0 ? (
           <div className="empty-orders">
@@ -165,6 +248,7 @@ const AdminOrders = () => {
                   <th>ITEMS</th>
                   <th>TOTAL</th>
                   <th>PAYMENT</th>
+                  <th>METHOD</th>
                   <th>STATUS</th>
                   <th>RIDER</th>
                   <th>DATE</th>
@@ -172,55 +256,62 @@ const AdminOrders = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredOrders.map(order => (
-                  <tr key={order.orderId}>
-                    <td><strong>#{order.orderId.slice(-8)}</strong></td>
-                    <td>
-                      <div className="customer-info">
-                        <strong>{order.customerName || 'N/A'}</strong>
-                        <small>{order.email || 'N/A'}</small>
-                      </div>
-                    </td>
-                    <td>{order.items.length} item(s)</td>
-                    <td>
-                      {/* Show final (discounted) total in table */}
-                      <strong>₱{(order.finalTotal || order.total || 0).toLocaleString()}</strong>
-                      {order.promoCode && (
-                        <div style={{ fontSize: '11px', color: '#ec4899', fontWeight: 700, marginTop: '3px', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                          <i className="fas fa-tag"></i> {order.promoCode}
+                {filteredOrders.map(order => {
+                  const pm = getPaymentMethodLabel(order);
+                  return (
+                    <tr key={order.orderId}>
+                      <td><strong>#{order.orderId.slice(-8)}</strong></td>
+                      <td>
+                        <div className="customer-info">
+                          <strong>{order.customerName || 'N/A'}</strong>
+                          <small>{order.email || 'N/A'}</small>
                         </div>
-                      )}
-                    </td>
-                    <td>
-                      <span className={`payment-badge ${order.paymentStatus === 'paid' ? 'paid' : 'pending'}`}>
-                        {order.paymentStatus === 'paid' ? 'Paid' : 'Pending'}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="status-badge" style={{ backgroundColor: getStatusColor(order.orderStatus) }}>
-                        {getStatusLabel(order.orderStatus)}
-                      </span>
-                    </td>
-                    <td>
-                      {order.riderInfo ? (
-                        <div style={{ fontSize: '12px' }}>
-                          <strong>{order.riderInfo.name}</strong>
-                          <div style={{ color: '#888' }}>{order.riderInfo.plate}</div>
-                        </div>
-                      ) : <span style={{ color: '#ccc', fontSize: '12px' }}>-</span>}
-                    </td>
-                    <td>
-                      {order._creationTime
-                        ? new Date(order._creationTime).toLocaleDateString('en-PH')
-                        : 'N/A'}
-                    </td>
-                    <td>
-                      <button className="view-btn" onClick={() => setSelectedOrder(order)}>
-                        <i className="fas fa-eye"></i> View
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td>{order.items.length} item(s)</td>
+                      <td>
+                        <strong>₱{(order.finalTotal ?? order.total ?? 0).toLocaleString('en-PH')}</strong>
+                        {order.promoCode && (
+                          <div style={{ fontSize: '11px', color: '#ec4899', fontWeight: 700, marginTop: '3px', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                            <i className="fas fa-tag"></i> {order.promoCode}
+                          </div>
+                        )}
+                      </td>
+                      <td>
+                        <span className={`payment-badge ${order.paymentStatus === 'paid' ? 'paid' : 'pending'}`}>
+                          {order.paymentStatus === 'paid' ? 'Paid' : 'Pending'}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="method-badge" style={{ color: pm.color }}>
+                          <i className={`fas ${pm.icon}`}></i> {pm.label}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="status-badge" style={{ backgroundColor: getStatusColor(order.orderStatus) }}>
+                          {getStatusLabel(order.orderStatus)}
+                        </span>
+                      </td>
+                      <td>
+                        {order.riderInfo ? (
+                          <div style={{ fontSize: '12px' }}>
+                            <strong>{order.riderInfo.name}</strong>
+                            <div style={{ color: '#888' }}>{order.riderInfo.plate}</div>
+                          </div>
+                        ) : <span style={{ color: '#ccc', fontSize: '12px' }}>-</span>}
+                      </td>
+                      <td style={{ whiteSpace: 'nowrap', fontSize: '13px' }}>
+                        {order._creationTime
+                          ? new Date(order._creationTime).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })
+                          : 'N/A'}
+                      </td>
+                      <td>
+                        <button className="view-btn" onClick={() => setSelectedOrder(order)}>
+                          <i className="fas fa-eye"></i> View
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -242,31 +333,38 @@ const AdminOrders = () => {
   );
 };
 
+/* ══════════════════════════════════════
+   ORDER MODAL
+══════════════════════════════════════ */
 const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDelete, getStatusColor, getStatusLabel }) => {
   const [showCancelModal, setShowCancelModal] = useState(false);
-  const [proofExpanded, setProofExpanded] = useState(false);
+  const [proofExpanded,   setProofExpanded]   = useState(false);
 
-  const subtotal    = order.subtotal || 0;
-  const shippingFee = order.shippingFee || 0;
+  const subtotal      = order.subtotal  || 0;
+  const shippingFee   = order.shippingFee || 0;
   const originalTotal = order.total || (subtotal + shippingFee);
-  const discount    = order.discountAmount || 0;
-  const finalTotal  = order.finalTotal ?? (originalTotal - discount);
+  const discount      = order.discountAmount || 0;
+  const finalTotal    = order.finalTotal ?? (originalTotal - discount);
 
-  const currentStatus = order.orderStatus || 'pending';
-  const paymentStatus = order.paymentStatus || 'pending';
-  const isPaid        = paymentStatus === 'paid';
-  const isDone        = currentStatus === 'completed' || currentStatus === 'cancelled';
+  const currentStatus  = order.orderStatus || 'pending';
+  const paymentStatus  = order.paymentStatus || 'pending';
+  const isPaid         = paymentStatus === 'paid';
+  const isDone         = currentStatus === 'completed' || currentStatus === 'cancelled';
   const isRiderManaged = currentStatus === 'shipped' || currentStatus === 'out_for_delivery';
-  const canConfirm    = isPaid && currentStatus === 'pending';
-  const canCancel     = !isDone && !isRiderManaged;
-  const hasPromo      = !!(order.promoCode && discount > 0);
+  const canConfirm     = isPaid && currentStatus === 'pending';
+  const canCancel      = !isDone && !isRiderManaged;
+  const hasPromo       = !!(order.promoCode && discount > 0);
 
   const hasDeliveryProof = !!(order.deliveryProofPhoto);
   const otpVerified      = !!(order.deliveryOtpVerified);
 
+  const pm = getPaymentMethodLabel(order);
+
   return (
     <div className="order-modal-overlay" onClick={onClose}>
-      <div className="order-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="order-modal" onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
         <div className="modal-header">
           <div>
             <h2>Order #{order.orderId?.slice(-8) || 'N/A'}</h2>
@@ -276,6 +374,9 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
               </span>
               <span className={`payment-badge ${isPaid ? 'paid' : 'pending'}`}>
                 {isPaid ? 'Paid' : 'Payment Pending'}
+              </span>
+              <span className="method-badge-pill" style={{ color: pm.color, borderColor: pm.color + '44' }}>
+                <i className={`fas ${pm.icon}`}></i> {pm.label}
               </span>
               {hasPromo && (
                 <span className="promo-admin-pill">
@@ -389,8 +490,14 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
             <div className="order-info-grid">
               <div className="info-item"><label>Order ID</label><strong>#{order.orderId}</strong></div>
               <div className="info-item"><label>Date</label><span>{order._creationTime ? new Date(order._creationTime).toLocaleString('en-PH') : 'N/A'}</span></div>
-              <div className="info-item"><label>Payment Method</label><span>{order.paymentMethod || 'N/A'}</span></div>
-              <div className="info-item"><label>Payment Status</label>
+              <div className="info-item">
+                <label>Payment Method</label>
+                <span className="method-display" style={{ color: pm.color }}>
+                  <i className={`fas ${pm.icon}`}></i> {pm.label}
+                </span>
+              </div>
+              <div className="info-item">
+                <label>Payment Status</label>
                 <span className={`payment-badge ${isPaid ? 'paid' : 'pending'}`}>
                   {isPaid ? 'Paid' : 'Pending'}
                 </span>
@@ -398,7 +505,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
             </div>
           </div>
 
-          {/* ── PROMO / DISCOUNT SECTION ── */}
+          {/* Promo Section */}
           {hasPromo && (
             <div className="modal-section">
               <h3><i className="fas fa-tag"></i> Promo / Discount Applied</h3>
@@ -408,9 +515,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                     <i className="fas fa-ticket-alt"></i>
                     <span>{order.promoCode}</span>
                   </div>
-                  {order.promoName && (
-                    <span className="promo-admin-group">{order.promoName}</span>
-                  )}
+                  {order.promoName && <span className="promo-admin-group">{order.promoName}</span>}
                 </div>
                 <div className="promo-admin-details">
                   {order.discountPercent > 0 && (
@@ -421,15 +526,15 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                   )}
                   <div className="promo-admin-row discount">
                     <span>Amount Saved by Customer</span>
-                    <strong>−₱{discount.toLocaleString()}</strong>
+                    <strong>−₱{discount.toLocaleString('en-PH')}</strong>
                   </div>
                   <div className="promo-admin-row">
                     <span>Original Total (before discount)</span>
-                    <strong>₱{originalTotal.toLocaleString()}</strong>
+                    <strong>₱{originalTotal.toLocaleString('en-PH')}</strong>
                   </div>
                   <div className="promo-admin-row final">
                     <span>Final Amount Charged (PayMongo)</span>
-                    <strong>₱{finalTotal.toLocaleString()}</strong>
+                    <strong>₱{finalTotal.toLocaleString('en-PH')}</strong>
                   </div>
                 </div>
               </div>
@@ -444,13 +549,13 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                 <div key={index} className="order-item-card">
                   <div className="item-image">
                     <img src={item.image} alt={item.name || 'Product'}
-                      onError={(e) => { e.target.onerror = null; e.target.src = 'https://via.placeholder.com/80x80?text=No+Image'; }} />
+                      onError={e => { e.target.onerror = null; e.target.src = 'https://via.placeholder.com/80x80?text=No+Image'; }} />
                   </div>
                   <div className="item-details">
                     <strong>{item.name || 'N/A'}</strong>
-                    <p className="item-price">₱{(item.price || 0).toLocaleString()} x {item.quantity || 0} pc(s)</p>
+                    <p className="item-price">₱{(item.price || 0).toLocaleString('en-PH')} x {item.quantity || 0} pc(s)</p>
                   </div>
-                  <div className="item-subtotal">₱{((item.quantity || 0) * (item.price || 0)).toLocaleString()}</div>
+                  <div className="item-subtotal">₱{((item.quantity || 0) * (item.price || 0)).toLocaleString('en-PH')}</div>
                 </div>
               ))}
             </div>
@@ -460,32 +565,29 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
           <div className="modal-section">
             <h3><i className="fas fa-calculator"></i> Order Summary</h3>
             <div className="order-totals">
-              <div className="total-row"><span>Subtotal:</span><strong>₱{subtotal.toLocaleString()}</strong></div>
-              <div className="total-row"><span>Shipping Fee:</span><strong>₱{shippingFee.toLocaleString()}</strong></div>
+              <div className="total-row"><span>Subtotal:</span><strong>₱{subtotal.toLocaleString('en-PH')}</strong></div>
+              <div className="total-row"><span>Shipping Fee:</span><strong>₱{shippingFee.toLocaleString('en-PH')}</strong></div>
               {hasPromo && (
-                <div className="total-row promo-discount-admin-row">
-                  <span>
-                    <i className="fas fa-tag" style={{ marginRight: '6px', color: '#ec4899' }}></i>
-                    Promo ({order.promoCode}) −{order.discountPercent}%:
-                  </span>
-                  <strong>−₱{discount.toLocaleString()}</strong>
-                </div>
-              )}
-              {hasPromo && (
-                <div className="total-row">
-                  <span style={{ color: '#6b7280' }}>Original Total:</span>
-                  <strong style={{ color: '#6b7280', textDecoration: 'line-through' }}>₱{originalTotal.toLocaleString()}</strong>
-                </div>
+                <>
+                  <div className="total-row promo-discount-admin-row">
+                    <span><i className="fas fa-tag" style={{ marginRight: '6px', color: '#ec4899' }}></i>Promo ({order.promoCode}) −{order.discountPercent}%:</span>
+                    <strong>−₱{discount.toLocaleString('en-PH')}</strong>
+                  </div>
+                  <div className="total-row">
+                    <span style={{ color: '#6b7280' }}>Original Total:</span>
+                    <strong style={{ color: '#6b7280', textDecoration: 'line-through' }}>₱{originalTotal.toLocaleString('en-PH')}</strong>
+                  </div>
+                </>
               )}
               <div className="total-row grand-total">
                 <span>{hasPromo ? 'Final Charged (PayMongo):' : 'Total Amount:'}</span>
-                <strong>₱{finalTotal.toLocaleString()}</strong>
+                <strong>₱{finalTotal.toLocaleString('en-PH')}</strong>
               </div>
               {hasPromo && (
                 <div className="promo-admin-savings-note">
                   <i className="fas fa-info-circle"></i>
-                  Customer used promo <strong>{order.promoCode}</strong> and saved <strong>₱{discount.toLocaleString()}</strong>.
-                  PayMongo charged <strong>₱{finalTotal.toLocaleString()}</strong>.
+                  Customer used promo <strong>{order.promoCode}</strong> and saved <strong>₱{discount.toLocaleString('en-PH')}</strong>.
+                  PayMongo charged <strong>₱{finalTotal.toLocaleString('en-PH')}</strong>.
                 </div>
               )}
             </div>
@@ -494,14 +596,12 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
           {/* Update Status */}
           <div className="modal-section">
             <h3><i className="fas fa-tasks"></i> Update Order Status</h3>
-
             {isDone && (
               <div className={`status-done-notice ${currentStatus}`}>
                 <i className={`fas ${currentStatus === 'completed' ? 'fa-check-circle' : 'fa-ban'}`}></i>
                 <span>{currentStatus === 'completed' ? 'Order completed.' : 'Order cancelled.'}</span>
               </div>
             )}
-
             {isRiderManaged && (
               <div className="rider-managed-notice">
                 <i className="fas fa-motorcycle"></i>
@@ -511,7 +611,6 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                 </div>
               </div>
             )}
-
             {!isDone && !isRiderManaged && (
               <div className="status-buttons">
                 <div className="status-btn-wrapper">
@@ -529,7 +628,6 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                     <div className="block-reason" style={{ color: '#17a2b8' }}><i className="fas fa-check"></i> Already confirmed</div>
                   )}
                 </div>
-
                 {canCancel && (
                   <div className="status-btn-wrapper">
                     <button className="status-btn cancelled" onClick={() => setShowCancelModal(true)}>
@@ -563,7 +661,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
       {showCancelModal && (
         <CancelReasonModal
           order={order}
-          onConfirm={(reason) => { onCancelWithReason(order.orderId, reason); setShowCancelModal(false); }}
+          onConfirm={reason => { onCancelWithReason(order.orderId, reason); setShowCancelModal(false); }}
           onClose={() => setShowCancelModal(false)}
         />
       )}
@@ -579,15 +677,15 @@ const CANCEL_PRESETS = [
 
 const CancelReasonModal = ({ order, onConfirm, onClose }) => {
   const [selectedPreset, setSelectedPreset] = useState('');
-  const [customReason, setCustomReason] = useState('');
-  const [error, setError] = useState('');
+  const [customReason,   setCustomReason]   = useState('');
+  const [error,          setError]          = useState('');
 
-  const isOther    = selectedPreset === 'Other reason';
+  const isOther     = selectedPreset === 'Other reason';
   const finalReason = isOther ? customReason.trim() : selectedPreset;
 
   return (
     <div className="cancel-reason-overlay" onClick={onClose}>
-      <div className="cancel-reason-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="cancel-reason-modal" onClick={e => e.stopPropagation()}>
         <div className="cancel-reason-header">
           <div className="cancel-reason-icon"><i className="fas fa-ban"></i></div>
           <div><h3>Cancel Order</h3><p>Order #{order.orderId?.slice(-8)}</p></div>
@@ -596,7 +694,7 @@ const CancelReasonModal = ({ order, onConfirm, onClose }) => {
         <div className="cancel-reason-body">
           <p className="cancel-reason-prompt">Please select or enter a reason for cancelling this order.</p>
           <div className="cancel-presets">
-            {CANCEL_PRESETS.map((preset) => (
+            {CANCEL_PRESETS.map(preset => (
               <button key={preset}
                 className={`cancel-preset-chip ${selectedPreset === preset ? 'active' : ''}`}
                 onClick={() => { setSelectedPreset(preset); setError(''); if (preset !== 'Other reason') setCustomReason(''); }}
@@ -608,9 +706,12 @@ const CancelReasonModal = ({ order, onConfirm, onClose }) => {
           {isOther && (
             <div className="cancel-custom-wrap">
               <label>Specify your reason <span className="required">*</span></label>
-              <textarea className="cancel-custom-input" placeholder="Type the cancellation reason here..."
-                value={customReason} onChange={(e) => { setCustomReason(e.target.value); setError(''); }}
-                rows={3} maxLength={300} autoFocus />
+              <textarea className="cancel-custom-input"
+                placeholder="Type the cancellation reason here..."
+                value={customReason}
+                onChange={e => { setCustomReason(e.target.value); setError(''); }}
+                rows={3} maxLength={300} autoFocus
+              />
               <div className="char-count">{customReason.length}/300</div>
             </div>
           )}

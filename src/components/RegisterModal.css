@@ -29,6 +29,12 @@
   box-shadow: 0 10px 25px rgba(139, 92, 246, 0.3);
 }
 
+/* Forgot password icon — pink/red gradient */
+.register-icon.forgot-icon {
+  background: linear-gradient(135deg, #ec4899 0%, #f43f5e 100%);
+  box-shadow: 0 10px 25px rgba(236, 72, 153, 0.3);
+}
+
 .register-icon svg {
   width: 45px;
   height: 45px;
@@ -57,7 +63,6 @@
   padding: 0 40px 40px;
 }
 
-/* Input Groups - Compact spacing */
 .register-form .input-group {
   margin-bottom: 18px;
 }
@@ -71,20 +76,12 @@
   font-weight: 500;
 }
 
-/* Valid Input State */
-.form-input.valid {
-  border-color: #10b981 !important;
-}
+/* Valid / Error Input States */
+.form-input.valid { border-color: #10b981 !important; }
+.form-input.error { border-color: #dc2626 !important; }
 
-/* Error Input State */
-.form-input.error {
-  border-color: #dc2626 !important;
-}
-
-/* Password Strength Container */
-.password-strength-container {
-  margin-top: 10px;
-}
+/* Password Strength */
+.password-strength-container { margin-top: 10px; }
 
 .password-strength-bar {
   width: 100%;
@@ -137,8 +134,8 @@
   align-items: center;
   gap: 10px;
   font-size: 13px;
-  transition: all 0.2s ease;
   color: #6b7280;
+  transition: all 0.2s ease;
 }
 
 .requirement-item svg {
@@ -149,16 +146,10 @@
   transition: color 0.2s ease;
 }
 
-.requirement-item.valid {
-  color: #10b981;
-  font-weight: 500;
-}
+.requirement-item.valid { color: #10b981; font-weight: 500; }
+.requirement-item.valid svg { color: #10b981; }
 
-.requirement-item.valid svg {
-  color: #10b981;
-}
-
-/* Password Success Message */
+/* Password success / match */
 .password-success-message {
   display: flex;
   align-items: center;
@@ -181,7 +172,6 @@
   flex-shrink: 0;
 }
 
-/* Password Match Success */
 .password-match-success {
   display: flex;
   align-items: center;
@@ -196,6 +186,82 @@
   width: 18px;
   height: 18px;
   flex-shrink: 0;
+}
+
+/* ── Forgot Password — code row ── */
+.forgot-code-row {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.send-code-btn {
+  padding: 0 18px;
+  background: var(--primary-color, #fc1268);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+}
+
+.send-code-btn:hover:not(:disabled) {
+  background: #e63e7d;
+  transform: translateY(-1px);
+}
+
+.send-code-btn:disabled {
+  background: #d1d5db;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Forgot message (success / error) */
+.forgot-msg {
+  margin-top: 10px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  animation: fadeIn 0.3s ease;
+}
+
+.forgot-msg.success {
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.forgot-msg.error {
+  background: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+/* ── Forgot Password link in register view ── */
+.forgot-password-wrapper {
+  text-align: right;
+  margin: -6px 0 20px 0;
+}
+
+.forgot-password-link {
+  background: none;
+  border: none;
+  color: #ec4899;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0;
+  transition: all 0.2s ease;
+}
+
+.forgot-password-link:hover {
+  color: #db2777;
+  text-decoration: underline;
 }
 
 /* Submit Button */
@@ -218,19 +284,14 @@
   margin: 24px 0 20px 0;
 }
 
-.register-submit-btn svg {
-  width: 20px;
-  height: 20px;
-}
+.register-submit-btn svg { width: 20px; height: 20px; }
 
 .register-submit-btn:hover:not(:disabled) {
   transform: translateY(-2px);
   box-shadow: 0 8px 20px rgba(139, 92, 246, 0.4);
 }
 
-.register-submit-btn:active:not(:disabled) {
-  transform: translateY(0);
-}
+.register-submit-btn:active:not(:disabled) { transform: translateY(0); }
 
 .register-submit-btn:disabled {
   opacity: 0.6;
@@ -240,16 +301,8 @@
 }
 
 /* Login Section */
-.login-section {
-  text-align: center;
-  margin-top: 20px;
-}
-
-.login-section p {
-  color: #6b7280;
-  font-size: 14px;
-  margin: 0;
-}
+.login-section { text-align: center; margin-top: 20px; }
+.login-section p { color: #6b7280; font-size: 14px; margin: 0; }
 
 .login-link {
   background: none;
@@ -261,24 +314,32 @@
   transition: all 0.2s ease;
 }
 
-.login-link:hover {
-  color: #7c3aed;
-  text-decoration: underline;
+.login-link:hover { color: #7c3aed; text-decoration: underline; }
+
+/* Divider */
+.divider {
+  display: flex;
+  align-items: center;
+  margin: 20px 0;
+  color: #9ca3af;
+  font-size: 14px;
 }
+
+.divider::before,
+.divider::after { content: ""; flex: 1; height: 1px; background: #e5e7eb; }
+.divider span { margin: 0 16px; }
 
 /* Animations */
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-/* Spinner Animation */
+@keyframes slideUp {
+  from { transform: translateY(50px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
 .spinner {
   width: 20px;
   height: 20px;
@@ -286,165 +347,46 @@
 }
 
 @keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
-/* Scrollbar Styling */
-.register-modal-content::-webkit-scrollbar {
-  width: 6px;
-}
+/* Scrollbar */
+.register-modal-content::-webkit-scrollbar { width: 6px; }
+.register-modal-content::-webkit-scrollbar-track { background: #f3f4f6; border-radius: 10px; }
+.register-modal-content::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 10px; }
+.register-modal-content::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
 
-.register-modal-content::-webkit-scrollbar-track {
-  background: #f3f4f6;
-  border-radius: 10px;
-}
-
-.register-modal-content::-webkit-scrollbar-thumb {
-  background: #d1d5db;
-  border-radius: 10px;
-}
-
-.register-modal-content::-webkit-scrollbar-thumb:hover {
-  background: #9ca3af;
-}
-
-/* Responsive Design */
+/* Responsive */
 @media (max-width: 576px) {
-  .register-modal-content {
-    max-width: 100%;
-    border-radius: 16px;
-  }
-
-  .register-modal-header {
-    padding: 30px 24px 24px;
-  }
-
-  .register-icon {
-    width: 70px;
-    height: 70px;
-  }
-
-  .register-icon svg {
-    width: 40px;
-    height: 40px;
-  }
-
-  .register-modal-header h2 {
-    font-size: 24px;
-  }
-
-  .register-subtitle {
-    font-size: 14px;
-  }
-
-  .register-form {
-    padding: 0 24px 30px;
-  }
-
-  .register-form .input-group {
-    margin-bottom: 16px;
-  }
-
-  .form-input {
-    padding: 12px 14px 12px 44px;
-    font-size: 14px;
-  }
-
-  .input-icon {
-    left: 14px;
-    width: 18px;
-    height: 18px;
-  }
-
-  .register-submit-btn {
-    padding: 14px;
-    font-size: 15px;
-    margin: 20px 0 16px 0;
-  }
-
-  .password-requirements {
-    padding: 12px;
-  }
-
-  .requirements-title {
-    font-size: 11px;
-    margin-bottom: 8px;
-  }
-
-  .requirement-item {
-    font-size: 12px;
-    gap: 8px;
-  }
-
-  .requirement-item svg {
-    width: 16px;
-    height: 16px;
-  }
-
-  .password-success-message {
-    padding: 10px 12px;
-    font-size: 12px;
-  }
-
-  .password-success-message svg {
-    width: 18px;
-    height: 18px;
-  }
-
-  .password-match-success {
-    font-size: 12px;
-  }
-
-  .password-match-success svg {
-    width: 16px;
-    height: 16px;
-  }
+  .register-modal-content { max-width: 100%; border-radius: 16px; }
+  .register-modal-header { padding: 30px 24px 24px; }
+  .register-icon { width: 70px; height: 70px; }
+  .register-icon svg { width: 40px; height: 40px; }
+  .register-modal-header h2 { font-size: 24px; }
+  .register-form { padding: 0 24px 30px; }
+  .register-form .input-group { margin-bottom: 16px; }
+  .form-input { padding: 12px 14px 12px 44px; font-size: 14px; }
+  .input-icon { left: 14px; width: 18px; height: 18px; }
+  .register-submit-btn { padding: 14px; font-size: 15px; margin: 20px 0 16px 0; }
+  .forgot-code-row { flex-direction: column; }
+  .send-code-btn { padding: 12px; width: 100%; text-align: center; }
 }
 
 @media (max-width: 380px) {
-  .register-modal-header {
-    padding: 24px 20px 20px;
-  }
-
-  .register-form {
-    padding: 0 20px 24px;
-  }
-
-  .register-icon {
-    width: 60px;
-    height: 60px;
-    margin-bottom: 16px;
-  }
-
-  .register-icon svg {
-    width: 35px;
-    height: 35px;
-  }
-
-  .register-modal-header h2 {
-    font-size: 22px;
-  }
-
-  .register-form .input-group {
-    margin-bottom: 14px;
-  }
+  .register-modal-header { padding: 24px 20px 20px; }
+  .register-form { padding: 0 20px 24px; }
+  .register-icon { width: 60px; height: 60px; margin-bottom: 16px; }
+  .register-icon svg { width: 35px; height: 35px; }
+  .register-modal-header h2 { font-size: 22px; }
+  .register-form .input-group { margin-bottom: 14px; }
 }
 
-/* Focus visible for accessibility */
+/* Focus visible */
 .register-submit-btn:focus-visible,
-.login-link:focus-visible {
+.login-link:focus-visible,
+.forgot-password-link:focus-visible,
+.send-code-btn:focus-visible {
   outline: 2px solid #8b5cf6;
   outline-offset: 2px;
-}
-
-/* Prevent layout shift when requirements appear */
-.password-requirements,
-.password-success-message,
-.password-match-success {
-  will-change: opacity, transform;
 }

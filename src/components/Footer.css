@@ -3,7 +3,8 @@ footer {
   background-color: var(--dark-color);
   color: white;
   padding: 50px 0 20px;
-  margin-top: 80px;
+  margin-top: auto; /* ✅ FIXED: was margin-top: 80px — now pushes to bottom via flex */
+  flex-shrink: 0;
 }
 
 .footer-content {
@@ -114,7 +115,7 @@ footer {
     grid-template-columns: repeat(2, 1fr);
     gap: 35px;
   }
-  
+
   footer {
     padding: 45px 0 20px;
   }
@@ -123,30 +124,29 @@ footer {
 @media (max-width: 576px) {
   footer {
     padding: 35px 0 15px;
-    margin-top: 60px;
   }
-  
+
   .footer-content {
     grid-template-columns: 1fr;
     gap: 30px;
   }
-  
+
   .footer-section {
     text-align: center;
   }
-  
+
   .footer-about p {
     max-width: 100%;
   }
-  
+
   .social-links {
     justify-content: center;
   }
-  
+
   .contact-info p {
     justify-content: center;
   }
-  
+
   .footer-links a:hover {
     transform: none;
   }

@@ -14,6 +14,7 @@ import PreOrder from './pages/PreOrder';
 import TrackOrder from './pages/TrackOrder';
 import Help from './pages/Help';
 import Settings from './pages/Settings';
+import PromoRedirect from './pages/PromoRedirect'; // ✅ NEW
 
 import LoginModal from './components/LoginModal';
 import CartModal from './components/CartModal';
@@ -66,7 +67,8 @@ function AppContent() {
 
   const isAdminRoute = location.pathname.startsWith('/admin');
   const isRiderRoute = location.pathname.startsWith('/rider');
-  const hideHeaderFooter = isAdminRoute || isRiderRoute;
+  const isPromoRoute = location.pathname.startsWith('/promo'); // ✅ NEW
+  const hideHeaderFooter = isAdminRoute || isRiderRoute || isPromoRoute;
 
   const handleOpenProductModal = (product) => {
     setCurrentProduct(product);
@@ -92,9 +94,11 @@ function AppContent() {
         <Route path="/wishlist" element={<WishlistPage />} />
         <Route path="/checkout" element={<Checkout />} />
         <Route path="/settings" element={<Settings />} />
-        {/* ✅ /my-orders now redirects to /track-order */}
         <Route path="/my-orders" element={<Navigate to="/track-order" replace />} />
         <Route path="/order-success" element={<OrderSuccess />} />
+
+        {/* ✅ Promo redirect page — checks expiry before showing site */}
+        <Route path="/promo/:code" element={<PromoRedirect />} />
 
         <Route path="/rider" element={
           <RiderRoute>

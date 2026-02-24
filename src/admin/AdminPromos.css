@@ -811,3 +811,72 @@
   .send-btn { width: 100%; }
   .time-input-wrapper { flex-direction: column; align-items: flex-start; }
 }
+
+/* ══════════════════════════
+   ADD THESE TO AdminPromos.css (at the bottom)
+══════════════════════════ */
+
+/* Send Target Radio Options */
+.send-target-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.send-target-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  padding: 10px 14px;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  font-size: 14px;
+  color: #374151;
+}
+
+.send-target-option:hover {
+  border-color: #ec4899;
+  background: #fdf2f8;
+}
+
+.send-target-option input[type="radio"] {
+  accent-color: #ec4899;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.send-target-option input[type="radio"]:checked ~ span {
+  color: #be185d;
+  font-weight: 600;
+}
+
+/* Schedule Summary */
+.schedule-summary {
+  background: #f5f3ff;
+  border: 1px solid #c4b5fd;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #5b21b6;
+  margin-bottom: 8px;
+}
+
+.sched-arrow {
+  color: #9ca3af;
+  margin: 0 4px;
+}
+
+/* Email notice */
+.email-notice {
+  font-size: 13px;
+  color: #6b7280;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-top: 12px;
+}

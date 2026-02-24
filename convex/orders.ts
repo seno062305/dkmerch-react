@@ -162,3 +162,34 @@ export const deleteOrder = mutation({
     return { success: true };
   },
 });
+
+// ── Add this at the bottom of convex/orders.ts ──
+
+export const getServerTime = query({
+  handler: async () => {
+    return { now: Date.now() };
+  },
+});
+
+// ── APPEND THIS TO THE BOTTOM OF convex/orders.ts ──
+// Saves the actual payment source (gcash/paymaya/card) after PayMongo confirms
+
+export const updatePaymentSource = mutation({
+  args: {
+    orderId:       v.string(),
+    paymentSource: v.string(), // "gcash" | "paymaya" | "card" | etc.
+    paymentStatus: v.optional(v.string()),
+  },
+  handler: async ({ db }, { orderId, paymentSource, paymentStatus }) => {
+    const order = await db.query("orders")
+      .withIndex("by_orderId", q => q.eq("orderId", orderId))
+      .first();
+    if (!order) return { success: false };
+
+    const updates: any = { paymentSource };
+    if (paymentStatus) updates.paymentStatus = paymentStatus;
+
+    await db.patch(order._id, updates);
+    return { success: true };
+  },
+});

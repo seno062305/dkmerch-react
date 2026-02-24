@@ -74,31 +74,36 @@ const Settings = () => {
   const passwordsMatch = passwordForm.confirmPassword && passwordForm.newPassword === passwordForm.confirmPassword;
   const showPasswordRequirements = (passwordFocused || passwordForm.newPassword) && !isPasswordValid();
 
-  // FIXED: Read location.state once on mount/pathname change, clear immediately to prevent re-trigger
+  // ✅ FIXED: Check localStorage (not sessionStorage) + location.state
   useEffect(() => {
-    const forgotFlag = sessionStorage.getItem('dkmerch_forgot_password');
+    // ✅ Check both localStorage AND location.state
+    const forgotFlag = localStorage.getItem('dkmerch_forgot_password');
     const forgotPassword = location.state?.forgotPassword;
     const activeTabState = location.state?.activeTab;
 
     if (forgotFlag === 'true' || forgotPassword) {
       setIsForgotPasswordFlow(true);
       setActiveTab('password');
-      sessionStorage.removeItem('dkmerch_forgot_password');
+      // ✅ Clean up after reading
+      localStorage.removeItem('dkmerch_forgot_password');
       window.history.replaceState({}, document.title);
       return;
     }
+
     if (activeTabState === 'password') {
       setActiveTab('password');
       window.history.replaceState({}, document.title);
     }
-  // FIXED: only pathname, never whole location object
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
 
-  // Load user data
+  // ✅ FIXED: Auth check AFTER forgot password check so it doesn't redirect too early
   useEffect(() => {
-    if (isForgotPasswordFlow) return;
-    if (!isAuthenticated) { navigate('/'); return; }
+    if (isForgotPasswordFlow) return; // ✅ Skip auth check if forgot password flow
+    if (!isAuthenticated) {
+      navigate('/');
+      return;
+    }
     if (user) {
       setAccountForm({
         name: user.name || '',
@@ -182,7 +187,7 @@ const Settings = () => {
     try {
       const result = await sendPasswordResetCode({ to: targetEmail, code, name: user?.name || undefined });
       if (result?.success) {
-        setCodeMsg(`✅ Code sent to ${targetEmail}! Check your Gmail inbox.`);
+        setCodeMsg(`✅ Code sent to ${targetEmail}! Check your inbox.`);
       } else {
         setCodeMsg(`❌ Failed to send: ${result?.message || 'Unknown error'}`);
         setSentCode('');

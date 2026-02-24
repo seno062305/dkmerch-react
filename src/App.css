@@ -1,12 +1,36 @@
-.App {
-  min-height: 100vh;
+/* ═══════════════════════════════════════════
+   STICKY FOOTER FIX
+   ═══════════════════════════════════════════ */
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+#root {
   display: flex;
   flex-direction: column;
+  min-height: 100vh;
+}
+
+.App {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
 }
 
 .home-page {
   flex: 1;
 }
+
+footer {
+  flex-shrink: 0;
+  margin-top: auto;
+}
+
+/* ═══════════════════════════════════════════
+   END OF FOOTER FIX
+   ═══════════════════════════════════════════ */
 
 /* Notification styles */
 .notification {

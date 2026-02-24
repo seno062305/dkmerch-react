@@ -358,3 +358,22 @@
     .wv-promo-banner { font-size: 12px; padding: 8px 12px; }
     .wv-promo-badge { font-size: 9px; padding: 2px 7px; }
 }
+
+/* ── Highlight promo banner (from email Shop Now link) ── */
+.wv-promo-banner-highlight {
+  background: linear-gradient(135deg, #fce7f3, #ede9fe);
+  border-color: #ec4899;
+  animation: promo-banner-pulse 2s ease-in-out 3;
+}
+
+@keyframes promo-banner-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(236, 72, 153, 0); }
+  50% { box-shadow: 0 0 0 6px rgba(236, 72, 153, 0.2); }
+}
+
+.wv-promo-banner-sub {
+  color: #7c3aed;
+  font-size: 12px;
+  font-weight: 600;
+  margin-left: 4px;
+}

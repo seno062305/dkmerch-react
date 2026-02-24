@@ -1,7 +1,9 @@
 // convex/sendEmail.ts
 import { action, internalAction } from "./_generated/server";
-import { internal, api } from "./_generated/api";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
+
+const SITE_URL = process.env.SITE_URL || "https://dkmerchwebsite.vercel.app";
 
 // ── BASE EMAIL (internal) ─────────────────────────
 
@@ -241,8 +243,9 @@ export const sendPromoNotificationToAllUsers = internalAction({
     endTime:     v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<{ success: boolean; sent: number }> => {
+    // ✅ FIXED: using internal.users (internalQuery) instead of api.users
     const users: { name: string; email: string }[] = await ctx.runQuery(
-      api.users.getAllUsersForPromoNotif, {}
+      internal.users.getAllUsersForPromoNotif, {}
     );
 
     if (!users || users.length === 0) return { success: true, sent: 0 };
@@ -301,7 +304,7 @@ export const sendPromoNotificationToAllUsers = internalAction({
                 <span style="font-size: 13px; opacity: 0.85; margin-left: 6px;">(up to ₱${args.maxDiscount.toLocaleString()})</span>
               </div>
             </div>
-            <a href="https://dkmerch.com/collections" style="display: inline-block; background: linear-gradient(135deg, #9333ea, #ec4899); color: white; text-decoration: none; padding: 14px 36px; border-radius: 10px; font-size: 16px; font-weight: 700; margin-bottom: 20px;">
+            <a href="${SITE_URL}/promo/${args.promoCode}" style="display: inline-block; background: linear-gradient(135deg, #9333ea, #ec4899); color: white; text-decoration: none; padding: 14px 36px; border-radius: 10px; font-size: 16px; font-weight: 700; margin-bottom: 20px;">
               🛍️ Shop Now at DKMerch
             </a>
             <p style="color: #9ca3af; font-size: 13px; margin: 0;">Use code at checkout. Limited time only!</p>

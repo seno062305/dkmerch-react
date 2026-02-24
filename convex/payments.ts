@@ -91,7 +91,39 @@ export const savePaymentLink = mutation({
   },
 });
 
-// Called from OrderSuccess page
+// ── Helper: extract payment method from PayMongo response ──
+// PayMongo stores method in multiple possible locations depending on API version
+const extractPaymentMethod = (payments: any[], attrs?: any): string => {
+  // 1. Check payments[] array first (most reliable)
+  if (payments?.length) {
+    const paidPayment = payments.find((p: any) => p.attributes?.status === "paid") || payments[0];
+    const fromPayments =
+      paidPayment?.attributes?.source?.type ||           // checkout session payment source
+      paidPayment?.attributes?.payment_method_type ||    // payment intent type
+      paidPayment?.attributes?.type ||                   // older API
+      "";
+    if (fromPayments) return normalizeMethod(fromPayments);
+  }
+
+  // 2. Fallback: check payment_intent on session
+  const fromIntent =
+    attrs?.payment_intent?.attributes?.payment_method_options
+      ? Object.keys(attrs.payment_intent.attributes.payment_method_options)[0]
+      : "";
+  if (fromIntent) return normalizeMethod(fromIntent);
+
+  return "";
+};
+
+const normalizeMethod = (raw: string): string => {
+  const r = raw.toLowerCase();
+  if (r === "gcash")            return "GCash";
+  if (r === "paymaya" || r === "maya") return "Maya";
+  if (r === "card" || r === "dob")     return "Card";
+  return raw;
+};
+
+// Called from OrderSuccess page — checks PayMongo and saves exact payment method
 export const checkPaymentStatus = action({
   args: { orderId: v.string() },
   handler: async (ctx, { orderId }) => {
@@ -102,22 +134,33 @@ export const checkPaymentStatus = action({
 
     if (secretKey && order?.paymentLinkId) {
       try {
-        const encoded = btoa(`${secretKey}:`);
+        const encoded  = btoa(`${secretKey}:`);
         const response = await fetch(
           `https://api.paymongo.com/v1/checkout_sessions/${order.paymentLinkId}`,
           { headers: { Authorization: `Basic ${encoded}` } }
         );
+
         if (response.ok) {
-          const data = await response.json();
-          const attrs = data.data?.attributes;
-          const sessionStatus = attrs?.status;
+          const data                = await response.json();
+          const attrs               = data.data?.attributes;
+          const sessionStatus       = attrs?.status;
           const paymentIntentStatus = attrs?.payment_intent?.attributes?.status;
-          const payments = attrs?.payments ?? [];
+          const payments: any[]     = attrs?.payments ?? [];
           const hasSucceededPayment = payments.some((p: any) => p.attributes?.status === "paid");
 
+          // Extract exact payment method (GCash / Maya / Card)
+          const paymentMethod = extractPaymentMethod(payments, attrs);
+
           if (sessionStatus === "completed" || paymentIntentStatus === "succeeded" || hasSucceededPayment) {
-            await ctx.runMutation(api.payments.markOrderPaid, { orderId });
-            return { status: "paid" };
+            await ctx.runMutation(api.payments.markOrderPaid, { orderId, paymentMethod });
+            // Return paymentMethod so OrderSuccess.js knows if we got a specific method
+            // If empty string, OrderSuccess.js will retry to get the specific method
+            return { status: "paid", paymentMethod };
+          }
+
+          // Session not yet completed — return pending so caller can retry
+          if (!hasSucceededPayment) {
+            return { status: "pending", paymentMethod: "" };
           }
         }
       } catch (err) {
@@ -125,17 +168,19 @@ export const checkPaymentStatus = action({
       }
     }
 
-    // PayMongo ONLY redirects to success_url after successful payment — trust it
-    await ctx.runMutation(api.payments.markOrderPaid, { orderId });
+    // PayMongo ONLY redirects to success_url after successful payment — trust the redirect
+    await ctx.runMutation(api.payments.markOrderPaid, { orderId, paymentMethod: "" });
     return { status: "paid" };
   },
 });
 
-// ✅ FIXED: Only marks paymentStatus = "paid"
-// Does NOT touch orderStatus — admin must confirm the order manually
+// Marks order as paid + saves exact payment method
 export const markOrderPaid = mutation({
-  args: { orderId: v.string() },
-  handler: async ({ db }, { orderId }) => {
+  args: {
+    orderId:       v.string(),
+    paymentMethod: v.optional(v.string()),
+  },
+  handler: async ({ db }, { orderId, paymentMethod }) => {
     const order = await db
       .query("orders")
       .withIndex("by_orderId", (q) => q.eq("orderId", orderId))
@@ -143,11 +188,17 @@ export const markOrderPaid = mutation({
     if (!order) return { success: false };
     if (order.paymentStatus === "paid") return { success: true };
 
-    // Only update payment info — orderStatus remains "pending" for admin to review
-    await db.patch(order._id, {
+    const updates: any = {
       paymentStatus: "paid",
-      paidAt: new Date().toISOString(),
-    });
+      paidAt:        new Date().toISOString(),
+    };
+
+    // Save specific payment method if available (GCash / Maya / Card)
+    if (paymentMethod) {
+      updates.paymentMethod = paymentMethod;
+    }
+
+    await db.patch(order._id, updates);
     return { success: true };
   },
 });

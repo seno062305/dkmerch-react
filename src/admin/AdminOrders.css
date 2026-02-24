@@ -1519,11 +1519,26 @@
 .promo-admin-row span { color: #6b7280; font-weight: 500; }
 .promo-admin-row strong { color: #1a1a1a; font-weight: 700; }
 
-.promo-admin-row.discount strong {
-  color: #16a34a;
-  font-size: 16px;
+/* ── REPLACE these rules in AdminOrders.css (search and replace each block) ── */
+
+/* Fix: Amount Saved row — was red, now green */
+.promo-admin-row.discount {
+  /* lahat ng laman dito → palitan ng: */
+  background: #f0fdf4;
+  border-radius: 6px;
+  padding: 8px 6px;
 }
 
+.promo-admin-row.discount strong {
+  color: #16a34a;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.promo-admin-row.discount span {
+  color: #15803d;
+  font-weight: 600;
+}
 .promo-admin-row.final {
   background: white;
   margin: 4px -4px 0;
@@ -1691,4 +1706,224 @@
   .order-info-grid { padding: 10px; }
   .modal-body      { padding: 12px; }
   .status-buttons  { grid-template-columns: 1fr; }
+}
+
+/* ══════════════════════════════════════════════════════
+   APPEND THESE TO THE BOTTOM OF AdminOrders.css
+══════════════════════════════════════════════════════ */
+
+/* ── Date filter group ── */
+.date-filter-group {
+  flex-shrink: 0;
+}
+
+.date-filter-inputs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 14px;
+  flex-wrap: wrap;
+}
+
+.date-filter-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.date-filter-item label {
+  color: #6b7280;
+  font-size: 14px;
+  cursor: default;
+  margin: 0;
+  padding: 0;
+}
+
+.date-filter-item input[type="date"] {
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  color: #374151;
+  outline: none;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.date-filter-sep {
+  font-size: 13px;
+  color: #9ca3af;
+}
+
+.date-filter-clear {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  background: #fee2e2;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #dc3545;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.date-filter-clear:hover {
+  background: #fecaca;
+}
+
+/* ── Stats bar ── */
+.orders-stats-bar {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 20px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.orders-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stat-num {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1a1f36;
+  line-height: 1.2;
+}
+
+.revenue-stat {
+  color: #059669;
+}
+
+.stat-lbl {
+  font-size: 11px;
+  color: #6b7280;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.date-range-indicator {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #6366f1;
+  font-weight: 600;
+  background: #f5f3ff;
+  padding: 6px 12px;
+  border-radius: 6px;
+  margin-left: auto;
+}
+
+.date-range-indicator span {
+  font-size: 13px;
+}
+
+/* Divider between stats */
+.orders-stat + .orders-stat {
+  padding-left: 24px;
+  border-left: 1px solid #e5e7eb;
+}
+
+/* ── Method badge in table ── */
+.method-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.method-badge i {
+  font-size: 12px;
+}
+
+/* ── Method badge pill in modal header ── */
+.method-badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 1.5px solid;
+  background: white;
+}
+
+/* ── Method display in modal info grid ── */
+.method-display {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.method-display i {
+  font-size: 15px;
+}
+
+/* ── Responsive adjustments for new elements ── */
+@media (max-width: 900px) {
+  .orders-filters {
+    flex-direction: column;
+  }
+
+  .date-filter-group {
+    width: 100%;
+  }
+
+  .date-filter-inputs {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .orders-stats-bar {
+    gap: 16px;
+  }
+
+  .date-range-indicator {
+    margin-left: 0;
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 576px) {
+  .date-filter-inputs {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .date-filter-item input[type="date"] {
+    font-size: 13px;
+  }
+
+  .orders-stats-bar {
+    gap: 12px;
+  }
+
+  .orders-stat + .orders-stat {
+    padding-left: 12px;
+  }
+
+  .stat-num {
+    font-size: 17px;
+  }
 }
