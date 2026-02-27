@@ -1,7 +1,8 @@
 import React, { useState, useRef } from 'react';
 import './AdminProducts.css';
-import { useProducts, useAddProduct, useUpdateProduct, useDeleteProduct } from '../utils/productStorage';
-import { usePreOrderProducts } from '../utils/productStorage';
+import { useQuery } from 'convex/react';
+import { api } from '../../convex/_generated/api';
+import { useAddProduct, useUpdateProduct, useDeleteProduct } from '../utils/productStorage';
 
 const emptyForm = {
   name: '',
@@ -15,13 +16,13 @@ const emptyForm = {
   isSale: false,
   isPreOrder: false,
   releaseDate: '',
-  releaseTime: '',  // ✅ NEW: e.g. "01:00"
+  releaseTime: '',
 };
 
 const AdminProducts = () => {
-  const regularProducts   = useProducts() || [];
-  const preOrderProducts  = usePreOrderProducts() || [];
-  const products          = [...regularProducts, ...preOrderProducts];
+  // ✅ FIX: Use getAllProductsAdmin — fetches ALL products (regular + pre-order + released)
+  // This ensures released pre-orders are still visible and editable in admin
+  const products = useQuery(api.products.getAllProductsAdmin) || [];
 
   const addProduct    = useAddProduct();
   const updateProduct = useUpdateProduct();
@@ -75,7 +76,7 @@ const AdminProducts = () => {
       isSale:        Boolean(form.isSale),
       isPreOrder:    Boolean(form.isPreOrder),
       releaseDate:   form.isPreOrder ? form.releaseDate : '',
-      releaseTime:   form.isPreOrder ? form.releaseTime : '',  // ✅ NEW
+      releaseTime:   form.isPreOrder ? form.releaseTime : '',
       status:        form.isPreOrder ? 'preorder' : form.isSale ? 'sale' : 'available',
     };
 
@@ -101,7 +102,7 @@ const AdminProducts = () => {
       isSale:        product.isSale || false,
       isPreOrder:    product.isPreOrder || false,
       releaseDate:   product.releaseDate || '',
-      releaseTime:   product.releaseTime || '',  // ✅ NEW
+      releaseTime:   product.releaseTime || '',
     });
     setEditingId(product._id);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -125,10 +126,21 @@ const AdminProducts = () => {
     return matchesSearch && matchesCategory;
   });
 
+  // ✅ Helper: check if a pre-order product has already been released
+  const isReleased = (product) => {
+    if (!product.isPreOrder) return false;
+    if (!product.releaseDate) return false;
+    const rt = product.releaseTime || '00:00';
+    const [h, m] = rt.split(':').map(Number);
+    const [yr, mo, dy] = product.releaseDate.split('-').map(Number);
+    const releaseMs = Date.UTC(yr, mo - 1, dy, h - 8, m, 0);
+    return Date.now() >= releaseMs;
+  };
+
   const totalProducts  = products.length;
   const totalValue     = products.reduce((sum, p) => sum + (p.price * p.stock), 0);
   const onSaleCount    = products.filter(p => p.isSale).length;
-  const preOrderCount  = products.filter(p => p.isPreOrder).length;
+  const preOrderCount  = products.filter(p => p.isPreOrder && !isReleased(p)).length;
 
   const formatReleaseDateTime = (dateStr, timeStr) => {
     if (!dateStr) return null;
@@ -281,7 +293,6 @@ const AdminProducts = () => {
               </div>
             </div>
 
-            {/* ✅ UPDATED: Release Date AND Time — kapag Pre-Order checked */}
             {form.isPreOrder && (
               <>
                 <div className="form-group release-date-field">
@@ -362,47 +373,69 @@ const AdminProducts = () => {
           </div>
         ) : (
           <div className="product-grid">
-            {filteredProducts.map(product => (
-              <div key={product._id} className="product-card">
-                <div className="product-image">
-                  <img src={product.image} alt={product.name} />
-                  <div className="product-badges">
-                    {product.isPreOrder && <span className="badge pre-order"><i className="fas fa-clock"></i> Pre-Order</span>}
-                    {product.isSale && !product.isPreOrder && <span className="badge sale"><i className="fas fa-tag"></i> Sale</span>}
-                  </div>
-                </div>
-                <div className="product-details">
-                  <div className="product-header">
-                    <h3>{product.name}</h3>
-                    <span className="category-tag">{product.category}</span>
-                  </div>
-                  <div className="product-meta">
-                    <span className="group"><i className="fas fa-users"></i> {product.kpopGroup}</span>
-                    <span className="stock"><i className="fas fa-box"></i> Stock: {product.stock}</span>
-                  </div>
-                  {product.isPreOrder && product.releaseDate && (
-                    <div className="release-date-info">
-                      <i className="fas fa-calendar-alt"></i>
-                      Release: {formatReleaseDateTime(product.releaseDate, product.releaseTime)}
+            {filteredProducts.map(product => {
+              const released = isReleased(product);
+              return (
+                <div key={product._id} className="product-card">
+                  <div className="product-image">
+                    <img src={product.image} alt={product.name} />
+                    <div className="product-badges">
+                      {/* ✅ Show "Released" badge if pre-order but already released */}
+                      {product.isPreOrder && released && (
+                        <span className="badge released">
+                          <i className="fas fa-check-circle"></i> Released
+                        </span>
+                      )}
+                      {/* ✅ Show "Pre-Order" badge only if NOT yet released */}
+                      {product.isPreOrder && !released && (
+                        <span className="badge pre-order">
+                          <i className="fas fa-clock"></i> Pre-Order
+                        </span>
+                      )}
+                      {product.isSale && !product.isPreOrder && (
+                        <span className="badge sale">
+                          <i className="fas fa-tag"></i> Sale
+                        </span>
+                      )}
                     </div>
-                  )}
-                  <div className="product-pricing">
-                    <div className="price">₱{product.price.toLocaleString()}</div>
-                    {product.originalPrice > product.price && (
-                      <div className="original-price">₱{product.originalPrice.toLocaleString()}</div>
-                    )}
                   </div>
-                  <div className="product-actions">
-                    <button className="edit-btn" onClick={() => handleEdit(product)}>
-                      <i className="fas fa-edit"></i> Edit
-                    </button>
-                    <button className="delete-btn" onClick={() => handleDelete(product._id)}>
-                      <i className="fas fa-trash"></i> Delete
-                    </button>
+                  <div className="product-details">
+                    <div className="product-header">
+                      <h3>{product.name}</h3>
+                      <span className="category-tag">{product.category}</span>
+                    </div>
+                    <div className="product-meta">
+                      <span className="group"><i className="fas fa-users"></i> {product.kpopGroup}</span>
+                      <span className="stock"><i className="fas fa-box"></i> Stock: {product.stock}</span>
+                    </div>
+
+                    {/* ✅ Show release date info with proper label */}
+                    {product.isPreOrder && product.releaseDate && (
+                      <div className={`release-date-info ${released ? 'release-date-info--released' : ''}`}>
+                        <i className={`fas ${released ? 'fa-check-circle' : 'fa-calendar-alt'}`}></i>
+                        {released ? 'Released: ' : 'Release: '}
+                        {formatReleaseDateTime(product.releaseDate, product.releaseTime)}
+                      </div>
+                    )}
+
+                    <div className="product-pricing">
+                      <div className="price">₱{product.price.toLocaleString()}</div>
+                      {product.originalPrice > product.price && (
+                        <div className="original-price">₱{product.originalPrice.toLocaleString()}</div>
+                      )}
+                    </div>
+                    <div className="product-actions">
+                      <button className="edit-btn" onClick={() => handleEdit(product)}>
+                        <i className="fas fa-edit"></i> Edit
+                      </button>
+                      <button className="delete-btn" onClick={() => handleDelete(product._id)}>
+                        <i className="fas fa-trash"></i> Delete
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

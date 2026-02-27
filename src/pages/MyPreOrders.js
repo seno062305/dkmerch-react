@@ -1,5 +1,5 @@
 // src/pages/MyPreOrders.js
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './MyPreOrders.css';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
@@ -31,7 +31,35 @@ const MyPreOrders = () => {
   const [loadingId, setLoadingId] = useState(null);
   const [removingId, setRemovingId] = useState(null);
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const [activeTab, setActiveTab] = useState('all'); // 'all' | 'upcoming' | 'available' | 'added'
+
+  // ✅ FIX: Read ?tab= from URL so email link auto-opens the Available tab
+  const getInitialTab = () => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab');
+    const validTabs = ['all', 'upcoming', 'available', 'added'];
+    return validTabs.includes(tab) ? tab : 'all';
+  };
+
+  const [activeTab, setActiveTab] = useState(getInitialTab);
+
+  // ✅ Also update tab if URL changes (e.g. browser back/forward)
+  useEffect(() => {
+    const handlePopState = () => setActiveTab(getInitialTab());
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // ✅ Update URL when tab changes (without full page reload)
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    const url = new URL(window.location.href);
+    if (tab === 'all') {
+      url.searchParams.delete('tab');
+    } else {
+      url.searchParams.set('tab', tab);
+    }
+    window.history.replaceState({}, '', url.toString());
+  };
 
   const markAddedToCart = useMutation(api.preOrderRequests.markPreOrderAddedToCart);
   const removePreOrder = useMutation(api.preOrderRequests.removePreOrder);
@@ -68,7 +96,7 @@ const MyPreOrders = () => {
     if (activeTab === 'upcoming') return !req.isAvailable && !req.addedToCart;
     if (activeTab === 'available') return req.isAvailable && !req.addedToCart;
     if (activeTab === 'added') return req.addedToCart;
-    return true; // 'all' — show everything
+    return true; // 'all'
   });
 
   const upcomingCount = myPreOrders.filter((r) => !r.isAvailable && !r.addedToCart).length;
@@ -150,26 +178,26 @@ const MyPreOrders = () => {
           <div className="mpo-tabs">
             <button
               className={`mpo-tab ${activeTab === 'all' ? 'active' : ''}`}
-              onClick={() => setActiveTab('all')}
+              onClick={() => handleTabChange('all')}
             >
               All <span className="mpo-tab-count">{myPreOrders.length}</span>
             </button>
             <button
               className={`mpo-tab ${activeTab === 'upcoming' ? 'active' : ''}`}
-              onClick={() => setActiveTab('upcoming')}
+              onClick={() => handleTabChange('upcoming')}
             >
               Upcoming <span className="mpo-tab-count">{upcomingCount}</span>
             </button>
             <button
               className={`mpo-tab mpo-tab--available ${activeTab === 'available' ? 'active' : ''}`}
-              onClick={() => setActiveTab('available')}
+              onClick={() => handleTabChange('available')}
             >
               {availableCount > 0 && <span className="mpo-tab-dot"></span>}
               Available <span className="mpo-tab-count">{availableCount}</span>
             </button>
             <button
               className={`mpo-tab ${activeTab === 'added' ? 'active' : ''}`}
-              onClick={() => setActiveTab('added')}
+              onClick={() => handleTabChange('added')}
             >
               Added to Cart <span className="mpo-tab-count">{addedCount}</span>
             </button>
@@ -225,7 +253,6 @@ const PreOrderCard = ({ req, loadingId, removingId, onAddToCart, onRemove, fmt12
     return d || null;
   })();
 
-  // Status logic
   const status = req.addedToCart
     ? 'added'
     : req.isAvailable
@@ -295,7 +322,7 @@ const PreOrderCard = ({ req, loadingId, removingId, onAddToCart, onRemove, fmt12
             </div>
           )}
 
-          {/* ✅ Remove button — visible for upcoming and added-to-cart only */}
+          {/* Remove button — visible for upcoming and added-to-cart only */}
           {status !== 'available' && (
             <button
               className="mpo-btn-remove"

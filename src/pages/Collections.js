@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useLocation, useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
-import { useProducts } from '../utils/productStorage';
 import { useAddToCart } from '../context/cartUtils';
 import { useWishlist, useToggleWishlist } from '../context/wishlistUtils';
 import { useNotification } from '../context/NotificationContext';
@@ -20,7 +19,10 @@ const Collections = () => {
   const [highlightedProductId, setHighlightedProductId] = useState(null);
   const [selectedProduct, setSelectedProduct] = useState(null);
 
-  const products = useProducts();
+  // ✅ FIX: Use getCollectionProducts instead of getAllProducts
+  // getCollectionProducts returns regular products + released pre-orders
+  const products = useQuery(api.products.getCollectionProducts) || [];
+
   const wishlistItems = useWishlist();
   const addToCartMutation = useAddToCart();
   const toggleWishlistMutation = useToggleWishlist();
@@ -173,10 +175,9 @@ const Collections = () => {
                 className={`collection-card ${highlightedProductId === pid ? 'highlighted' : ''} ${hasPromo ? 'collection-card-promo' : ''}`}
                 onClick={() => setSelectedProduct(product)}
               >
-                {product.isPreOrder
-                  ? <div className="collection-preorder-badge">PRE-ORDER</div>
-                  : product.isSale && <div className="collection-sale-badge">SALE</div>
-                }
+                {product.isSale && !product.isPreOrder && (
+                  <div className="collection-sale-badge">SALE</div>
+                )}
 
                 {/* ✅ Promo indicator badge */}
                 {hasPromo && (

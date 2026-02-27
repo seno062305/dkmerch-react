@@ -5,6 +5,10 @@ import { v } from "convex/values";
 
 const SITE_URL = process.env.SITE_URL || "https://dkmerchwebsite.vercel.app";
 
+// ✅ TEST MODE: All emails go to this address while domain is unverified
+const TEST_EMAIL = "dkmerchtest@gmail.com";
+const IS_TEST_MODE = true; // Set to false once you verify a domain on resend.com
+
 // ── BASE EMAIL (internal) ─────────────────────────
 
 export const sendEmail = internalAction({
@@ -24,6 +28,16 @@ export const sendEmail = internalAction({
       return { success: false, message: "Email service not configured." };
     }
 
+    // ✅ TEST MODE: redirect to test email, show original recipient in subject
+    const actualTo = IS_TEST_MODE ? TEST_EMAIL : to;
+    const actualSubject = IS_TEST_MODE && to !== TEST_EMAIL
+      ? `[TEST → ${to}] ${subject}`
+      : subject;
+
+    if (IS_TEST_MODE && to !== TEST_EMAIL) {
+      console.log(`[TEST MODE] Redirecting email from "${to}" → "${TEST_EMAIL}"`);
+    }
+
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -32,8 +46,8 @@ export const sendEmail = internalAction({
       },
       body: JSON.stringify({
         from: "DKMerch <onboarding@resend.dev>",
-        to,
-        subject,
+        to: actualTo,
+        subject: actualSubject,
         html,
       }),
     });
@@ -243,7 +257,6 @@ export const sendPromoNotificationToAllUsers = internalAction({
     endTime:     v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<{ success: boolean; sent: number }> => {
-    // ✅ FIXED: using internal.users (internalQuery) instead of api.users
     const users: { name: string; email: string }[] = await ctx.runQuery(
       internal.users.getAllUsersForPromoNotif, {}
     );
@@ -320,6 +333,9 @@ export const sendPromoNotificationToAllUsers = internalAction({
         subject: `🔥 ${args.promoCode} — ${args.discount}% OFF for ${args.promoName} fans! | DKMerch`,
         html,
       });
+
+      // ✅ Rate limit: 600ms delay between sends
+      await new Promise((r) => setTimeout(r, 600));
       sent++;
     }
 

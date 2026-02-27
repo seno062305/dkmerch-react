@@ -880,3 +880,22 @@
   padding: 10px 14px;
   margin-top: 12px;
 }
+
+/* ── IDAGDAG SA DULO NG AdminProducts.css ── */
+
+/* Released badge — green, para alam ng admin na released na */
+.badge.released {
+  background: rgba(22, 163, 74, 0.95);
+  color: white;
+}
+
+/* Released release-date-info — green instead of blue */
+.release-date-info--released {
+  background: #f0fdf4;
+  color: #15803d;
+  border-color: #bbf7d0;
+}
+
+.release-date-info--released i {
+  color: #16a34a;
+}
