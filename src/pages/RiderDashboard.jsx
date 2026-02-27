@@ -28,6 +28,14 @@ const RiderDashboard = () => {
   const trackingIntervalRef = useRef(null);
   const watchIdRef = useRef(null);
 
+  // ── SESSION GUARD STATE ──
+  // ✅ "kicked" = another device logged in and took over this session
+  const [kickedOut, setKickedOut] = useState(false);
+  const [kickedCountdown, setKickedCountdown] = useState(180); // 3-minute countdown
+  const sessionCheckIntervalRef = useRef(null);
+  const countdownIntervalRef = useRef(null);
+  const hasBeenKickedRef = useRef(false); // prevent double-trigger
+
   // ── CONVEX QUERIES ──
   const riderInfo = useQuery(
     api.riders.getRiderByEmail,
@@ -37,14 +45,22 @@ const RiderDashboard = () => {
   const allOrders = useQuery(api.orders.getAllOrders) || [];
   const allPickups = useQuery(api.pickupRequests.getAllPickupRequests) || [];
 
+  // ✅ Poll session validity — live Convex query, auto-updates when DB changes
+  const sessionCheck = useQuery(
+    api.riders.checkRiderSession,
+    user?.email && user?.sessionId
+      ? { email: user.email, sessionId: user.sessionId }
+      : 'skip'
+  );
+
   // ── CONVEX MUTATIONS ──
-  const createPickupRequest = useMutation(api.pickupRequests.createPickupRequest);
-  const updateOrderStatus = useMutation(api.orders.updateOrderStatus);
-  const updateOrderFields = useMutation(api.orders.updateOrderFields);
-  const updatePickupStatus = useMutation(api.pickupRequests.updatePickupStatus);
-  const deletePickupRequest = useMutation(api.pickupRequests.deletePickupRequest);
-  const updateRiderLocation = useMutation(api.riders.updateRiderLocation);
-  const stopRiderTracking = useMutation(api.riders.stopRiderTracking);
+  const createPickupRequest  = useMutation(api.pickupRequests.createPickupRequest);
+  const updateOrderStatus    = useMutation(api.orders.updateOrderStatus);
+  const updateOrderFields    = useMutation(api.orders.updateOrderFields);
+  const updatePickupStatus   = useMutation(api.pickupRequests.updatePickupStatus);
+  const deletePickupRequest  = useMutation(api.pickupRequests.deletePickupRequest);
+  const updateRiderLocation  = useMutation(api.riders.updateRiderLocation);
+  const stopRiderTracking    = useMutation(api.riders.stopRiderTracking);
 
   // ── DERIVED DATA ──
   const confirmedOrders = allOrders.filter(o =>
@@ -52,13 +68,58 @@ const RiderDashboard = () => {
     !allPickups.some(p => p.orderId === o.orderId && p.status === 'approved')
   );
 
-  const myPickups = allPickups.filter(p => p.riderEmail === user?.email);
+  const myPickups   = allPickups.filter(p => p.riderEmail === user?.email);
   const myDeliveries = myPickups.filter(p =>
     p.status === 'approved' || p.status === 'out_for_delivery'
   );
 
-  const pendingPickupsCount = myPickups.filter(p => p.status === 'pending').length;
+  const pendingPickupsCount   = myPickups.filter(p => p.status === 'pending').length;
   const activeDeliveriesCount = myDeliveries.length;
+
+  // ─────────────────────────────────────────────────────────────
+  // ✅ SESSION GUARD: detect when another device logs in
+  // Convex live query fires automatically — no polling needed
+  // ─────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!sessionCheck) return;
+    if (hasBeenKickedRef.current) return; // already handling
+
+    if (!sessionCheck.valid && sessionCheck.reason === 'new_device_logged_in') {
+      hasBeenKickedRef.current = true;
+      setKickedOut(true);
+      setKickedCountdown(180);
+
+      // Stop local GPS quietly — new device is now tracking
+      stopTrackingLocal();
+
+      // Start 3-minute countdown then force logout
+      countdownIntervalRef.current = setInterval(() => {
+        setKickedCountdown(prev => {
+          if (prev <= 1) {
+            // Time's up — force logout
+            clearInterval(countdownIntervalRef.current);
+            handleForcedLogout();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionCheck]);
+
+  // Cleanup countdown on unmount
+  useEffect(() => {
+    return () => {
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    };
+  }, []);
+
+  const handleForcedLogout = useCallback(() => {
+    stopTrackingLocal();
+    logout();
+    navigate('/', { replace: true });
+  }, [logout, navigate]);
 
   // ── GPS TRACKING LOGIC ──
   const sendLocation = useCallback(async (orderId, pos, isTracking = true) => {
@@ -74,6 +135,7 @@ const RiderDashboard = () => {
         heading: pos.heading ?? undefined,
         speed: pos.speed ?? undefined,
         isTracking,
+        sessionId: user.sessionId, // ✅ tag each location ping with session
       });
     } catch (err) {
       console.error('Failed to send location:', err);
@@ -132,8 +194,7 @@ const RiderDashboard = () => {
     );
   }, [sendLocation]);
 
-  // ✅ FIX: stopTracking no longer calls stopRiderTracking in Convex
-  // GPS stays alive in Convex even after page close/logout — only stops on delivery completion
+  // ✅ Clears local browser GPS only — Convex record stays alive
   const stopTrackingLocal = useCallback(() => {
     if (trackingIntervalRef.current) {
       clearInterval(trackingIntervalRef.current);
@@ -147,7 +208,7 @@ const RiderDashboard = () => {
     setCurrentPosition(null);
   }, []);
 
-  // ✅ FIX: Only called on delivery completion — marks Convex as stopped
+  // ✅ Only called on delivery completion — marks Convex as stopped
   const stopTrackingOnDelivery = useCallback(async (orderId) => {
     stopTrackingLocal();
     if (orderId) {
@@ -159,7 +220,7 @@ const RiderDashboard = () => {
     }
   }, [stopRiderTracking, stopTrackingLocal]);
 
-  // Cleanup on unmount — only clears local state, NOT Convex
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (trackingIntervalRef.current) clearInterval(trackingIntervalRef.current);
@@ -202,10 +263,10 @@ const RiderDashboard = () => {
     return map[status] || status;
   };
 
-  // ✅ FIX: Logout no longer stops GPS tracking in Convex
+  // ✅ Logout — only clears local state, GPS stays in Convex
   const handleLogout = async () => {
     if (window.confirm('Are you sure you want to logout?\n\n📍 GPS tracking will remain active for ongoing deliveries.')) {
-      stopTrackingLocal(); // Only stops local browser tracking
+      stopTrackingLocal();
       logout();
       navigate('/', { replace: true });
     }
@@ -306,9 +367,8 @@ const RiderDashboard = () => {
 
   const confirmDelivery = async (delivery) => {
     const inputOtp = (otpInputs[delivery._id] || '').trim();
-    const photo = photoData[delivery._id];
+    const photo    = photoData[delivery._id];
 
-    // ✅ FIX: Search all orders — use loose match in case of whitespace/case issues
     const order = allOrders.find(o =>
       o.orderId === delivery.orderId ||
       o.orderId?.trim() === delivery.orderId?.trim()
@@ -360,7 +420,6 @@ const RiderDashboard = () => {
         status: 'completed',
       });
 
-      // ✅ Only stop GPS tracking on actual delivery completion
       await stopTrackingOnDelivery(delivery.orderId);
 
       setOtpInputs(prev => { const n = { ...prev }; delete n[delivery._id]; return n; });
@@ -410,6 +469,44 @@ const RiderDashboard = () => {
           <h2>Account Pending Approval</h2>
           <p>Your rider application is still being reviewed by the admin. Please wait for approval before accessing the dashboard.</p>
           <button className="rider-logout-btn" onClick={handleLogout}>Logout</button>
+        </div>
+      </div>
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // ✅ KICKED-OUT OVERLAY — shown when new device logs in
+  // Rider has 3 minutes before forced logout
+  // ─────────────────────────────────────────────────────────────
+  if (kickedOut) {
+    const mins = Math.floor(kickedCountdown / 60);
+    const secs = kickedCountdown % 60;
+    return (
+      <div className="rider-dashboard">
+        <div className="rider-kicked-overlay">
+          <div className="rider-kicked-card">
+            <div className="rider-kicked-icon">📱</div>
+            <h2>Logged In on Another Device</h2>
+            <p>
+              Your rider account was just logged in on a <strong>new device</strong>.
+              GPS tracking has automatically switched to that device.
+            </p>
+            <p className="rider-kicked-note">
+              If this wasn't you, please change your password immediately.
+            </p>
+            <div className="rider-kicked-countdown">
+              <span className="rider-kicked-timer">
+                {mins}:{secs.toString().padStart(2, '0')}
+              </span>
+              <small>This session will close automatically</small>
+            </div>
+            <button
+              className="rider-kicked-logout-btn"
+              onClick={handleForcedLogout}
+            >
+              <i className="fas fa-sign-out-alt"></i> Logout Now
+            </button>
+          </div>
         </div>
       </div>
     );

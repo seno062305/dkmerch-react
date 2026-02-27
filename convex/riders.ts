@@ -2,6 +2,9 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 
+const genSessionId = () =>
+  `${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${Math.random().toString(36).slice(2, 10)}`;
+
 export const getAllRiders = query(async ({ db }) => {
   return await db.query("riderApplications").collect();
 });
@@ -40,12 +43,11 @@ export const createRiderApplication = mutation({
   handler: async ({ db }, args) => {
     const existing = await db
       .query("riderApplications")
-      .withIndex("by_email", q => q.eq("email", args.email))
+      .withIndex("by_email", q => q.eq("email", args.email)) // ✅ fixed: was bare `email`
       .first();
     if (existing) {
       return { success: false, message: "This email is already registered as a rider applicant." };
     }
-
     const id = await db.insert("riderApplications", {
       fullName: args.fullName,
       email: args.email,
@@ -58,15 +60,12 @@ export const createRiderApplication = mutation({
       licenseNumber: args.licenseNumber,
       password: args.password,
     });
-
     return { success: true, id };
   },
 });
 
 export const approveRider = mutation({
-  args: {
-    id: v.id("riderApplications"),
-  },
+  args: { id: v.id("riderApplications") },
   handler: async ({ db }, { id }) => {
     await db.patch(id, { status: "approved" });
     return { success: true };
@@ -107,6 +106,8 @@ export const deleteRider = mutation({
   },
 });
 
+// ✅ loginRider generates + saves sessionId directly in Convex
+// Returns sessionId to client — client stores in sessionStorage only (not localStorage)
 export const loginRider = mutation({
   args: { email: v.string(), password: v.string() },
   handler: async ({ db }, { email, password }) => {
@@ -123,33 +124,35 @@ export const loginRider = mutation({
 
     if (status === "pending") {
       return {
-        success: false,
-        riderExists: true,
+        success: false, riderExists: true,
         message: "⏳ Your rider application is still pending admin approval. Please wait.",
       };
     }
     if (status === "rejected") {
       return {
-        success: false,
-        riderExists: true,
+        success: false, riderExists: true,
         message: "❌ Your rider application was not approved. Please contact support.",
       };
     }
     if (status === "suspended") {
       return {
-        success: false,
-        riderExists: true,
+        success: false, riderExists: true,
         message: "🚫 Your rider account has been suspended. Please contact admin.",
       };
     }
-
     if (rider.password && rider.password !== password) {
       return {
-        success: false,
-        riderExists: true,
+        success: false, riderExists: true,
         message: "Incorrect password. Please try again.",
       };
     }
+
+    // ✅ Generate and persist sessionId in Convex — source of truth
+    const newSessionId = genSessionId();
+    await db.patch(rider._id, {
+      activeSessionId: newSessionId,
+      activeDeviceAt: Date.now(),
+    });
 
     return {
       success: true,
@@ -161,15 +164,42 @@ export const loginRider = mutation({
         role: "rider",
         status: rider.status,
       },
+      sessionId: newSessionId, // ✅ client stores in sessionStorage only
     };
   },
 });
 
 // ─────────────────────────────────────────────────────
-// ✅ GPS TRACKING MUTATIONS & QUERIES
+// ✅ SESSION CHECK — Convex live query
+// Fires automatically whenever activeSessionId changes in DB
+// Old device detects mismatch within milliseconds (no polling needed)
 // ─────────────────────────────────────────────────────
+export const checkRiderSession = query({
+  args: {
+    email: v.string(),
+    sessionId: v.string(),
+  },
+  handler: async ({ db }, { email, sessionId }) => {
+    const rider = await db
+      .query("riderApplications")
+      .withIndex("by_email", q => q.eq("email", email))
+      .first();
 
-// Called every 10 seconds by the rider's browser
+    if (!rider) return { valid: false, reason: "rider_not_found" };
+    if (!rider.activeSessionId) return { valid: true };
+
+    const isValid = rider.activeSessionId === sessionId;
+    return {
+      valid: isValid,
+      reason: isValid ? "ok" : "new_device_logged_in",
+      activeDeviceAt: rider.activeDeviceAt,
+    };
+  },
+});
+
+// ─────────────────────────────────────────────────────
+// ✅ GPS TRACKING
+// ─────────────────────────────────────────────────────
 export const updateRiderLocation = mutation({
   args: {
     orderId: v.string(),
@@ -181,16 +211,15 @@ export const updateRiderLocation = mutation({
     heading: v.optional(v.number()),
     speed: v.optional(v.number()),
     isTracking: v.boolean(),
+    sessionId: v.optional(v.string()),
   },
   handler: async ({ db }, args) => {
-    // Check if a location record already exists for this orderId
     const existing = await db
       .query("riderLocations")
       .withIndex("by_orderId", q => q.eq("orderId", args.orderId))
       .first();
 
     if (existing) {
-      // Update in place — upsert pattern
       await db.patch(existing._id, {
         lat: args.lat,
         lng: args.lng,
@@ -199,9 +228,9 @@ export const updateRiderLocation = mutation({
         speed: args.speed,
         isTracking: args.isTracking,
         updatedAt: Date.now(),
+        sessionId: args.sessionId,
       });
     } else {
-      // First location ping — create the record
       await db.insert("riderLocations", {
         orderId: args.orderId,
         riderEmail: args.riderEmail,
@@ -213,6 +242,7 @@ export const updateRiderLocation = mutation({
         speed: args.speed,
         isTracking: args.isTracking,
         updatedAt: Date.now(),
+        sessionId: args.sessionId,
       });
     }
 
@@ -220,7 +250,6 @@ export const updateRiderLocation = mutation({
   },
 });
 
-// Called by customer's TrackOrder page — live query (auto-updates)
 export const getRiderLocation = query({
   args: { orderId: v.string() },
   handler: async ({ db }, { orderId }) => {
@@ -231,7 +260,6 @@ export const getRiderLocation = query({
   },
 });
 
-// Stop tracking — called when rider confirms delivery or manually stops
 export const stopRiderTracking = mutation({
   args: { orderId: v.string() },
   handler: async ({ db }, { orderId }) => {

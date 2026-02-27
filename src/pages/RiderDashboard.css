@@ -1628,3 +1628,138 @@
   border-radius: 10px !important;
   box-shadow: 0 4px 16px rgba(0,0,0,0.15) !important;
 }
+
+/* ─── DEVICE SWITCH / KICKED-OUT OVERLAY ─────────────────────────── */
+
+.rider-kicked-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.82);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 20px;
+}
+
+.rider-kicked-card {
+  background: #fff;
+  border-radius: 20px;
+  padding: 40px 32px;
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.35);
+  animation: kickedSlideIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes kickedSlideIn {
+  from { transform: scale(0.85) translateY(30px); opacity: 0; }
+  to   { transform: scale(1)    translateY(0);    opacity: 1; }
+}
+
+.rider-kicked-icon {
+  font-size: 56px;
+  margin-bottom: 16px;
+  animation: kickedBounce 1.2s ease infinite;
+}
+
+@keyframes kickedBounce {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-8px); }
+}
+
+.rider-kicked-card h2 {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1a1a2e;
+  margin-bottom: 12px;
+}
+
+.rider-kicked-card p {
+  color: #555;
+  font-size: 15px;
+  line-height: 1.6;
+  margin-bottom: 10px;
+}
+
+.rider-kicked-note {
+  font-size: 13px !important;
+  color: #e74c3c !important;
+  background: #fff5f5;
+  border: 1px solid #fcd0d0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin: 10px 0 20px !important;
+}
+
+.rider-kicked-countdown {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 24px;
+}
+
+.rider-kicked-timer {
+  font-size: 44px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #e74c3c;
+  letter-spacing: 2px;
+  line-height: 1;
+}
+
+.rider-kicked-countdown small {
+  color: #999;
+  font-size: 13px;
+}
+
+.rider-kicked-logout-btn {
+  width: 100%;
+  padding: 14px;
+  background: linear-gradient(135deg, #e74c3c, #c0392b);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: opacity 0.2s;
+}
+
+.rider-kicked-logout-btn:hover {
+  opacity: 0.9;
+}
+
+/* ─── DEVICE SWITCH BANNER in TrackOrder map section ────────────── */
+
+.rider-map-device-switch-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #fff8e1;
+  border: 1px solid #ffe082;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: #7c5200;
+  animation: bannerFadeIn 0.5s ease;
+}
+
+@keyframes bannerFadeIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.rider-map-device-switch-banner i {
+  font-size: 16px;
+  margin-top: 1px;
+  flex-shrink: 0;
+  color: #f59e0b;
+}

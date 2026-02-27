@@ -153,6 +153,9 @@ export default defineSchema({
     licenseNumber: v.optional(v.string()),
     password: v.optional(v.string()),
     name: v.optional(v.string()),
+    // ✅ Device session tracking — for multi-device login detection
+    activeSessionId: v.optional(v.string()),  // random UUID set on each login
+    activeDeviceAt:  v.optional(v.number()),  // Date.now() of last login
   })
     .index("by_email", ["email"])
     .index("by_status", ["status"]),
@@ -193,19 +196,20 @@ export default defineSchema({
     .index("by_user_product", ["userId", "productId"])
     .index("by_product", ["productId"]),
 
-  // ✅ NEW: Real-time rider GPS locations
-  // One record per orderId — upserted every 10 seconds by the rider
+  // ✅ Real-time rider GPS locations
   riderLocations: defineTable({
-    orderId: v.string(),       // links to orders.orderId
-    riderEmail: v.string(),    // rider's email
+    orderId: v.string(),
+    riderEmail: v.string(),
     riderName: v.string(),
-    lat: v.number(),           // latitude
-    lng: v.number(),           // longitude
-    accuracy: v.optional(v.number()), // GPS accuracy in meters
-    heading: v.optional(v.number()),  // direction in degrees (0-360)
-    speed: v.optional(v.number()),    // speed in m/s
-    isTracking: v.boolean(),   // true = rider actively tracking, false = stopped
-    updatedAt: v.number(),     // Date.now() timestamp for freshness check
+    lat: v.number(),
+    lng: v.number(),
+    accuracy: v.optional(v.number()),
+    heading: v.optional(v.number()),
+    speed: v.optional(v.number()),
+    isTracking: v.boolean(),
+    updatedAt: v.number(),
+    // ✅ NEW: which sessionId last updated this location (for device switch detection)
+    sessionId: v.optional(v.string()),
   })
     .index("by_orderId", ["orderId"])
     .index("by_riderEmail", ["riderEmail"]),
