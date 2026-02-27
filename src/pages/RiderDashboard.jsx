@@ -6,9 +6,7 @@ import { api } from '../../convex/_generated/api';
 import './RiderDashboard.css';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ✅ WINDOW-LEVEL GPS TRACKER
-// Lives outside React — survives logout and component unmount.
-// Only dies when the browser tab is closed or page is hard-refreshed.
+// WINDOW-LEVEL GPS TRACKER
 // ─────────────────────────────────────────────────────────────────────────────
 const GPS = {
   _watchId:    null,
@@ -65,6 +63,7 @@ const GPS = {
       }
     }, 10000);
 
+    // Immediate first fix
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         this._lastPos = {
@@ -117,34 +116,412 @@ const GPS = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// FULLSCREEN MAP MODAL
+// ─────────────────────────────────────────────────────────────────────────────
+const FullscreenMapModal = ({ address, customerName, onClose }) => {
+  const mapRef         = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const unmountedRef   = useRef(false);   // ✅ guard: prevents setState after unmount
+  const [geocoding, setGeocoding] = useState(true);
+
+  // Lock body scroll while modal is open
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = ''; };
+  }, []);
+
+  useEffect(() => {
+    unmountedRef.current = false; // reset on each mount
+
+    if (!mapRef.current || mapInstanceRef.current) return;
+
+    let intervalId = null;
+
+    const initMap = () => {
+      if (!window.L || !mapRef.current || unmountedRef.current) return;
+      try {
+        const L   = window.L;
+        const map = L.map(mapRef.current, {
+          zoomControl     : false,
+          tap             : false,
+          scrollWheelZoom : true,
+        }).setView([14.5995, 120.9842], 14);
+
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '© OpenStreetMap contributors',
+          maxZoom: 19,
+        }).addTo(map);
+
+        const icon = L.divIcon({
+          className: '',
+          html: `<div style="
+            background:#3b82f6;color:white;border-radius:50% 50% 50% 0;
+            width:44px;height:44px;display:flex;align-items:center;
+            justify-content:center;font-size:20px;transform:rotate(-45deg);
+            box-shadow:0 4px 14px rgba(59,130,246,0.55);border:3px solid white;">
+            <span style="transform:rotate(45deg)">🏠</span>
+          </div>`,
+          iconSize: [44, 44], iconAnchor: [22, 44], popupAnchor: [0, -48],
+        });
+
+        const popupLabel = customerName ? `${customerName}'s Location` : 'Customer Location';
+        const marker = L.marker([14.5995, 120.9842], { icon })
+          .addTo(map)
+          .bindPopup(`<div style="font-size:13px;max-width:220px">
+            <strong>📍 ${popupLabel}</strong><br>
+            <small>${address}</small>
+          </div>`);
+
+        mapInstanceRef.current = map;
+
+        // ✅ invalidateSize after animation
+        setTimeout(() => {
+          if (!unmountedRef.current && mapInstanceRef.current) {
+            try { mapInstanceRef.current.invalidateSize(); } catch {}
+          }
+        }, 350);
+
+        // ✅ Geocode — check unmounted before every setState/map call
+        const encoded = encodeURIComponent(address + ', Philippines');
+        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&limit=1`, {
+          headers: { 'Accept-Language': 'en' }
+        })
+          .then(r => r.json())
+          .then(data => {
+            if (unmountedRef.current || !mapInstanceRef.current) return;
+            if (data?.length > 0) {
+              const lat = parseFloat(data[0].lat);
+              const lng = parseFloat(data[0].lon);
+              try {
+                marker.setLatLng([lat, lng]);
+                marker.getPopup()?.setContent(`
+                  <div style="font-size:13px;max-width:220px">
+                    <strong>📍 ${popupLabel}</strong><br>
+                    <small>${address}</small>
+                  </div>`);
+                marker.openPopup();
+                map.flyTo([lat, lng], 17, { animate: true, duration: 1.2 });
+              } catch {}
+            }
+            if (!unmountedRef.current) setGeocoding(false);
+          })
+          .catch(() => {
+            if (!unmountedRef.current) setGeocoding(false);
+          });
+      } catch (err) {
+        console.error('FullscreenMap init error:', err);
+        if (!unmountedRef.current) setGeocoding(false);
+      }
+    };
+
+    if (window.L) {
+      initMap();
+    } else {
+      intervalId = setInterval(() => {
+        if (window.L) { clearInterval(intervalId); intervalId = null; initMap(); }
+      }, 100);
+    }
+
+    // ✅ Single cleanup function — handles both cases
+    return () => {
+      unmountedRef.current = true;
+      if (intervalId !== null) { clearInterval(intervalId); intervalId = null; }
+      if (mapInstanceRef.current) {
+        try { mapInstanceRef.current.remove(); } catch {}
+        mapInstanceRef.current = null;
+      }
+    };
+  }, [address, customerName]);
+
+  return (
+    // ✅ Clicking the dark overlay closes the modal
+    <div className="fullscreen-map-overlay" onClick={onClose}>
+      {/* ✅ Stop propagation so clicking inside modal doesn't close it */}
+      <div className="fullscreen-map-modal" onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div className="fullscreen-map-header">
+          <div className="fullscreen-map-header-left">
+            <i className="fas fa-map-marked-alt"></i>
+            <div>
+              <strong>{customerName ? `${customerName}'s Location` : 'Customer Location'}</strong>
+              <span>{address}</span>
+            </div>
+          </div>
+          <button className="fullscreen-map-close" onClick={onClose} type="button" aria-label="Close map">
+            <i className="fas fa-times"></i>
+          </button>
+        </div>
+
+        {/* Loading bar */}
+        {geocoding && (
+          <div className="fullscreen-map-loading">
+            <div className="fullscreen-map-loading-bar"></div>
+            <span>Locating address on map…</span>
+          </div>
+        )}
+
+        {/* Map — takes all available height */}
+        <div ref={mapRef} className="fullscreen-map-container" />
+
+        {/* Footer hint */}
+        <div className="fullscreen-map-footer">
+          <span><i className="fas fa-hand-pointer"></i> Pinch to zoom · Drag to pan</span>
+          <span className="fullscreen-map-footer-right">
+            <i className="fas fa-search-plus"></i> Use +/− to zoom
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CUSTOMER MAP — inline preview in Deliver tab
+// ─────────────────────────────────────────────────────────────────────────────
+const CustomerMap = ({ orderId, allOrders }) => {
+  const mapRef         = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const markerRef      = useRef(null);
+  const unmountedRef   = useRef(false);  // ✅ guard against setState after unmount
+  const [mapError, setMapError]             = useState(null);
+  const [leafletLoaded, setLeafletLoaded]   = useState(!!window.L);
+  const [geocoding, setGeocoding]           = useState(false);
+  const [addressText, setAddressText]       = useState('');
+  const [showFullscreen, setShowFullscreen] = useState(false);
+
+  // ✅ Get order data including customer name from passed allOrders prop
+  const order        = allOrders.find(o => o.orderId === orderId);
+  const address      = order?.shippingAddress || order?.address || '';
+  const customerName = order?.customerName || order?.name || '';
+
+  // Load Leaflet once
+  useEffect(() => {
+    if (window.L) { setLeafletLoaded(true); return; }
+    if (!document.getElementById('leaflet-css')) {
+      const link  = document.createElement('link');
+      link.id     = 'leaflet-css';
+      link.rel    = 'stylesheet';
+      link.href   = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(link);
+    }
+    const existingScript = document.getElementById('leaflet-js');
+    if (existingScript) {
+      if (window.L) { setLeafletLoaded(true); return; }
+      existingScript.addEventListener('load', () => setLeafletLoaded(true));
+      return;
+    }
+    const script   = document.createElement('script');
+    script.id      = 'leaflet-js';
+    script.src     = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.onload  = () => setLeafletLoaded(true);
+    script.onerror = () => setMapError('Failed to load map library.');
+    document.head.appendChild(script);
+  }, []);
+
+  // Init map
+  useEffect(() => {
+    if (!leafletLoaded || mapInstanceRef.current || !mapRef.current) return;
+    try {
+      const L   = window.L;
+      const map = L.map(mapRef.current, {
+        zoomControl     : false,
+        tap             : false,
+        scrollWheelZoom : false,
+        dragging        : true,
+      }).setView([14.5995, 120.9842], 14);
+
+      L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19,
+      }).addTo(map);
+
+      const customerIcon = L.divIcon({
+        className: '',
+        html: `<div style="
+          background:#3b82f6;color:white;border-radius:50% 50% 50% 0;
+          width:36px;height:36px;display:flex;align-items:center;
+          justify-content:center;font-size:16px;transform:rotate(-45deg);
+          box-shadow:0 3px 10px rgba(59,130,246,0.5);border:3px solid white;">
+          <span style="transform:rotate(45deg)">🏠</span>
+        </div>`,
+        iconSize: [36, 36], iconAnchor: [18, 36], popupAnchor: [0, -40],
+      });
+
+      const marker = L.marker([14.5995, 120.9842], { icon: customerIcon })
+        .addTo(map)
+        .bindPopup('<strong>📍 Customer Location</strong>');
+
+      mapInstanceRef.current = map;
+      markerRef.current      = marker;
+      setTimeout(() => map.invalidateSize(), 300);
+    } catch { setMapError('Failed to initialize map.'); }
+  }, [leafletLoaded]);
+
+  // Geocode address
+  useEffect(() => {
+    if (!address || !mapInstanceRef.current || !markerRef.current || !window.L) return;
+    setAddressText(address);
+    setGeocoding(true);
+    setMapError(null);
+
+    const encoded = encodeURIComponent(address + ', Philippines');
+    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&limit=1`, {
+      headers: { 'Accept-Language': 'en', 'User-Agent': 'DKMerch-RiderApp/1.0' }
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (unmountedRef.current || !markerRef.current || !mapInstanceRef.current) return;
+        if (data?.length > 0) {
+          const lat = parseFloat(data[0].lat);
+          const lng = parseFloat(data[0].lon);
+          try {
+            markerRef.current.setLatLng([lat, lng]);
+            markerRef.current.getPopup()?.setContent(
+              `<div style="font-size:13px;max-width:200px;">
+                <strong>📍 ${customerName ? customerName + '\'s Location' : 'Customer Location'}</strong><br>
+                <small>${address}</small>
+              </div>`
+            );
+            markerRef.current.openPopup();
+            mapInstanceRef.current.flyTo([lat, lng], 16, { animate: true, duration: 1.0 });
+          } catch {}
+        } else {
+          if (!unmountedRef.current) setMapError('Address not found on map.');
+        }
+      })
+      .catch(() => { if (!unmountedRef.current) setMapError('Could not load map location.'); })
+      .finally(() => { if (!unmountedRef.current) setGeocoding(false); });
+  }, [address, customerName, leafletLoaded]);
+
+  // Cleanup on unmount — set unmounted flag FIRST to stop all pending setState
+  useEffect(() => {
+    unmountedRef.current = false;
+    return () => {
+      unmountedRef.current = true;
+      if (mapInstanceRef.current) {
+        try { mapInstanceRef.current.remove(); } catch {}
+        mapInstanceRef.current = null;
+        markerRef.current      = null;
+      }
+    };
+  }, []);
+
+  // Invalidate map size after sidebar closes
+  useEffect(() => {
+    const handler = () => {
+      setTimeout(() => {
+        if (mapInstanceRef.current) {
+          try { mapInstanceRef.current.invalidateSize(); } catch {}
+        }
+      }, 350);
+    };
+    window.addEventListener('rider-sidebar-closed', handler);
+    return () => window.removeEventListener('rider-sidebar-closed', handler);
+  }, []);
+
+  if (!address) return (
+    <div className="customer-map-no-address">
+      <i className="fas fa-map-marker-alt"></i>
+      <span>No address saved for this order.</span>
+    </div>
+  );
+
+  return (
+    <>
+      <div className="customer-map-wrapper">
+        {/* Address bar */}
+        <div className="customer-map-address-bar">
+          <i className="fas fa-home"></i>
+          <span>{addressText || address}</span>
+          {geocoding && <span className="customer-map-geocoding">📍 Locating...</span>}
+        </div>
+
+        {mapError && (
+          <div className="customer-map-error">
+            <i className="fas fa-exclamation-triangle"></i> {mapError}
+          </div>
+        )}
+
+        {/* Map + View Full Map button */}
+        <div className="customer-map-inner-wrapper">
+          <div ref={mapRef} className="customer-map-container" />
+
+          <button
+            className="customer-map-fullscreen-btn"
+            onClick={() => setShowFullscreen(true)}
+            type="button"
+            title="View full map"
+          >
+            <i className="fas fa-expand-alt"></i>
+            <span>View Full Map</span>
+          </button>
+        </div>
+
+        {/* Zoom hint bar */}
+        <div className="customer-map-zoom-hint">
+          <i className="fas fa-search-plus"></i>
+          <span>Use <strong>+</strong> / <strong>−</strong> on map to zoom</span>
+          <button
+            className="customer-map-fullscreen-link"
+            onClick={() => setShowFullscreen(true)}
+            type="button"
+          >
+            <i className="fas fa-expand-alt"></i> Full Screen
+          </button>
+        </div>
+      </div>
+
+      {/* ✅ Fullscreen modal — passes customerName so header shows correct name */}
+      {showFullscreen && address && (
+        <FullscreenMapModal
+          address={address}
+          customerName={customerName}
+          onClose={() => setShowFullscreen(false)}
+        />
+      )}
+    </>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 const RiderDashboard = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  const [tab, setTab] = useState('available');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [expandedOrders, setExpandedOrders] = useState({});
-  const [expandedPickups, setExpandedPickups] = useState({});
+  const [tab, setTab]                               = useState('available');
+  const [sidebarOpen, setSidebarOpen]               = useState(false);
+  const [expandedOrders, setExpandedOrders]         = useState({});
+  const [expandedPickups, setExpandedPickups]       = useState({});
   const [expandedDeliveries, setExpandedDeliveries] = useState({});
-  const [otpInputs, setOtpInputs] = useState({});
-  const [photoData, setPhotoData] = useState({});
-  const [otpErrors, setOtpErrors] = useState({});
-  const [confirmingId, setConfirmingId] = useState(null);
-  const [notifyingId, setNotifyingId] = useState(null);
-  const fileInputRefs = useRef({});
+  const [otpInputs, setOtpInputs]                   = useState({});
+  const [photoData, setPhotoData]                   = useState({});
+  const [otpErrors, setOtpErrors]                   = useState({});
+  const [confirmingId, setConfirmingId]             = useState(null);
+  const [notifyingId, setNotifyingId]               = useState(null);
 
-  // ── GPS UI STATE ──
+  // GPS UI STATE
   const [trackingOrderId, setTrackingOrderId] = useState(() => GPS.activeOrderId());
-  const [gpsError, setGpsError] = useState(null);
+  const [gpsError, setGpsError]               = useState(null);
   const [currentPosition, setCurrentPosition] = useState(() => GPS.lastPosition());
 
-  // ── SESSION GUARD STATE ──
-  const [kickedOut, setKickedOut] = useState(false);
-  const [kickedCountdown, setKickedCountdown] = useState(180);
-  const countdownIntervalRef = useRef(null);
-  const hasBeenKickedRef = useRef(false);
+  // ✅ Track whether auto-start has already been attempted this session
+  const autoStartAttemptedRef = useRef(false);
 
-  // ── CONVEX QUERIES ──
+  // ✅ File input refs for photo proof upload (keyed by delivery._id)
+  const fileInputRefs = useRef({});
+
+  // SESSION GUARD STATE
+  const [kickedOut, setKickedOut]             = useState(false);
+  const [kickedCountdown, setKickedCountdown] = useState(180);
+  const countdownIntervalRef                  = useRef(null);
+  const hasBeenKickedRef                      = useRef(false);
+
+  // CONVEX QUERIES
   const riderInfo  = useQuery(api.riders.getRiderByEmail, user?.email ? { email: user.email } : 'skip');
   const allOrders  = useQuery(api.orders.getAllOrders) || [];
   const allPickups = useQuery(api.pickupRequests.getAllPickupRequests) || [];
@@ -156,7 +533,7 @@ const RiderDashboard = () => {
       : 'skip'
   );
 
-  // ── CONVEX MUTATIONS ──
+  // CONVEX MUTATIONS
   const createPickupRequest = useMutation(api.pickupRequests.createPickupRequest);
   const updateOrderFields   = useMutation(api.orders.updateOrderFields);
   const updatePickupStatus  = useMutation(api.pickupRequests.updatePickupStatus);
@@ -164,25 +541,23 @@ const RiderDashboard = () => {
   const updateRiderLocation = useMutation(api.riders.updateRiderLocation);
   const stopRiderTracking   = useMutation(api.riders.stopRiderTracking);
 
-  // ✅ Every render — keep GPS sendFn fresh (Convex mutation refs change across renders)
+  // Keep GPS sendFn fresh every render
   useEffect(() => {
     if (GPS.isActive()) GPS.updateSendFn(updateRiderLocation);
   });
 
-  // ✅ On mount — immediately sync UI from GPS object.
-  // Fixes rider logout → login again: GPS is still running in window memory
-  // but RiderDashboard remounted with fresh state. Restore UI to match GPS reality.
+  // Restore GPS state on mount (e.g. page refresh)
   useEffect(() => {
     const activeId = GPS.activeOrderId();
     const lastPos  = GPS.lastPosition();
     if (activeId) {
       setTrackingOrderId(activeId);
-      setTab('deliver'); // auto-switch to Deliver tab so rider sees active delivery
+      setTab('deliver');
     }
     if (lastPos) setCurrentPosition(lastPos);
-  }, []); // runs once on mount only
+  }, []);
 
-  // ✅ Sync UI state from GPS object every 2 seconds
+  // Sync GPS state every 2s
   useEffect(() => {
     const sync = setInterval(() => {
       setTrackingOrderId(GPS.activeOrderId());
@@ -191,10 +566,7 @@ const RiderDashboard = () => {
     return () => clearInterval(sync);
   }, []);
 
-  // ── DERIVED DATA (with sorting) ──
-
-  // ✅ Sort confirmed orders: pinaka-bago (pinaka-recently confirmed) sa taas
-  // Gumagamit ng confirmedAt kung available, fallback sa _creationTime
+  // DERIVED DATA
   const confirmedOrders = allOrders
     .filter(o =>
       (o.orderStatus === 'confirmed' || o.status === 'Confirmed') &&
@@ -203,23 +575,20 @@ const RiderDashboard = () => {
     .sort((a, b) => {
       const aTime = a.confirmedAt ? new Date(a.confirmedAt).getTime() : (a._creationTime || 0);
       const bTime = b.confirmedAt ? new Date(b.confirmedAt).getTime() : (b._creationTime || 0);
-      return bTime - aTime; // newest first
+      return bTime - aTime;
     });
 
   const myPickups = allPickups
     .filter(p => p.riderEmail === user?.email)
     .sort((a, b) => {
-      // ✅ Primary sort: pinaka-recently approved/actioned ng admin ang nasa taas
-      // Gumagamit ng approvedAt (set ng admin), fallback sa requestedAt, fallback sa _creationTime
       const getLatestTime = (p) => {
-        if (p.approvedAt)   return new Date(p.approvedAt).getTime();
-        if (p.requestedAt)  return new Date(p.requestedAt).getTime();
+        if (p.approvedAt)  return new Date(p.approvedAt).getTime();
+        if (p.requestedAt) return new Date(p.requestedAt).getTime();
         return p._creationTime || 0;
       };
-      return getLatestTime(b) - getLatestTime(a); // newest first
+      return getLatestTime(b) - getLatestTime(a);
     });
 
-  // ✅ Active deliveries: out_for_delivery first, then approved, newest first
   const myDeliveries = myPickups
     .filter(p => p.status === 'approved' || p.status === 'out_for_delivery')
     .sort((a, b) => {
@@ -233,7 +602,40 @@ const RiderDashboard = () => {
   const pendingPickupsCount   = myPickups.filter(p => p.status === 'pending').length;
   const activeDeliveriesCount = myDeliveries.length;
 
-  // ── SESSION GUARD ──
+  // ─────────────────────────────────────────────────────────────────────────
+  // ✅ AUTO-START GPS on login if there's an active out_for_delivery order
+  // Only runs once after riderInfo and myDeliveries are both loaded
+  // ─────────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (autoStartAttemptedRef.current) return;
+    if (!riderInfo || !user?.email || !user?.sessionId) return;
+    if (myDeliveries.length === 0) return;
+    if (GPS.isActive()) return; // already tracking from page load
+
+    const activeDelivery = myDeliveries.find(d => d.status === 'out_for_delivery');
+    if (!activeDelivery) return;
+
+    autoStartAttemptedRef.current = true;
+
+    if (!navigator.geolocation) {
+      setGpsError('GPS not supported on this device.');
+      return;
+    }
+
+    GPS.start({
+      orderId:    activeDelivery.orderId,
+      riderEmail: user.email,
+      riderName:  riderInfo.fullName,
+      sessionId:  user.sessionId,
+      sendFn:     updateRiderLocation,
+    });
+    setTrackingOrderId(activeDelivery.orderId);
+    setTab('deliver');
+    // Auto-expand the active delivery card
+    setExpandedDeliveries(prev => ({ ...prev, [activeDelivery._id]: true }));
+  }, [riderInfo, myDeliveries, user, updateRiderLocation]);
+
+  // SESSION GUARD
   const handleForcedLogout = useCallback(() => {
     logout();
     navigate('/', { replace: true });
@@ -242,23 +644,16 @@ const RiderDashboard = () => {
   useEffect(() => {
     if (!sessionCheck) return;
     if (hasBeenKickedRef.current) return;
-
     if (!sessionCheck.valid && sessionCheck.reason === 'new_device_logged_in') {
       hasBeenKickedRef.current = true;
       setKickedOut(true);
       setKickedCountdown(180);
-
       GPS.stopLocal();
       setTrackingOrderId(null);
       setCurrentPosition(null);
-
       countdownIntervalRef.current = setInterval(() => {
         setKickedCountdown(prev => {
-          if (prev <= 1) {
-            clearInterval(countdownIntervalRef.current);
-            handleForcedLogout();
-            return 0;
-          }
+          if (prev <= 1) { clearInterval(countdownIntervalRef.current); handleForcedLogout(); return 0; }
           return prev - 1;
         });
       }, 1000);
@@ -270,11 +665,10 @@ const RiderDashboard = () => {
     return () => { if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current); };
   }, []);
 
-  // ── GPS ACTIONS ──
+  // GPS ACTIONS
   const startTracking = useCallback((orderId) => {
     if (!navigator.geolocation) { setGpsError('GPS not supported on this device.'); return; }
     if (!riderInfo) return;
-
     setGpsError(null);
     GPS.start({
       orderId,
@@ -324,7 +718,14 @@ const RiderDashboard = () => {
     return map[status] || status;
   };
 
-  // ✅ Logout — GPS keeps running so customer map stays live
+  // ✅ closeSidebar fires invalidateSize on all maps after transition
+  const closeSidebar = useCallback(() => {
+    setSidebarOpen(false);
+    setTimeout(() => {
+      window.dispatchEvent(new Event('rider-sidebar-closed'));
+    }, 350);
+  }, []);
+
   const handleLogout = async () => {
     if (window.confirm(
       'Are you sure you want to logout?\n\n📍 GPS tracking will continue running for the customer until delivery is confirmed.'
@@ -334,9 +735,12 @@ const RiderDashboard = () => {
     }
   };
 
-  const handleNavClick = (newTab) => { setTab(newTab); setSidebarOpen(false); };
+  const handleNavClick = (newTab) => {
+    setTab(newTab);
+    closeSidebar();
+  };
 
-  // ── ACTIONS ──
+  // ACTIONS
   const requestPickup = async (order) => {
     if (!riderInfo) return;
     const alreadyApproved = allPickups.find(p => p.orderId === order.orderId && p.status === 'approved');
@@ -416,7 +820,7 @@ const RiderDashboard = () => {
     catch (err) { console.error(err); alert('Failed to remove pickup.'); }
   };
 
-  // ── LOADING / NOT APPROVED ──
+  // LOADING / NOT APPROVED
   if (riderInfo === undefined) {
     return (
       <div className="rider-dashboard">
@@ -438,7 +842,7 @@ const RiderDashboard = () => {
     );
   }
 
-  // ── KICKED-OUT OVERLAY ──
+  // KICKED-OUT OVERLAY
   if (kickedOut) {
     const mins = Math.floor(kickedCountdown / 60);
     const secs = kickedCountdown % 60;
@@ -464,9 +868,9 @@ const RiderDashboard = () => {
   }
 
   return (
-    <div className="rider-dashboard">
+    <div className={`rider-dashboard${sidebarOpen ? ' sidebar-open' : ''}`}>
 
-      {/* ✅ MOBILE TOP HEADER BAR — only visible on mobile */}
+      {/* MOBILE TOP HEADER */}
       <header className="rider-mobile-header">
         <button className="rider-burger-btn" onClick={() => setSidebarOpen(true)} aria-label="Open menu">
           <i className="fas fa-bars"></i>
@@ -489,7 +893,10 @@ const RiderDashboard = () => {
       </header>
 
       {/* SIDEBAR OVERLAY */}
-      <div className={`rider-sidebar-overlay ${sidebarOpen ? 'open' : ''}`} onClick={() => setSidebarOpen(false)} />
+      <div
+        className={`rider-sidebar-overlay ${sidebarOpen ? 'open' : ''}`}
+        onClick={closeSidebar}
+      />
 
       {/* SIDEBAR */}
       <aside className={`rider-sidebar ${sidebarOpen ? 'open' : ''}`}>
@@ -498,8 +905,7 @@ const RiderDashboard = () => {
             <div className="rider-logo"><i className="fas fa-motorcycle"></i><span>DKMerch</span></div>
             <div className="rider-tagline">Rider Dashboard</div>
           </div>
-          {/* ✅ Close button — always visible inside sidebar */}
-          <button className="rider-sidebar-close" onClick={() => setSidebarOpen(false)} aria-label="Close menu">
+          <button className="rider-sidebar-close" onClick={closeSidebar} aria-label="Close menu">
             <i className="fas fa-times"></i>
           </button>
         </div>
@@ -551,7 +957,7 @@ const RiderDashboard = () => {
       {/* MAIN */}
       <main className="rider-main">
 
-        {/* ═══ AVAILABLE ORDERS ═══ */}
+        {/* ─── AVAILABLE ORDERS ─── */}
         {tab === 'available' && (
           <div className="rider-content">
             <div className="rider-page-header">
@@ -627,7 +1033,7 @@ const RiderDashboard = () => {
           </div>
         )}
 
-        {/* ═══ MY PICKUPS ═══ */}
+        {/* ─── MY PICKUPS ─── */}
         {tab === 'my-pickups' && (
           <div className="rider-content">
             <div className="rider-page-header">
@@ -685,7 +1091,7 @@ const RiderDashboard = () => {
           </div>
         )}
 
-        {/* ═══ DELIVER ═══ */}
+        {/* ─── DELIVER ─── */}
         {tab === 'deliver' && (
           <div className="rider-content">
             <div className="rider-page-header">
@@ -712,17 +1118,24 @@ const RiderDashboard = () => {
                 {myDeliveries.map(delivery => {
                   const isOutForDelivery   = delivery.status === 'out_for_delivery';
                   const isApproved         = delivery.status === 'approved';
-                  const isExpanded         = expandedDeliveries[delivery._id];
+                  const isExpanded         = expandedDeliveries[delivery._id] || trackingOrderId === delivery.orderId;
                   const errMsg             = otpErrors[delivery._id];
                   const hasPhoto           = !!photoData[delivery._id];
                   const isThisBeingTracked = trackingOrderId === delivery.orderId;
+
+                  // ✅ Get customer name from actual order data
+                  const ord          = allOrders.find(o => o.orderId === delivery.orderId);
+                  const customerName = ord?.customerName || ord?.name || delivery.customerName || 'Customer';
+                  const addr         = ord?.shippingAddress || ord?.address || delivery.customerAddress || '';
+                  const phone        = ord?.phone || '';
 
                   return (
                     <div key={delivery._id} className="rider-compact-card">
                       <div className="rider-compact-row">
                         <div className="rider-compact-left">
                           <span className="rider-order-id">#{delivery.orderId?.slice(-8)}</span>
-                          <span className="rider-compact-customer"><i className="fas fa-user"></i> {delivery.customerName || 'N/A'}</span>
+                          {/* ✅ Shows customer name from order */}
+                          <span className="rider-compact-customer"><i className="fas fa-user"></i> {customerName}</span>
                           <span className="rider-compact-total">₱{(delivery.total || 0).toLocaleString()}</span>
                         </div>
                         <div className="rider-compact-right">
@@ -743,8 +1156,30 @@ const RiderDashboard = () => {
                       {isExpanded && (
                         <div className="rider-expanded-body">
                           <div className="rider-expanded-section">
-                            <div className="rider-expanded-section-title"><i className="fas fa-user"></i> Customer Info</div>
-                            <div className="rider-info-row"><i className="fas fa-map-marker-alt"></i><span><strong>Address:</strong> {delivery.customerAddress || 'N/A'}</span></div>
+                            <div className="rider-expanded-section-title">
+                              <i className="fas fa-user"></i> Customer Info
+                            </div>
+                            <div className="rider-info-row">
+                              <i className="fas fa-user-circle"></i>
+                              {/* ✅ Customer name from order */}
+                              <span><strong>Name:</strong> {customerName}</span>
+                            </div>
+                            <div className="rider-info-row">
+                              <i className="fas fa-map-marker-alt"></i>
+                              <span><strong>Address:</strong> {addr || 'N/A'}</span>
+                            </div>
+                            {phone && (
+                              <div className="rider-info-row">
+                                <i className="fas fa-phone"></i>
+                                <span><strong>Phone:</strong> {phone}</span>
+                              </div>
+                            )}
+
+                            <div className="customer-map-section-title">
+                              <i className="fas fa-map-marked-alt"></i> Customer Location
+                            </div>
+                            {/* ✅ Pass allOrders so CustomerMap can find the order + customer name */}
+                            <CustomerMap orderId={delivery.orderId} allOrders={allOrders} />
                           </div>
 
                           <div className="rider-expanded-section rider-info-preview">

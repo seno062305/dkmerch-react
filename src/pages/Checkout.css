@@ -1423,3 +1423,269 @@ html { scroll-behavior: smooth; }
   justify-content: center;
   gap: 5px;
 }
+
+/* ══════════════════════════════════════════════════════
+   ADDRESS MAP PICKER — append to bottom of Checkout.css
+   ══════════════════════════════════════════════════════ */
+
+.address-map-picker {
+  width: 100%;
+}
+
+/* ── Input + toggle button row ── */
+.address-input-row {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.address-input-row input {
+  flex: 1;
+  padding: 14px 18px;
+  border: 2px solid var(--border-light);
+  border-radius: var(--radius-md);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  transition: var(--transition-smooth);
+  outline: none;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.address-input-row input:focus {
+  border-color: var(--primary-pink);
+  box-shadow: 0 0 0 4px rgba(252, 18, 104, 0.08);
+}
+
+.address-map-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px;
+  background: #eff6ff;
+  border: 2px solid #bfdbfe;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 700;
+  color: #2563eb;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.address-map-toggle-btn:hover {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  transform: translateY(-1px);
+}
+
+/* ── Suggestions dropdown ── */
+.address-suggestions-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1.5px solid var(--border-light);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  z-index: 1000;
+  list-style: none;
+  margin: 0;
+  padding: 6px 0;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.address-suggestions-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 0.15s;
+  line-height: 1.4;
+  border-bottom: 1px solid #f5f5f5;
+}
+
+.address-suggestions-list li:last-child {
+  border-bottom: none;
+}
+
+.address-suggestions-list li:hover {
+  background: #fdf2f8;
+  color: var(--primary-pink);
+}
+
+.address-suggestions-list li i {
+  color: var(--primary-pink);
+  font-size: 12px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.address-suggestions-list li span {
+  word-break: break-word;
+}
+
+/* ── Map preview ── */
+.address-map-preview-wrap {
+  margin-top: 12px;
+  border: 1.5px solid #bfdbfe;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  animation: fadeInMap 0.25s ease;
+}
+
+@keyframes fadeInMap {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.address-map-preview-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #dbeafe;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1e40af;
+  border-bottom: 1px solid #bfdbfe;
+}
+
+.address-map-preview-header i {
+  color: #3b82f6;
+  flex-shrink: 0;
+}
+
+.address-map-preview-container {
+  height: 260px;
+  width: 100%;
+}
+
+.address-map-preview-hint {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  background: #f8fafc;
+  font-size: 11px;
+  color: #64748b;
+  border-top: 1px solid #e2e8f0;
+}
+
+.address-map-preview-hint i {
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+/* Mobile adjustments */
+@media (max-width: 576px) {
+  .address-input-row {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .address-map-toggle-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 11px 16px;
+  }
+
+  .address-map-preview-container {
+    height: 200px;
+  }
+}
+
+
+/* ══════════════════════════════════════════════════════
+   TRACK ORDER FIXES — append to bottom of TrackOrder.css
+   ══════════════════════════════════════════════════════ */
+
+/* ── FIX: 3 cards per row — override the minmax conflict ── */
+.orders-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr) !important; /* ✅ Force 3 cols desktop */
+  gap: 0;
+  background: white;
+  border-top: 1px solid #e0e0e0;
+  border-left: 1px solid #e0e0e0;
+}
+
+/* On wider screens, allow 4 cols */
+@media (min-width: 1100px) {
+  .orders-grid {
+    grid-template-columns: repeat(4, 1fr) !important;
+  }
+}
+
+/* ── FIX: Map overlap on mobile ── */
+@media (max-width: 768px) {
+  /* Prevent overflow stacking */
+  .rider-map-section {
+    border-radius: 10px;
+    overflow: hidden;
+    position: relative; /* ✅ Establish stacking context */
+  }
+
+  .rider-map-wrapper {
+    position: relative; /* ✅ Needed for absolute overlay */
+    overflow: hidden;
+  }
+
+  .rider-map-container {
+    height: 200px !important; /* ✅ Fixed height on mobile — no overflow */
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ✅ Fix overlay z-index so it doesn't bleed outside wrapper */
+  .rider-map-waiting-overlay {
+    position: absolute;
+    top: 0;            /* ✅ Was 32px, now covers full map area */
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10;
+  }
+
+  /* Prevent map container from showing outside modal on iOS */
+  .tracking-modal {
+    overflow: hidden !important;
+    overflow-y: auto !important;
+  }
+}
+
+/* ── FIX: Rider CustomerMap zoom — add zoom controls ── */
+.customer-map-container {
+  height: 240px !important; /* slightly taller for better usability */
+  width: 100%;
+  position: relative;
+}
+
+/* Force Leaflet zoom control to be visible on all screen sizes */
+.customer-map-wrapper .leaflet-control-zoom {
+  display: block !important;
+}
+
+/* ── FIX: map z-index inside tracking modal ── */
+.tracking-modal .rider-map-container,
+.tracking-modal .customer-map-container {
+  z-index: 1;
+  position: relative;
+}
+
+/* Fix Leaflet tiles appearing above modal close button */
+.tracking-modal .leaflet-pane {
+  z-index: 1 !important;
+}
+
+.tracking-modal .leaflet-control-container {
+  z-index: 5 !important;
+}

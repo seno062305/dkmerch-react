@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
@@ -15,6 +15,314 @@ const calcShipping = (totalPcs) => {
   return 10 + totalPcs * 10;
 };
 
+// ─── ADDRESS MAP + AUTOCOMPLETE ──────────────────────────────────────────────
+const AddressMapPicker = ({ value, onChange, onSelectSuggestion }) => {
+  const mapRef         = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const markerRef      = useRef(null);
+  const debounceRef    = useRef(null);
+  // ✅ Store pending geocode target so we can run it after map finishes init
+  const pendingGeocode = useRef(null);
+
+  const [suggestions, setSuggestions]         = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [geocoding, setGeocoding]             = useState(false);
+  const [leafletReady, setLeafletReady]       = useState(!!window.L);
+  const [mapVisible, setMapVisible]           = useState(false);
+  const [statusText, setStatusText]           = useState('');
+
+  // ── Load Leaflet once ──
+  useEffect(() => {
+    if (window.L) { setLeafletReady(true); return; }
+    if (!document.getElementById('leaflet-css')) {
+      const link = document.createElement('link');
+      link.id   = 'leaflet-css';
+      link.rel  = 'stylesheet';
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(link);
+    }
+    const existing = document.getElementById('leaflet-js');
+    if (existing) {
+      if (window.L) { setLeafletReady(true); return; }
+      existing.addEventListener('load', () => setLeafletReady(true));
+      return;
+    }
+    const script   = document.createElement('script');
+    script.id      = 'leaflet-js';
+    script.src     = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.onload  = () => setLeafletReady(true);
+    script.onerror = () => console.error('Leaflet failed to load');
+    document.head.appendChild(script);
+  }, []);
+
+  // ── Geocode helper — always uses current map/marker refs ──
+  const geocodeAddress = useCallback(async (addr) => {
+    if (!addr) return;
+    // Wait for map to be ready
+    if (!mapInstanceRef.current || !markerRef.current) {
+      pendingGeocode.current = addr;
+      return;
+    }
+    setGeocoding(true);
+    setStatusText('Locating on map…');
+    try {
+      const encoded = encodeURIComponent(addr + ', Philippines');
+      const res     = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&limit=1`,
+        { headers: { 'Accept-Language': 'en' } }
+      );
+      const data = await res.json();
+      if (data?.length > 0) {
+        const lat = parseFloat(data[0].lat);
+        const lng = parseFloat(data[0].lon);
+        // ✅ Update marker and fly map to the geocoded position
+        if (markerRef.current && mapInstanceRef.current) {
+          markerRef.current.setLatLng([lat, lng]);
+          markerRef.current.getPopup()?.setContent(
+            `<div style="font-size:12px;max-width:200px"><strong>📍 Delivery Address</strong><br><small>${addr}</small></div>`
+          );
+          markerRef.current.openPopup();
+          mapInstanceRef.current.flyTo([lat, lng], 17, { animate: true, duration: 0.8 });
+          // Notify parent with coords
+          onSelectSuggestion({ address: addr, lat, lng });
+        }
+        setStatusText('Pin your exact location — drag the marker to adjust');
+      } else {
+        setStatusText('Address not found. Drag the pin to set location manually.');
+      }
+    } catch {
+      setStatusText('Could not locate address. Drag the pin to set location.');
+    }
+    setGeocoding(false);
+  }, [onSelectSuggestion]);
+
+  // ── Init map — runs when mapVisible becomes true AND leaflet is ready ──
+  useEffect(() => {
+    // Don't init if: not visible, already inited, container not in DOM, or Leaflet not loaded
+    if (!mapVisible || mapInstanceRef.current || !mapRef.current || !leafletReady) return;
+
+    try {
+      const L   = window.L;
+      const map = L.map(mapRef.current, {
+        zoomControl    : true,
+        tap            : false,
+        scrollWheelZoom: false, // prevent accidental scroll on mobile
+      }).setView([14.5995, 120.9842], 13);
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19,
+      }).addTo(map);
+
+      const icon = L.divIcon({
+        className: '',
+        html: `<div style="
+          width:36px;height:36px;background:#fc1268;border-radius:50% 50% 50% 0;
+          transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;
+          box-shadow:0 3px 10px rgba(252,18,104,0.5);border:3px solid white;">
+          <span style="transform:rotate(45deg);font-size:16px">📍</span>
+        </div>`,
+        iconSize: [36, 36], iconAnchor: [18, 36], popupAnchor: [0, -40],
+      });
+
+      const marker = L.marker([14.5995, 120.9842], { icon, draggable: true })
+        .addTo(map)
+        .bindPopup('<strong>📍 Delivery Address</strong>');
+
+      // ✅ When marker is dragged — reverse geocode and update address
+      marker.on('dragend', async () => {
+        const { lat, lng } = marker.getLatLng();
+        setGeocoding(true);
+        setStatusText('Getting address for this location…');
+        try {
+          const res  = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`,
+            { headers: { 'Accept-Language': 'en' } }
+          );
+          const data = await res.json();
+          const addr = data.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+          onChange(addr);
+          onSelectSuggestion({ address: addr, lat, lng });
+          marker.getPopup()?.setContent(
+            `<div style="font-size:12px;max-width:200px"><strong>📍 Delivery Address</strong><br><small>${addr}</small></div>`
+          );
+          marker.openPopup();
+          setStatusText('Pin your exact location — drag the marker to adjust');
+        } catch {
+          setStatusText('Could not get address. Try again.');
+        }
+        setGeocoding(false);
+      });
+
+      mapInstanceRef.current = map;
+      markerRef.current      = marker;
+
+      // ✅ invalidateSize after CSS transition finishes (map was hidden before)
+      setTimeout(() => {
+        map.invalidateSize();
+        // ✅ If there was a pending geocode (user selected address before map opened), run it now
+        if (pendingGeocode.current) {
+          const addr = pendingGeocode.current;
+          pendingGeocode.current = null;
+          geocodeAddress(addr);
+        } else if (value) {
+          // ✅ If there's already a value in the input, auto-geocode it
+          geocodeAddress(value);
+        } else {
+          setStatusText('Select an address suggestion or drag the pin to set location');
+        }
+      }, 350);
+    } catch (err) {
+      console.error('Map init error:', err);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapVisible, leafletReady]); // ✅ Only re-init when visibility or readiness changes
+
+  // ── Cleanup on unmount ──
+  useEffect(() => {
+    return () => {
+      clearTimeout(debounceRef.current);
+      if (mapInstanceRef.current) {
+        try { mapInstanceRef.current.remove(); } catch {}
+        mapInstanceRef.current = null;
+        markerRef.current      = null;
+      }
+    };
+  }, []);
+
+  // ── Autocomplete via Nominatim ──
+  const fetchSuggestions = useCallback(async (query) => {
+    if (!query || query.length < 4) { setSuggestions([]); return; }
+    try {
+      const encoded = encodeURIComponent(query + ', Philippines');
+      const res     = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&limit=5&addressdetails=1`,
+        { headers: { 'Accept-Language': 'en' } }
+      );
+      const data = await res.json();
+      setSuggestions(data.map(d => ({
+        label:   d.display_name,
+        lat:     parseFloat(d.lat),
+        lng:     parseFloat(d.lon),
+        address: d.display_name,
+      })));
+      setShowSuggestions(true);
+    } catch { setSuggestions([]); }
+  }, []);
+
+  const handleInputChange = (e) => {
+    const val = e.target.value;
+    onChange(val);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => fetchSuggestions(val), 500);
+  };
+
+  // ✅ When user picks a suggestion: update input, show map, then geocode/pin immediately
+  const handleSelectSuggestion = (s) => {
+    onChange(s.address);
+    setSuggestions([]);
+    setShowSuggestions(false);
+
+    if (!mapVisible) {
+      // Map isn't open yet — store pending geocode, then open map
+      // The map init useEffect will pick up pendingGeocode.current after init
+      pendingGeocode.current = s.address;
+      setMapVisible(true);
+    } else {
+      // Map is already open — geocode directly
+      // But if map just initialized with coords from suggestion, use them directly
+      if (mapInstanceRef.current && markerRef.current) {
+        // ✅ Use the lat/lng directly from suggestion — no extra fetch needed!
+        markerRef.current.setLatLng([s.lat, s.lng]);
+        markerRef.current.getPopup()?.setContent(
+          `<div style="font-size:12px;max-width:200px"><strong>📍 Delivery Address</strong><br><small>${s.address}</small></div>`
+        );
+        markerRef.current.openPopup();
+        mapInstanceRef.current.flyTo([s.lat, s.lng], 17, { animate: true, duration: 0.8 });
+        onSelectSuggestion({ address: s.address, lat: s.lat, lng: s.lng });
+        setStatusText('Pin your exact location — drag the marker to adjust');
+      } else {
+        pendingGeocode.current = s.address;
+      }
+    }
+  };
+
+  // ✅ Handle toggle map button — invalidate size when re-opening
+  const handleToggleMap = () => {
+    if (mapVisible) {
+      setMapVisible(false);
+    } else {
+      setMapVisible(true);
+      // If map was already initialized (just hidden via CSS), invalidate size
+      setTimeout(() => {
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.invalidateSize();
+        }
+      }, 350);
+    }
+  };
+
+  return (
+    <div className="address-map-picker">
+      {/* Input + toggle button */}
+      <div className="address-autocomplete-wrap" style={{ position: 'relative' }}>
+        <div className="address-input-row">
+          <input
+            type="text"
+            name="address"
+            value={value}
+            onChange={handleInputChange}
+            onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+            onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+            placeholder="Start typing your address…"
+            autoComplete="off"
+          />
+          <button
+            type="button"
+            className="address-map-toggle-btn"
+            onClick={handleToggleMap}
+            title={mapVisible ? 'Hide map' : 'Show map'}
+          >
+            <i className={`fas fa-map${mapVisible ? '-marked-alt' : ''}`}></i>
+            {mapVisible ? ' Hide Map' : ' View on Map'}
+          </button>
+        </div>
+
+        {/* Autocomplete dropdown */}
+        {showSuggestions && suggestions.length > 0 && (
+          <ul className="address-suggestions-list">
+            {suggestions.map((s, i) => (
+              <li key={i} onMouseDown={() => handleSelectSuggestion(s)}>
+                <i className="fas fa-map-marker-alt"></i>
+                <span>{s.label}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* ✅ Map preview — always rendered when mapVisible, never unmounted after first mount */}
+      {mapVisible && (
+        <div className="address-map-preview-wrap">
+          <div className="address-map-preview-header">
+            <i className={geocoding ? 'fas fa-spinner fa-spin' : 'fas fa-map-marked-alt'}></i>
+            <span>
+              {geocoding
+                ? 'Locating on map…'
+                : statusText || 'Select an address suggestion or drag the pin'}
+            </span>
+          </div>
+          {/* ✅ mapRef container — must stay in DOM while map is visible */}
+          <div ref={mapRef} className="address-map-preview-container" />
+          <div className="address-map-preview-hint">
+            <i className="fas fa-hand-pointer"></i> Drag the 📍 pin to fine-tune your delivery location
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const Checkout = () => {
   const navigate  = useNavigate();
   const location  = useLocation();
@@ -23,7 +331,6 @@ const Checkout = () => {
   const collectionProducts = useCollectionProducts() || [];
   const regularProducts    = useProducts() || [];
   const preOrderProducts   = usePreOrderProducts() || [];
-  // Merge all sources and deduplicate by _id
   const allProductsMap = new Map();
   [...collectionProducts, ...regularProducts, ...preOrderProducts].forEach(p => {
     allProductsMap.set(p._id?.toString(), p);
@@ -56,6 +363,7 @@ const Checkout = () => {
   });
   const [savedContact, setSavedContact] = useState({ fullName: '', email: '', phone: '' });
   const [savedAddress, setSavedAddress] = useState({ address: '', city: '', zipCode: '' });
+  const [addressCoords, setAddressCoords] = useState(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -151,6 +459,15 @@ const Checkout = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  const handleAddressChange = (val) => {
+    setFormData(prev => ({ ...prev, address: val }));
+  };
+
+  const handleAddressSelect = ({ address, lat, lng }) => {
+    setFormData(prev => ({ ...prev, address }));
+    setAddressCoords({ lat, lng });
+  };
+
   const isContactComplete = () =>
     savedContact.fullName.trim() && savedContact.email.trim() &&
     savedContact.phone.trim() && !validatePhone(savedContact.phone);
@@ -200,43 +517,27 @@ const Checkout = () => {
   // ── Submit ────────────────────────────────────────────────────────
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('🟡 SUBMIT FIRED | isFormReady:', isFormReady(), '| cartItems:', cartItems.length);
-
     if (!isFormReady()) {
-      console.log('❌ Form not ready — contact:', isContactComplete(), '| address:', isAddressComplete());
       showNotification('Please fill in and save all required fields', 'error');
       if (!isContactComplete()) setIsEditingContact(true);
       if (!isAddressComplete()) setIsEditingAddress(true);
       return;
     }
-
-    // Wait for products to load if still empty
     if (products.length === 0) {
       setLoading(false);
       showNotification('Products are still loading. Please wait a moment and try again.', 'warning');
       return;
     }
-
     for (const item of cartItems) {
       const product = getProductById(item.productId || item.id);
-      console.log('📦 product check:', item.productId || item.id, '→', product?.name, '| stock:', product?.stock, '| qty:', getQty(item));
-      if (!product) {
-        // Product might be a preorder or deleted — skip stock check, don't block
-        console.warn('⚠️ Product not found in local list, skipping stock check:', item.productId || item.id);
-        continue;
-      }
+      if (!product) continue;
       if (product.stock !== undefined && product.stock < getQty(item)) {
-        console.log('❌ Insufficient stock');
         showNotification(`Insufficient stock for ${product.name}. Available: ${product.stock}`, 'error');
         return;
       }
     }
-
-    console.log('🟢 All checks passed — proceeding to createOrder...');
     setLoading(true);
-
     try {
-      // Deduct stock
       for (const item of cartItems) {
         const product = getProductById(item.productId || item.id);
         if (product) await updateProduct({ id: product._id, stock: product.stock - getQty(item) });
@@ -265,7 +566,6 @@ const Checkout = () => {
 
       const promoItem = cartItems.find(i => i.promoCode);
 
-      console.log('📝 Calling createOrder...');
       await createOrder({
         orderId,
         email:           savedContact.email,
@@ -289,8 +589,6 @@ const Checkout = () => {
         paymentStatus:   'pending',
       });
 
-      console.log('✅ createOrder done — calling createPaymentLink...');
-      // Create PayMongo payment link
       let paymentLinkUrl;
       try {
         const result = await createPaymentLink({
@@ -302,7 +600,6 @@ const Checkout = () => {
           customerPhone: savedContact.phone,
         });
         paymentLinkUrl = result.paymentLinkUrl;
-        console.log('✅ PayMongo link created:', paymentLinkUrl);
       } catch (payError) {
         console.error('PayMongo error:', payError);
         setLoading(false);
@@ -340,7 +637,6 @@ const Checkout = () => {
   const nonPromoCartItems = cartItems.filter(i => !i.promoCode);
   const totalPcs          = getTotalPcs();
 
-  // ── Render one summary item ───────────────────────────────────────
   const renderSummaryItem = (item) => {
     const product = getProductById(item.productId || item.id);
     if (!product) return null;
@@ -380,7 +676,6 @@ const Checkout = () => {
             <p className="item-error">⚠️ Only {product.stock} in stock</p>
           )}
         </div>
-
         <div className="item-price-col">
           <div className={`item-price${hasPromo ? ' item-price-promo' : ''}`}>
             ₱{itemTotal.toLocaleString()}
@@ -398,9 +693,6 @@ const Checkout = () => {
   return (
     <div className="checkout-page">
       <div className="checkout-container">
-
-        {/* ── checkout-header REMOVED ── */}
-
         <form onSubmit={handleSubmit} className="checkout-form">
           <div className="checkout-grid">
             <div className="checkout-details">
@@ -492,6 +784,7 @@ const Checkout = () => {
                     </button>
                   )}
                 </div>
+
                 {!isEditingAddress ? (
                   <div className="info-display-grid">
                     <div className="info-display-item info-display-full">
@@ -509,9 +802,14 @@ const Checkout = () => {
                   </div>
                 ) : (
                   <div className="form-grid">
+                    {/* ✅ STREET ADDRESS — with map + autocomplete */}
                     <div className="form-group full-width">
                       <label>Street Address</label>
-                      <input type="text" name="address" value={formData.address} onChange={handleChange} placeholder="123 Main Street, Barangay" />
+                      <AddressMapPicker
+                        value={formData.address}
+                        onChange={handleAddressChange}
+                        onSelectSuggestion={handleAddressSelect}
+                      />
                     </div>
                     <div className="form-group">
                       <label>City</label>
@@ -594,7 +892,6 @@ const Checkout = () => {
             <div className="order-summary">
               <div className="summary-card">
                 <h2>Order Summary</h2>
-
                 <div className="summary-items">
                   {nonPromoCartItems.length > 0 && (
                     <>

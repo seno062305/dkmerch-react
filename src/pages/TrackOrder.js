@@ -22,13 +22,12 @@ const RiderMap = ({ orderId, riderName }) => {
   const mapInstanceRef    = useRef(null);
   const markerRef         = useRef(null);
   const accuracyCircleRef = useRef(null);
-  const pendingLocRef     = useRef(null); // buffer location if map not ready yet
+  const pendingLocRef     = useRef(null);
   const [mapReady, setMapReady]           = useState(false);
   const [mapError, setMapError]           = useState(null);
   const [leafletLoaded, setLeafletLoaded] = useState(!!window.L);
-  const [, forceUpdate] = useState(0); // re-render status bar every 10s
+  const [, forceUpdate] = useState(0);
 
-  // ── Convex live query — auto-updates whenever rider sends new location ──
   const locationData = useQuery(
     api.riders.getRiderLocation,
     orderId ? { orderId } : 'skip'
@@ -44,10 +43,15 @@ const RiderMap = ({ orderId, riderName }) => {
     return () => clearInterval(interval);
   }, []);
 
-  // ── Load Leaflet CSS + JS once ──
+  // ✅ FIX: Reset pending buffer when orderId changes
+  useEffect(() => {
+    if (!orderId) return;
+    pendingLocRef.current = null;
+  }, [orderId]);
+
+  // Load Leaflet CSS + JS once
   useEffect(() => {
     if (window.L) { setLeafletLoaded(true); return; }
-
     if (!document.getElementById('leaflet-css')) {
       const link = document.createElement('link');
       link.id   = 'leaflet-css';
@@ -55,14 +59,12 @@ const RiderMap = ({ orderId, riderName }) => {
       link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
       document.head.appendChild(link);
     }
-
     const existingScript = document.getElementById('leaflet-js');
     if (existingScript) {
       if (window.L) { setLeafletLoaded(true); return; }
       existingScript.addEventListener('load', () => setLeafletLoaded(true));
       return;
     }
-
     const script   = document.createElement('script');
     script.id      = 'leaflet-js';
     script.src     = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
@@ -71,7 +73,7 @@ const RiderMap = ({ orderId, riderName }) => {
     document.head.appendChild(script);
   }, []);
 
-  // ── Helper: apply location data to map marker + accuracy circle ──
+  // Apply location data to map marker + accuracy circle
   const applyLocation = useCallback((data) => {
     if (!data?.lat || !data?.lng) return;
     if (!mapInstanceRef.current || !markerRef.current || !window.L) return;
@@ -91,7 +93,6 @@ const RiderMap = ({ orderId, riderName }) => {
       </div>`
     );
 
-    // Redraw accuracy circle
     if (accuracyCircleRef.current) {
       try { map.removeLayer(accuracyCircleRef.current); } catch {}
     }
@@ -106,23 +107,29 @@ const RiderMap = ({ orderId, riderName }) => {
       }).addTo(map);
     }
 
-    // Pan to rider; zoom in if too far out
-    map.panTo([lat, lng], { animate: true, duration: 0.6 });
-    if (map.getZoom() < 15) map.setView([lat, lng], 15, { animate: true });
+    // ✅ FIX: Use flyTo for smooth zoom, always zoom to street level
+    const targetZoom = Math.max(map.getZoom(), 16);
+    map.flyTo([lat, lng], targetZoom, { animate: true, duration: 1.2 });
   }, [riderName]);
 
-  // ── Init map once Leaflet is ready ──
+  // Init map once Leaflet is ready
   useEffect(() => {
     if (!leafletLoaded || mapInstanceRef.current || !mapRef.current) return;
 
     try {
       const L = window.L;
 
+      // ✅ FIX: start at zoom 15, zoom controls at bottom-right
       const map = L.map(mapRef.current, {
         zoomControl       : true,
         attributionControl: true,
-        tap               : false, // fix iOS double-tap bug
-      }).setView([14.5995, 120.9842], 12); // default: Manila
+        tap               : false,
+        scrollWheelZoom   : true,
+        doubleClickZoom   : true,
+      }).setView([14.5995, 120.9842], 15);
+
+      // ✅ Move zoom control to bottom-right for mobile usability
+      map.zoomControl.setPosition('bottomright');
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors',
@@ -154,10 +161,8 @@ const RiderMap = ({ orderId, riderName }) => {
       markerRef.current      = marker;
       setMapReady(true);
 
-      // ✅ Fix: tiles don't render properly inside modals until size is known
       setTimeout(() => map.invalidateSize(), 300);
 
-      // ✅ Fix: if location data arrived before map was ready, apply it now
       if (pendingLocRef.current) {
         applyLocation(pendingLocRef.current);
         pendingLocRef.current = null;
@@ -169,12 +174,11 @@ const RiderMap = ({ orderId, riderName }) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leafletLoaded]);
 
-  // ── React to Convex location updates (live, auto-fires on every change) ──
+  // React to Convex location updates
   useEffect(() => {
     if (!locationData?.lat || !locationData?.lng) return;
 
     if (!mapReady || !mapInstanceRef.current) {
-      // Map not ready yet — buffer and apply after init
       pendingLocRef.current = locationData;
       return;
     }
@@ -182,7 +186,7 @@ const RiderMap = ({ orderId, riderName }) => {
     applyLocation(locationData);
   }, [locationData, mapReady, applyLocation]);
 
-  // ── Cleanup on unmount ──
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (mapInstanceRef.current) {
@@ -195,7 +199,6 @@ const RiderMap = ({ orderId, riderName }) => {
     };
   }, []);
 
-  // ── Status bar ──
   const statusClass = !locationData          ? 'status-waiting'
     : !locationData.isTracking               ? 'status-stopped'
     : isStale                                ? 'status-stale'
@@ -240,7 +243,6 @@ const RiderMap = ({ orderId, riderName }) => {
         </div>
       )}
 
-      {/* Overlay when rider hasn't shared yet */}
       {!locationData && (
         <div className="rider-map-waiting-overlay">
           <div className="rider-map-waiting-inner">
@@ -283,7 +285,6 @@ const TrackOrder = () => {
     ? allAvailableOrders.find(o => o._id === selectedOrderId)
     : null;
 
-  // Auto-open order from URL param
   useEffect(() => {
     if (!orderIdParam || selectedOrderId) return;
     const found = [...orders, ...emailOrders].find(o => o.orderId === orderIdParam);
@@ -333,10 +334,14 @@ const TrackOrder = () => {
     return s === 'cancelled';
   };
 
-  // ✅ Handles ALL status formats: "out_for_delivery", "Out for Delivery", etc.
+  // ✅ FIX: More robust status check — handles all formats
   const isOutForDeliveryStatus = (order) => {
-    const s = (order.orderStatus || order.status || '').toLowerCase().replace(/\s+/g, '_');
-    return s === 'out_for_delivery';
+    const checkStr = (val) => {
+      if (!val) return false;
+      const s = val.toLowerCase().replace(/[\s_-]+/g, '_');
+      return s === 'out_for_delivery';
+    };
+    return checkStr(order.orderStatus) || checkStr(order.status);
   };
 
   const getTimelineSteps = (order) => {
@@ -811,7 +816,6 @@ const TrackingModal = ({
     return () => { document.body.style.overflow = ''; };
   }, []);
 
-  // Keep local OTP in sync when Convex order updates
   useEffect(() => {
     if (order.deliveryOtp) setLocalOtp(order.deliveryOtp);
   }, [order.deliveryOtp]);
@@ -907,7 +911,7 @@ const TrackingModal = ({
             </div>
           )}
 
-          {/* ✅ LIVE MAP */}
+          {/* ✅ LIVE MAP — shows only when out_for_delivery */}
           {isOutForDelivery && (
             <div className="rider-map-section">
               <div className="rider-map-section-title">
