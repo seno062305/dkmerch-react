@@ -51,16 +51,17 @@ export const createOrder = mutation({
     total: v.number(),
     subtotal: v.optional(v.number()),
     shippingFee: v.optional(v.number()),
-    // ── PROMO FIELDS ──
     promoCode:       v.optional(v.string()),
     promoName:       v.optional(v.string()),
     discountAmount:  v.optional(v.number()),
     discountPercent: v.optional(v.number()),
     finalTotal:      v.optional(v.number()),
-    // ──────────────────
     status: v.string(),
     orderStatus: v.optional(v.string()),
     shippingAddress: v.optional(v.string()),
+    // ✅ NEW: exact pin lat/lng from checkout map
+    addressLat: v.optional(v.number()),
+    addressLng: v.optional(v.number()),
     paymentMethod: v.string(),
     notes: v.optional(v.string()),
     paymentStatus: v.optional(v.string()),
@@ -112,6 +113,9 @@ export const updateOrderFields = mutation({
     deliveryConfirmedAt: v.optional(v.string()),
     cancelReason: v.optional(v.string()),
     shippingAddress: v.optional(v.string()),
+    // ✅ NEW: allow updating coords if customer edits address later
+    addressLat: v.optional(v.number()),
+    addressLng: v.optional(v.number()),
     notes: v.optional(v.string()),
     paymentStatus: v.optional(v.string()),
     paymentLinkId: v.optional(v.string()),
@@ -163,21 +167,16 @@ export const deleteOrder = mutation({
   },
 });
 
-// ── Add this at the bottom of convex/orders.ts ──
-
 export const getServerTime = query({
   handler: async () => {
     return { now: Date.now() };
   },
 });
 
-// ── APPEND THIS TO THE BOTTOM OF convex/orders.ts ──
-// Saves the actual payment source (gcash/paymaya/card) after PayMongo confirms
-
 export const updatePaymentSource = mutation({
   args: {
     orderId:       v.string(),
-    paymentSource: v.string(), // "gcash" | "paymaya" | "card" | etc.
+    paymentSource: v.string(),
     paymentStatus: v.optional(v.string()),
   },
   handler: async ({ db }, { orderId, paymentSource, paymentStatus }) => {

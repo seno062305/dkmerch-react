@@ -16,12 +16,11 @@ const calcShipping = (totalPcs) => {
 };
 
 // ─── ADDRESS MAP + AUTOCOMPLETE ──────────────────────────────────────────────
-const AddressMapPicker = ({ value, onChange, onSelectSuggestion }) => {
+const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) => {
   const mapRef         = useRef(null);
   const mapInstanceRef = useRef(null);
   const markerRef      = useRef(null);
   const debounceRef    = useRef(null);
-  // ✅ Store pending geocode target so we can run it after map finishes init
   const pendingGeocode = useRef(null);
 
   const [suggestions, setSuggestions]         = useState([]);
@@ -55,10 +54,9 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion }) => {
     document.head.appendChild(script);
   }, []);
 
-  // ── Geocode helper — always uses current map/marker refs ──
+  // ── Geocode helper ──
   const geocodeAddress = useCallback(async (addr) => {
     if (!addr) return;
-    // Wait for map to be ready
     if (!mapInstanceRef.current || !markerRef.current) {
       pendingGeocode.current = addr;
       return;
@@ -75,7 +73,6 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion }) => {
       if (data?.length > 0) {
         const lat = parseFloat(data[0].lat);
         const lng = parseFloat(data[0].lon);
-        // ✅ Update marker and fly map to the geocoded position
         if (markerRef.current && mapInstanceRef.current) {
           markerRef.current.setLatLng([lat, lng]);
           markerRef.current.getPopup()?.setContent(
@@ -83,7 +80,6 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion }) => {
           );
           markerRef.current.openPopup();
           mapInstanceRef.current.flyTo([lat, lng], 17, { animate: true, duration: 0.8 });
-          // Notify parent with coords
           onSelectSuggestion({ address: addr, lat, lng });
         }
         setStatusText('Pin your exact location — drag the marker to adjust');
@@ -96,18 +92,23 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion }) => {
     setGeocoding(false);
   }, [onSelectSuggestion]);
 
-  // ── Init map — runs when mapVisible becomes true AND leaflet is ready ──
+  // ── Init map ──
   useEffect(() => {
-    // Don't init if: not visible, already inited, container not in DOM, or Leaflet not loaded
     if (!mapVisible || mapInstanceRef.current || !mapRef.current || !leafletReady) return;
 
     try {
-      const L   = window.L;
+      const L = window.L;
+
+      // ✅ If customer has saved coords from a previous order, use those as start position
+      const startLat = savedCoords?.lat ?? 14.5995;
+      const startLng = savedCoords?.lng ?? 120.9842;
+      const startZoom = savedCoords ? 17 : 13;
+
       const map = L.map(mapRef.current, {
         zoomControl    : true,
         tap            : false,
-        scrollWheelZoom: false, // prevent accidental scroll on mobile
-      }).setView([14.5995, 120.9842], 13);
+        scrollWheelZoom: false,
+      }).setView([startLat, startLng], startZoom);
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors',
@@ -125,11 +126,23 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion }) => {
         iconSize: [36, 36], iconAnchor: [18, 36], popupAnchor: [0, -40],
       });
 
-      const marker = L.marker([14.5995, 120.9842], { icon, draggable: true })
+      const marker = L.marker([startLat, startLng], { icon, draggable: true })
         .addTo(map)
-        .bindPopup('<strong>📍 Delivery Address</strong>');
+        .bindPopup(
+          savedCoords
+            ? `<div style="font-size:12px;max-width:200px"><strong>📍 Last Used Location</strong><br><small>${value || 'Your saved address'}</small></div>`
+            : '<strong>📍 Delivery Address</strong>'
+        );
 
-      // ✅ When marker is dragged — reverse geocode and update address
+      // ✅ If saved coords exist, open the popup immediately so customer sees it
+      if (savedCoords) {
+        marker.openPopup();
+        // Also notify parent right away so coords are set even before dragging
+        onSelectSuggestion({ address: value || '', lat: startLat, lng: startLng });
+        setStatusText('📍 Showing your last saved location — drag the pin to adjust');
+      }
+
+      // ── When marker is dragged — reverse geocode and update address ──
       marker.on('dragend', async () => {
         const { lat, lng } = marker.getLatLng();
         setGeocoding(true);
@@ -157,18 +170,16 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion }) => {
       mapInstanceRef.current = map;
       markerRef.current      = marker;
 
-      // ✅ invalidateSize after CSS transition finishes (map was hidden before)
       setTimeout(() => {
         map.invalidateSize();
-        // ✅ If there was a pending geocode (user selected address before map opened), run it now
         if (pendingGeocode.current) {
           const addr = pendingGeocode.current;
           pendingGeocode.current = null;
           geocodeAddress(addr);
-        } else if (value) {
-          // ✅ If there's already a value in the input, auto-geocode it
+        } else if (!savedCoords && value) {
+          // Only auto-geocode if no saved coords (saved coords are already placed)
           geocodeAddress(value);
-        } else {
+        } else if (!savedCoords) {
           setStatusText('Select an address suggestion or drag the pin to set location');
         }
       }, 350);
@@ -176,7 +187,7 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion }) => {
       console.error('Map init error:', err);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapVisible, leafletReady]); // ✅ Only re-init when visibility or readiness changes
+  }, [mapVisible, leafletReady]);
 
   // ── Cleanup on unmount ──
   useEffect(() => {
@@ -217,22 +228,16 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion }) => {
     debounceRef.current = setTimeout(() => fetchSuggestions(val), 500);
   };
 
-  // ✅ When user picks a suggestion: update input, show map, then geocode/pin immediately
   const handleSelectSuggestion = (s) => {
     onChange(s.address);
     setSuggestions([]);
     setShowSuggestions(false);
 
     if (!mapVisible) {
-      // Map isn't open yet — store pending geocode, then open map
-      // The map init useEffect will pick up pendingGeocode.current after init
       pendingGeocode.current = s.address;
       setMapVisible(true);
     } else {
-      // Map is already open — geocode directly
-      // But if map just initialized with coords from suggestion, use them directly
       if (mapInstanceRef.current && markerRef.current) {
-        // ✅ Use the lat/lng directly from suggestion — no extra fetch needed!
         markerRef.current.setLatLng([s.lat, s.lng]);
         markerRef.current.getPopup()?.setContent(
           `<div style="font-size:12px;max-width:200px"><strong>📍 Delivery Address</strong><br><small>${s.address}</small></div>`
@@ -247,13 +252,11 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion }) => {
     }
   };
 
-  // ✅ Handle toggle map button — invalidate size when re-opening
   const handleToggleMap = () => {
     if (mapVisible) {
       setMapVisible(false);
     } else {
       setMapVisible(true);
-      // If map was already initialized (just hidden via CSS), invalidate size
       setTimeout(() => {
         if (mapInstanceRef.current) {
           mapInstanceRef.current.invalidateSize();
@@ -264,7 +267,6 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion }) => {
 
   return (
     <div className="address-map-picker">
-      {/* Input + toggle button */}
       <div className="address-autocomplete-wrap" style={{ position: 'relative' }}>
         <div className="address-input-row">
           <input
@@ -288,7 +290,17 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion }) => {
           </button>
         </div>
 
-        {/* Autocomplete dropdown */}
+        {/* ✅ Show saved location hint if customer has previous coords */}
+        {savedCoords && !mapVisible && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '6px',
+            marginTop: '6px', fontSize: '12px', color: '#2563eb', fontWeight: 600,
+          }}>
+            <i className="fas fa-map-marker-alt" style={{ color: '#fc1268' }}></i>
+            Saved pin location available — click "View on Map" to see it
+          </div>
+        )}
+
         {showSuggestions && suggestions.length > 0 && (
           <ul className="address-suggestions-list">
             {suggestions.map((s, i) => (
@@ -301,7 +313,6 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion }) => {
         )}
       </div>
 
-      {/* ✅ Map preview — always rendered when mapVisible, never unmounted after first mount */}
       {mapVisible && (
         <div className="address-map-preview-wrap">
           <div className="address-map-preview-header">
@@ -312,7 +323,6 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion }) => {
                 : statusText || 'Select an address suggestion or drag the pin'}
             </span>
           </div>
-          {/* ✅ mapRef container — must stay in DOM while map is visible */}
           <div ref={mapRef} className="address-map-preview-container" />
           <div className="address-map-preview-hint">
             <i className="fas fa-hand-pointer"></i> Drag the 📍 pin to fine-tune your delivery location
@@ -365,6 +375,9 @@ const Checkout = () => {
   const [savedAddress, setSavedAddress] = useState({ address: '', city: '', zipCode: '' });
   const [addressCoords, setAddressCoords] = useState(null);
 
+  // ✅ Load saved coords from profile (from last order's pin location)
+  const [savedCoords, setSavedCoords] = useState(null);
+
   useEffect(() => {
     if (!isAuthenticated) {
       showNotification('Please login to checkout', 'warning');
@@ -386,6 +399,13 @@ const Checkout = () => {
     setSavedAddress({ address: init.address, city: init.city, zipCode: init.zipCode });
     setIsEditingContact(!init.fullName || !init.email || !init.phone);
     setIsEditingAddress(!init.address  || !init.city  || !init.zipCode);
+
+    // ✅ Load saved pin coords from profile if available
+    if (profile?.addressLat && profile?.addressLng) {
+      const coords = { lat: profile.addressLat, lng: profile.addressLng };
+      setSavedCoords(coords);
+      setAddressCoords(coords);
+    }
   }, [isAuthenticated, navigate, showNotification, user, savedProfile]);
 
   useEffect(() => {
@@ -395,7 +415,6 @@ const Checkout = () => {
     }
   }, [cartItems.length, products.length]);
 
-  // ── Helpers ──────────────────────────────────────────────────────
   const getProductById = (id) => products.find(p => p._id?.toString() === id?.toString() || p.id === id);
   const getQty         = (item) => item.qty ?? item.quantity ?? 1;
   const getTotalPcs    = () => cartItems.reduce((sum, item) => sum + getQty(item), 0);
@@ -426,7 +445,6 @@ const Checkout = () => {
   const totalDiscount = calculateTotalDiscount();
   const finalTotal    = subtotal + shippingFee;
 
-  // ── Validation ────────────────────────────────────────────────────
   const validatePhone = (phone) => {
     const cleaned = phone.replace(/[\s-]/g, '');
     if (!/^\d*$/.test(cleaned)) return 'Phone number must contain only numbers';
@@ -463,6 +481,7 @@ const Checkout = () => {
     setFormData(prev => ({ ...prev, address: val }));
   };
 
+  // ✅ When customer pins/drags on map, save the coords
   const handleAddressSelect = ({ address, lat, lng }) => {
     setFormData(prev => ({ ...prev, address }));
     setAddressCoords({ lat, lng });
@@ -505,10 +524,12 @@ const Checkout = () => {
     setSavedAddress({ address: formData.address, city: formData.city, zipCode: formData.zipCode });
     setIsEditingAddress(false);
     try {
+      // ✅ Save coords to profile too so next order pre-loads the map pin
       await saveProfile({
         userId: user?._id || user?.id,
         fullName: savedContact.fullName, email: savedContact.email, phone: savedContact.phone,
         address: formData.address, city: formData.city, zipCode: formData.zipCode,
+        ...(addressCoords ? { addressLat: addressCoords.lat, addressLng: addressCoords.lng } : {}),
       });
       showNotification('Shipping address saved!', 'success');
     } catch { showNotification('Address saved locally', 'success'); }
@@ -584,10 +605,28 @@ const Checkout = () => {
         status:          'Pending Payment',
         orderStatus:     'pending',
         shippingAddress: `${savedAddress.address}, ${savedAddress.city} ${savedAddress.zipCode}`,
+        // ✅ Save the exact pin coordinates with the order
+        ...(addressCoords ? {
+          addressLat: addressCoords.lat,
+          addressLng: addressCoords.lng,
+        } : {}),
         paymentMethod:   'paymongo',
         notes:           formData.notes || '',
         paymentStatus:   'pending',
       });
+
+      // ✅ Also persist the coords to user profile for next order pre-fill
+      if (addressCoords) {
+        try {
+          await saveProfile({
+            userId: user?._id || user?.id,
+            fullName: savedContact.fullName, email: savedContact.email, phone: savedContact.phone,
+            address: savedAddress.address, city: savedAddress.city, zipCode: savedAddress.zipCode,
+            addressLat: addressCoords.lat,
+            addressLng: addressCoords.lng,
+          });
+        } catch { /* non-critical */ }
+      }
 
       let paymentLinkUrl;
       try {
@@ -632,7 +671,6 @@ const Checkout = () => {
     }
   };
 
-  // ── Grouped cart items ────────────────────────────────────────────
   const promoCartItems    = cartItems.filter(i => !!i.promoCode);
   const nonPromoCartItems = cartItems.filter(i => !i.promoCode);
   const totalPcs          = getTotalPcs();
@@ -799,16 +837,29 @@ const Checkout = () => {
                       <span className="info-label"><i className="fas fa-map-pin"></i> Zip Code</span>
                       <span className="info-value">{savedAddress.zipCode || <span className="info-missing">Not set</span>}</span>
                     </div>
+                    {/* ✅ Show saved pin indicator in display mode */}
+                    {savedCoords && (
+                      <div className="info-display-item info-display-full" style={{ background: '#f0fdf4', borderColor: '#86efac' }}>
+                        <span className="info-label" style={{ color: '#16a34a' }}>
+                          <i className="fas fa-map-marker-alt"></i> Map Pin
+                        </span>
+                        <span className="info-value" style={{ fontSize: '13px', color: '#166534' }}>
+                          <i className="fas fa-check-circle" style={{ color: '#16a34a', marginRight: '6px' }}></i>
+                          Exact location saved — rider will navigate to your pin
+                        </span>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="form-grid">
-                    {/* ✅ STREET ADDRESS — with map + autocomplete */}
                     <div className="form-group full-width">
                       <label>Street Address</label>
+                      {/* ✅ Pass savedCoords so map opens on the customer's last pinned location */}
                       <AddressMapPicker
                         value={formData.address}
                         onChange={handleAddressChange}
                         onSelectSuggestion={handleAddressSelect}
+                        savedCoords={savedCoords}
                       />
                     </div>
                     <div className="form-group">

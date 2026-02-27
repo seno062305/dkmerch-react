@@ -17,6 +17,9 @@ export default defineSchema({
     address: v.optional(v.string()),
     city: v.optional(v.string()),
     zipCode: v.optional(v.string()),
+    // ✅ Saved map pin coords — pre-loads on next checkout
+    addressLat: v.optional(v.number()),
+    addressLng: v.optional(v.number()),
   })
     .index("by_email", ["email"])
     .index("by_username", ["username"]),
@@ -104,6 +107,9 @@ export default defineSchema({
     status: v.string(),
     orderStatus: v.optional(v.string()),
     shippingAddress: v.optional(v.string()),
+    // ✅ NEW: exact pin coordinates from customer's checkout map
+    addressLat: v.optional(v.number()),
+    addressLng: v.optional(v.number()),
     paymentMethod: v.string(),
     notes: v.optional(v.string()),
     riderId: v.optional(v.string()),
@@ -153,9 +159,8 @@ export default defineSchema({
     licenseNumber: v.optional(v.string()),
     password: v.optional(v.string()),
     name: v.optional(v.string()),
-    // ✅ Device session tracking — for multi-device login detection
-    activeSessionId: v.optional(v.string()),  // random UUID set on each login
-    activeDeviceAt:  v.optional(v.number()),  // Date.now() of last login
+    activeSessionId: v.optional(v.string()),
+    activeDeviceAt:  v.optional(v.number()),
   })
     .index("by_email", ["email"])
     .index("by_status", ["status"]),
@@ -196,7 +201,6 @@ export default defineSchema({
     .index("by_user_product", ["userId", "productId"])
     .index("by_product", ["productId"]),
 
-  // ✅ Real-time rider GPS locations
   riderLocations: defineTable({
     orderId: v.string(),
     riderEmail: v.string(),
@@ -208,7 +212,6 @@ export default defineSchema({
     speed: v.optional(v.number()),
     isTracking: v.boolean(),
     updatedAt: v.number(),
-    // ✅ NEW: which sessionId last updated this location (for device switch detection)
     sessionId: v.optional(v.string()),
   })
     .index("by_orderId", ["orderId"])

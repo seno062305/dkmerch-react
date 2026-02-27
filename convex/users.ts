@@ -52,6 +52,8 @@ export const getProfile = query({
         address: user.address || '',
         city: user.city || '',
         zipCode: user.zipCode || '',
+        addressLat: user.addressLat || null,
+        addressLng: user.addressLng || null,
       };
     } catch {}
     return null;
@@ -195,6 +197,9 @@ export const saveProfile = mutation({
     address: v.optional(v.string()),
     city: v.optional(v.string()),
     zipCode: v.optional(v.string()),
+    // ✅ NEW: saved map pin coords
+    addressLat: v.optional(v.number()),
+    addressLng: v.optional(v.number()),
   },
   handler: async ({ db }, { userId, ...fields }) => {
     try {
@@ -206,6 +211,9 @@ export const saveProfile = mutation({
       if (fields.address !== undefined) updates.address = fields.address;
       if (fields.city !== undefined) updates.city = fields.city;
       if (fields.zipCode !== undefined) updates.zipCode = fields.zipCode;
+      // ✅ NEW: save map pin coords
+      if (fields.addressLat !== undefined) updates.addressLat = fields.addressLat;
+      if (fields.addressLng !== undefined) updates.addressLng = fields.addressLng;
       await db.patch(userId as any, updates);
       return { success: true };
     } catch {

@@ -118,11 +118,31 @@ const GPS = {
 // ─────────────────────────────────────────────────────────────────────────────
 // FULLSCREEN MAP MODAL
 // ─────────────────────────────────────────────────────────────────────────────
-const FullscreenMapModal = ({ address, customerName, onClose }) => {
+// ─── OSRM route helper — fetches driving route between two points ────────────
+const fetchRoute = async (fromLat, fromLng, toLat, toLng) => {
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}?overview=full&geometries=geojson`;
+    const res  = await fetch(url);
+    const data = await res.json();
+    if (data.code === 'Ok' && data.routes?.length > 0) {
+      return data.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+    }
+  } catch { /* fall through */ }
+  return null;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FULLSCREEN MAP MODAL
+// ─────────────────────────────────────────────────────────────────────────────
+// coords = { lat, lng } — customer's saved pin (from order.addressLat/addressLng)
+// riderCoords = { lat, lng } — rider's current GPS position for route drawing
+const FullscreenMapModal = ({ address, customerName, coords, riderCoords, onClose }) => {
   const mapRef         = useRef(null);
   const mapInstanceRef = useRef(null);
   const unmountedRef   = useRef(false);
-  const [geocoding, setGeocoding] = useState(true);
+  const routeLayerRef  = useRef(null);
+  const riderMarkerRef = useRef(null);
+  const [geocoding, setGeocoding] = useState(!coords); // no geocoding if we have coords
 
   useEffect(() => {
     document.body.style.overflow = 'hidden';
@@ -140,11 +160,15 @@ const FullscreenMapModal = ({ address, customerName, onClose }) => {
       if (!window.L || !mapRef.current || unmountedRef.current) return;
       try {
         const L   = window.L;
+        // Start at customer pin coords if available, else Manila default
+        const startLat = coords?.lat ?? 14.5995;
+        const startLng = coords?.lng ?? 120.9842;
+
         const map = L.map(mapRef.current, {
           zoomControl     : false,
           tap             : false,
           scrollWheelZoom : true,
-        }).setView([14.5995, 120.9842], 14);
+        }).setView([startLat, startLng], coords ? 16 : 14);
 
         L.control.zoom({ position: 'bottomright' }).addTo(map);
 
@@ -153,7 +177,8 @@ const FullscreenMapModal = ({ address, customerName, onClose }) => {
           maxZoom: 19,
         }).addTo(map);
 
-        const icon = L.divIcon({
+        // ── Customer pin (blue house) ──
+        const customerIcon = L.divIcon({
           className: '',
           html: `<div style="
             background:#3b82f6;color:white;border-radius:50% 50% 50% 0;
@@ -166,12 +191,13 @@ const FullscreenMapModal = ({ address, customerName, onClose }) => {
         });
 
         const popupLabel = customerName ? `${customerName}'s Location` : 'Customer Location';
-        const marker = L.marker([14.5995, 120.9842], { icon })
+        const customerMarker = L.marker([startLat, startLng], { icon: customerIcon })
           .addTo(map)
           .bindPopup(`<div style="font-size:13px;max-width:220px">
             <strong>📍 ${popupLabel}</strong><br>
             <small>${address}</small>
-          </div>`);
+          </div>`)
+          .openPopup();
 
         mapInstanceRef.current = map;
 
@@ -181,32 +207,87 @@ const FullscreenMapModal = ({ address, customerName, onClose }) => {
           }
         }, 350);
 
-        const encoded = encodeURIComponent(address + ', Philippines');
-        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&limit=1`, {
-          headers: { 'Accept-Language': 'en' }
-        })
-          .then(r => r.json())
-          .then(data => {
-            if (unmountedRef.current || !mapInstanceRef.current) return;
-            if (data?.length > 0) {
-              const lat = parseFloat(data[0].lat);
-              const lng = parseFloat(data[0].lon);
-              try {
-                marker.setLatLng([lat, lng]);
-                marker.getPopup()?.setContent(`
-                  <div style="font-size:13px;max-width:220px">
-                    <strong>📍 ${popupLabel}</strong><br>
-                    <small>${address}</small>
-                  </div>`);
-                marker.openPopup();
-                map.flyTo([lat, lng], 17, { animate: true, duration: 1.2 });
-              } catch {}
-            }
-            if (!unmountedRef.current) setGeocoding(false);
-          })
-          .catch(() => {
-            if (!unmountedRef.current) setGeocoding(false);
+        // ── Rider marker (if GPS available) ──
+        if (riderCoords?.lat && riderCoords?.lng) {
+          const riderIcon = L.divIcon({
+            className: '',
+            html: `<div style="
+              background:#fc1268;color:white;border-radius:50%;
+              width:40px;height:40px;display:flex;align-items:center;
+              justify-content:center;font-size:18px;
+              box-shadow:0 4px 14px rgba(252,18,104,0.55);border:3px solid white;">
+              🛵
+            </div>`,
+            iconSize: [40, 40], iconAnchor: [20, 20], popupAnchor: [0, -24],
           });
+          const rMrk = L.marker([riderCoords.lat, riderCoords.lng], { icon: riderIcon })
+            .addTo(map)
+            .bindPopup('<strong>🛵 Your Location</strong>');
+          riderMarkerRef.current = rMrk;
+
+          // ── Fit map to show both rider and customer ──
+          map.fitBounds([
+            [riderCoords.lat, riderCoords.lng],
+            [startLat, startLng],
+          ], { padding: [40, 40] });
+
+          // ── Draw OSRM route line ──
+          fetchRoute(riderCoords.lat, riderCoords.lng, startLat, startLng).then(latlngs => {
+            if (unmountedRef.current || !mapInstanceRef.current || !latlngs) return;
+            try {
+              if (routeLayerRef.current) {
+                try { mapInstanceRef.current.removeLayer(routeLayerRef.current); } catch {}
+              }
+              routeLayerRef.current = L.polyline(latlngs, {
+                color: '#fc1268',
+                weight: 5,
+                opacity: 0.85,
+                lineJoin: 'round',
+                lineCap: 'round',
+                dashArray: null,
+              }).addTo(mapInstanceRef.current);
+              // Re-fit after route drawn
+              mapInstanceRef.current.fitBounds(routeLayerRef.current.getBounds(), { padding: [40, 40] });
+            } catch {}
+          });
+        }
+
+        // ── If no saved coords, geocode the address text ──
+        if (!coords) {
+          const encoded = encodeURIComponent(address + ', Philippines');
+          fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&limit=1`, {
+            headers: { 'Accept-Language': 'en' }
+          })
+            .then(r => r.json())
+            .then(data => {
+              if (unmountedRef.current || !mapInstanceRef.current) return;
+              if (data?.length > 0) {
+                const lat = parseFloat(data[0].lat);
+                const lng = parseFloat(data[0].lon);
+                try {
+                  customerMarker.setLatLng([lat, lng]);
+                  customerMarker.openPopup();
+                  map.flyTo([lat, lng], 17, { animate: true, duration: 1.2 });
+                  // Draw route with geocoded position
+                  if (riderCoords?.lat && riderCoords?.lng) {
+                    fetchRoute(riderCoords.lat, riderCoords.lng, lat, lng).then(latlngs => {
+                      if (unmountedRef.current || !mapInstanceRef.current || !latlngs) return;
+                      try {
+                        if (routeLayerRef.current) mapInstanceRef.current.removeLayer(routeLayerRef.current);
+                        routeLayerRef.current = L.polyline(latlngs, {
+                          color: '#fc1268', weight: 5, opacity: 0.85,
+                          lineJoin: 'round', lineCap: 'round',
+                        }).addTo(mapInstanceRef.current);
+                        mapInstanceRef.current.fitBounds(routeLayerRef.current.getBounds(), { padding: [40, 40] });
+                      } catch {}
+                    });
+                  }
+                } catch {}
+              }
+              if (!unmountedRef.current) setGeocoding(false);
+            })
+            .catch(() => { if (!unmountedRef.current) setGeocoding(false); });
+        }
       } catch (err) {
         console.error('FullscreenMap init error:', err);
         if (!unmountedRef.current) setGeocoding(false);
@@ -229,7 +310,7 @@ const FullscreenMapModal = ({ address, customerName, onClose }) => {
         mapInstanceRef.current = null;
       }
     };
-  }, [address, customerName]);
+  }, [address, customerName, coords, riderCoords]);
 
   return (
     <div className="fullscreen-map-overlay" onClick={onClose}>
@@ -259,7 +340,10 @@ const FullscreenMapModal = ({ address, customerName, onClose }) => {
         <div className="fullscreen-map-footer">
           <span><i className="fas fa-hand-pointer"></i> Pinch to zoom · Drag to pan</span>
           <span className="fullscreen-map-footer-right">
-            <i className="fas fa-search-plus"></i> Use +/− to zoom
+            {riderCoords
+              ? <><i className="fas fa-route" style={{ color: '#fc1268' }}></i> Route shown in pink</>
+              : <><i className="fas fa-search-plus"></i> Use +/− to zoom</>
+            }
           </span>
         </div>
       </div>
@@ -269,11 +353,17 @@ const FullscreenMapModal = ({ address, customerName, onClose }) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CUSTOMER MAP — inline preview in Deliver tab
+// Props:
+//   orderId     — to find order from allOrders
+//   allOrders   — full orders list
+//   riderCoords — { lat, lng } from GPS, for drawing route line
 // ─────────────────────────────────────────────────────────────────────────────
-const CustomerMap = ({ orderId, allOrders }) => {
+const CustomerMap = ({ orderId, allOrders, riderCoords }) => {
   const mapRef         = useRef(null);
   const mapInstanceRef = useRef(null);
   const markerRef      = useRef(null);
+  const routeLayerRef  = useRef(null);
+  const riderMarkerRef = useRef(null);
   const unmountedRef   = useRef(false);
   const [mapError, setMapError]             = useState(null);
   const [leafletLoaded, setLeafletLoaded]   = useState(!!window.L);
@@ -281,11 +371,14 @@ const CustomerMap = ({ orderId, allOrders }) => {
   const [addressText, setAddressText]       = useState('');
   const [showFullscreen, setShowFullscreen] = useState(false);
 
-  // ✅ FIX: Get order data accurately from allOrders (the actual Convex orders table)
-  // Check multiple possible field names for address and customer name
+  // ✅ Get order — use saved coords if available (exact pin from customer's checkout map)
   const order        = allOrders.find(o => o.orderId === orderId);
   const address      = order?.shippingAddress || order?.address || order?.deliveryAddress || '';
   const customerName = order?.customerName || order?.name || '';
+  // ✅ Saved pin coords from checkout — no geocoding needed if present
+  const savedCoords  = (order?.addressLat && order?.addressLng)
+    ? { lat: order.addressLat, lng: order.addressLng }
+    : null;
 
   // Load Leaflet once
   useEffect(() => {
@@ -315,13 +408,18 @@ const CustomerMap = ({ orderId, allOrders }) => {
   useEffect(() => {
     if (!leafletLoaded || mapInstanceRef.current || !mapRef.current) return;
     try {
-      const L   = window.L;
+      const L = window.L;
+      // ✅ Start at saved pin coords if available, else Manila center
+      const startLat = savedCoords?.lat ?? 14.5995;
+      const startLng = savedCoords?.lng ?? 120.9842;
+      const startZoom = savedCoords ? 16 : 14;
+
       const map = L.map(mapRef.current, {
         zoomControl     : false,
         tap             : false,
         scrollWheelZoom : false,
         dragging        : true,
-      }).setView([14.5995, 120.9842], 14);
+      }).setView([startLat, startLng], startZoom);
 
       L.control.zoom({ position: 'bottomright' }).addTo(map);
 
@@ -342,61 +440,136 @@ const CustomerMap = ({ orderId, allOrders }) => {
         iconSize: [36, 36], iconAnchor: [18, 36], popupAnchor: [0, -40],
       });
 
-      const marker = L.marker([14.5995, 120.9842], { icon: customerIcon })
+      const marker = L.marker([startLat, startLng], { icon: customerIcon })
         .addTo(map)
-        .bindPopup('<strong>📍 Customer Location</strong>');
+        .bindPopup(
+          savedCoords
+            ? `<div style="font-size:13px;max-width:200px"><strong>📍 ${customerName ? customerName + "'s Location" : 'Customer Location'}</strong><br><small>${address}</small></div>`
+            : '<strong>📍 Customer Location</strong>'
+        );
+
+      if (savedCoords) marker.openPopup();
 
       mapInstanceRef.current = map;
       markerRef.current      = marker;
-      setTimeout(() => map.invalidateSize(), 300);
+      setTimeout(() => {
+        if (!unmountedRef.current && mapInstanceRef.current) {
+          try { mapInstanceRef.current.invalidateSize(); } catch {}
+        }
+      }, 300);
     } catch { setMapError('Failed to initialize map.'); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leafletLoaded]);
 
-  // Geocode address
+  // ✅ Plot customer pin and draw route (coords-first, geocode only as fallback)
   useEffect(() => {
-    if (!address || !mapInstanceRef.current || !markerRef.current || !window.L) return;
-    setAddressText(address);
-    setGeocoding(true);
-    setMapError(null);
+    if (!mapInstanceRef.current || !markerRef.current || !window.L) return;
 
-    const encoded = encodeURIComponent(address + ', Philippines');
-    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&limit=1`, {
-      headers: { 'Accept-Language': 'en', 'User-Agent': 'DKMerch-RiderApp/1.0' }
-    })
-      .then(r => r.json())
-      .then(data => {
-        if (unmountedRef.current || !markerRef.current || !mapInstanceRef.current) return;
-        if (data?.length > 0) {
-          const lat = parseFloat(data[0].lat);
-          const lng = parseFloat(data[0].lon);
-          try {
-            markerRef.current.setLatLng([lat, lng]);
-            markerRef.current.getPopup()?.setContent(
-              `<div style="font-size:13px;max-width:200px;">
-                <strong>📍 ${customerName ? customerName + '\'s Location' : 'Customer Location'}</strong><br>
-                <small>${address}</small>
-              </div>`
-            );
-            markerRef.current.openPopup();
-            mapInstanceRef.current.flyTo([lat, lng], 16, { animate: true, duration: 1.0 });
-          } catch {}
+    const L = window.L;
+
+    const plotAndRoute = async (custLat, custLng) => {
+      if (unmountedRef.current) return;
+
+      // ── Rider marker ──
+      if (riderCoords?.lat && riderCoords?.lng) {
+        const riderIcon = L.divIcon({
+          className: '',
+          html: `<div style="
+            background:#fc1268;color:white;border-radius:50%;
+            width:34px;height:34px;display:flex;align-items:center;
+            justify-content:center;font-size:16px;
+            box-shadow:0 3px 10px rgba(252,18,104,0.5);border:3px solid white;">
+            🛵
+          </div>`,
+          iconSize: [34, 34], iconAnchor: [17, 17], popupAnchor: [0, -20],
+        });
+
+        if (riderMarkerRef.current) {
+          try { riderMarkerRef.current.setLatLng([riderCoords.lat, riderCoords.lng]); } catch {}
         } else {
-          if (!unmountedRef.current) setMapError('Address not found on map.');
+          riderMarkerRef.current = L.marker([riderCoords.lat, riderCoords.lng], { icon: riderIcon })
+            .addTo(mapInstanceRef.current)
+            .bindPopup('<strong>🛵 Your Location</strong>');
         }
+
+        // Fit both markers in view
+        mapInstanceRef.current.fitBounds([
+          [riderCoords.lat, riderCoords.lng],
+          [custLat, custLng],
+        ], { padding: [30, 30] });
+
+        // ── OSRM route line ──
+        const latlngs = await fetchRoute(riderCoords.lat, riderCoords.lng, custLat, custLng);
+        if (!unmountedRef.current && latlngs && mapInstanceRef.current) {
+          try {
+            if (routeLayerRef.current) mapInstanceRef.current.removeLayer(routeLayerRef.current);
+            routeLayerRef.current = L.polyline(latlngs, {
+              color: '#fc1268', weight: 5, opacity: 0.8,
+              lineJoin: 'round', lineCap: 'round',
+            }).addTo(mapInstanceRef.current);
+          } catch {}
+        }
+      } else {
+        try {
+          mapInstanceRef.current.flyTo([custLat, custLng], 16, { animate: true, duration: 1.0 });
+        } catch {}
+      }
+
+      // Update marker position + popup
+      try {
+        markerRef.current.setLatLng([custLat, custLng]);
+        markerRef.current.getPopup()?.setContent(
+          `<div style="font-size:13px;max-width:200px;">
+            <strong>📍 ${customerName ? customerName + "'s Location" : 'Customer Location'}</strong><br>
+            <small>${address}</small>
+          </div>`
+        );
+        markerRef.current.openPopup();
+      } catch {}
+    };
+
+    if (savedCoords) {
+      // ✅ Exact pin — no geocoding needed
+      setAddressText(address);
+      plotAndRoute(savedCoords.lat, savedCoords.lng);
+    } else if (address) {
+      // ✅ Fallback: geocode the address string
+      setAddressText(address);
+      setGeocoding(true);
+      setMapError(null);
+      const encoded = encodeURIComponent(address + ', Philippines');
+      fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&limit=1`, {
+        headers: { 'Accept-Language': 'en', 'User-Agent': 'DKMerch-RiderApp/1.0' }
       })
-      .catch(() => { if (!unmountedRef.current) setMapError('Could not load map location.'); })
-      .finally(() => { if (!unmountedRef.current) setGeocoding(false); });
-  }, [address, customerName, leafletLoaded]);
+        .then(r => r.json())
+        .then(data => {
+          if (unmountedRef.current) return;
+          if (data?.length > 0) {
+            plotAndRoute(parseFloat(data[0].lat), parseFloat(data[0].lon));
+          } else {
+            if (!unmountedRef.current) setMapError('Address not found on map.');
+          }
+        })
+        .catch(() => { if (!unmountedRef.current) setMapError('Could not load map location.'); })
+        .finally(() => { if (!unmountedRef.current) setGeocoding(false); });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedCoords, address, customerName, riderCoords, leafletLoaded]);
 
   // Cleanup on unmount
   useEffect(() => {
     unmountedRef.current = false;
     return () => {
       unmountedRef.current = true;
+      if (routeLayerRef.current && mapInstanceRef.current) {
+        try { mapInstanceRef.current.removeLayer(routeLayerRef.current); } catch {}
+        routeLayerRef.current = null;
+      }
       if (mapInstanceRef.current) {
         try { mapInstanceRef.current.remove(); } catch {}
         mapInstanceRef.current = null;
         markerRef.current      = null;
+        riderMarkerRef.current = null;
       }
     };
   }, []);
@@ -467,6 +640,8 @@ const CustomerMap = ({ orderId, allOrders }) => {
         <FullscreenMapModal
           address={address}
           customerName={customerName}
+          coords={savedCoords}
+          riderCoords={riderCoords}
           onClose={() => setShowFullscreen(false)}
         />
       )}
@@ -1175,7 +1350,11 @@ const RiderDashboard = () => {
                             <div className="customer-map-section-title">
                               <i className="fas fa-map-marked-alt"></i> Customer Location
                             </div>
-                            <CustomerMap orderId={delivery.orderId} allOrders={allOrders} />
+                            <CustomerMap
+                              orderId={delivery.orderId}
+                              allOrders={allOrders}
+                              riderCoords={currentPosition ? { lat: currentPosition.lat, lng: currentPosition.lng } : null}
+                            />
                           </div>
 
                           <div className="rider-expanded-section rider-info-preview">
