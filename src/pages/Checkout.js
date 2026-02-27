@@ -103,15 +103,10 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) 
         scrollWheelZoom: false,
       }).setView([startLat, startLng], startZoom);
 
-      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-        attribution: 'Tiles © Esri — Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye',
+      // ✅ OSM normal map — no satellite
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         maxZoom: 19,
-      }).addTo(map);
-
-      // ✅ Labels overlay
-      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
-        maxZoom: 19,
-        opacity: 0.85,
       }).addTo(map);
 
       const icon = L.divIcon({

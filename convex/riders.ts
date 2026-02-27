@@ -43,7 +43,7 @@ export const createRiderApplication = mutation({
   handler: async ({ db }, args) => {
     const existing = await db
       .query("riderApplications")
-      .withIndex("by_email", q => q.eq("email", args.email)) // ✅ fixed: was bare `email`
+      .withIndex("by_email", q => q.eq("email", args.email))
       .first();
     if (existing) {
       return { success: false, message: "This email is already registered as a rider applicant." };
@@ -107,7 +107,6 @@ export const deleteRider = mutation({
 });
 
 // ✅ loginRider generates + saves sessionId directly in Convex
-// Returns sessionId to client — client stores in sessionStorage only (not localStorage)
 export const loginRider = mutation({
   args: { email: v.string(), password: v.string() },
   handler: async ({ db }, { email, password }) => {
@@ -152,6 +151,7 @@ export const loginRider = mutation({
     await db.patch(rider._id, {
       activeSessionId: newSessionId,
       activeDeviceAt: Date.now(),
+      kickedAt: undefined, // ✅ clear any previous kickedAt on fresh login
     });
 
     return {
@@ -164,15 +164,13 @@ export const loginRider = mutation({
         role: "rider",
         status: rider.status,
       },
-      sessionId: newSessionId, // ✅ client stores in sessionStorage only
+      sessionId: newSessionId,
     };
   },
 });
 
 // ─────────────────────────────────────────────────────
 // ✅ SESSION CHECK — Convex live query
-// Fires automatically whenever activeSessionId changes in DB
-// Old device detects mismatch within milliseconds (no polling needed)
 // ─────────────────────────────────────────────────────
 export const checkRiderSession = query({
   args: {
@@ -193,7 +191,28 @@ export const checkRiderSession = query({
       valid: isValid,
       reason: isValid ? "ok" : "new_device_logged_in",
       activeDeviceAt: rider.activeDeviceAt,
+      // ✅ Always return kickedAt so RiderDashboard can compute remaining countdown
+      kickedAt: rider.kickedAt ?? null,
     };
+  },
+});
+
+// ─────────────────────────────────────────────────────
+// ✅ SET KICKED AT — saves exact timestamp when rider is kicked
+// RiderDashboard calls this when it first detects session mismatch.
+// On reload, checkRiderSession returns kickedAt so countdown resumes
+// from where it left off — not reset to 3:00.
+// ─────────────────────────────────────────────────────
+export const setRiderKickedAt = mutation({
+  args: { email: v.string(), kickedAt: v.number() },
+  handler: async ({ db }, { email, kickedAt }) => {
+    const rider = await db
+      .query("riderApplications")
+      .withIndex("by_email", q => q.eq("email", email))
+      .first();
+    if (!rider) return { success: false };
+    await db.patch(rider._id, { kickedAt });
+    return { success: true };
   },
 });
 

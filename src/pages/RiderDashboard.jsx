@@ -5,6 +5,9 @@ import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import './RiderDashboard.css';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// GPS singleton
+// ─────────────────────────────────────────────────────────────────────────────
 const GPS = {
   _watchId:    null,
   _interval:   null,
@@ -49,8 +52,8 @@ const GPS = {
           lat:        this._lastPos.lat,
           lng:        this._lastPos.lng,
           accuracy:   this._lastPos.accuracy,
-          heading:    this._lastPos.heading  ?? undefined,
-          speed:      this._lastPos.speed    ?? undefined,
+          heading:    this._lastPos.heading ?? undefined,
+          speed:      this._lastPos.speed   ?? undefined,
           isTracking: true,
           sessionId:  this._sessionId,
         }).catch(err => console.error('Location send failed:', err));
@@ -73,8 +76,8 @@ const GPS = {
             lat:        this._lastPos.lat,
             lng:        this._lastPos.lng,
             accuracy:   this._lastPos.accuracy,
-            heading:    this._lastPos.heading  ?? undefined,
-            speed:      this._lastPos.speed    ?? undefined,
+            heading:    this._lastPos.heading ?? undefined,
+            speed:      this._lastPos.speed   ?? undefined,
             isTracking: true,
             sessionId:  this._sessionId,
           }).catch(() => {});
@@ -107,19 +110,99 @@ const GPS = {
   },
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Route fetcher (OSRM)
+// ─────────────────────────────────────────────────────────────────────────────
 const fetchRoute = async (fromLat, fromLng, toLat, toLng) => {
   try {
     const url = `https://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}?overview=full&geometries=geojson`;
     const res  = await fetch(url);
     const data = await res.json();
-    if (data.code === 'Ok' && data.routes?.length > 0) {
+    if (data.code === 'Ok' && data.routes?.length > 0)
       return data.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng]);
-    }
-  } catch { }
+  } catch {}
   return null;
 };
 
-const FullscreenMapModal = ({ address, customerName, coords, riderCoords, onClose }) => {
+// ─────────────────────────────────────────────────────────────────────────────
+// Directional arrow icon builder
+// heading: 0-360° from North  |  null = no GPS heading (plain dot)
+// ─────────────────────────────────────────────────────────────────────────────
+const buildRiderIconHtml = (heading) => {
+  const hasHeading = heading !== null && heading !== undefined && !isNaN(Number(heading));
+
+  if (!document.getElementById('rider-marker-style')) {
+    const s = document.createElement('style');
+    s.id = 'rider-marker-style';
+    s.textContent = `
+      @keyframes riderPulse {
+        0%   { transform: scale(1);   opacity: 0.6; }
+        100% { transform: scale(2.2); opacity: 0; }
+      }`;
+    document.head.appendChild(s);
+  }
+
+  const pulseRing = `
+    <div style="
+      position:absolute;inset:-6px;
+      background:rgba(252,18,104,0.3);
+      border-radius:50%;
+      animation:riderPulse 1.5s ease-out infinite;
+      pointer-events:none;
+    "></div>`;
+
+  if (!hasHeading) {
+    return `
+      <div style="position:relative;width:38px;height:38px;">
+        ${pulseRing}
+        <div style="
+          width:38px;height:38px;
+          background:linear-gradient(135deg,#fc1268,#ff5a9d);
+          border-radius:50%;
+          border:3px solid white;
+          box-shadow:0 3px 12px rgba(252,18,104,0.55);
+          display:flex;align-items:center;justify-content:center;
+          font-size:17px;
+        ">🛵</div>
+      </div>`;
+  }
+
+  return `
+    <div style="position:relative;width:50px;height:50px;">
+      ${pulseRing}
+      <div style="
+        position:absolute;inset:0;
+        display:flex;align-items:center;justify-content:center;
+        transform:rotate(${Number(heading)}deg);
+      ">
+        <svg width="50" height="50" viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="rg" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#ff5a9d"/>
+              <stop offset="100%" stop-color="#fc1268"/>
+            </radialGradient>
+            <filter id="ds">
+              <feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-color="rgba(252,18,104,0.45)"/>
+            </filter>
+          </defs>
+          <circle cx="25" cy="25" r="22" fill="url(#rg)" stroke="white" stroke-width="3" filter="url(#ds)"/>
+          <polygon points="25,7 32,30 25,25 18,30" fill="white" opacity="0.95"/>
+        </svg>
+      </div>
+      <div style="
+        position:absolute;inset:0;
+        display:flex;align-items:center;justify-content:center;
+        font-size:14px;
+        pointer-events:none;
+        padding-top:4px;
+      ">🛵</div>
+    </div>`;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Fullscreen map modal
+// ─────────────────────────────────────────────────────────────────────────────
+const FullscreenMapModal = ({ address, customerName, coords, riderCoords, riderHeading, onClose }) => {
   const mapRef         = useRef(null);
   const mapInstanceRef = useRef(null);
   const unmountedRef   = useRef(false);
@@ -134,124 +217,87 @@ const FullscreenMapModal = ({ address, customerName, coords, riderCoords, onClos
   }, []);
 
   useEffect(() => {
-    unmountedRef.current = false;
+    unmountedRef.current  = false;
     routeDrawnRef.current = false;
     if (!mapRef.current || mapInstanceRef.current) return;
     let intervalId = null;
     const initMap = () => {
       if (!window.L || !mapRef.current || unmountedRef.current) return;
       try {
-        const L   = window.L;
+        const L      = window.L;
         const startLat = coords?.lat ?? 14.5995;
         const startLng = coords?.lng ?? 120.9842;
-        const map = L.map(mapRef.current, {
-          zoomControl     : false,
-          tap             : false,
-          scrollWheelZoom : true,
-        }).setView([startLat, startLng], coords ? 16 : 14);
+        const map = L.map(mapRef.current, { zoomControl: false, tap: false, scrollWheelZoom: true })
+          .setView([startLat, startLng], coords ? 16 : 14);
         L.control.zoom({ position: 'bottomright' }).addTo(map);
-        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-          attribution: 'Tiles © Esri — Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye',
+        // ✅ OSM normal map (no satellite)
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
           maxZoom: 19,
         }).addTo(map);
 
-      // ✅ Labels overlay
-      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
-        maxZoom: 19,
-        opacity: 0.85,
-      }).addTo(map);
         const customerIcon = L.divIcon({
           className: '',
           html: `<div style="background:#3b82f6;color:white;border-radius:50% 50% 50% 0;
-            width:44px;height:44px;display:flex;align-items:center;
-            justify-content:center;font-size:20px;transform:rotate(-45deg);
+            width:44px;height:44px;display:flex;align-items:center;justify-content:center;
+            font-size:20px;transform:rotate(-45deg);
             box-shadow:0 4px 14px rgba(59,130,246,0.55);border:3px solid white;">
             <span style="transform:rotate(45deg)">🏠</span></div>`,
           iconSize: [44, 44], iconAnchor: [22, 44], popupAnchor: [0, -48],
         });
-        const popupLabel = customerName ? `${customerName}'s Location` : 'Customer Location';
+        const popupLabel     = customerName ? `${customerName}'s Location` : 'Customer Location';
         const customerMarker = L.marker([startLat, startLng], { icon: customerIcon })
           .addTo(map)
-          .bindPopup(`<div style="font-size:13px;max-width:220px">
-            <strong>📍 ${popupLabel}</strong><br><small>${address}</small></div>`)
+          .bindPopup(`<div style="font-size:13px;max-width:220px"><strong>📍 ${popupLabel}</strong><br><small>${address}</small></div>`)
           .openPopup();
         mapInstanceRef.current = map;
-        setTimeout(() => {
-          if (!unmountedRef.current && mapInstanceRef.current) {
-            try { mapInstanceRef.current.invalidateSize(); } catch {}
-          }
-        }, 350);
+        setTimeout(() => { try { map.invalidateSize(); } catch {} }, 350);
+
         if (riderCoords?.lat && riderCoords?.lng && !routeDrawnRef.current) {
           routeDrawnRef.current = true;
           const riderIcon = L.divIcon({
             className: '',
-            html: `<div style="background:#fc1268;color:white;border-radius:50%;
-              width:40px;height:40px;display:flex;align-items:center;
-              justify-content:center;font-size:18px;
-              box-shadow:0 4px 14px rgba(252,18,104,0.55);border:3px solid white;">🛵</div>`,
-            iconSize: [40, 40], iconAnchor: [20, 20], popupAnchor: [0, -24],
+            html: buildRiderIconHtml(riderHeading),
+            iconSize: [50, 50], iconAnchor: [25, 25], popupAnchor: [0, -28],
           });
-          const rMrk = L.marker([riderCoords.lat, riderCoords.lng], { icon: riderIcon })
-            .addTo(map)
-            .bindPopup('<strong>🛵 Your Location</strong>');
-          riderMarkerRef.current = rMrk;
-          map.fitBounds([
-            [riderCoords.lat, riderCoords.lng],
-            [startLat, startLng],
-          ], { padding: [40, 40] });
+          riderMarkerRef.current = L.marker([riderCoords.lat, riderCoords.lng], { icon: riderIcon })
+            .addTo(map).bindPopup('<strong>🛵 Your Location</strong>');
+          map.fitBounds([[riderCoords.lat, riderCoords.lng], [startLat, startLng]], { padding: [40, 40] });
           fetchRoute(riderCoords.lat, riderCoords.lng, startLat, startLng).then(latlngs => {
             if (unmountedRef.current || !mapInstanceRef.current || !latlngs) return;
             try {
-              if (routeLayerRef.current) {
-                try { mapInstanceRef.current.removeLayer(routeLayerRef.current); } catch {}
-              }
+              if (routeLayerRef.current) mapInstanceRef.current.removeLayer(routeLayerRef.current);
               routeLayerRef.current = L.polyline(latlngs, {
-                color: '#fc1268', weight: 5, opacity: 0.85,
-                lineJoin: 'round', lineCap: 'round',
+                color: '#fc1268', weight: 5, opacity: 0.85, lineJoin: 'round', lineCap: 'round',
               }).addTo(mapInstanceRef.current);
             } catch {}
           });
         }
+
         if (!coords) {
-          const encoded = encodeURIComponent(address + ', Philippines');
-          fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&limit=1`, {
-            headers: { 'Accept-Language': 'en' }
-          })
-            .then(r => r.json())
-            .then(data => {
-              if (unmountedRef.current || !mapInstanceRef.current) return;
-              if (data?.length > 0) {
-                const lat = parseFloat(data[0].lat);
-                const lng = parseFloat(data[0].lon);
-                try {
-                  customerMarker.setLatLng([lat, lng]);
-                  customerMarker.openPopup();
-                  map.flyTo([lat, lng], 17, { animate: true, duration: 1.2 });
-                } catch {}
-              }
-              if (!unmountedRef.current) setGeocoding(false);
-            })
-            .catch(() => { if (!unmountedRef.current) setGeocoding(false); });
+          fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address + ', Philippines')}&limit=1`, {
+            headers: { 'Accept-Language': 'en' },
+          }).then(r => r.json()).then(data => {
+            if (unmountedRef.current || !mapInstanceRef.current) return;
+            if (data?.length > 0) {
+              const lat = parseFloat(data[0].lat), lng = parseFloat(data[0].lon);
+              customerMarker.setLatLng([lat, lng]).openPopup();
+              map.flyTo([lat, lng], 17, { animate: true, duration: 1.2 });
+            }
+            if (!unmountedRef.current) setGeocoding(false);
+          }).catch(() => { if (!unmountedRef.current) setGeocoding(false); });
         }
       } catch (err) {
         console.error('FullscreenMap init error:', err);
         if (!unmountedRef.current) setGeocoding(false);
       }
     };
-    if (window.L) {
-      initMap();
-    } else {
-      intervalId = setInterval(() => {
-        if (window.L) { clearInterval(intervalId); intervalId = null; initMap(); }
-      }, 100);
-    }
+    if (window.L) { initMap(); }
+    else { intervalId = setInterval(() => { if (window.L) { clearInterval(intervalId); intervalId = null; initMap(); } }, 100); }
     return () => {
       unmountedRef.current = true;
-      if (intervalId !== null) { clearInterval(intervalId); intervalId = null; }
-      if (mapInstanceRef.current) {
-        try { mapInstanceRef.current.remove(); } catch {}
-        mapInstanceRef.current = null;
-      }
+      if (intervalId !== null) { clearInterval(intervalId); }
+      if (mapInstanceRef.current) { try { mapInstanceRef.current.remove(); } catch {} mapInstanceRef.current = null; }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -283,8 +329,7 @@ const FullscreenMapModal = ({ address, customerName, coords, riderCoords, onClos
           <span className="fullscreen-map-footer-right">
             {riderCoords
               ? <><i className="fas fa-route" style={{ color: '#fc1268' }}></i> Route shown in pink</>
-              : <><i className="fas fa-search-plus"></i> Use +/− to zoom</>
-            }
+              : <><i className="fas fa-search-plus"></i> Use +/− to zoom</>}
           </span>
         </div>
       </div>
@@ -292,7 +337,10 @@ const FullscreenMapModal = ({ address, customerName, coords, riderCoords, onClos
   );
 };
 
-const CustomerMap = ({ orderId, allOrders, riderCoords }) => {
+// ─────────────────────────────────────────────────────────────────────────────
+// Customer map (inline)
+// ─────────────────────────────────────────────────────────────────────────────
+const CustomerMap = ({ orderId, allOrders, riderCoords, riderHeading }) => {
   const mapRef         = useRef(null);
   const mapInstanceRef = useRef(null);
   const markerRef      = useRef(null);
@@ -301,38 +349,33 @@ const CustomerMap = ({ orderId, allOrders, riderCoords }) => {
   const unmountedRef   = useRef(false);
   const routeDrawnRef  = useRef(false);
   const prevRiderRef   = useRef(null);
-  const [mapError, setMapError]             = useState(null);
-  const [leafletLoaded, setLeafletLoaded]   = useState(!!window.L);
-  const [geocoding, setGeocoding]           = useState(false);
-  const [addressText, setAddressText]       = useState('');
+  const prevHeadingRef = useRef(null);
+
+  const [mapError, setMapError]           = useState(null);
+  const [leafletLoaded, setLeafletLoaded] = useState(!!window.L);
+  const [geocoding, setGeocoding]         = useState(false);
+  const [addressText, setAddressText]     = useState('');
   const [showFullscreen, setShowFullscreen] = useState(false);
 
   const order        = allOrders.find(o => o.orderId === orderId);
   const address      = order?.shippingAddress || order?.address || order?.deliveryAddress || '';
   const customerName = order?.customerName || order?.name || '';
   const savedCoords  = (order?.addressLat && order?.addressLng)
-    ? { lat: order.addressLat, lng: order.addressLng }
-    : null;
+    ? { lat: order.addressLat, lng: order.addressLng } : null;
 
   useEffect(() => {
     if (window.L) { setLeafletLoaded(true); return; }
     if (!document.getElementById('leaflet-css')) {
-      const link  = document.createElement('link');
-      link.id     = 'leaflet-css';
-      link.rel    = 'stylesheet';
-      link.href   = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      const link = document.createElement('link');
+      link.id = 'leaflet-css'; link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
       document.head.appendChild(link);
     }
-    const existingScript = document.getElementById('leaflet-js');
-    if (existingScript) {
-      if (window.L) { setLeafletLoaded(true); return; }
-      existingScript.addEventListener('load', () => setLeafletLoaded(true));
-      return;
-    }
-    const script   = document.createElement('script');
-    script.id      = 'leaflet-js';
-    script.src     = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-    script.onload  = () => setLeafletLoaded(true);
+    const existing = document.getElementById('leaflet-js');
+    if (existing) { if (window.L) { setLeafletLoaded(true); return; } existing.addEventListener('load', () => setLeafletLoaded(true)); return; }
+    const script = document.createElement('script');
+    script.id = 'leaflet-js'; script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.onload = () => setLeafletLoaded(true);
     script.onerror = () => setMapError('Failed to load map library.');
     document.head.appendChild(script);
   }, []);
@@ -340,51 +383,35 @@ const CustomerMap = ({ orderId, allOrders, riderCoords }) => {
   useEffect(() => {
     if (!leafletLoaded || mapInstanceRef.current || !mapRef.current) return;
     try {
-      const L = window.L;
-      const startLat  = savedCoords?.lat ?? 14.5995;
-      const startLng  = savedCoords?.lng ?? 120.9842;
-      const startZoom = savedCoords ? 16 : 14;
-      const map = L.map(mapRef.current, {
-        zoomControl     : false,
-        tap             : false,
-        scrollWheelZoom : false,
-        dragging        : true,
-      }).setView([startLat, startLng], startZoom);
+      const L        = window.L;
+      const startLat = savedCoords?.lat ?? 14.5995;
+      const startLng = savedCoords?.lng ?? 120.9842;
+      const map = L.map(mapRef.current, { zoomControl: false, tap: false, scrollWheelZoom: false, dragging: true })
+        .setView([startLat, startLng], savedCoords ? 16 : 14);
       L.control.zoom({ position: 'bottomright' }).addTo(map);
-      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-        attribution: 'Tiles © Esri — Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye',
+      // ✅ OSM normal map (no satellite)
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         maxZoom: 19,
-      }).addTo(map);
-
-      // ✅ Labels overlay
-      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
-        maxZoom: 19,
-        opacity: 0.85,
       }).addTo(map);
       const customerIcon = L.divIcon({
         className: '',
         html: `<div style="background:#3b82f6;color:white;border-radius:50% 50% 50% 0;
-          width:36px;height:36px;display:flex;align-items:center;
-          justify-content:center;font-size:16px;transform:rotate(-45deg);
+          width:36px;height:36px;display:flex;align-items:center;justify-content:center;
+          font-size:16px;transform:rotate(-45deg);
           box-shadow:0 3px 10px rgba(59,130,246,0.5);border:3px solid white;">
           <span style="transform:rotate(45deg)">🏠</span></div>`,
         iconSize: [36, 36], iconAnchor: [18, 36], popupAnchor: [0, -40],
       });
       const marker = L.marker([startLat, startLng], { icon: customerIcon })
         .addTo(map)
-        .bindPopup(
-          savedCoords
-            ? `<div style="font-size:13px;max-width:200px"><strong>📍 ${customerName ? customerName + "'s Location" : 'Customer Location'}</strong><br><small>${address}</small></div>`
-            : '<strong>📍 Customer Location</strong>'
-        );
+        .bindPopup(savedCoords
+          ? `<div style="font-size:13px;max-width:200px"><strong>📍 ${customerName ? customerName + "'s Location" : 'Customer Location'}</strong><br><small>${address}</small></div>`
+          : '<strong>📍 Customer Location</strong>');
       if (savedCoords) marker.openPopup();
       mapInstanceRef.current = map;
       markerRef.current      = marker;
-      setTimeout(() => {
-        if (!unmountedRef.current && mapInstanceRef.current) {
-          try { mapInstanceRef.current.invalidateSize(); } catch {}
-        }
-      }, 300);
+      setTimeout(() => { try { map.invalidateSize(); } catch {} }, 300);
     } catch { setMapError('Failed to initialize map.'); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leafletLoaded]);
@@ -392,53 +419,57 @@ const CustomerMap = ({ orderId, allOrders, riderCoords }) => {
   useEffect(() => {
     if (!mapInstanceRef.current || !markerRef.current || !window.L) return;
     const L = window.L;
-    const plotCustomer = async (custLat, custLng) => {
+
+    const plotCustomer = (custLat, custLng) => {
       if (unmountedRef.current) return;
       try {
         markerRef.current.setLatLng([custLat, custLng]);
         markerRef.current.getPopup()?.setContent(
           `<div style="font-size:13px;max-width:200px;">
             <strong>📍 ${customerName ? customerName + "'s Location" : 'Customer Location'}</strong><br>
-            <small>${address}</small>
-          </div>`
-        );
+            <small>${address}</small></div>`);
         if (savedCoords) markerRef.current.openPopup();
       } catch {}
+
       if (riderCoords?.lat && riderCoords?.lng) {
-        const prevLat = prevRiderRef.current?.lat;
-        const prevLng = prevRiderRef.current?.lng;
-        const coordsChanged = prevLat !== riderCoords.lat || prevLng !== riderCoords.lng;
-        prevRiderRef.current = { lat: riderCoords.lat, lng: riderCoords.lng };
+        const coordsChanged   = prevRiderRef.current?.lat !== riderCoords.lat || prevRiderRef.current?.lng !== riderCoords.lng;
+        const headingChanged  = prevHeadingRef.current !== riderHeading;
+        prevRiderRef.current  = { lat: riderCoords.lat, lng: riderCoords.lng };
+        prevHeadingRef.current = riderHeading;
+
         if (!riderMarkerRef.current) {
           const riderIcon = L.divIcon({
             className: '',
-            html: `<div style="background:#fc1268;color:white;border-radius:50%;
-              width:34px;height:34px;display:flex;align-items:center;
-              justify-content:center;font-size:16px;
-              box-shadow:0 3px 10px rgba(252,18,104,0.5);border:3px solid white;">🛵</div>`,
-            iconSize: [34, 34], iconAnchor: [17, 17], popupAnchor: [0, -20],
+            html: buildRiderIconHtml(riderHeading),
+            iconSize: [50, 50], iconAnchor: [25, 25], popupAnchor: [0, -28],
           });
           riderMarkerRef.current = L.marker([riderCoords.lat, riderCoords.lng], { icon: riderIcon })
             .addTo(mapInstanceRef.current)
             .bindPopup('<strong>🛵 Your Location</strong>');
-        } else if (coordsChanged) {
-          try { riderMarkerRef.current.setLatLng([riderCoords.lat, riderCoords.lng]); } catch {}
+        } else {
+          if (coordsChanged) {
+            try { riderMarkerRef.current.setLatLng([riderCoords.lat, riderCoords.lng]); } catch {}
+          }
+          if (coordsChanged || headingChanged) {
+            try {
+              riderMarkerRef.current.setIcon(L.divIcon({
+                className: '',
+                html: buildRiderIconHtml(riderHeading),
+                iconSize: [50, 50], iconAnchor: [25, 25], popupAnchor: [0, -28],
+              }));
+            } catch {}
+          }
         }
+
         if (!routeDrawnRef.current) {
           routeDrawnRef.current = true;
-          try {
-            mapInstanceRef.current.fitBounds([
-              [riderCoords.lat, riderCoords.lng],
-              [custLat, custLng],
-            ], { padding: [30, 30] });
-          } catch {}
+          try { mapInstanceRef.current.fitBounds([[riderCoords.lat, riderCoords.lng], [custLat, custLng]], { padding: [30, 30] }); } catch {}
           fetchRoute(riderCoords.lat, riderCoords.lng, custLat, custLng).then(latlngs => {
             if (unmountedRef.current || !latlngs || !mapInstanceRef.current) return;
             try {
               if (routeLayerRef.current) mapInstanceRef.current.removeLayer(routeLayerRef.current);
               routeLayerRef.current = L.polyline(latlngs, {
-                color: '#fc1268', weight: 5, opacity: 0.8,
-                lineJoin: 'round', lineCap: 'round',
+                color: '#fc1268', weight: 5, opacity: 0.8, lineJoin: 'round', lineCap: 'round',
               }).addTo(mapInstanceRef.current);
             } catch {}
           });
@@ -448,6 +479,7 @@ const CustomerMap = ({ orderId, allOrders, riderCoords }) => {
         try { mapInstanceRef.current.setView([custLat, custLng], 16); } catch {}
       }
     };
+
     if (savedCoords) {
       setAddressText(address);
       plotCustomer(savedCoords.lat, savedCoords.lng);
@@ -455,24 +487,17 @@ const CustomerMap = ({ orderId, allOrders, riderCoords }) => {
       setAddressText(address);
       setGeocoding(true);
       setMapError(null);
-      const encoded = encodeURIComponent(address + ', Philippines');
-      fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&limit=1`, {
-        headers: { 'Accept-Language': 'en', 'User-Agent': 'DKMerch-RiderApp/1.0' }
-      })
-        .then(r => r.json())
-        .then(data => {
-          if (unmountedRef.current) return;
-          if (data?.length > 0) {
-            plotCustomer(parseFloat(data[0].lat), parseFloat(data[0].lon));
-          } else {
-            if (!unmountedRef.current) setMapError('Address not found on map.');
-          }
-        })
-        .catch(() => { if (!unmountedRef.current) setMapError('Could not load map location.'); })
+      fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address + ', Philippines')}&limit=1`, {
+        headers: { 'Accept-Language': 'en', 'User-Agent': 'DKMerch-RiderApp/1.0' },
+      }).then(r => r.json()).then(data => {
+        if (unmountedRef.current) return;
+        if (data?.length > 0) plotCustomer(parseFloat(data[0].lat), parseFloat(data[0].lon));
+        else if (!unmountedRef.current) setMapError('Address not found on map.');
+      }).catch(() => { if (!unmountedRef.current) setMapError('Could not load map location.'); })
         .finally(() => { if (!unmountedRef.current) setGeocoding(false); });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [savedCoords?.lat, savedCoords?.lng, address, leafletLoaded, riderCoords?.lat, riderCoords?.lng]);
+  }, [savedCoords?.lat, savedCoords?.lng, address, leafletLoaded, riderCoords?.lat, riderCoords?.lng, riderHeading]);
 
   useEffect(() => {
     unmountedRef.current = false;
@@ -480,22 +505,14 @@ const CustomerMap = ({ orderId, allOrders, riderCoords }) => {
       unmountedRef.current = true;
       if (mapInstanceRef.current) {
         try { mapInstanceRef.current.remove(); } catch {}
-        mapInstanceRef.current = null;
-        markerRef.current      = null;
-        riderMarkerRef.current = null;
-        routeLayerRef.current  = null;
+        mapInstanceRef.current = null; markerRef.current = null;
+        riderMarkerRef.current = null; routeLayerRef.current = null;
       }
     };
   }, []);
 
   useEffect(() => {
-    const handler = () => {
-      setTimeout(() => {
-        if (mapInstanceRef.current) {
-          try { mapInstanceRef.current.invalidateSize(); } catch {}
-        }
-      }, 350);
-    };
+    const handler = () => setTimeout(() => { try { mapInstanceRef.current?.invalidateSize(); } catch {} }, 350);
     window.addEventListener('rider-sidebar-closed', handler);
     return () => window.removeEventListener('rider-sidebar-closed', handler);
   }, []);
@@ -515,16 +532,11 @@ const CustomerMap = ({ orderId, allOrders, riderCoords }) => {
           <span>{addressText || address}</span>
           {geocoding && <span className="customer-map-geocoding">📍 Locating...</span>}
         </div>
-        {mapError && (
-          <div className="customer-map-error">
-            <i className="fas fa-exclamation-triangle"></i> {mapError}
-          </div>
-        )}
+        {mapError && <div className="customer-map-error"><i className="fas fa-exclamation-triangle"></i> {mapError}</div>}
         <div className="customer-map-inner-wrapper">
           <div ref={mapRef} className="customer-map-container" />
           <button className="customer-map-fullscreen-btn" onClick={() => setShowFullscreen(true)} type="button" title="View full map">
-            <i className="fas fa-expand-alt"></i>
-            <span>View Full Map</span>
+            <i className="fas fa-expand-alt"></i><span>View Full Map</span>
           </button>
         </div>
         <div className="customer-map-zoom-hint">
@@ -541,6 +553,7 @@ const CustomerMap = ({ orderId, allOrders, riderCoords }) => {
           customerName={customerName}
           coords={savedCoords}
           riderCoords={riderCoords}
+          riderHeading={riderHeading}
           onClose={() => setShowFullscreen(false)}
         />
       )}
@@ -548,21 +561,22 @@ const CustomerMap = ({ orderId, allOrders, riderCoords }) => {
   );
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Notif bell
+// ─────────────────────────────────────────────────────────────────────────────
 const RiderNotifBell = ({ onGoToAvailable }) => {
-  const [open, setOpen] = useState(false);
-  const notifications   = useQuery(api.riderNotifications?.getUnread ?? 'skip') || [];
-  const markRead        = useMutation(api.riderNotifications?.markAllRead ?? 'skip');
-  const unreadCount     = notifications.length;
-  const handleOpen = () => { setOpen(o => !o); };
+  const [open, setOpen]   = useState(false);
+  const notifications     = useQuery(api.riderNotifications?.getUnread ?? 'skip') || [];
+  const markRead          = useMutation(api.riderNotifications?.markAllRead ?? 'skip');
+  const unreadCount       = notifications.length;
   const handleMarkRead = async () => {
     try { await markRead({}); } catch {}
-    setOpen(false);
-    onGoToAvailable?.();
+    setOpen(false); onGoToAvailable?.();
   };
   if (unreadCount === 0 && !open) return null;
   return (
     <div className="rider-notif-wrapper">
-      <button className="rider-notif-bell-btn" onClick={handleOpen} type="button">
+      <button className="rider-notif-bell-btn" onClick={() => setOpen(o => !o)} type="button">
         <i className="fas fa-bell"></i>
         {unreadCount > 0 && <span className="rider-notif-count">{unreadCount}</span>}
       </button>
@@ -597,9 +611,41 @@ const RiderNotifBell = ({ onGoToAvailable }) => {
   );
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// KICKED-OUT COUNTDOWN
+// ─────────────────────────────────────────────────────────────────────────────
+const KICKED_DURATION_SEC = 180;
+
+const useKickedCountdown = (kickedAt) => {
+  const [remaining, setRemaining] = useState(null);
+
+  useEffect(() => {
+    if (!kickedAt) { setRemaining(null); return; }
+    const tick = () => {
+      const elapsed = Math.floor((Date.now() - kickedAt) / 1000);
+      const left    = Math.max(0, KICKED_DURATION_SEC - elapsed);
+      setRemaining(left);
+      return left;
+    };
+    const left = tick();
+    if (left === 0) return;
+    const id = setInterval(() => {
+      const l = tick();
+      if (l === 0) clearInterval(id);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [kickedAt]);
+
+  return remaining;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main dashboard
+// ─────────────────────────────────────────────────────────────────────────────
 const RiderDashboard = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+
   const [tab, setTab]                               = useState('available');
   const [sidebarOpen, setSidebarOpen]               = useState(false);
   const [expandedOrders, setExpandedOrders]         = useState({});
@@ -611,40 +657,45 @@ const RiderDashboard = () => {
   const [confirmingId, setConfirmingId]             = useState(null);
   const [notifyingId, setNotifyingId]               = useState(null);
   const [lastSeenAvailable, setLastSeenAvailable]   = useState(0);
-  const [lastSeenPickups,   setLastSeenPickups]     = useState(0);
-  const [lastSeenDeliveries,setLastSeenDeliveries]  = useState(0);
-  const initializedRef = useRef(false);
+  const [lastSeenPickups, setLastSeenPickups]       = useState(0);
+  const [lastSeenDeliveries, setLastSeenDeliveries] = useState(0);
+  const initializedRef        = useRef(false);
   const [trackingOrderId, setTrackingOrderId] = useState(() => GPS.activeOrderId());
   const [gpsError, setGpsError]               = useState(null);
   const [currentPosition, setCurrentPosition] = useState(() => GPS.lastPosition());
   const autoStartAttemptedRef = useRef(false);
   const fileInputRefs         = useRef({});
-  const [kickedOut, setKickedOut]             = useState(false);
-  const [kickedCountdown, setKickedCountdown] = useState(180);
-  const countdownIntervalRef                  = useRef(null);
-  const hasBeenKickedRef                      = useRef(false);
 
-  const riderInfo  = useQuery(api.riders.getRiderByEmail, user?.email ? { email: user.email } : 'skip');
-  const allOrders  = useQuery(api.orders.getAllOrders) || [];
+  const [kickedOut, setKickedOut]     = useState(false);
+  const hasBeenKickedRef              = useRef(false);
+  const [kickedAtTimestamp, setKickedAtTimestamp] = useState(null);
+  const remainingCountdown = useKickedCountdown(kickedAtTimestamp);
+
+  const riderInfo  = useQuery(api.riders.getRiderByEmail,  user?.email ? { email: user.email } : 'skip');
+  const allOrders  = useQuery(api.orders.getAllOrders)  || [];
   const allPickups = useQuery(api.pickupRequests.getAllPickupRequests) || [];
   const sessionCheck = useQuery(
     api.riders.checkRiderSession,
     user?.email && user?.sessionId ? { email: user.email, sessionId: user.sessionId } : 'skip'
   );
+
   const createPickupRequest = useMutation(api.pickupRequests.createPickupRequest);
   const updateOrderFields   = useMutation(api.orders.updateOrderFields);
   const updatePickupStatus  = useMutation(api.pickupRequests.updatePickupStatus);
   const deletePickupRequest = useMutation(api.pickupRequests.deletePickupRequest);
   const updateRiderLocation = useMutation(api.riders.updateRiderLocation);
   const stopRiderTracking   = useMutation(api.riders.stopRiderTracking);
+  const setRiderKickedAt    = useMutation(api.riders.setRiderKickedAt);
 
   useEffect(() => { if (GPS.isActive()) GPS.updateSendFn(updateRiderLocation); });
+
   useEffect(() => {
     const activeId = GPS.activeOrderId();
     const lastPos  = GPS.lastPosition();
     if (activeId) { setTrackingOrderId(activeId); setTab('deliver'); }
     if (lastPos)   setCurrentPosition(lastPos);
   }, []);
+
   useEffect(() => {
     const sync = setInterval(() => {
       setTrackingOrderId(GPS.activeOrderId());
@@ -652,6 +703,22 @@ const RiderDashboard = () => {
     }, 2000);
     return () => clearInterval(sync);
   }, []);
+
+  useEffect(() => {
+    if (!riderInfo) return;
+    if (hasBeenKickedRef.current) return;
+    if (!riderInfo.kickedAt) return;
+    const elapsed = Math.floor((Date.now() - riderInfo.kickedAt) / 1000);
+    const left    = KICKED_DURATION_SEC - elapsed;
+    if (left > 0) {
+      hasBeenKickedRef.current = true;
+      setKickedOut(true);
+      setKickedAtTimestamp(riderInfo.kickedAt);
+      GPS.stopLocal();
+      setTrackingOrderId(null);
+      setCurrentPosition(null);
+    }
+  }, [riderInfo]);
 
   const confirmedOrders = allOrders
     .filter(o =>
@@ -667,25 +734,16 @@ const RiderDashboard = () => {
   const myPickups = allPickups
     .filter(p => p.riderEmail === user?.email)
     .sort((a, b) => {
-      const getLatestTime = (p) => {
-        if (p.approvedAt)  return new Date(p.approvedAt).getTime();
-        if (p.requestedAt) return new Date(p.requestedAt).getTime();
-        return p._creationTime || 0;
-      };
-      return getLatestTime(b) - getLatestTime(a);
+      const t = p => p.approvedAt ? new Date(p.approvedAt).getTime() : p.requestedAt ? new Date(p.requestedAt).getTime() : (p._creationTime || 0);
+      return t(b) - t(a);
     });
 
   const myDeliveries = myPickups
-    .filter(p => {
-      if (p.status !== 'approved' && p.status !== 'out_for_delivery') return false;
-      return allOrders.some(o => o.orderId === p.orderId);
-    })
+    .filter(p => (p.status === 'approved' || p.status === 'out_for_delivery') && allOrders.some(o => o.orderId === p.orderId))
     .sort((a, b) => {
       if (a.status === 'out_for_delivery' && b.status !== 'out_for_delivery') return -1;
-      if (b.status === 'out_for_delivery' && a.status !== 'out_for_delivery') return 1;
-      const aTime = a.requestedAt ? new Date(a.requestedAt).getTime() : 0;
-      const bTime = b.requestedAt ? new Date(b.requestedAt).getTime() : 0;
-      return bTime - aTime;
+      if (b.status === 'out_for_delivery' && a.status !== 'out_for_delivery') return  1;
+      return (new Date(b.requestedAt).getTime()) - (new Date(a.requestedAt).getTime());
     });
 
   const pendingPickupsCount   = myPickups.filter(p => p.status === 'pending').length;
@@ -716,22 +774,15 @@ const RiderDashboard = () => {
   useEffect(() => {
     if (autoStartAttemptedRef.current) return;
     if (!riderInfo || !user?.email || !user?.sessionId) return;
-    if (myDeliveries.length === 0) return;
-    if (GPS.isActive()) return;
-    const activeDelivery = myDeliveries.find(d => d.status === 'out_for_delivery');
-    if (!activeDelivery) return;
+    if (myDeliveries.length === 0 || GPS.isActive()) return;
+    const active = myDeliveries.find(d => d.status === 'out_for_delivery');
+    if (!active) return;
     autoStartAttemptedRef.current = true;
     if (!navigator.geolocation) { setGpsError('GPS not supported on this device.'); return; }
-    GPS.start({
-      orderId:    activeDelivery.orderId,
-      riderEmail: user.email,
-      riderName:  riderInfo.fullName,
-      sessionId:  user.sessionId,
-      sendFn:     updateRiderLocation,
-    });
-    setTrackingOrderId(activeDelivery.orderId);
+    GPS.start({ orderId: active.orderId, riderEmail: user.email, riderName: riderInfo.fullName, sessionId: user.sessionId, sendFn: updateRiderLocation });
+    setTrackingOrderId(active.orderId);
     setTab('deliver');
-    setExpandedDeliveries(prev => ({ ...prev, [activeDelivery._id]: true }));
+    setExpandedDeliveries(prev => ({ ...prev, [active._id]: true }));
   }, [riderInfo, myDeliveries, user, updateRiderLocation]);
 
   const handleForcedLogout = useCallback(() => {
@@ -739,180 +790,126 @@ const RiderDashboard = () => {
   }, [logout, navigate]);
 
   useEffect(() => {
+    if (kickedOut && remainingCountdown === 0) {
+      handleForcedLogout();
+    }
+  }, [kickedOut, remainingCountdown, handleForcedLogout]);
+
+  useEffect(() => {
     if (!sessionCheck) return;
     if (hasBeenKickedRef.current) return;
     if (!sessionCheck.valid && sessionCheck.reason === 'new_device_logged_in') {
       hasBeenKickedRef.current = true;
+      const now = Date.now();
       setKickedOut(true);
-      setKickedCountdown(180);
+      setKickedAtTimestamp(now);
       GPS.stopLocal();
       setTrackingOrderId(null);
       setCurrentPosition(null);
-      countdownIntervalRef.current = setInterval(() => {
-        setKickedCountdown(prev => {
-          if (prev <= 1) { clearInterval(countdownIntervalRef.current); handleForcedLogout(); return 0; }
-          return prev - 1;
-        });
-      }, 1000);
+      if (user?.email) {
+        setRiderKickedAt({ email: user.email, kickedAt: now }).catch(e => console.error('setRiderKickedAt failed:', e));
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionCheck]);
-
-  useEffect(() => {
-    return () => { if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current); };
-  }, []);
 
   const startTracking = useCallback((orderId) => {
     if (!navigator.geolocation) { setGpsError('GPS not supported on this device.'); return; }
     if (!riderInfo) return;
     setGpsError(null);
-    GPS.start({
-      orderId,
-      riderEmail: user.email,
-      riderName:  riderInfo.fullName,
-      sessionId:  user.sessionId,
-      sendFn:     updateRiderLocation,
-    });
+    GPS.start({ orderId, riderEmail: user.email, riderName: riderInfo.fullName, sessionId: user.sessionId, sendFn: updateRiderLocation });
     setTrackingOrderId(orderId);
   }, [riderInfo, user, updateRiderLocation]);
 
-  const stopTrackingLocal = useCallback(() => {
-    GPS.stopLocal();
-    setTrackingOrderId(null);
-    setCurrentPosition(null);
-  }, []);
+  const stopTrackingLocal    = useCallback(() => { GPS.stopLocal(); setTrackingOrderId(null); setCurrentPosition(null); }, []);
+  const stopTrackingOnDelivery = useCallback(async () => { await GPS.stopOnDelivery(stopRiderTracking); setTrackingOrderId(null); setCurrentPosition(null); }, [stopRiderTracking]);
 
-  const stopTrackingOnDelivery = useCallback(async () => {
-    await GPS.stopOnDelivery(stopRiderTracking);
-    setTrackingOrderId(null);
-    setCurrentPosition(null);
-  }, [stopRiderTracking]);
+  const toggleExpanded   = (id, setFn) => setFn(prev => ({ ...prev, [id]: !prev[id] }));
+  const getMyRequestStatus = (orderId) => { const r = myPickups.find(p => p.orderId === orderId); return r ? r.status : null; };
+  const getPickupStatusStyle = (status) => ({ pending: { bg: '#fff3cd', color: '#856404' }, approved: { bg: '#d1fae5', color: '#0f5132' }, rejected: { bg: '#fee2e2', color: '#991b1b' }, out_for_delivery: { bg: '#dbeafe', color: '#1e40af' }, completed: { bg: '#d1fae5', color: '#065f46' } }[status] || { bg: '#e2e8f0', color: '#475569' });
+  const getStatusLabel = (status) => ({ pending: '⏳ Pending', approved: '✅ Approved', rejected: '❌ Rejected', out_for_delivery: '🚚 Out for Delivery', completed: '🎉 Delivered' }[status] || status);
 
-  const toggleExpanded = (id, setFn) => setFn(prev => ({ ...prev, [id]: !prev[id] }));
-  const getMyRequestStatus = (orderId) => {
-    const req = myPickups.find(p => p.orderId === orderId);
-    return req ? req.status : null;
-  };
-  const getPickupStatusStyle = (status) => {
-    const map = {
-      pending:          { bg: '#fff3cd', color: '#856404' },
-      approved:         { bg: '#d1fae5', color: '#0f5132' },
-      rejected:         { bg: '#fee2e2', color: '#991b1b' },
-      out_for_delivery: { bg: '#dbeafe', color: '#1e40af' },
-      completed:        { bg: '#d1fae5', color: '#065f46' },
-    };
-    return map[status] || { bg: '#e2e8f0', color: '#475569' };
-  };
-  const getStatusLabel = (status) => {
-    const map = {
-      pending: '⏳ Pending', approved: '✅ Approved', rejected: '❌ Rejected',
-      out_for_delivery: '🚚 Out for Delivery', completed: '🎉 Delivered',
-    };
-    return map[status] || status;
-  };
-  const closeSidebar = useCallback(() => {
-    setSidebarOpen(false);
-    setTimeout(() => window.dispatchEvent(new Event('rider-sidebar-closed')), 350);
-  }, []);
+  const closeSidebar = useCallback(() => { setSidebarOpen(false); setTimeout(() => window.dispatchEvent(new Event('rider-sidebar-closed')), 350); }, []);
   const handleLogout = async () => {
     if (window.confirm('Are you sure you want to logout?\n\n📍 GPS tracking will continue running for the customer until delivery is confirmed.')) {
       logout(); navigate('/', { replace: true });
     }
   };
+
   const requestPickup = async (order) => {
     if (!riderInfo) return;
-    const alreadyApproved  = allPickups.find(p => p.orderId === order.orderId && p.status === 'approved');
-    if (alreadyApproved)   { alert('❌ Sorry! Another rider was already approved for this order.'); return; }
-    const alreadyRequested = myPickups.find(p => p.orderId === order.orderId && p.status === 'pending');
-    if (alreadyRequested)  { alert('You already have a pending request for this order.'); return; }
+    if (allPickups.find(p => p.orderId === order.orderId && p.status === 'approved')) { alert('❌ Sorry! Another rider was already approved for this order.'); return; }
+    if (myPickups.find(p => p.orderId === order.orderId && p.status === 'pending'))   { alert('You already have a pending request for this order.'); return; }
     try {
-      await createPickupRequest({
-        orderId: order.orderId, riderId: riderInfo._id, riderName: riderInfo.fullName,
-        riderEmail: user.email, riderPhone: riderInfo.phone || '', riderVehicle: riderInfo.vehicleType || '',
-        riderPlate: riderInfo.plateNumber || '', customerName: order.customerName || order.name || '',
-        total: order.total || 0, requestedAt: new Date().toISOString(), status: 'pending',
-      });
+      await createPickupRequest({ orderId: order.orderId, riderId: riderInfo._id, riderName: riderInfo.fullName, riderEmail: user.email, riderPhone: riderInfo.phone || '', riderVehicle: riderInfo.vehicleType || '', riderPlate: riderInfo.plateNumber || '', customerName: order.customerName || order.name || '', total: order.total || 0, requestedAt: new Date().toISOString(), status: 'pending' });
       alert('✅ Pickup request sent! Waiting for admin approval.');
     } catch (err) { console.error(err); alert('Failed to send pickup request. Please try again.'); }
   };
+
   const notifyCustomer = async (delivery) => {
     if (!window.confirm('Notify the customer that their order is on the way?')) return;
     setNotifyingId(delivery._id);
     try {
-      await updateOrderFields({
-        orderId: delivery.orderId, orderStatus: 'out_for_delivery', status: 'Out for Delivery',
-        riderInfo: { name: riderInfo.fullName, phone: riderInfo.phone, vehicle: riderInfo.vehicleType, plate: riderInfo.plateNumber },
-      });
+      await updateOrderFields({ orderId: delivery.orderId, orderStatus: 'out_for_delivery', status: 'Out for Delivery', riderInfo: { name: riderInfo.fullName, phone: riderInfo.phone, vehicle: riderInfo.vehicleType, plate: riderInfo.plateNumber } });
       await updatePickupStatus({ requestId: delivery._id, status: 'out_for_delivery' });
       startTracking(delivery.orderId);
       alert('📦 Customer notified!\n\n📍 GPS tracking has started automatically.\nThe customer can now see your location in real-time.\n\nAsk the customer for their OTP code when you arrive.');
     } catch (err) { console.error(err); alert('Failed to notify customer. Please try again.'); }
     finally { setNotifyingId(null); }
   };
+
   const handlePhotoSelect = (deliveryId, file) => {
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) { setOtpErrors(prev => ({ ...prev, [deliveryId]: 'Photo must be under 5MB.' })); return; }
+    if (file.size > 5 * 1024 * 1024) { setOtpErrors(p => ({ ...p, [deliveryId]: 'Photo must be under 5MB.' })); return; }
     const reader = new FileReader();
-    reader.onload = (e) => {
-      setPhotoData(prev => ({ ...prev, [deliveryId]: e.target.result }));
-      setOtpErrors(prev => ({ ...prev, [deliveryId]: '' }));
-    };
+    reader.onload = (e) => { setPhotoData(p => ({ ...p, [deliveryId]: e.target.result })); setOtpErrors(p => ({ ...p, [deliveryId]: '' })); };
     reader.readAsDataURL(file);
   };
+
   const confirmDelivery = async (delivery) => {
     const inputOtp = (otpInputs[delivery._id] || '').trim();
     const photo    = photoData[delivery._id];
     const order    = allOrders.find(o => o.orderId === delivery.orderId || o.orderId?.trim() === delivery.orderId?.trim());
-    if (!order)             { setOtpErrors(prev => ({ ...prev, [delivery._id]: '⏳ Order data is still loading. Please wait a moment and try again.' })); return; }
-    if (!inputOtp)          { setOtpErrors(prev => ({ ...prev, [delivery._id]: 'Please enter the OTP from the customer.' })); return; }
-    if (!order.deliveryOtp) { setOtpErrors(prev => ({ ...prev, [delivery._id]: '⏳ The customer has not generated their OTP yet. Ask them to open their tracking page.' })); return; }
-    if (inputOtp !== order.deliveryOtp) { setOtpErrors(prev => ({ ...prev, [delivery._id]: '❌ Incorrect OTP. Please ask the customer for the correct code.' })); return; }
+    if (!order)                             { setOtpErrors(p => ({ ...p, [delivery._id]: '⏳ Order data is still loading. Please wait a moment and try again.' })); return; }
+    if (!inputOtp)                          { setOtpErrors(p => ({ ...p, [delivery._id]: 'Please enter the OTP from the customer.' })); return; }
+    if (!order.deliveryOtp)                 { setOtpErrors(p => ({ ...p, [delivery._id]: '⏳ The customer has not generated their OTP yet. Ask them to open their tracking page.' })); return; }
+    if (inputOtp !== order.deliveryOtp)     { setOtpErrors(p => ({ ...p, [delivery._id]: '❌ Incorrect OTP. Please ask the customer for the correct code.' })); return; }
     if (!window.confirm('Confirm delivery? This will mark the order as Completed.')) return;
     setConfirmingId(delivery._id);
-    const timestamp = new Date().toISOString();
     try {
-      await updateOrderFields({
-        orderId: delivery.orderId, orderStatus: 'completed', status: 'Delivered',
-        deliveryOtpVerified: true, deliveryConfirmedAt: timestamp,
-        ...(photo ? { deliveryProofPhoto: photo } : {}),
-      });
+      await updateOrderFields({ orderId: delivery.orderId, orderStatus: 'completed', status: 'Delivered', deliveryOtpVerified: true, deliveryConfirmedAt: new Date().toISOString(), ...(photo ? { deliveryProofPhoto: photo } : {}) });
       await updatePickupStatus({ requestId: delivery._id, status: 'completed' });
       await stopTrackingOnDelivery(delivery.orderId);
-      setOtpInputs(prev => { const n = { ...prev }; delete n[delivery._id]; return n; });
-      setPhotoData(prev => { const n = { ...prev }; delete n[delivery._id]; return n; });
-      setOtpErrors(prev => { const n = { ...prev }; delete n[delivery._id]; return n; });
+      setOtpInputs(p => { const n = { ...p }; delete n[delivery._id]; return n; });
+      setPhotoData(p => { const n = { ...p }; delete n[delivery._id]; return n; });
+      setOtpErrors(p => { const n = { ...p }; delete n[delivery._id]; return n; });
       alert('🎉 Delivery confirmed! Order marked as Completed.');
     } catch (err) { console.error(err); alert('Failed to confirm delivery. Please try again.'); }
     finally { setConfirmingId(null); }
   };
+
   const handleDeletePickup = async (pickupId, status, orderId) => {
     if (['approved', 'out_for_delivery'].includes(status)) { alert('❌ Cannot delete an active pickup. Complete the delivery first.'); return; }
     if (!window.confirm('Remove this pickup record from your list?')) return;
     try {
       await deletePickupRequest({ requestId: pickupId });
       if (GPS.activeOrderId() === orderId) { GPS.stopLocal(); setTrackingOrderId(null); setCurrentPosition(null); }
-    }
-    catch (err) { console.error(err); alert('Failed to remove pickup.'); }
+    } catch (err) { console.error(err); alert('Failed to remove pickup.'); }
   };
 
-  if (riderInfo === undefined) {
-    return <div className="rider-dashboard"><div className="rider-not-approved"><div className="rider-na-icon">🛵</div><h2>Loading...</h2></div></div>;
-  }
-  if (!riderInfo || riderInfo.status !== 'approved') {
-    return (
-      <div className="rider-dashboard">
-        <div className="rider-not-approved">
-          <div className="rider-na-icon">🛵</div>
-          <h2>Account Pending Approval</h2>
-          <p>Your rider application is still being reviewed by the admin. Please wait for approval before accessing the dashboard.</p>
-          <button className="rider-logout-btn" onClick={handleLogout}>Logout</button>
-        </div>
-      </div>
-    );
-  }
-  if (kickedOut) {
-    const mins = Math.floor(kickedCountdown / 60);
-    const secs = kickedCountdown % 60;
+  if (riderInfo === undefined) return <div className="rider-dashboard"><div className="rider-not-approved"><div className="rider-na-icon">🛵</div><h2>Loading...</h2></div></div>;
+  if (!riderInfo || riderInfo.status !== 'approved') return (
+    <div className="rider-dashboard"><div className="rider-not-approved">
+      <div className="rider-na-icon">🛵</div>
+      <h2>Account Pending Approval</h2>
+      <p>Your rider application is still being reviewed by the admin. Please wait for approval before accessing the dashboard.</p>
+      <button className="rider-logout-btn" onClick={handleLogout}>Logout</button>
+    </div></div>
+  );
+
+  if (kickedOut && remainingCountdown !== null && remainingCountdown > 0) {
+    const mins = Math.floor(remainingCountdown / 60);
+    const secs = remainingCountdown % 60;
     return (
       <div className="rider-dashboard">
         <div className="rider-kicked-overlay">
@@ -933,6 +930,8 @@ const RiderDashboard = () => {
       </div>
     );
   }
+
+  const riderHeading = currentPosition?.heading ?? null;
 
   return (
     <div className={`rider-dashboard${sidebarOpen ? ' sidebar-open' : ''}`}>
@@ -969,15 +968,15 @@ const RiderDashboard = () => {
           </div>
         )}
         <nav className="rider-nav">
-          <button className={`rider-nav-link ${tab === 'available' ? 'active' : ''}`} onClick={() => handleNavClick('available')}>
+          <button className={`rider-nav-link ${tab === 'available'  ? 'active' : ''}`} onClick={() => handleNavClick('available')}>
             <i className="fas fa-box-open"></i><span>Available Orders</span>
-            {confirmedOrders.length > 0 && <span className={`rider-nav-badge ${newAvailableCount > 0 ? 'rider-nav-badge-new' : ''}`}>{confirmedOrders.length}</span>}
+            {confirmedOrders.length > 0 && <span className={`rider-nav-badge ${newAvailableCount  > 0 ? 'rider-nav-badge-new' : ''}`}>{confirmedOrders.length}</span>}
           </button>
           <button className={`rider-nav-link ${tab === 'my-pickups' ? 'active' : ''}`} onClick={() => handleNavClick('my-pickups')}>
             <i className="fas fa-truck-pickup"></i><span>My Pickups</span>
             {pendingPickupsCount > 0 && <span className={`rider-nav-badge ${newPickupsCount > 0 ? 'rider-nav-badge-new' : ''}`}>{pendingPickupsCount}</span>}
           </button>
-          <button className={`rider-nav-link ${tab === 'deliver' ? 'active' : ''}`} onClick={() => handleNavClick('deliver')}>
+          <button className={`rider-nav-link ${tab === 'deliver'    ? 'active' : ''}`} onClick={() => handleNavClick('deliver')}>
             <i className="fas fa-shipping-fast"></i><span>Deliver</span>
             {activeDeliveriesCount > 0 && <span className={`rider-nav-badge rider-nav-badge-green ${newDeliveriesCount > 0 ? 'rider-nav-badge-new' : ''}`}>{activeDeliveriesCount}</span>}
           </button>
@@ -1141,6 +1140,7 @@ const RiderDashboard = () => {
                               orderId={delivery.orderId}
                               allOrders={allOrders}
                               riderCoords={currentPosition ? { lat: currentPosition.lat, lng: currentPosition.lng } : null}
+                              riderHeading={riderHeading}
                             />
                           </div>
                           <div className="rider-expanded-section rider-info-preview">
@@ -1192,8 +1192,8 @@ const RiderDashboard = () => {
                                   value={otpInputs[delivery._id] || ''}
                                   onChange={(e) => {
                                     const val = e.target.value.replace(/\D/g, '').slice(0, 4);
-                                    setOtpInputs(prev => ({ ...prev, [delivery._id]: val }));
-                                    setOtpErrors(prev => ({ ...prev, [delivery._id]: '' }));
+                                    setOtpInputs(p => ({ ...p, [delivery._id]: val }));
+                                    setOtpErrors(p => ({ ...p, [delivery._id]: '' }));
                                   }}
                                 />
                               </div>

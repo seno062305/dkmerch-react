@@ -16,22 +16,6 @@ const formatTimeAgo = (timestamp) => {
   return `${Math.floor(diff / 60)}m ago`;
 };
 
-// ─── SATELLITE TILE LAYERS ───────────────────────────────────────────────────
-// Esri World Imagery — free, no API key required
-const SATELLITE_LAYER = {
-  url        : 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-  attribution: 'Tiles © Esri — Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
-  maxZoom    : 19,
-};
-
-// Esri Labels overlay — shows street/place names on top of satellite
-const LABELS_LAYER = {
-  url        : 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
-  attribution: '',
-  maxZoom    : 19,
-  opacity    : 0.85,
-};
-
 // ─── LEAFLET MAP COMPONENT ───────────────────────────────────────────────────
 const RiderMap = ({ orderId, riderName }) => {
   const mapRef            = useRef(null);
@@ -139,17 +123,10 @@ const RiderMap = ({ orderId, riderName }) => {
 
       map.zoomControl.setPosition('bottomright');
 
-      // ✅ SATELLITE: Esri World Imagery base layer
-      L.tileLayer(SATELLITE_LAYER.url, {
-        attribution: SATELLITE_LAYER.attribution,
-        maxZoom    : SATELLITE_LAYER.maxZoom,
-      }).addTo(map);
-
-      // ✅ LABELS: street names/places on top of satellite
-      L.tileLayer(LABELS_LAYER.url, {
-        attribution: LABELS_LAYER.attribution,
-        maxZoom    : LABELS_LAYER.maxZoom,
-        opacity    : LABELS_LAYER.opacity,
+      // ✅ OSM normal map — no satellite
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom    : 19,
       }).addTo(map);
 
       const riderIcon = L.divIcon({

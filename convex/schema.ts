@@ -161,6 +161,8 @@ export default defineSchema({
     name: v.optional(v.string()),
     activeSessionId: v.optional(v.string()),
     activeDeviceAt:  v.optional(v.number()),
+    // ✅ Timestamp (ms) when rider was kicked — used to persist countdown across reloads
+    kickedAt: v.optional(v.number()),
   })
     .index("by_email", ["email"])
     .index("by_status", ["status"]),
