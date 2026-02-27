@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useQuery, useAction } from 'convex/react';
@@ -7,165 +7,247 @@ import { useUserOrders, useOrdersByEmail, useUpdateOrderOtp } from '../utils/ord
 import { useProducts, usePreOrderProducts } from '../utils/productStorage';
 import './TrackOrder.css';
 
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+const formatTimeAgo = (timestamp) => {
+  if (!timestamp) return 'unknown';
+  const diff = Math.floor((Date.now() - timestamp) / 1000);
+  if (diff < 10) return 'just now';
+  if (diff < 60) return `${diff}s ago`;
+  return `${Math.floor(diff / 60)}m ago`;
+};
+
 // ─── LEAFLET MAP COMPONENT ───────────────────────────────────────────────────
 const RiderMap = ({ orderId, riderName }) => {
-  const mapRef = useRef(null);
-  const mapInstanceRef = useRef(null);
-  const markerRef = useRef(null);
+  const mapRef            = useRef(null);
+  const mapInstanceRef    = useRef(null);
+  const markerRef         = useRef(null);
   const accuracyCircleRef = useRef(null);
-  const [mapReady, setMapReady] = useState(false);
-  const [mapError, setMapError] = useState(null);
+  const pendingLocRef     = useRef(null); // buffer location if map not ready yet
+  const [mapReady, setMapReady]           = useState(false);
+  const [mapError, setMapError]           = useState(null);
+  const [leafletLoaded, setLeafletLoaded] = useState(!!window.L);
+  const [, forceUpdate] = useState(0); // re-render status bar every 10s
 
+  // ── Convex live query — auto-updates whenever rider sends new location ──
   const locationData = useQuery(
     api.riders.getRiderLocation,
     orderId ? { orderId } : 'skip'
   );
 
   const isStale = locationData
-    ? Date.now() - locationData.updatedAt > 30000
+    ? Date.now() - locationData.updatedAt > 60000
     : true;
 
+  // Re-render "X seconds ago" label every 10s
   useEffect(() => {
-    if (mapInstanceRef.current || !mapRef.current) return;
+    const interval = setInterval(() => forceUpdate(n => n + 1), 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // ── Load Leaflet CSS + JS once ──
+  useEffect(() => {
+    if (window.L) { setLeafletLoaded(true); return; }
 
     if (!document.getElementById('leaflet-css')) {
       const link = document.createElement('link');
-      link.id = 'leaflet-css';
-      link.rel = 'stylesheet';
+      link.id   = 'leaflet-css';
+      link.rel  = 'stylesheet';
       link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
       document.head.appendChild(link);
     }
 
-    const script = document.createElement('script');
-    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-    script.onload = () => {
-      try {
-        const L = window.L;
-        const defaultLat = 12.8797;
-        const defaultLng = 121.7740;
+    const existingScript = document.getElementById('leaflet-js');
+    if (existingScript) {
+      if (window.L) { setLeafletLoaded(true); return; }
+      existingScript.addEventListener('load', () => setLeafletLoaded(true));
+      return;
+    }
 
-        const map = L.map(mapRef.current, {
-          zoomControl: true,
-          attributionControl: true,
-        }).setView([defaultLat, defaultLng], 6);
-
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '© OpenStreetMap contributors',
-          maxZoom: 19,
-        }).addTo(map);
-
-        const riderIcon = L.divIcon({
-          className: 'rider-map-icon',
-          html: `
-            <div class="rider-map-marker">
-              <div class="rider-map-marker-inner">
-                <i class="fas fa-motorcycle"></i>
-              </div>
-              <div class="rider-map-pulse"></div>
-            </div>
-          `,
-          iconSize: [48, 48],
-          iconAnchor: [24, 48],
-          popupAnchor: [0, -48],
-        });
-
-        const marker = L.marker([defaultLat, defaultLng], { icon: riderIcon })
-          .addTo(map)
-          .bindPopup(`<div class="rider-map-popup"><strong>🛵 ${riderName || 'Your Rider'}</strong><br><small>On the way to you!</small></div>`);
-
-        mapInstanceRef.current = map;
-        markerRef.current = marker;
-        setMapReady(true);
-      } catch (err) {
-        setMapError('Failed to initialize map.');
-        console.error('Leaflet init error:', err);
-      }
-    };
-    script.onerror = () => setMapError('Failed to load map. Check your internet connection.');
+    const script   = document.createElement('script');
+    script.id      = 'leaflet-js';
+    script.src     = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.onload  = () => setLeafletLoaded(true);
+    script.onerror = () => setMapError('Failed to load map library.');
     document.head.appendChild(script);
-
-    return () => {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
-        mapInstanceRef.current = null;
-        markerRef.current = null;
-        accuracyCircleRef.current = null;
-      }
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    if (!mapReady || !mapInstanceRef.current || !markerRef.current) return;
-    if (!locationData || !locationData.isTracking) return;
+  // ── Helper: apply location data to map marker + accuracy circle ──
+  const applyLocation = useCallback((data) => {
+    if (!data?.lat || !data?.lng) return;
+    if (!mapInstanceRef.current || !markerRef.current || !window.L) return;
 
-    const L = window.L;
-    const map = mapInstanceRef.current;
+    const L      = window.L;
+    const map    = mapInstanceRef.current;
     const marker = markerRef.current;
-    const { lat, lng, accuracy } = locationData;
+    const { lat, lng, accuracy, updatedAt, riderName: rName, isTracking } = data;
 
     marker.setLatLng([lat, lng]);
     marker.getPopup()?.setContent(
       `<div class="rider-map-popup">
-        <strong>🛵 ${locationData.riderName || riderName || 'Your Rider'}</strong><br>
-        <small>Updated ${formatTimeAgo(locationData.updatedAt)}</small>
+        <strong>🛵 ${rName || riderName || 'Your Rider'}</strong><br>
+        <small>${isTracking
+          ? `📍 Updated ${formatTimeAgo(updatedAt)}`
+          : '⏹ Stopped sharing location'}</small>
       </div>`
     );
 
-    if (accuracyCircleRef.current) map.removeLayer(accuracyCircleRef.current);
-    if (accuracy && accuracy < 500) {
+    // Redraw accuracy circle
+    if (accuracyCircleRef.current) {
+      try { map.removeLayer(accuracyCircleRef.current); } catch {}
+    }
+    if (accuracy && accuracy < 2000) {
       accuracyCircleRef.current = L.circle([lat, lng], {
-        radius: accuracy,
-        color: '#fc1268',
-        fillColor: '#fc1268',
-        fillOpacity: 0.08,
-        weight: 1.5,
-        dashArray: '4 4',
+        radius      : accuracy,
+        color       : '#fc1268',
+        fillColor   : '#fc1268',
+        fillOpacity : 0.07,
+        weight      : 1.5,
+        dashArray   : '4 4',
       }).addTo(map);
     }
 
-    map.panTo([lat, lng], { animate: true, duration: 0.8 });
+    // Pan to rider; zoom in if too far out
+    map.panTo([lat, lng], { animate: true, duration: 0.6 });
     if (map.getZoom() < 15) map.setView([lat, lng], 15, { animate: true });
-  }, [locationData, mapReady, riderName]);
+  }, [riderName]);
 
-  const formatTimeAgo = (timestamp) => {
-    const diff = Math.floor((Date.now() - timestamp) / 1000);
-    if (diff < 10) return 'just now';
-    if (diff < 60) return `${diff}s ago`;
-    return `${Math.floor(diff / 60)}m ago`;
-  };
+  // ── Init map once Leaflet is ready ──
+  useEffect(() => {
+    if (!leafletLoaded || mapInstanceRef.current || !mapRef.current) return;
+
+    try {
+      const L = window.L;
+
+      const map = L.map(mapRef.current, {
+        zoomControl       : true,
+        attributionControl: true,
+        tap               : false, // fix iOS double-tap bug
+      }).setView([14.5995, 120.9842], 12); // default: Manila
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom    : 19,
+      }).addTo(map);
+
+      const riderIcon = L.divIcon({
+        className : 'rider-map-icon',
+        html      : `
+          <div class="rider-map-marker">
+            <div class="rider-map-marker-inner">
+              <i class="fas fa-motorcycle"></i>
+            </div>
+            <div class="rider-map-pulse"></div>
+          </div>`,
+        iconSize    : [48, 48],
+        iconAnchor  : [24, 48],
+        popupAnchor : [0, -50],
+      });
+
+      const marker = L.marker([14.5995, 120.9842], { icon: riderIcon })
+        .addTo(map)
+        .bindPopup(`<div class="rider-map-popup">
+          <strong>🛵 ${riderName || 'Your Rider'}</strong><br>
+          <small>Waiting for location...</small>
+        </div>`);
+
+      mapInstanceRef.current = map;
+      markerRef.current      = marker;
+      setMapReady(true);
+
+      // ✅ Fix: tiles don't render properly inside modals until size is known
+      setTimeout(() => map.invalidateSize(), 300);
+
+      // ✅ Fix: if location data arrived before map was ready, apply it now
+      if (pendingLocRef.current) {
+        applyLocation(pendingLocRef.current);
+        pendingLocRef.current = null;
+      }
+    } catch (err) {
+      console.error('Leaflet init error:', err);
+      setMapError('Failed to initialize map.');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leafletLoaded]);
+
+  // ── React to Convex location updates (live, auto-fires on every change) ──
+  useEffect(() => {
+    if (!locationData?.lat || !locationData?.lng) return;
+
+    if (!mapReady || !mapInstanceRef.current) {
+      // Map not ready yet — buffer and apply after init
+      pendingLocRef.current = locationData;
+      return;
+    }
+
+    applyLocation(locationData);
+  }, [locationData, mapReady, applyLocation]);
+
+  // ── Cleanup on unmount ──
+  useEffect(() => {
+    return () => {
+      if (mapInstanceRef.current) {
+        try { mapInstanceRef.current.remove(); } catch {}
+        mapInstanceRef.current    = null;
+        markerRef.current         = null;
+        accuracyCircleRef.current = null;
+        pendingLocRef.current     = null;
+      }
+    };
+  }, []);
+
+  // ── Status bar ──
+  const statusClass = !locationData          ? 'status-waiting'
+    : !locationData.isTracking               ? 'status-stopped'
+    : isStale                                ? 'status-stale'
+    : 'status-live';
+
+  const statusContent = !locationData
+    ? <><span className="map-status-dot dot-waiting"></span> Waiting for rider to share location…</>
+    : !locationData.isTracking
+    ? <><span className="map-status-dot dot-stopped"></span> Rider stopped sharing location</>
+    : isStale
+    ? <><span className="map-status-dot dot-stale"></span> Location may be outdated · last: {formatTimeAgo(locationData.updatedAt)}</>
+    : <><span className="map-status-dot dot-live"></span> <strong>Live</strong> · Updated {formatTimeAgo(locationData.updatedAt)}</>;
 
   if (mapError) {
     return (
       <div className="rider-map-error">
         <i className="fas fa-map-marked-alt"></i>
         <p>{mapError}</p>
+        <small>Try refreshing the page.</small>
       </div>
     );
   }
 
   return (
     <div className="rider-map-wrapper">
-      <div className={`rider-map-status-bar ${
-        !locationData ? 'status-waiting' :
-        !locationData.isTracking ? 'status-stopped' :
-        isStale ? 'status-stale' : 'status-live'
-      }`}>
-        {!locationData ? (
-          <><span className="map-status-dot dot-waiting"></span> Waiting for rider to share location…</>
-        ) : !locationData.isTracking ? (
-          <><span className="map-status-dot dot-stopped"></span> Rider stopped sharing location</>
-        ) : isStale ? (
-          <><span className="map-status-dot dot-stale"></span> Location may be outdated (last update: {formatTimeAgo(locationData.updatedAt)})</>
-        ) : (
-          <><span className="map-status-dot dot-live"></span> Live · Updated {formatTimeAgo(locationData.updatedAt)}</>
-        )}
+      <div className={`rider-map-status-bar ${statusClass}`}>
+        {statusContent}
       </div>
+
       <div ref={mapRef} className="rider-map-container" />
-      {locationData?.isTracking && locationData.accuracy && (
+
+      {locationData?.isTracking && (
         <div className="rider-map-accuracy">
-          <i className="fas fa-crosshairs"></i>
-          GPS accuracy: ±{Math.round(locationData.accuracy)}m
+          {locationData.accuracy && (
+            <span><i className="fas fa-crosshairs"></i> ±{Math.round(locationData.accuracy)}m</span>
+          )}
+          {locationData.speed > 0 && (
+            <span style={{ marginLeft: 10 }}>
+              <i className="fas fa-tachometer-alt"></i> {Math.round((locationData.speed || 0) * 3.6)} km/h
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Overlay when rider hasn't shared yet */}
+      {!locationData && (
+        <div className="rider-map-waiting-overlay">
+          <div className="rider-map-waiting-inner">
+            <i className="fas fa-motorcycle"></i>
+            <p>Rider hasn't shared location yet</p>
+            <small>Map updates automatically when rider starts sharing</small>
+          </div>
         </div>
       )}
     </div>
@@ -179,14 +261,14 @@ const TrackOrder = () => {
   const [searchParams] = useSearchParams();
   const orderIdParam = searchParams.get('order') || searchParams.get('orderId');
 
-  const [filter, setFilter] = useState('active');
-  const [selectedOrderId, setSelectedOrderId] = useState(null);
-  const [trackingEmail, setTrackingEmail] = useState('');
-  const [searchEmail, setSearchEmail] = useState('');
+  const [filter, setFilter]                       = useState('active');
+  const [selectedOrderId, setSelectedOrderId]     = useState(null);
+  const [trackingEmail, setTrackingEmail]         = useState('');
+  const [searchEmail, setSearchEmail]             = useState('');
   const [showTrackedOrders, setShowTrackedOrders] = useState(false);
-  const [lightboxData, setLightboxData] = useState(null);
-  const [removeConfirm, setRemoveConfirm] = useState(null);
-  const [hiddenOrders, setHiddenOrders] = useState(() => {
+  const [lightboxData, setLightboxData]           = useState(null);
+  const [removeConfirm, setRemoveConfirm]         = useState(null);
+  const [hiddenOrders, setHiddenOrders]           = useState(() => {
     try { return JSON.parse(localStorage.getItem('hiddenDeliveredOrders') || '[]'); } catch { return []; }
   });
 
@@ -201,19 +283,12 @@ const TrackOrder = () => {
     ? allAvailableOrders.find(o => o._id === selectedOrderId)
     : null;
 
+  // Auto-open order from URL param
   useEffect(() => {
-    if (orderIdParam && orders.length > 0 && !selectedOrderId) {
-      const found = orders.find(o => o.orderId === orderIdParam);
-      if (found) setSelectedOrderId(found._id);
-    }
-  }, [orderIdParam, orders]);
-
-  useEffect(() => {
-    if (orderIdParam && emailOrders.length > 0 && !selectedOrderId) {
-      const found = emailOrders.find(o => o.orderId === orderIdParam);
-      if (found) setSelectedOrderId(found._id);
-    }
-  }, [orderIdParam, emailOrders]);
+    if (!orderIdParam || selectedOrderId) return;
+    const found = [...orders, ...emailOrders].find(o => o.orderId === orderIdParam);
+    if (found) setSelectedOrderId(found._id);
+  }, [orderIdParam, orders, emailOrders, selectedOrderId]);
 
   const handleCloseModal = () => setSelectedOrderId(null);
   const handleOpenModal  = (order) => setSelectedOrderId(order._id);
@@ -258,8 +333,14 @@ const TrackOrder = () => {
     return s === 'cancelled';
   };
 
+  // ✅ Handles ALL status formats: "out_for_delivery", "Out for Delivery", etc.
+  const isOutForDeliveryStatus = (order) => {
+    const s = (order.orderStatus || order.status || '').toLowerCase().replace(/\s+/g, '_');
+    return s === 'out_for_delivery';
+  };
+
   const getTimelineSteps = (order) => {
-    const status = (order.orderStatus || order.status || 'pending').toLowerCase().replace(/ /g, '_');
+    const status = (order.orderStatus || order.status || 'pending').toLowerCase().replace(/\s+/g, '_');
     const fmt = (ts) => ts
       ? new Date(ts).toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
       : null;
@@ -273,20 +354,21 @@ const TrackOrder = () => {
 
     if (status === 'cancelled') {
       return [
-        { label: 'Order Placed', icon: 'fa-shopping-cart', completed: true,           time: placedAt },
+        { label: 'Order Placed', icon: 'fa-shopping-cart', completed: true, time: placedAt },
         { label: 'Payment',      icon: 'fa-credit-card',   completed: !!order.paidAt, time: paidAt },
         { label: 'Cancelled',    icon: 'fa-times-circle',  completed: true, isCancelled: true, cancelReason: order.cancelReason, time: null },
       ];
     }
 
     return [
-      { label: 'Order Placed', icon: 'fa-shopping-cart', completed: true, time: placedAt, desc: 'Your order has been placed successfully.' },
+      {
+        label: 'Order Placed', icon: 'fa-shopping-cart', completed: true, time: placedAt,
+        desc: 'Your order has been placed successfully.',
+      },
       {
         label: 'Payment Confirmed', icon: 'fa-credit-card',
         completed: order.paymentStatus === 'paid', time: paidAt,
-        desc: order.paymentStatus === 'paid'
-          ? 'Payment received via PayMongo.'
-          : 'Waiting for payment confirmation.',
+        desc: order.paymentStatus === 'paid' ? 'Payment received via PayMongo.' : 'Waiting for payment confirmation.',
       },
       {
         label: 'Order Confirmed', icon: 'fa-check-circle',
@@ -303,24 +385,21 @@ const TrackOrder = () => {
         desc: order.riderInfo
           ? `${order.riderInfo.name} (${order.riderInfo.plate}) will deliver your order.`
           : ['shipped','out_for_delivery','delivered','completed'].includes(status)
-            ? 'A rider has been assigned to your order.'
-            : 'Waiting for rider assignment.',
+            ? 'A rider has been assigned to your order.' : 'Waiting for rider assignment.',
       },
       {
         label: 'Out for Delivery', icon: 'fa-shipping-fast',
         completed: ['out_for_delivery','delivered','completed'].includes(status),
         time: outForDeliveryAt,
         desc: ['out_for_delivery','delivered','completed'].includes(status)
-          ? 'Your rider is on the way to deliver your order!'
-          : 'Waiting for rider to pick up your order.',
+          ? 'Your rider is on the way!' : 'Waiting for rider to pick up your order.',
       },
       {
         label: 'Delivered', icon: 'fa-check-double',
         completed: ['delivered','completed'].includes(status),
         time: deliveredAt,
         desc: ['delivered','completed'].includes(status)
-          ? 'Your order has been delivered successfully!'
-          : 'Waiting for delivery confirmation.',
+          ? 'Your order has been delivered successfully!' : 'Waiting for delivery confirmation.',
       },
     ];
   };
@@ -350,9 +429,9 @@ const TrackOrder = () => {
   });
 
   const FILTERS = [
-    { key: 'active',    icon: 'fa-shopping-bag',  label: 'All Orders', count: activeOrders.length,    desc: 'Active & ongoing orders' },
-    { key: 'delivered', icon: 'fa-check-double',   label: 'Delivered',  count: deliveredOrders.length, desc: 'Successfully delivered' },
-    { key: 'cancelled', icon: 'fa-ban',            label: 'Cancelled',  count: cancelledOrders.length, desc: 'Cancelled orders' },
+    { key: 'active',    icon: 'fa-shopping-bag', label: 'All Orders', count: activeOrders.length,    desc: 'Active & ongoing orders' },
+    { key: 'delivered', icon: 'fa-check-double',  label: 'Delivered',  count: deliveredOrders.length, desc: 'Successfully delivered' },
+    { key: 'cancelled', icon: 'fa-ban',           label: 'Cancelled',  count: cancelledOrders.length, desc: 'Cancelled orders' },
   ];
 
   const handleFindMyOrders = (e) => {
@@ -375,15 +454,15 @@ const TrackOrder = () => {
   // ─── ORDER CARD ─────────────────────────────────────────────────────────────
   const OrderCard = ({ order, onViewDetails }) => {
     const scrollRef = useRef(null);
-    const [activeImgIdx, setActiveImgIdx] = useState(0);
+    const [activeImgIdx, setActiveImgIdx]           = useState(0);
     const [continuingPayment, setContinuingPayment] = useState(false);
     const createPaymentLink = useAction(api.payments.createPaymentLink);
 
-    const ordDate     = order._creationTime ? new Date(order._creationTime) : null;
-    const orderStatus = getDisplayStatus(order);
-    const statusKey   = order.orderStatus || order.status || 'pending';
-    const delivered   = isDelivered(order);
-    const releaseDate = getPreOrderReleaseDate(order);
+    const ordDate      = order._creationTime ? new Date(order._creationTime) : null;
+    const orderStatus  = getDisplayStatus(order);
+    const statusKey    = order.orderStatus || order.status || 'pending';
+    const delivered    = isDelivered(order);
+    const releaseDate  = getPreOrderReleaseDate(order);
     const needsPayment = isPendingPayment(order);
 
     const itemImages = (order.items || []).map(item => {
@@ -401,23 +480,14 @@ const TrackOrder = () => {
       }
     };
 
-    // ✅ Continue Payment — re-use existing paymentLinkUrl or create new one
     const handleContinuePayment = async () => {
       setContinuingPayment(true);
       try {
-        // If order already has a payment link, just redirect
-        if (order.paymentLinkUrl) {
-          window.location.href = order.paymentLinkUrl;
-          return;
-        }
-        // Otherwise create a new payment link
+        if (order.paymentLinkUrl) { window.location.href = order.paymentLinkUrl; return; }
         const result = await createPaymentLink({
-          orderId:       order.orderId,
-          amount:        order.finalTotal ?? order.total,
-          description:   `DKMerch Order ${order.orderId}`,
-          customerName:  order.customerName,
-          customerEmail: order.email,
-          customerPhone: order.phone,
+          orderId: order.orderId, amount: order.finalTotal ?? order.total,
+          description: `DKMerch Order ${order.orderId}`,
+          customerName: order.customerName, customerEmail: order.email, customerPhone: order.phone,
         });
         window.location.href = result.paymentLinkUrl;
       } catch (err) {
@@ -443,14 +513,12 @@ const TrackOrder = () => {
                 ))}
               </div>
               {itemImages.length > 1 && (
-                <div className="order-img-dots">
-                  {itemImages.map((_, idx) => (
-                    <button key={idx} className={`order-img-dot ${idx === activeImgIdx ? 'active' : ''}`} onClick={() => scrollTo(idx)} />
-                  ))}
-                </div>
-              )}
-              {itemImages.length > 1 && (
                 <>
+                  <div className="order-img-dots">
+                    {itemImages.map((_, idx) => (
+                      <button key={idx} className={`order-img-dot ${idx === activeImgIdx ? 'active' : ''}`} onClick={() => scrollTo(idx)} />
+                    ))}
+                  </div>
                   <button className="order-img-arrow order-img-arrow-left" onClick={() => scrollTo((activeImgIdx - 1 + itemImages.length) % itemImages.length)}>
                     <i className="fas fa-chevron-left"></i>
                   </button>
@@ -492,26 +560,17 @@ const TrackOrder = () => {
             <span className="order-card-price">₱{order.total?.toLocaleString()}</span>
           </div>
 
-          {/* ✅ Continue Payment button for unpaid orders */}
           {needsPayment ? (
-            <button
-              className="btn btn-continue-payment"
-              onClick={handleContinuePayment}
-              disabled={continuingPayment}
-            >
-              {continuingPayment
-                ? <><i className="fas fa-spinner fa-spin"></i> Loading...</>
-                : <><i className="fas fa-credit-card"></i> Continue Payment</>
-              }
-            </button>
+            <>
+              <button className="btn btn-continue-payment" onClick={handleContinuePayment} disabled={continuingPayment}>
+                {continuingPayment ? <><i className="fas fa-spinner fa-spin"></i> Loading...</> : <><i className="fas fa-credit-card"></i> Continue Payment</>}
+              </button>
+              <button className="btn btn-outline btn-small order-view-btn" style={{ marginTop: '6px' }} onClick={() => onViewDetails(order)}>
+                <i className="fas fa-search"></i> View Details
+              </button>
+            </>
           ) : (
             <button className="btn btn-primary btn-small order-view-btn" onClick={() => onViewDetails(order)}>
-              <i className="fas fa-search"></i> View Details
-            </button>
-          )}
-
-          {needsPayment && (
-            <button className="btn btn-outline btn-small order-view-btn" style={{ marginTop: '6px' }} onClick={() => onViewDetails(order)}>
               <i className="fas fa-search"></i> View Details
             </button>
           )}
@@ -533,7 +592,7 @@ const TrackOrder = () => {
     const hasMultiple = images.length > 1;
     useEffect(() => {
       const onKey = (e) => {
-        if (e.key === 'Escape') closeLightbox();
+        if (e.key === 'Escape')                    closeLightbox();
         if (e.key === 'ArrowRight' && hasMultiple) lightboxNext();
         if (e.key === 'ArrowLeft'  && hasMultiple) lightboxPrev();
       };
@@ -543,15 +602,31 @@ const TrackOrder = () => {
     return (
       <div className="order-lightbox" onClick={closeLightbox}>
         <button className="lightbox-close" onClick={closeLightbox}><i className="fas fa-times"></i></button>
-        {hasMultiple && <button className="lightbox-arrow lightbox-arrow-left" onClick={(e) => { e.stopPropagation(); lightboxPrev(); }}><i className="fas fa-chevron-left"></i></button>}
+        {hasMultiple && (
+          <button className="lightbox-arrow lightbox-arrow-left" onClick={e => { e.stopPropagation(); lightboxPrev(); }}>
+            <i className="fas fa-chevron-left"></i>
+          </button>
+        )}
         <img src={images[index]} alt={`Item ${index + 1}`} onClick={e => e.stopPropagation()} />
-        {hasMultiple && <button className="lightbox-arrow lightbox-arrow-right" onClick={(e) => { e.stopPropagation(); lightboxNext(); }}><i className="fas fa-chevron-right"></i></button>}
-        {hasMultiple && <div className="lightbox-dots">{images.map((_, i) => <button key={i} className={`lightbox-dot ${i === index ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); setLightboxData(prev => ({ ...prev, index: i })); }} />)}</div>}
+        {hasMultiple && (
+          <button className="lightbox-arrow lightbox-arrow-right" onClick={e => { e.stopPropagation(); lightboxNext(); }}>
+            <i className="fas fa-chevron-right"></i>
+          </button>
+        )}
+        {hasMultiple && (
+          <div className="lightbox-dots">
+            {images.map((_, i) => (
+              <button key={i} className={`lightbox-dot ${i === index ? 'active' : ''}`}
+                onClick={e => { e.stopPropagation(); setLightboxData(prev => ({ ...prev, index: i })); }} />
+            ))}
+          </div>
+        )}
         {hasMultiple && <div className="lightbox-counter">{index + 1} / {images.length}</div>}
       </div>
     );
   };
 
+  // ─── LOGGED-IN VIEW ──────────────────────────────────────────────────────────
   if (isAuthenticated && user) {
     const activeTab = FILTERS.find(f => f.key === filter);
     return (
@@ -577,7 +652,9 @@ const TrackOrder = () => {
               <i className={`fas ${activeTab?.icon}`}></i>
               <span>
                 <strong>{activeTab?.label}</strong> — {activeTab?.desc}
-                {filteredOrders.length > 0 && <span className="tab-context-count"> · {filteredOrders.length} order{filteredOrders.length !== 1 ? 's' : ''}</span>}
+                {filteredOrders.length > 0 && (
+                  <span className="tab-context-count"> · {filteredOrders.length} order{filteredOrders.length !== 1 ? 's' : ''}</span>
+                )}
               </span>
             </div>
             {filteredOrders.length === 0 ? (
@@ -597,16 +674,27 @@ const TrackOrder = () => {
               </div>
             ) : (
               <div className="orders-grid">
-                {filteredOrders.map(order => <OrderCard key={order._id} order={order} onViewDetails={handleOpenModal} />)}
+                {filteredOrders.map(order => (
+                  <OrderCard key={order._id} order={order} onViewDetails={handleOpenModal} />
+                ))}
               </div>
             )}
           </section>
         </div>
+
         {selectedOrder && (
-          <TrackingModal order={selectedOrder} products={products} onClose={handleCloseModal}
-            getTimelineSteps={getTimelineSteps} getStatusClass={getStatusClass} getDisplayStatus={getDisplayStatus} />
+          <TrackingModal
+            order={selectedOrder}
+            products={products}
+            onClose={handleCloseModal}
+            getTimelineSteps={getTimelineSteps}
+            getStatusClass={getStatusClass}
+            getDisplayStatus={getDisplayStatus}
+            isOutForDeliveryStatus={isOutForDeliveryStatus}
+          />
         )}
         <Lightbox />
+
         {removeConfirm && (
           <div className="remove-confirm-overlay" onClick={() => setRemoveConfirm(null)}>
             <div className="remove-confirm-dialog" onClick={e => e.stopPropagation()}>
@@ -615,7 +703,9 @@ const TrackOrder = () => {
               <p>Are you sure you want to remove this delivered order from your list?</p>
               <div className="remove-confirm-actions">
                 <button className="btn btn-outline" onClick={() => setRemoveConfirm(null)}>Cancel</button>
-                <button className="btn btn-danger" onClick={() => handleRemoveOrder(removeConfirm)}><i className="fas fa-trash-alt"></i> Yes, Remove</button>
+                <button className="btn btn-danger" onClick={() => handleRemoveOrder(removeConfirm)}>
+                  <i className="fas fa-trash-alt"></i> Yes, Remove
+                </button>
               </div>
             </div>
           </div>
@@ -624,7 +714,7 @@ const TrackOrder = () => {
     );
   }
 
-  // Guest view
+  // ─── GUEST VIEW ──────────────────────────────────────────────────────────────
   return (
     <main className="trackorder-main">
       <div className="page-header">
@@ -643,10 +733,12 @@ const TrackOrder = () => {
                   <label htmlFor="tracking-email">Email Address</label>
                   <input type="email" id="tracking-email" className="form-control"
                     placeholder="Enter your email address"
-                    value={trackingEmail} onChange={(e) => setTrackingEmail(e.target.value)} required />
+                    value={trackingEmail} onChange={e => setTrackingEmail(e.target.value)} required />
                   <small>Enter the email you used when placing your order</small>
                 </div>
-                <button type="submit" className="btn btn-primary"><i className="fas fa-search"></i> Find My Orders</button>
+                <button type="submit" className="btn btn-primary">
+                  <i className="fas fa-search"></i> Find My Orders
+                </button>
               </form>
             </div>
             <div className="tracking-info">
@@ -666,7 +758,9 @@ const TrackOrder = () => {
                 <p>Found {emailOrders.length} order{emailOrders.length > 1 ? 's' : ''} for {searchEmail}</p>
               </div>
               <div className="orders-grid">
-                {emailOrders.map(order => <OrderCard key={order._id} order={order} onViewDetails={handleOpenModal} />)}
+                {emailOrders.map(order => (
+                  <OrderCard key={order._id} order={order} onViewDetails={handleOpenModal} />
+                ))}
               </div>
             </div>
           )}
@@ -679,25 +773,36 @@ const TrackOrder = () => {
           )}
         </section>
       </div>
+
       {selectedOrder && (
-        <TrackingModal order={selectedOrder} products={products} onClose={handleCloseModal}
-          getTimelineSteps={getTimelineSteps} getStatusClass={getStatusClass} getDisplayStatus={getDisplayStatus} />
+        <TrackingModal
+          order={selectedOrder}
+          products={products}
+          onClose={handleCloseModal}
+          getTimelineSteps={getTimelineSteps}
+          getStatusClass={getStatusClass}
+          getDisplayStatus={getDisplayStatus}
+          isOutForDeliveryStatus={isOutForDeliveryStatus}
+        />
       )}
       <Lightbox />
     </main>
   );
 };
 
-// ─── TRACKING MODAL ─────────────────────────────────────────────────────────
-const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusClass, getDisplayStatus }) => {
-  const updateOrderOtp = useUpdateOrderOtp();
+// ─── TRACKING MODAL ──────────────────────────────────────────────────────────
+const TrackingModal = ({
+  order, products, onClose,
+  getTimelineSteps, getStatusClass, getDisplayStatus, isOutForDeliveryStatus,
+}) => {
+  const updateOrderOtp    = useUpdateOrderOtp();
   const createPaymentLink = useAction(api.payments.createPaymentLink);
-  const [generatingOtp, setGeneratingOtp] = useState(false);
-  const [localOtp, setLocalOtp] = useState(order.deliveryOtp || null);
+  const [generatingOtp, setGeneratingOtp]         = useState(false);
+  const [localOtp, setLocalOtp]                   = useState(order.deliveryOtp || null);
   const [continuingPayment, setContinuingPayment] = useState(false);
 
   const isCancelled      = (order.orderStatus || order.status || '').toLowerCase() === 'cancelled';
-  const isOutForDelivery = (order.orderStatus || order.status || '').toLowerCase() === 'out_for_delivery';
+  const isOutForDelivery = isOutForDeliveryStatus(order);
   const needsPayment     = order.status === 'Pending Payment' && order.paymentStatus !== 'paid';
   const timelineSteps    = getTimelineSteps(order);
 
@@ -706,7 +811,10 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
     return () => { document.body.style.overflow = ''; };
   }, []);
 
-  useEffect(() => { if (order.deliveryOtp) setLocalOtp(order.deliveryOtp); }, [order.deliveryOtp]);
+  // Keep local OTP in sync when Convex order updates
+  useEffect(() => {
+    if (order.deliveryOtp) setLocalOtp(order.deliveryOtp);
+  }, [order.deliveryOtp]);
 
   const getProductById = (id) => products.find(p => p._id === id || p.id === id);
 
@@ -728,17 +836,11 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
   const handleContinuePayment = async () => {
     setContinuingPayment(true);
     try {
-      if (order.paymentLinkUrl) {
-        window.location.href = order.paymentLinkUrl;
-        return;
-      }
+      if (order.paymentLinkUrl) { window.location.href = order.paymentLinkUrl; return; }
       const result = await createPaymentLink({
-        orderId:       order.orderId,
-        amount:        order.finalTotal ?? order.total,
-        description:   `DKMerch Order ${order.orderId}`,
-        customerName:  order.customerName,
-        customerEmail: order.email,
-        customerPhone: order.phone,
+        orderId: order.orderId, amount: order.finalTotal ?? order.total,
+        description: `DKMerch Order ${order.orderId}`,
+        customerName: order.customerName, customerEmail: order.email, customerPhone: order.phone,
       });
       window.location.href = result.paymentLinkUrl;
     } catch (err) {
@@ -751,8 +853,12 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
   return (
     <div className="tracking-modal-overlay" onClick={onClose}>
       <div className="tracking-modal" onClick={e => e.stopPropagation()}>
-        <button className="modal-close-btn" onClick={onClose} type="button"><i className="fas fa-times"></i></button>
+        <button className="modal-close-btn" onClick={onClose} type="button">
+          <i className="fas fa-times"></i>
+        </button>
         <div className="tracking-result">
+
+          {/* Header */}
           <div className="result-header">
             <h2>Order #{order.orderId?.slice(-8) || 'N/A'}</h2>
             <div className={`status-badge ${getStatusClass(order.orderStatus || order.status)}`}>
@@ -760,7 +866,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
             </div>
           </div>
 
-          {/* ✅ Continue Payment banner inside modal */}
+          {/* Pending payment banner */}
           {needsPayment && (
             <div className="pending-payment-banner">
               <div className="pending-payment-icon"><i className="fas fa-exclamation-circle"></i></div>
@@ -768,30 +874,29 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
                 <strong>Payment Incomplete</strong>
                 <p>Your order is reserved but payment was not completed.</p>
               </div>
-              <button
-                className="btn btn-continue-payment"
-                onClick={handleContinuePayment}
-                disabled={continuingPayment}
-              >
+              <button className="btn btn-continue-payment" onClick={handleContinuePayment} disabled={continuingPayment}>
                 {continuingPayment
                   ? <><i className="fas fa-spinner fa-spin"></i> Loading...</>
-                  : <><i className="fas fa-credit-card"></i> Complete Payment</>
-                }
+                  : <><i className="fas fa-credit-card"></i> Complete Payment</>}
               </button>
             </div>
           )}
 
+          {/* Rider info banner */}
           {order.riderInfo && !isCancelled && (
             <div className="rider-info-banner">
               <div className="rider-info-icon"><i className="fas fa-motorcycle"></i></div>
               <div className="rider-info-details">
                 <strong>Your Rider: {order.riderInfo.name}</strong>
                 <span>{order.riderInfo.vehicle} • {order.riderInfo.plate}</span>
-                {order.riderInfo.phone && <span><i className="fas fa-phone"></i> {order.riderInfo.phone}</span>}
+                {order.riderInfo.phone && (
+                  <span><i className="fas fa-phone"></i> {order.riderInfo.phone}</span>
+                )}
               </div>
             </div>
           )}
 
+          {/* Cancelled banner */}
           {isCancelled && (
             <div className="cancelled-banner">
               <div className="cancelled-banner-icon"><i className="fas fa-ban"></i></div>
@@ -802,16 +907,19 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
             </div>
           )}
 
+          {/* ✅ LIVE MAP */}
           {isOutForDelivery && (
             <div className="rider-map-section">
               <div className="rider-map-section-title">
                 <i className="fas fa-map-marked-alt"></i>
                 <span>Real-Time Rider Location</span>
+                <span className="rider-map-live-pill">LIVE</span>
               </div>
               <RiderMap orderId={order.orderId} riderName={order.riderInfo?.name} />
             </div>
           )}
 
+          {/* OTP section */}
           {isOutForDelivery && (
             <div className="customer-otp-section">
               {!localOtp ? (
@@ -829,18 +937,27 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
                     <div className="otp-step"><span className="otp-step-num">3</span><span>Rider enters the code to complete the delivery</span></div>
                   </div>
                   <button className={`otp-generate-btn ${generatingOtp ? 'generating' : ''}`} onClick={handleGenerateOtp} disabled={generatingOtp}>
-                    {generatingOtp ? <><i className="fas fa-spinner fa-spin"></i> Generating OTP...</> : <><i className="fas fa-key"></i> Generate My OTP</>}
+                    {generatingOtp
+                      ? <><i className="fas fa-spinner fa-spin"></i> Generating OTP...</>
+                      : <><i className="fas fa-key"></i> Generate My OTP</>}
                   </button>
-                  <p className="otp-generate-warning"><i className="fas fa-exclamation-triangle"></i> Only generate this when your rider has arrived.</p>
+                  <p className="otp-generate-warning">
+                    <i className="fas fa-exclamation-triangle"></i> Only generate this when your rider has arrived.
+                  </p>
                 </div>
               ) : (
                 <div className="otp-display-card">
                   <div className="otp-display-header">
                     <div className="otp-display-icon"><i className="fas fa-shield-alt"></i></div>
-                    <div><strong>Your Delivery OTP</strong><p>Show this code to your rider when they arrive</p></div>
+                    <div>
+                      <strong>Your Delivery OTP</strong>
+                      <p>Show this code to your rider when they arrive</p>
+                    </div>
                   </div>
                   <div className="otp-code-display">
-                    {localOtp.split('').map((digit, i) => <span key={i} className="otp-digit">{digit}</span>)}
+                    {localOtp.split('').map((digit, i) => (
+                      <span key={i} className="otp-digit">{digit}</span>
+                    ))}
                   </div>
                   <div className="otp-display-note">
                     <i className="fas fa-info-circle"></i>
@@ -851,6 +968,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
             </div>
           )}
 
+          {/* Timeline */}
           <div className="tracking-timeline">
             <h3>Order Timeline</h3>
             <div className="timeline">
@@ -877,6 +995,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
             </div>
           </div>
 
+          {/* Order items */}
           <div className="order-items-timeline">
             <h3>Order Items</h3>
             {order.items?.map((item, index) => {
@@ -904,6 +1023,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
               <strong>₱{order.total?.toLocaleString()}</strong>
             </div>
           </div>
+
         </div>
       </div>
     </div>

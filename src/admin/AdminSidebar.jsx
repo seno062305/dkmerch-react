@@ -8,12 +8,19 @@ const AdminSidebar = ({ onLinkClick }) => {
   const { logout } = useAuth();
   const navigate = useNavigate();
 
-  // ✅ Convex real-time — awtomatikong mag-a-update
+  // Orders badge
   const allOrders = useQuery(api.orders.getAllOrders) ?? [];
   const newOrderCount = allOrders.filter(o =>
     o.orderId && o.items?.length > 0 &&
     (o.orderStatus === 'pending' || o.orderStatus === 'confirmed')
   ).length;
+
+  // ✅ Riders badge — pending applications + pending pickup requests
+  const allRiders         = useQuery(api.riders.getAllRiders)                ?? [];
+  const allPickupRequests = useQuery(api.pickupRequests.getAllPickupRequests) ?? [];
+  const pendingApplications = allRiders.filter(r => r.status === 'pending').length;
+  const pendingPickups      = allPickupRequests.filter(p => p.status === 'pending').length;
+  const riderBadgeCount     = pendingApplications + pendingPickups;
 
   const handleLogout = () => {
     if (window.confirm('Are you sure you want to logout?')) {
@@ -78,6 +85,10 @@ const AdminSidebar = ({ onLinkClick }) => {
         <NavLink to="/admin/riders" className="admin-nav-link" onClick={handleNavClick}>
           <i className="fas fa-motorcycle"></i>
           <span>Riders</span>
+          {/* ✅ Shows total of pending applications + pending pickup requests */}
+          {riderBadgeCount > 0 && (
+            <span className="order-badge">{riderBadgeCount}</span>
+          )}
         </NavLink>
       </nav>
 

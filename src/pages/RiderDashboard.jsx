@@ -22,10 +22,9 @@ const RiderDashboard = () => {
   const fileInputRefs = useRef({});
 
   // ── GPS TRACKING STATE ──
-  // trackingOrderId = orderId currently being tracked (null if not tracking)
   const [trackingOrderId, setTrackingOrderId] = useState(null);
   const [gpsError, setGpsError] = useState(null);
-  const [currentPosition, setCurrentPosition] = useState(null); // { lat, lng, accuracy }
+  const [currentPosition, setCurrentPosition] = useState(null);
   const trackingIntervalRef = useRef(null);
   const watchIdRef = useRef(null);
 
@@ -62,7 +61,6 @@ const RiderDashboard = () => {
   const activeDeliveriesCount = myDeliveries.length;
 
   // ── GPS TRACKING LOGIC ──
-  // Send location to Convex
   const sendLocation = useCallback(async (orderId, pos, isTracking = true) => {
     if (!riderInfo || !orderId) return;
     try {
@@ -82,7 +80,6 @@ const RiderDashboard = () => {
     }
   }, [updateRiderLocation, riderInfo, user]);
 
-  // Start GPS tracking for a specific order
   const startTracking = useCallback((orderId) => {
     if (!navigator.geolocation) {
       setGpsError('GPS not supported on this device.');
@@ -92,7 +89,6 @@ const RiderDashboard = () => {
     setGpsError(null);
     setTrackingOrderId(orderId);
 
-    // Continuously watch position (most accurate)
     watchIdRef.current = navigator.geolocation.watchPosition(
       (position) => {
         const pos = {
@@ -109,24 +105,16 @@ const RiderDashboard = () => {
         console.error('GPS watch error:', err);
         setGpsError(getGpsErrorMessage(err));
       },
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0,
-      }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
 
-    // Send to Convex every 10 seconds
     trackingIntervalRef.current = setInterval(() => {
       setCurrentPosition(pos => {
-        if (pos) {
-          sendLocation(orderId, pos, true);
-        }
+        if (pos) sendLocation(orderId, pos, true);
         return pos;
       });
     }, 10000);
 
-    // Send immediately on start
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const pos = {
@@ -139,16 +127,14 @@ const RiderDashboard = () => {
         setCurrentPosition(pos);
         sendLocation(orderId, pos, true);
       },
-      (err) => {
-        setGpsError(getGpsErrorMessage(err));
-      },
+      (err) => { setGpsError(getGpsErrorMessage(err)); },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
   }, [sendLocation]);
 
-  // Stop GPS tracking
-  const stopTracking = useCallback(async (orderId) => {
-    // Clear interval & watch
+  // ✅ FIX: stopTracking no longer calls stopRiderTracking in Convex
+  // GPS stays alive in Convex even after page close/logout — only stops on delivery completion
+  const stopTrackingLocal = useCallback(() => {
     if (trackingIntervalRef.current) {
       clearInterval(trackingIntervalRef.current);
       trackingIntervalRef.current = null;
@@ -157,8 +143,13 @@ const RiderDashboard = () => {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
     }
+    setTrackingOrderId(null);
+    setCurrentPosition(null);
+  }, []);
 
-    // Mark as not tracking in Convex
+  // ✅ FIX: Only called on delivery completion — marks Convex as stopped
+  const stopTrackingOnDelivery = useCallback(async (orderId) => {
+    stopTrackingLocal();
     if (orderId) {
       try {
         await stopRiderTracking({ orderId });
@@ -166,12 +157,9 @@ const RiderDashboard = () => {
         console.error('Failed to stop tracking:', err);
       }
     }
+  }, [stopRiderTracking, stopTrackingLocal]);
 
-    setTrackingOrderId(null);
-    setCurrentPosition(null);
-  }, [stopRiderTracking]);
-
-  // Cleanup on unmount
+  // Cleanup on unmount — only clears local state, NOT Convex
   useEffect(() => {
     return () => {
       if (trackingIntervalRef.current) clearInterval(trackingIntervalRef.current);
@@ -188,7 +176,6 @@ const RiderDashboard = () => {
     }
   };
 
-  // ── HELPERS ──
   const toggleExpanded = (id, setFn) => setFn(prev => ({ ...prev, [id]: !prev[id] }));
 
   const getMyRequestStatus = (orderId) => {
@@ -209,21 +196,16 @@ const RiderDashboard = () => {
 
   const getStatusLabel = (status) => {
     const map = {
-      pending: '⏳ Pending',
-      approved: '✅ Approved',
-      rejected: '❌ Rejected',
-      out_for_delivery: '🚚 Out for Delivery',
-      completed: '🎉 Delivered',
+      pending: '⏳ Pending', approved: '✅ Approved', rejected: '❌ Rejected',
+      out_for_delivery: '🚚 Out for Delivery', completed: '🎉 Delivered',
     };
     return map[status] || status;
   };
 
+  // ✅ FIX: Logout no longer stops GPS tracking in Convex
   const handleLogout = async () => {
-    if (window.confirm('Are you sure you want to logout?')) {
-      // Stop any active tracking before logout
-      if (trackingOrderId) {
-        await stopTracking(trackingOrderId);
-      }
+    if (window.confirm('Are you sure you want to logout?\n\n📍 GPS tracking will remain active for ongoing deliveries.')) {
+      stopTrackingLocal(); // Only stops local browser tracking
       logout();
       navigate('/', { replace: true });
     }
@@ -297,7 +279,6 @@ const RiderDashboard = () => {
         status: 'out_for_delivery',
       });
 
-      // ✅ Auto-start GPS tracking when rider notifies customer
       startTracking(delivery.orderId);
 
       alert('📦 Customer notified!\n\n📍 GPS tracking has started automatically.\nThe customer can now see your location in real-time.\n\nAsk the customer for their OTP code when you arrive.');
@@ -327,10 +308,17 @@ const RiderDashboard = () => {
     const inputOtp = (otpInputs[delivery._id] || '').trim();
     const photo = photoData[delivery._id];
 
-    const order = allOrders.find(o => o.orderId === delivery.orderId);
+    // ✅ FIX: Search all orders — use loose match in case of whitespace/case issues
+    const order = allOrders.find(o =>
+      o.orderId === delivery.orderId ||
+      o.orderId?.trim() === delivery.orderId?.trim()
+    );
 
     if (!order) {
-      setOtpErrors(prev => ({ ...prev, [delivery._id]: 'Order not found.' }));
+      setOtpErrors(prev => ({
+        ...prev,
+        [delivery._id]: '⏳ Order data is still loading. Please wait a moment and try again.',
+      }));
       return;
     }
     if (!inputOtp) {
@@ -372,8 +360,8 @@ const RiderDashboard = () => {
         status: 'completed',
       });
 
-      // ✅ Stop GPS tracking on delivery completion
-      await stopTracking(delivery.orderId);
+      // ✅ Only stop GPS tracking on actual delivery completion
+      await stopTrackingOnDelivery(delivery.orderId);
 
       setOtpInputs(prev => { const n = { ...prev }; delete n[delivery._id]; return n; });
       setPhotoData(prev => { const n = { ...prev }; delete n[delivery._id]; return n; });
@@ -459,7 +447,6 @@ const RiderDashboard = () => {
           </div>
         </div>
 
-        {/* ✅ GPS Tracking Status in Sidebar */}
         {trackingOrderId && (
           <div className="rider-gps-sidebar-status">
             <span className="rider-gps-dot"></span>
@@ -638,7 +625,6 @@ const RiderDashboard = () => {
               <p>Notify the customer you're on the way, then confirm delivery with their OTP.</p>
             </div>
 
-            {/* GPS Error Banner */}
             {gpsError && (
               <div className="rider-gps-error-banner">
                 <i className="fas fa-exclamation-triangle"></i>
@@ -675,7 +661,6 @@ const RiderDashboard = () => {
                           <span className={`rider-delivery-badge ${isOutForDelivery ? 'badge-ofd' : ''}`}>
                             {isOutForDelivery ? '🚚 On the Way' : '✅ Pickup Approved'}
                           </span>
-                          {/* ✅ GPS Tracking badge */}
                           {isThisBeingTracked && (
                             <span className="rider-gps-active-badge">
                               <span className="rider-gps-dot"></span> GPS On
@@ -702,7 +687,6 @@ const RiderDashboard = () => {
                             <div className="rider-info-row"><i className="fas fa-id-card"></i><span><strong>Plate:</strong> {riderInfo.plateNumber}</span></div>
                           </div>
 
-                          {/* ✅ GPS Tracking Panel — shown when out_for_delivery */}
                           {isOutForDelivery && (
                             <div className={`rider-gps-panel ${isThisBeingTracked ? 'gps-panel-active' : ''}`}>
                               <div className="rider-gps-panel-title">
@@ -728,10 +712,7 @@ const RiderDashboard = () => {
                                       {currentPosition.lat.toFixed(6)}, {currentPosition.lng.toFixed(6)}
                                     </div>
                                   )}
-                                  <button
-                                    className="rider-gps-stop-btn"
-                                    onClick={() => stopTracking(delivery.orderId)}
-                                  >
+                                  <button className="rider-gps-stop-btn" onClick={stopTrackingLocal}>
                                     <i className="fas fa-stop-circle"></i> Stop Sharing Location
                                   </button>
                                 </>
@@ -740,10 +721,7 @@ const RiderDashboard = () => {
                                   <p className="rider-gps-desc">
                                     Share your real-time location so the customer can track you on the map.
                                   </p>
-                                  <button
-                                    className="rider-gps-start-btn"
-                                    onClick={() => startTracking(delivery.orderId)}
-                                  >
+                                  <button className="rider-gps-start-btn" onClick={() => startTracking(delivery.orderId)}>
                                     <i className="fas fa-location-arrow"></i> Start Location Sharing
                                   </button>
                                 </>
