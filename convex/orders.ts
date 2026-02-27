@@ -1,6 +1,7 @@
 // convex/orders.ts
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 
 export const getAllOrders = query(async ({ db }) => {
   return await db.query("orders").collect();
@@ -59,7 +60,6 @@ export const createOrder = mutation({
     status: v.string(),
     orderStatus: v.optional(v.string()),
     shippingAddress: v.optional(v.string()),
-    // ✅ NEW: exact pin lat/lng from checkout map
     addressLat: v.optional(v.number()),
     addressLng: v.optional(v.number()),
     paymentMethod: v.string(),
@@ -79,7 +79,7 @@ export const updateOrderStatus = mutation({
     status: v.string(),
     orderStatus: v.optional(v.string()),
   },
-  handler: async ({ db }, { orderId, status, orderStatus }) => {
+  handler: async ({ db, scheduler }, { orderId, status, orderStatus }) => {
     const order = await db.query("orders")
       .withIndex("by_orderId", q => q.eq("orderId", orderId))
       .first();
@@ -96,6 +96,33 @@ export const updateOrderStatus = mutation({
     if (orderStatus === 'cancelled')        updates.cancelledAt       = now;
 
     await db.patch(order._id, updates);
+
+    // ✅ Send email to customer when admin confirms order
+    if (orderStatus === 'confirmed' && order.email) {
+      const customerName = order.customerName || 'Customer';
+      const total = (order.finalTotal ?? order.total ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2 });
+      const itemCount = order.items?.length || 0;
+
+      await scheduler.runAfter(0, internal.sendEmail.sendOrderConfirmedEmail, {
+        to: order.email,
+        customerName,
+        orderId,
+        total,
+        itemCount,
+        shippingAddress: order.shippingAddress || 'N/A',
+      });
+
+      // ✅ Create rider notification
+      await db.insert("riderNotifications", {
+        type: "new_order",
+        orderId,
+        customerName,
+        total: order.finalTotal ?? order.total ?? 0,
+        createdAt: now,
+        read: false,
+      });
+    }
+
     return { success: true };
   },
 });
@@ -113,14 +140,13 @@ export const updateOrderFields = mutation({
     deliveryConfirmedAt: v.optional(v.string()),
     cancelReason: v.optional(v.string()),
     shippingAddress: v.optional(v.string()),
-    // ✅ NEW: allow updating coords if customer edits address later
     addressLat: v.optional(v.number()),
     addressLng: v.optional(v.number()),
     notes: v.optional(v.string()),
     paymentStatus: v.optional(v.string()),
     paymentLinkId: v.optional(v.string()),
   },
-  handler: async ({ db }, { orderId, ...updates }) => {
+  handler: async ({ db, scheduler }, { orderId, ...updates }) => {
     const order = await db.query("orders")
       .withIndex("by_orderId", q => q.eq("orderId", orderId))
       .first();
@@ -137,6 +163,30 @@ export const updateOrderFields = mutation({
     if (filtered.orderStatus === 'completed' || filtered.deliveryOtpVerified)
       filtered.deliveryConfirmedAt = filtered.deliveryConfirmedAt || now;
     if (filtered.orderStatus === 'cancelled')        filtered.cancelledAt      = now;
+
+    // ✅ Email notif for confirmed (via updateOrderFields path too)
+    if (filtered.orderStatus === 'confirmed' && order.email) {
+      const customerName = order.customerName || 'Customer';
+      const total = (order.finalTotal ?? order.total ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2 });
+
+      await scheduler.runAfter(0, internal.sendEmail.sendOrderConfirmedEmail, {
+        to: order.email,
+        customerName,
+        orderId,
+        total,
+        itemCount: order.items?.length || 0,
+        shippingAddress: order.shippingAddress || 'N/A',
+      });
+
+      await db.insert("riderNotifications", {
+        type: "new_order",
+        orderId,
+        customerName,
+        total: order.finalTotal ?? order.total ?? 0,
+        createdAt: now,
+        read: false,
+      });
+    }
 
     await db.patch(order._id, filtered);
     return { success: true };

@@ -107,7 +107,7 @@ export default defineSchema({
     status: v.string(),
     orderStatus: v.optional(v.string()),
     shippingAddress: v.optional(v.string()),
-    // ✅ NEW: exact pin coordinates from customer's checkout map
+    // ✅ exact pin coordinates from customer's checkout map
     addressLat: v.optional(v.number()),
     addressLng: v.optional(v.number()),
     paymentMethod: v.string(),
@@ -216,4 +216,14 @@ export default defineSchema({
   })
     .index("by_orderId", ["orderId"])
     .index("by_riderEmail", ["riderEmail"]),
+
+  // ✅ NEW: Rider notifications — created when admin confirms an order
+  riderNotifications: defineTable({
+    type: v.string(),        // "new_order"
+    orderId: v.string(),
+    customerName: v.string(),
+    total: v.number(),
+    createdAt: v.string(),
+    read: v.boolean(),
+  }).index("by_read", ["read"]),
 });
