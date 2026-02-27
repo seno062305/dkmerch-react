@@ -493,3 +493,205 @@ export const sendOrderConfirmedEmail = internalAction({
     }
   },
 });
+
+// ─── ADD THIS TO THE BOTTOM OF convex/sendEmail.ts ───────────────────────────
+// This is the NEW function to notify riders via email when a new confirmed order
+// is available. In test mode it goes to dkmerchtest@gmail.com.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const sendRiderNewOrderEmail = internalAction({
+  args: {
+    orderId:         v.string(),
+    customerName:    v.string(),
+    total:           v.string(),
+    itemCount:       v.number(),
+    shippingAddress: v.string(),
+  },
+  handler: async (_, args) => {
+    const RESEND_API_KEY = process.env.RESEND_API_KEY;
+    if (!RESEND_API_KEY) {
+      console.error("RESEND_API_KEY not set — skipping rider notification email");
+      return { success: false };
+    }
+
+    // ✅ TEST MODE: send to test inbox so you can see it
+    const IS_TEST_MODE = true;
+    const TEST_EMAIL   = "dkmerchtest@gmail.com";
+    const recipientTo  = IS_TEST_MODE ? TEST_EMAIL : TEST_EMAIL; // swap to rider email when prod
+
+    const shortId = args.orderId.slice(-8).toUpperCase();
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>New Order Available — DKMerch Rider</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:32px 0;">
+    <tr>
+      <td align="center">
+        <table width="560" cellpadding="0" cellspacing="0"
+          style="background:white;border-radius:16px;overflow:hidden;
+                 box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#42011e,#fc1268);
+                        padding:32px 36px;text-align:center;">
+              <div style="font-size:28px;font-weight:900;color:white;
+                           letter-spacing:-0.5px;">DKMerch Rider</div>
+              <div style="color:#ffd6e7;font-size:13px;margin-top:4px;">
+                Delivery Notification System
+              </div>
+            </td>
+          </tr>
+
+          <!-- Bell banner -->
+          <tr>
+            <td style="background:#fff7ed;padding:20px 36px;text-align:center;
+                        border-bottom:1px solid #fed7aa;">
+              <div style="font-size:40px;margin-bottom:8px;">🛵</div>
+              <div style="font-size:20px;font-weight:800;color:#7c2d12;">
+                New Order Available!
+              </div>
+              <div style="font-size:14px;color:#9a3412;margin-top:4px;">
+                A confirmed order is ready for pickup.
+              </div>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:28px 36px;">
+              <p style="font-size:15px;color:#374151;margin:0 0 20px;">
+                Hi Rider 👋,
+              </p>
+              <p style="font-size:14px;color:#6b7280;line-height:1.6;margin:0 0 24px;">
+                Admin has confirmed a new customer order. Log in to the Rider Dashboard 
+                to request this pickup and start the delivery!
+              </p>
+
+              <!-- Order Card -->
+              <table width="100%" cellpadding="0" cellspacing="0"
+                style="background:#f9fafb;border-radius:12px;
+                       border:1.5px solid #e5e7eb;margin-bottom:24px;">
+                <tr>
+                  <td style="padding:20px 24px;">
+                    <div style="font-size:11px;font-weight:700;color:#9ca3af;
+                                 text-transform:uppercase;letter-spacing:0.5px;
+                                 margin-bottom:14px;">Order Details</div>
+                    <table width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="font-size:13px;color:#6b7280;padding:5px 0;">Order ID</td>
+                        <td style="font-size:13px;font-weight:700;color:#fc1268;
+                                    text-align:right;">#${shortId}</td>
+                      </tr>
+                      <tr>
+                        <td style="font-size:13px;color:#6b7280;padding:5px 0;">Customer</td>
+                        <td style="font-size:13px;font-weight:600;color:#1f2937;
+                                    text-align:right;">${args.customerName}</td>
+                      </tr>
+                      <tr>
+                        <td style="font-size:13px;color:#6b7280;padding:5px 0;">Items</td>
+                        <td style="font-size:13px;font-weight:600;color:#1f2937;
+                                    text-align:right;">
+                          ${args.itemCount} item${args.itemCount !== 1 ? 's' : ''}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="font-size:13px;color:#6b7280;padding:5px 0;">
+                          Order Total
+                        </td>
+                        <td style="font-size:14px;font-weight:800;color:#1f2937;
+                                    text-align:right;">₱${args.total}</td>
+                      </tr>
+                      <tr>
+                        <td style="font-size:13px;color:#6b7280;padding:5px 0;
+                                    vertical-align:top;">
+                          Delivery Address
+                        </td>
+                        <td style="font-size:13px;font-weight:600;color:#1f2937;
+                                    text-align:right;max-width:260px;">
+                          ${args.shippingAddress}
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- CTA -->
+              <div style="background:#fff7ed;border-radius:12px;
+                           border:1.5px solid #fed7aa;padding:18px 22px;
+                           margin-bottom:24px;text-align:center;">
+                <div style="font-size:12px;font-weight:700;color:#c2410c;
+                             text-transform:uppercase;letter-spacing:0.5px;
+                             margin-bottom:8px;">
+                  🔥 Act Fast!
+                </div>
+                <div style="font-size:13px;color:#9a3412;line-height:1.7;">
+                  Open your Rider Dashboard now to request this pickup
+                  before another rider takes it!
+                </div>
+              </div>
+
+              <p style="font-size:13px;color:#9ca3af;line-height:1.6;margin:0;">
+                Log in at 
+                <a href="https://dkmerchwebsite.vercel.app/rider"
+                   style="color:#fc1268;font-weight:700;">
+                  dkmerchwebsite.vercel.app/rider
+                </a>
+                → <strong>Available Orders</strong>
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background:#fafafa;border-top:1px solid #e5e7eb;
+                        padding:20px 36px;text-align:center;">
+              <div style="font-size:12px;color:#9ca3af;">
+                © 2024 DKMerch · Rider Notification System
+              </div>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+    try {
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${RESEND_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: "DKMerch <onboarding@resend.dev>",  // ✅ use verified sender in test mode
+          to:   [recipientTo],
+          subject: `🛵 New Order Ready for Pickup — #${shortId} | DKMerch`,
+          html,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        console.error("Resend rider email error:", err);
+        return { success: false };
+      }
+
+      console.log(`✅ Rider notification email sent → ${recipientTo} for order #${shortId}`);
+      return { success: true };
+    } catch (err) {
+      console.error("sendRiderNewOrderEmail failed:", err);
+      return { success: false };
+    }
+  },
+});

@@ -73,10 +73,57 @@ export const createOrder = mutation({
   },
 });
 
+// ─── SHARED HELPER: fires customer email + rider email + DB notification ─────
+async function onOrderConfirmed(
+  scheduler: any,
+  db: any,
+  order: any,
+  orderId: string,
+) {
+  const customerName = order.customerName || 'Customer';
+  const total = (order.finalTotal ?? order.total ?? 0).toLocaleString('en-PH', {
+    minimumFractionDigits: 2,
+  });
+  const itemCount      = order.items?.length || 0;
+  const shippingAddr   = order.shippingAddress || 'N/A';
+  const now            = new Date().toISOString();
+
+  // ✅ 1. Email to CUSTOMER — order confirmed
+  if (order.email) {
+    await scheduler.runAfter(0, internal.sendEmail.sendOrderConfirmedEmail, {
+      to:              order.email,
+      customerName,
+      orderId,
+      total,
+      itemCount,
+      shippingAddress: shippingAddr,
+    });
+  }
+
+  // ✅ 2. Email to RIDER (test inbox: dkmerchtest@gmail.com)
+  await scheduler.runAfter(0, internal.sendEmail.sendRiderNewOrderEmail, {
+    orderId,
+    customerName,
+    total,
+    itemCount,
+    shippingAddress: shippingAddr,
+  });
+
+  // ✅ 3. In-app bell notification for riders (DB insert)
+  await db.insert("riderNotifications", {
+    type:         "new_order",
+    orderId,
+    customerName,
+    total:        order.finalTotal ?? order.total ?? 0,
+    createdAt:    now,
+    read:         false,
+  });
+}
+
 export const updateOrderStatus = mutation({
   args: {
-    orderId: v.string(),
-    status: v.string(),
+    orderId:     v.string(),
+    status:      v.string(),
     orderStatus: v.optional(v.string()),
   },
   handler: async ({ db, scheduler }, { orderId, status, orderStatus }) => {
@@ -85,42 +132,21 @@ export const updateOrderStatus = mutation({
       .first();
     if (!order) return { success: false };
 
-    const now = new Date().toISOString();
+    const now     = new Date().toISOString();
     const updates: any = { status };
     if (orderStatus !== undefined) updates.orderStatus = orderStatus;
 
-    if (orderStatus === 'confirmed')        updates.confirmedAt       = now;
-    if (orderStatus === 'shipped')          updates.shippedAt         = now;
-    if (orderStatus === 'out_for_delivery') updates.outForDeliveryAt  = now;
+    if (orderStatus === 'confirmed')        updates.confirmedAt         = now;
+    if (orderStatus === 'shipped')          updates.shippedAt           = now;
+    if (orderStatus === 'out_for_delivery') updates.outForDeliveryAt    = now;
     if (orderStatus === 'completed')        updates.deliveryConfirmedAt = now;
-    if (orderStatus === 'cancelled')        updates.cancelledAt       = now;
+    if (orderStatus === 'cancelled')        updates.cancelledAt         = now;
 
     await db.patch(order._id, updates);
 
-    // ✅ Send email to customer when admin confirms order
-    if (orderStatus === 'confirmed' && order.email) {
-      const customerName = order.customerName || 'Customer';
-      const total = (order.finalTotal ?? order.total ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2 });
-      const itemCount = order.items?.length || 0;
-
-      await scheduler.runAfter(0, internal.sendEmail.sendOrderConfirmedEmail, {
-        to: order.email,
-        customerName,
-        orderId,
-        total,
-        itemCount,
-        shippingAddress: order.shippingAddress || 'N/A',
-      });
-
-      // ✅ Create rider notification
-      await db.insert("riderNotifications", {
-        type: "new_order",
-        orderId,
-        customerName,
-        total: order.finalTotal ?? order.total ?? 0,
-        createdAt: now,
-        read: false,
-      });
+    // ✅ Trigger emails + bell notif when admin confirms
+    if (orderStatus === 'confirmed') {
+      await onOrderConfirmed(scheduler, db, order, orderId);
     }
 
     return { success: true };
@@ -129,22 +155,22 @@ export const updateOrderStatus = mutation({
 
 export const updateOrderFields = mutation({
   args: {
-    orderId: v.string(),
-    status: v.optional(v.string()),
-    orderStatus: v.optional(v.string()),
-    riderId: v.optional(v.string()),
-    riderInfo: v.optional(v.any()),
-    deliveryOtp: v.optional(v.string()),
+    orderId:             v.string(),
+    status:              v.optional(v.string()),
+    orderStatus:         v.optional(v.string()),
+    riderId:             v.optional(v.string()),
+    riderInfo:           v.optional(v.any()),
+    deliveryOtp:         v.optional(v.string()),
     deliveryOtpVerified: v.optional(v.boolean()),
-    deliveryProofPhoto: v.optional(v.string()),
+    deliveryProofPhoto:  v.optional(v.string()),
     deliveryConfirmedAt: v.optional(v.string()),
-    cancelReason: v.optional(v.string()),
-    shippingAddress: v.optional(v.string()),
-    addressLat: v.optional(v.number()),
-    addressLng: v.optional(v.number()),
-    notes: v.optional(v.string()),
-    paymentStatus: v.optional(v.string()),
-    paymentLinkId: v.optional(v.string()),
+    cancelReason:        v.optional(v.string()),
+    shippingAddress:     v.optional(v.string()),
+    addressLat:          v.optional(v.number()),
+    addressLng:          v.optional(v.number()),
+    notes:               v.optional(v.string()),
+    paymentStatus:       v.optional(v.string()),
+    paymentLinkId:       v.optional(v.string()),
   },
   handler: async ({ db, scheduler }, { orderId, ...updates }) => {
     const order = await db.query("orders")
@@ -152,7 +178,7 @@ export const updateOrderFields = mutation({
       .first();
     if (!order) return { success: false };
 
-    const now = new Date().toISOString();
+    const now     = new Date().toISOString();
     const filtered: any = Object.fromEntries(
       Object.entries(updates).filter(([, v]) => v !== undefined)
     );
@@ -162,30 +188,11 @@ export const updateOrderFields = mutation({
     if (filtered.orderStatus === 'out_for_delivery') filtered.outForDeliveryAt = now;
     if (filtered.orderStatus === 'completed' || filtered.deliveryOtpVerified)
       filtered.deliveryConfirmedAt = filtered.deliveryConfirmedAt || now;
-    if (filtered.orderStatus === 'cancelled')        filtered.cancelledAt      = now;
+    if (filtered.orderStatus === 'cancelled') filtered.cancelledAt = now;
 
-    // ✅ Email notif for confirmed (via updateOrderFields path too)
-    if (filtered.orderStatus === 'confirmed' && order.email) {
-      const customerName = order.customerName || 'Customer';
-      const total = (order.finalTotal ?? order.total ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2 });
-
-      await scheduler.runAfter(0, internal.sendEmail.sendOrderConfirmedEmail, {
-        to: order.email,
-        customerName,
-        orderId,
-        total,
-        itemCount: order.items?.length || 0,
-        shippingAddress: order.shippingAddress || 'N/A',
-      });
-
-      await db.insert("riderNotifications", {
-        type: "new_order",
-        orderId,
-        customerName,
-        total: order.finalTotal ?? order.total ?? 0,
-        createdAt: now,
-        read: false,
-      });
+    // ✅ Trigger emails + bell notif when admin confirms (via updateOrderFields path too)
+    if (filtered.orderStatus === 'confirmed') {
+      await onOrderConfirmed(scheduler, db, order, orderId);
     }
 
     await db.patch(order._id, filtered);
