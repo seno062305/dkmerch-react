@@ -8,35 +8,40 @@ const AdminUsers = () => {
   const [activeTab, setActiveTab] = useState('users');
 
   // ─── CONVEX DATA ───
-  const users = useQuery(api.users.getAllUsers) ?? [];
+  const users  = useQuery(api.users.getAllUsers) ?? [];
   const riders = useQuery(api.riders.getAllRiders) ?? [];
 
   const updateUserProfileMutation = useMutation(api.users.updateUserProfile);
-  const deleteUserMutation = useMutation(api.users.deleteUser);
-  const updateRiderMutation = useMutation(api.riders.updateRider);
-  const deleteRiderMutation = useMutation(api.riders.deleteRider);
+  const deleteUserMutation        = useMutation(api.users.deleteUser);
+  const activateUserMutation      = useMutation(api.users.activateUser);   // ✅ NEW
+  const updateRiderMutation       = useMutation(api.riders.updateRider);
+  const deleteRiderMutation       = useMutation(api.riders.deleteRider);
   const updateRiderStatusMutation = useMutation(api.riders.updateRiderStatus);
 
   // ─── USERS STATE ───
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('all');
-  const [editingUser, setEditingUser] = useState(null);
-  const [formData, setFormData] = useState({ name: '', username: '', email: '', password: '', role: 'user', status: 'active' });
-  const [showEditModal, setShowEditModal] = useState(false);
+  const [searchTerm, setSearchTerm]         = useState('');
+  const [filterStatus, setFilterStatus]     = useState('all');
+  const [editingUser, setEditingUser]       = useState(null);
+  const [formData, setFormData]             = useState({ name: '', username: '', email: '', password: '', role: 'user', status: 'active' });
+  const [showEditModal, setShowEditModal]   = useState(false);
   const [showSuspendConfirm, setShowSuspendConfirm] = useState(false);
-  const [userToSuspend, setUserToSuspend] = useState(null);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [userToDelete, setUserToDelete] = useState(null);
-  const [showPassword, setShowPassword] = useState(false);
+  const [userToSuspend, setUserToSuspend]   = useState(null);
+  const [showDeleteConfirm, setShowDeleteConfirm]   = useState(false);
+  const [userToDelete, setUserToDelete]     = useState(null);
+  const [showPassword, setShowPassword]     = useState(false);
+
+  // ✅ NEW: Activate confirm state
+  const [showActivateConfirm, setShowActivateConfirm] = useState(false);
+  const [userToActivate, setUserToActivate]           = useState(null);
 
   // ─── RIDERS STATE ───
-  const [riderSearch, setRiderSearch] = useState('');
-  const [riderFilterStatus, setRiderFilterStatus] = useState('all');
-  const [editingRider, setEditingRider] = useState(null);
-  const [riderFormData, setRiderFormData] = useState({ fullName: '', email: '', phone: '', vehicleType: '', status: 'pending' });
+  const [riderSearch, setRiderSearch]               = useState('');
+  const [riderFilterStatus, setRiderFilterStatus]   = useState('all');
+  const [editingRider, setEditingRider]             = useState(null);
+  const [riderFormData, setRiderFormData]           = useState({ fullName: '', email: '', phone: '', vehicleType: '', status: 'pending' });
   const [showRiderEditModal, setShowRiderEditModal] = useState(false);
   const [showRiderDeleteConfirm, setShowRiderDeleteConfirm] = useState(false);
-  const [riderToDelete, setRiderToDelete] = useState(null);
+  const [riderToDelete, setRiderToDelete]           = useState(null);
 
   const [notification, setNotification] = useState({ show: false, message: '', type: '' });
 
@@ -46,12 +51,23 @@ const AdminUsers = () => {
   };
 
   // ─── FILTERED DATA ───
-  const filteredUsers = users.filter(u => {
+  // ✅ Pending users — status === 'pending_activation'
+  const pendingUsers  = users.filter(u => u.status === 'pending_activation');
+  const regularUsers  = users.filter(u => u.status !== 'pending_activation');
+
+  const filteredUsers = regularUsers.filter(u => {
     if (filterStatus !== 'all' && (u.status || 'active') !== filterStatus) return false;
     if (!searchTerm.trim()) return true;
     const q = searchTerm.toLowerCase();
     return u.name?.toLowerCase().includes(q) || u.username?.toLowerCase().includes(q) ||
       u.email?.toLowerCase().includes(q) || u.role?.toLowerCase().includes(q);
+  });
+
+  const filteredPending = pendingUsers.filter(u => {
+    if (!searchTerm.trim()) return true;
+    const q = searchTerm.toLowerCase();
+    return u.name?.toLowerCase().includes(q) || u.username?.toLowerCase().includes(q) ||
+      u.email?.toLowerCase().includes(q);
   });
 
   const filteredRiders = riders.filter(r => {
@@ -73,8 +89,6 @@ const AdminUsers = () => {
     return errors;
   };
 
-  const passwordErrors = validatePassword(formData.password);
-
   // ─── USER ACTIONS ───
   const handleEdit = (user) => {
     setEditingUser(user);
@@ -88,7 +102,6 @@ const AdminUsers = () => {
     if (validatePassword(formData.password).length > 0) { showNotification('Please meet all password requirements', 'error'); return; }
     try {
       await updateUserProfileMutation({ id: editingUser._id, ...formData });
-      // Update session if editing self
       const auth = JSON.parse(localStorage.getItem('authUser'));
       if (auth && auth._id === editingUser._id) {
         localStorage.setItem('authUser', JSON.stringify({ ...auth, ...formData }));
@@ -125,6 +138,17 @@ const AdminUsers = () => {
     setUserToDelete(null);
   };
 
+  // ✅ NEW: Activate a pending_activation user
+  const confirmActivate = async () => {
+    if (!userToActivate) return;
+    try {
+      await activateUserMutation({ id: userToActivate._id });
+      showNotification(`${userToActivate.name} has been activated successfully`, 'success');
+    } catch { showNotification('Failed to activate user', 'error'); }
+    setShowActivateConfirm(false);
+    setUserToActivate(null);
+  };
+
   // ─── RIDER ACTIONS ───
   const handleEditRider = (rider) => {
     setEditingRider(rider);
@@ -152,8 +176,8 @@ const AdminUsers = () => {
   };
 
   // ─── HELPERS ───
-  const getRoleBadgeClass = (role) => role === 'admin' ? 'role-badge admin' : 'role-badge user';
-  const getStatusBadgeClass = (status) => `status-badge ${status || 'active'}`;
+  const getRoleBadgeClass    = (role)   => role === 'admin' ? 'role-badge admin' : 'role-badge user';
+  const getStatusBadgeClass  = (status) => `status-badge ${status || 'active'}`;
   const getRiderStatusBadgeClass = (status) => {
     const map = { pending: 'rider-status-badge pending', approved: 'rider-status-badge approved', rejected: 'rider-status-badge rejected', suspended: 'rider-status-badge suspended' };
     return map[status] || 'rider-status-badge pending';
@@ -164,12 +188,12 @@ const AdminUsers = () => {
   };
 
   // Stats
-  const totalUsers = users.length;
-  const activeUsers = users.filter(u => (u.status || 'active') === 'active').length;
-  const suspendedUsers = users.filter(u => u.status === 'suspended').length;
-  const totalRiders = riders.length;
+  const totalUsers     = regularUsers.length;
+  const activeUsers    = regularUsers.filter(u => (u.status || 'active') === 'active').length;
+  const suspendedUsers = regularUsers.filter(u => u.status === 'suspended').length;
+  const totalRiders    = riders.length;
   const approvedRiders = riders.filter(r => r.status === 'approved').length;
-  const pendingRiders = riders.filter(r => r.status === 'pending').length;
+  const pendingRiders  = riders.filter(r => r.status === 'pending').length;
 
   return (
     <div className="admin-users">
@@ -187,7 +211,7 @@ const AdminUsers = () => {
           <p className="subtitle">Manage user accounts and rider registrations</p>
         </div>
         <div className="users-stats">
-          {activeTab === 'users' ? (
+          {activeTab === 'users' || activeTab === 'pending' ? (
             <>
               <div className="stat-card"><i className="fas fa-users"></i><div><div className="stat-number">{totalUsers}</div><div className="stat-label">Total Users</div></div></div>
               <div className="stat-card"><i className="fas fa-check-circle"></i><div><div className="stat-number">{activeUsers}</div><div className="stat-label">Active</div></div></div>
@@ -207,6 +231,11 @@ const AdminUsers = () => {
       <div className="tab-switcher">
         <button className={`tab-btn ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>
           <i className="fas fa-user"></i> Users <span className="tab-count">{totalUsers}</span>
+        </button>
+        {/* ✅ NEW: Pending Activation tab */}
+        <button className={`tab-btn ${activeTab === 'pending' ? 'active' : ''}`} onClick={() => setActiveTab('pending')}>
+          <i className="fas fa-user-clock"></i> Pending Activation <span className="tab-count">{pendingUsers.length}</span>
+          {pendingUsers.length > 0 && <span className="tab-badge">{pendingUsers.length}</span>}
         </button>
         <button className={`tab-btn ${activeTab === 'riders' ? 'active' : ''}`} onClick={() => setActiveTab('riders')}>
           <i className="fas fa-motorcycle"></i> Riders <span className="tab-count">{totalRiders}</span>
@@ -278,6 +307,69 @@ const AdminUsers = () => {
         </>
       )}
 
+      {/* ═══════ PENDING ACTIVATION TAB ✅ NEW ═══════ */}
+      {activeTab === 'pending' && (
+        <>
+          <div className="users-controls">
+            <div className="search-box">
+              <i className="fas fa-search"></i>
+              <input type="text" placeholder="Search pending users..."
+                value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+              {searchTerm && <button className="clear-search" onClick={() => setSearchTerm('')}><i className="fas fa-times"></i></button>}
+            </div>
+            <div style={{ color: '#e53e3e', fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <i className="fas fa-shield-alt"></i>
+              These accounts were flagged as suspicious (bot/spam registration) and require manual activation.
+            </div>
+          </div>
+
+          <div className="users-table-container">
+            {filteredPending.length === 0 ? (
+              <div className="no-users">
+                <i className="fas fa-check-circle" style={{ color: '#28a745' }}></i>
+                <p>No pending activations — no suspicious registrations detected!</p>
+              </div>
+            ) : (
+              <table className="users-table">
+                <thead>
+                  <tr><th>Name</th><th>Username</th><th>Email</th><th>Registered</th><th>Reason</th><th>Actions</th></tr>
+                </thead>
+                <tbody>
+                  {filteredPending.map(user => (
+                    <tr key={user._id}>
+                      <td className="user-name"><i className="fas fa-user-clock" style={{ color: '#ed8936' }}></i>{user.name}</td>
+                      <td>@{user.username}</td>
+                      <td>{user.email}</td>
+                      <td className="date-cell">{formatDate(user.registeredAt)}</td>
+                      <td>
+                        <span style={{ background: '#fff3cd', color: '#856404', padding: '4px 10px', borderRadius: 12, fontSize: 11, fontWeight: 700 }}>
+                          <i className="fas fa-robot" style={{ marginRight: 4 }}></i>
+                          {user.suspendReason === 'spam_registration' ? 'Spam/Bot Detection' : user.suspendReason || 'Flagged'}
+                        </span>
+                      </td>
+                      <td className="actions-cell">
+                        {/* Activate */}
+                        <button
+                          className="btn-suspend btn-activate"
+                          title="Activate this account"
+                          onClick={() => { setUserToActivate(user); setShowActivateConfirm(true); }}
+                        >
+                          <i className="fas fa-check-circle"></i>
+                        </button>
+                        {/* Delete */}
+                        <button className="btn-delete" title="Delete" onClick={() => { setUserToDelete(user); setShowDeleteConfirm(true); }}>
+                          <i className="fas fa-trash"></i>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </>
+      )}
+
       {/* ═══════ RIDERS TAB ═══════ */}
       {activeTab === 'riders' && (
         <>
@@ -314,9 +406,9 @@ const AdminUsers = () => {
                       <td style={{ textTransform: 'capitalize' }}>{rider.vehicleType}</td>
                       <td>
                         <span className={getRiderStatusBadgeClass(rider.status)}>
-                          {rider.status === 'approved' && <i className="fas fa-check-circle"></i>}
-                          {rider.status === 'pending' && <i className="fas fa-clock"></i>}
-                          {rider.status === 'rejected' && <i className="fas fa-times-circle"></i>}
+                          {rider.status === 'approved'  && <i className="fas fa-check-circle"></i>}
+                          {rider.status === 'pending'   && <i className="fas fa-clock"></i>}
+                          {rider.status === 'rejected'  && <i className="fas fa-times-circle"></i>}
                           {rider.status === 'suspended' && <i className="fas fa-ban"></i>}
                           {rider.status}
                         </span>
@@ -409,18 +501,9 @@ const AdminUsers = () => {
               <button className="close-btn" onClick={() => setShowRiderEditModal(false)}><i className="fas fa-times"></i></button>
             </div>
             <form onSubmit={handleRiderSubmit}>
-              <div className="form-group">
-                <label>Full Name</label>
-                <input type="text" value={riderFormData.fullName} onChange={(e) => setRiderFormData(p => ({ ...p, fullName: e.target.value }))} required />
-              </div>
-              <div className="form-group">
-                <label>Email</label>
-                <input type="email" value={riderFormData.email} onChange={(e) => setRiderFormData(p => ({ ...p, email: e.target.value }))} required />
-              </div>
-              <div className="form-group">
-                <label>Phone</label>
-                <input type="tel" value={riderFormData.phone} onChange={(e) => setRiderFormData(p => ({ ...p, phone: e.target.value }))} required />
-              </div>
+              <div className="form-group"><label>Full Name</label><input type="text" value={riderFormData.fullName} onChange={(e) => setRiderFormData(p => ({ ...p, fullName: e.target.value }))} required /></div>
+              <div className="form-group"><label>Email</label><input type="email" value={riderFormData.email} onChange={(e) => setRiderFormData(p => ({ ...p, email: e.target.value }))} required /></div>
+              <div className="form-group"><label>Phone</label><input type="tel" value={riderFormData.phone} onChange={(e) => setRiderFormData(p => ({ ...p, phone: e.target.value }))} required /></div>
               <div className="form-group">
                 <label>Vehicle Type</label>
                 <select value={riderFormData.vehicleType} onChange={(e) => setRiderFormData(p => ({ ...p, vehicleType: e.target.value }))}>
@@ -462,6 +545,26 @@ const AdminUsers = () => {
               <button className="btn-cancel" onClick={() => setShowSuspendConfirm(false)}>Cancel</button>
               <button className={`${(userToSuspend?.status || 'active') === 'active' ? 'btn-suspend-confirm' : 'btn-activate-confirm'}`} onClick={confirmSuspend}>
                 {(userToSuspend?.status || 'active') === 'active' ? 'Suspend' : 'Activate'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════ ACTIVATE CONFIRM ✅ NEW ═══════ */}
+      {showActivateConfirm && (
+        <div className="modal-overlay" onClick={() => setShowActivateConfirm(false)}>
+          <div className="modal-content confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="confirm-icon activate">
+              <i className="fas fa-user-check"></i>
+            </div>
+            <h2>Activate Account?</h2>
+            <p>Activate <strong>{userToActivate?.name}</strong>'s account?</p>
+            <p className="success-text">They will be able to log in immediately after activation.</p>
+            <div className="modal-actions">
+              <button className="btn-cancel" onClick={() => setShowActivateConfirm(false)}>Cancel</button>
+              <button className="btn-activate-confirm" onClick={confirmActivate}>
+                <i className="fas fa-check-circle"></i> Activate
               </button>
             </div>
           </div>

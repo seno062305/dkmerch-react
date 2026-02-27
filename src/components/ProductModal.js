@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useQuery } from 'convex/react';
+import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
@@ -14,94 +14,142 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
   const { showNotification } = useNotification();
   const navigate = useNavigate();
 
-  const [rating, setRating] = useState(0);
+  const [rating, setRating]           = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
-  const [review, setReview] = useState('');
-  const [existingReviews, setExistingReviews] = useState([]);
-  const [hasUserReviewed, setHasUserReviewed] = useState(false);
-  const [showLoginModal, setShowLoginModal] = useState(false);
-  const [hideProductModal, setHideProductModal] = useState(false);
-  const [appliedPromo, setAppliedPromo] = useState(null);
-  const [showLightbox, setShowLightbox] = useState(false);
+  const [review, setReview]           = useState('');
+  const [showLoginModal, setShowLoginModal]       = useState(false);
+  const [hideProductModal, setHideProductModal]   = useState(false);
+  const [appliedPromo, setAppliedPromo]           = useState(null);
+  const [showLightbox, setShowLightbox]           = useState(false);
+
+  const productId = product._id || product.id || '';
+
+  const convexReviews = useQuery(
+    api.reviews.getProductReviews,
+    productId ? { productId } : 'skip'
+  ) ?? [];
+
+  const submitReviewMutation = useMutation(api.reviews.submitReview);
+  const deleteReviewMutation = useMutation(api.reviews.deleteReview);
+
+  // ✅ FIX: A pre-order is "released" (show Add to Cart) if:
+  //   1. It has no isPreOrder flag at all (regular product), OR
+  //   2. It IS a pre-order BUT its releaseDate+releaseTime is already past
+  const isReleased = (() => {
+    // Not a pre-order at all → always show Add to Cart
+    if (!product.isPreOrder && product.status !== 'preorder') return true;
+    // Pre-order with no release date → still a pre-order
+    if (!product.releaseDate) return false;
+    // Pre-order with a release date → check if past
+    const rt = product.releaseTime || '00:00';
+    const releaseMs = new Date(`${product.releaseDate}T${rt}:00+08:00`).getTime();
+    return Date.now() >= releaseMs;
+  })();
+
+  const hasUserReviewed = isAuthenticated && user
+    ? convexReviews.some(r => r.userEmail === user.email)
+    : false;
 
   useEffect(() => {
     setRating(0);
     setReview('');
-    setHasUserReviewed(false);
     setAppliedPromo(null);
-
-    const reviews = JSON.parse(localStorage.getItem('product_reviews')) || [];
-    const productReviews = reviews.filter(r => r.productId === product.id);
-    setExistingReviews(productReviews);
-
-    if (isAuthenticated && user) {
-      const userReview = productReviews.find(r => r.userEmail === user.email);
-      if (userReview) setHasUserReviewed(true);
-    }
 
     const scrollY = window.scrollY;
     document.body.style.position = 'fixed';
     document.body.style.top = `-${scrollY}px`;
     document.body.style.width = '100%';
     document.body.style.overflow = 'hidden';
+
     return () => {
-      setRating(0);
-      setReview('');
-      setHasUserReviewed(false);
       document.body.style.position = '';
       document.body.style.top = '';
       document.body.style.width = '';
       document.body.style.overflow = '';
       window.scrollTo(0, scrollY);
     };
-  }, [product.id, isAuthenticated, user]);
+  }, [productId]);
+
+  const handleDeleteReview = async (reviewId) => {
+    if (!window.confirm('Delete your review?')) return;
+    try {
+      await deleteReviewMutation({ reviewId, userEmail: user.email });
+      showNotification('Review deleted.', 'success');
+    } catch {
+      showNotification('Failed to delete review.', 'error');
+    }
+  };
 
   const discountedPrice = appliedPromo
     ? Math.max(0, product.price - Math.min((product.price * appliedPromo.discount) / 100, appliedPromo.maxDiscount))
     : product.price;
 
-  const handleSubmitReview = () => {
-    if (!isAuthenticated) { showNotification('Please login to submit a review', 'error'); setHideProductModal(true); setShowLoginModal(true); return; }
+  const getAverageRating = () => {
+    if (convexReviews.length === 0) return 0;
+    return (convexReviews.reduce((acc, r) => acc + r.rating, 0) / convexReviews.length).toFixed(1);
+  };
+
+  const handleSubmitReview = async () => {
+    if (!isAuthenticated) {
+      showNotification('Please login to submit a review', 'error');
+      setHideProductModal(true);
+      setShowLoginModal(true);
+      return;
+    }
     if (rating === 0) { showNotification('Please select a rating', 'error'); return; }
     if (review.trim() === '') { showNotification('Please write a review', 'error'); return; }
     if (review.length > 250) { showNotification('Review must be 250 characters or less', 'error'); return; }
-    const reviews = JSON.parse(localStorage.getItem('product_reviews')) || [];
-    const newReview = {
-      id: Date.now().toString(), productId: product.id, productName: product.name,
-      productImage: product.image, userEmail: user.email, userName: user.name || user.email,
-      rating, review: review.trim(), createdAt: new Date().toISOString()
-    };
-    const existingIndex = reviews.findIndex(r => r.productId === product.id && r.userEmail === user.email);
-    if (existingIndex !== -1) { reviews[existingIndex] = newReview; showNotification('Review updated!', 'success'); }
-    else { reviews.push(newReview); showNotification('Review submitted!', 'success'); }
-    localStorage.setItem('product_reviews', JSON.stringify(reviews));
-    setExistingReviews(reviews.filter(r => r.productId === product.id));
-    setHasUserReviewed(true);
-    setRating(0);
-    setReview('');
-  };
 
-  const getAverageRating = () => {
-    if (existingReviews.length === 0) return 0;
-    return (existingReviews.reduce((acc, r) => acc + r.rating, 0) / existingReviews.length).toFixed(1);
+    try {
+      const result = await submitReviewMutation({
+        productId,
+        userEmail: user.email,
+        userName: user.name || user.email,
+        rating,
+        review: review.trim(),
+      });
+      showNotification(result.updated ? 'Review updated!' : 'Review submitted!', 'success');
+      setRating(0);
+      setReview('');
+    } catch {
+      showNotification('Failed to submit review. Please try again.', 'error');
+    }
   };
 
   const handleAddToCartClick = () => {
-    if (!isAuthenticated) { showNotification('Please login to add to cart', 'error'); setHideProductModal(true); setShowLoginModal(true); return; }
+    if (!isAuthenticated) {
+      showNotification('Please login to add to cart', 'error');
+      setHideProductModal(true);
+      setShowLoginModal(true);
+      return;
+    }
     onAddToCart({ ...product, appliedPromo, finalPrice: discountedPrice });
   };
 
   const handlePreOrderClick = () => {
-    if (!isAuthenticated) { showNotification('Please login to pre-order', 'error'); setHideProductModal(true); setShowLoginModal(true); return; }
+    if (!isAuthenticated) {
+      showNotification('Please login to pre-order', 'error');
+      setHideProductModal(true);
+      setShowLoginModal(true);
+      return;
+    }
     onAddToCart({ ...product, appliedPromo, finalPrice: discountedPrice });
   };
 
   const handleWishlistClick = () => {
-    if (!isAuthenticated) { showNotification('Please login to add to favorites', 'error'); setHideProductModal(true); setShowLoginModal(true); return; }
+    if (!isAuthenticated) {
+      showNotification('Please login to add to favorites', 'error');
+      setHideProductModal(true);
+      setShowLoginModal(true);
+      return;
+    }
     onAddToWishlist(product);
   };
 
-  const handleLoginModalClose = () => { setShowLoginModal(false); setHideProductModal(false); };
+  const handleLoginModalClose = () => {
+    setShowLoginModal(false);
+    setHideProductModal(false);
+  };
 
   if (hideProductModal) return <>{showLoginModal && <LoginModal onClose={handleLoginModalClose} />}</>;
 
@@ -110,27 +158,22 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
       <div className="product-modal-overlay" onClick={onClose}>
         <div className="product-modal-content" onClick={(e) => e.stopPropagation()}>
 
-          {/* ── Close button — always fixed on screen ── */}
           <button className="modal-close" onClick={onClose}>
             <i className="fas fa-times"></i>
           </button>
 
-          {/* ══════════════════════════════════════
-              DESKTOP: 2-column grid
-              MOBILE:  image on top, details below
-              ══════════════════════════════════════ */}
           <div className="modal-grid">
 
-            {/* ── LEFT / TOP: Image ── */}
+            {/* ── LEFT: Image ── */}
             <div className="modal-image-section">
-              {product.isPreOrder && <div className="pre-order-badge">PRE-ORDER</div>}
+              {/* ✅ Only show PRE-ORDER badge if it's a pre-order AND not yet released */}
+              {product.isPreOrder && !isReleased && <div className="pre-order-badge">PRE-ORDER</div>}
               {product.isSale && !product.isPreOrder && <div className="sale-badge">SALE</div>}
               {appliedPromo && (
                 <div className="modal-promo-img-badge">
                   <i className="fas fa-tag"></i> {appliedPromo.discount}% OFF
                 </div>
               )}
-              {/* Clickable image → lightbox */}
               <img
                 src={product.image}
                 alt={product.name}
@@ -142,7 +185,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
               </div>
             </div>
 
-            {/* ── RIGHT / BOTTOM: Details ── */}
+            {/* ── RIGHT: Details ── */}
             <div className="modal-details-section">
               <div className="modal-product-info">
                 <div className="product-group">{product.kpopGroup}</div>
@@ -152,7 +195,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
                   <p className="product-description">{product.description}</p>
                 )}
 
-                {existingReviews.length > 0 && (
+                {convexReviews.length > 0 && (
                   <div className="average-rating">
                     <div className="stars">
                       {[1,2,3,4,5].map(s => (
@@ -160,7 +203,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
                       ))}
                     </div>
                     <span className="rating-text">
-                      {getAverageRating()} ({existingReviews.length} {existingReviews.length === 1 ? 'review' : 'reviews'})
+                      {getAverageRating()} ({convexReviews.length} {convexReviews.length === 1 ? 'review' : 'reviews'})
                     </span>
                   </div>
                 )}
@@ -201,7 +244,8 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
                 )}
 
                 <div className="modal-actions">
-                  {product.isPreOrder ? (
+                  {/* ✅ Show Pre-Order button ONLY if it's a pre-order AND not yet released */}
+                  {product.isPreOrder && !isReleased ? (
                     <>
                       <button className="btn btn-preorder" onClick={handlePreOrderClick} disabled={product.stock === 0}>
                         <i className="fas fa-shopping-cart"></i> Pre-Order Now
@@ -222,7 +266,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
                   )}
                 </div>
 
-                {product.isPreOrder && product.preOrderSlots !== undefined && (
+                {product.isPreOrder && !isReleased && product.preOrderSlots !== undefined && (
                   <div className="preorder-slots">
                     <i className="fas fa-info-circle"></i>
                     {product.preOrderSlots > 0
@@ -235,6 +279,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
               {/* ── Review Section ── */}
               <div className="review-section">
                 <h3><i className="fas fa-star"></i> {hasUserReviewed ? 'Update Review' : 'Rate & Review'}</h3>
+
                 {!isAuthenticated ? (
                   <div className="login-to-review">
                     <i className="fas fa-lock"></i>
@@ -261,7 +306,8 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
                         value={review}
                         onChange={(e) => { if (e.target.value.length <= 250) setReview(e.target.value); }}
                         placeholder="Share your thoughts about this product..."
-                        rows="4" maxLength="250"
+                        rows="4"
+                        maxLength="250"
                       />
                     </div>
                     <button
@@ -275,24 +321,41 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
                   </>
                 )}
 
-                {existingReviews.length > 0 && (
+                {convexReviews.length > 0 && (
                   <div className="all-reviews">
-                    <h4>Customer Reviews ({existingReviews.length})</h4>
-                    {existingReviews.slice(0, 3).map(rev => (
-                      <div key={rev.id} className="review-item">
+                    <h4>Customer Reviews ({convexReviews.length})</h4>
+                    {convexReviews.slice(0, 3).map(rev => (
+                      <div key={rev._id} className="review-item">
                         <div className="review-header">
                           <div className="reviewer-info">
                             <i className="fas fa-user-circle"></i>
                             <strong>{rev.userName}</strong>
                           </div>
-                          <div className="review-stars">
-                            {[1,2,3,4,5].map(s => (
-                              <i key={s} className={`fas fa-star ${s <= rev.rating ? 'filled' : ''}`}></i>
-                            ))}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div className="review-stars">
+                              {[1,2,3,4,5].map(s => (
+                                <i key={s} className={`fas fa-star ${s <= rev.rating ? 'filled' : ''}`}></i>
+                              ))}
+                            </div>
+                            {isAuthenticated && user?.email === rev.userEmail && (
+                              <button
+                                onClick={() => handleDeleteReview(rev._id)}
+                                style={{
+                                  background: 'none', border: 'none', cursor: 'pointer',
+                                  color: '#dc2626', fontSize: 13, padding: '2px 4px',
+                                  borderRadius: 4, transition: 'background 0.2s'
+                                }}
+                                title="Delete your review"
+                              >
+                                <i className="fas fa-trash-alt"></i>
+                              </button>
+                            )}
                           </div>
                         </div>
                         <p className="review-text">{rev.review}</p>
-                        <small className="review-date">{new Date(rev.createdAt).toLocaleDateString()}</small>
+                        <small className="review-date">
+                          {new Date(rev.createdAt).toLocaleDateString()}
+                        </small>
                       </div>
                     ))}
                   </div>
@@ -303,7 +366,6 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
         </div>
       </div>
 
-      {/* ── Lightbox ── */}
       {showLightbox && (
         <div className="modal-lightbox" onClick={() => setShowLightbox(false)}>
           <button className="modal-lightbox-close" onClick={() => setShowLightbox(false)}>

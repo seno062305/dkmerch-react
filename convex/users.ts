@@ -2,6 +2,11 @@
 import { query, mutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 
+// ── RATE LIMIT CONFIG ─────────────────────────────
+const RATE_LIMIT_WINDOW_MS = 2 * 60 * 1000; // 2 minutes
+const RATE_LIMIT_MAX        = 5;             // max 5 registrations per fingerprint per 2 mins
+                                             // (the 6th+ account gets auto-suspended)
+
 // ── QUERIES ──────────────────────────────────────
 
 export const getAllUsers = query(async ({ db }) => {
@@ -29,7 +34,12 @@ export const getUserById = query({
   },
 });
 
-// Get saved checkout profile for a user
+// ✅ NEW: Get all pending_activation users (for admin)
+export const getPendingUsers = query(async ({ db }) => {
+  const users = await db.query("users").collect();
+  return users.filter(u => u.status === "pending_activation");
+});
+
 export const getProfile = query({
   args: { userId: v.string() },
   handler: async ({ db }, { userId }) => {
@@ -48,7 +58,6 @@ export const getProfile = query({
   },
 });
 
-// ── Internal query for promo email blast ──
 export const getAllUsersForPromoNotif = internalQuery({
   args: {},
   handler: async ({ db }) => {
@@ -78,7 +87,10 @@ export const loginUser = mutation({
 
     if (user && user.password === password) {
       if (user.status === "suspended") {
-        return { success: false, user: null, message: "Your account has been suspended." };
+        return { success: false, user: null, message: "Your account has been suspended. Please contact support." };
+      }
+      if (user.status === "pending_activation") {
+        return { success: false, user: null, message: "Your account is pending activation by an administrator." };
       }
       return { success: true, user };
     }
@@ -86,6 +98,7 @@ export const loginUser = mutation({
   },
 });
 
+// ✅ UPDATED: createUser with rate limiting + auto-suspend on spam
 export const createUser = mutation({
   args: {
     name: v.string(),
@@ -93,6 +106,7 @@ export const createUser = mutation({
     email: v.string(),
     password: v.string(),
     role: v.optional(v.string()),
+    fingerprint: v.optional(v.string()), // ✅ IP or browser fingerprint from client
   },
   handler: async ({ db }, args) => {
     const existingEmail = await db
@@ -107,19 +121,71 @@ export const createUser = mutation({
       .first();
     if (existingUsername) return { success: false, message: "Username already taken" };
 
+    const nowMs = Date.now();
+    let isSuspicious = false;
+
+    // ✅ Rate limit check — only if fingerprint is provided
+    if (args.fingerprint) {
+      const windowStart = nowMs - RATE_LIMIT_WINDOW_MS;
+
+      // Count registrations from this fingerprint within the window
+      const recentAttempts = await db
+        .query("registrationAttempts")
+        .withIndex("by_fingerprint", q => q.eq("fingerprint", args.fingerprint!))
+        .collect();
+
+      const recentCount = recentAttempts.filter(a => a.attemptedAt >= windowStart).length;
+
+      // Log this attempt
+      await db.insert("registrationAttempts", {
+        fingerprint: args.fingerprint,
+        attemptedAt: nowMs,
+        email: args.email,
+      });
+
+      // If more than RATE_LIMIT_MAX registrations in window → flag as suspicious
+      if (recentCount >= RATE_LIMIT_MAX) {
+        isSuspicious = true;
+      }
+    }
+
+    // ✅ Auto-suspend if suspicious, otherwise active
+    const status = isSuspicious ? "pending_activation" : "active";
+    const suspendReason = isSuspicious ? "spam_registration" : undefined;
+
     const id = await db.insert("users", {
       name: args.name,
       username: args.username,
       email: args.email,
       password: args.password,
       role: args.role || "user",
+      status,
+      ...(suspendReason ? { suspendReason } : {}),
+      registeredAt: new Date(nowMs).toISOString(),
     });
+
+    if (isSuspicious) {
+      return {
+        success: false,
+        message: "Registration is temporarily restricted. Your account requires admin activation.",
+        pendingActivation: true,
+        id,
+      };
+    }
 
     return { success: true, id };
   },
 });
 
-// Save checkout profile (contact + address) to user record
+// ✅ NEW: Admin activates a pending_activation user
+export const activateUser = mutation({
+  args: { id: v.id("users") },
+  handler: async ({ db }, { id }) => {
+    await db.patch(id, { status: "active", suspendReason: undefined });
+    return { success: true };
+  },
+});
+
 export const saveProfile = mutation({
   args: {
     userId: v.string(),
@@ -134,14 +200,12 @@ export const saveProfile = mutation({
     try {
       const user = await db.get(userId as any);
       if (!user) return { success: false };
-
       const updates: any = {};
       if (fields.fullName !== undefined) updates.fullName = fields.fullName;
       if (fields.phone !== undefined) updates.phone = fields.phone;
       if (fields.address !== undefined) updates.address = fields.address;
       if (fields.city !== undefined) updates.city = fields.city;
       if (fields.zipCode !== undefined) updates.zipCode = fields.zipCode;
-
       await db.patch(userId as any, updates);
       return { success: true };
     } catch {
@@ -193,7 +257,6 @@ export const seedAdmin = mutation({
       .query("users")
       .withIndex("by_email", q => q.eq("email", "admin"))
       .first();
-
     if (!existing) {
       await db.insert("users", {
         name: "Administrator",
@@ -201,6 +264,7 @@ export const seedAdmin = mutation({
         email: "admin",
         password: "admin123",
         role: "admin",
+        status: "active",
       });
     }
     return { success: true };
@@ -217,11 +281,7 @@ export const resetPasswordByEmail = mutation({
       .query("users")
       .withIndex("by_email", q => q.eq("email", email))
       .first();
-
-    if (!user) {
-      return { success: false, message: "No account found with that email." };
-    }
-
+    if (!user) return { success: false, message: "No account found with that email." };
     await db.patch(user._id, { password: newPassword });
     return { success: true, message: "Password reset successfully!" };
   },

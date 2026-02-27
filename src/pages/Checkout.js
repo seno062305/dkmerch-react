@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
-import { useProducts, usePreOrderProducts, useUpdateProduct } from '../utils/productStorage';
+import { useProducts, usePreOrderProducts, useUpdateProduct, useCollectionProducts } from '../utils/productStorage';
 import { useCreateOrder } from '../utils/orderStorage';
 import { useCart, useClearCart } from '../context/cartUtils';
 import { useMutation, useQuery, useAction } from 'convex/react';
@@ -20,10 +20,15 @@ const Checkout = () => {
   const location  = useLocation();
   const { user, isAuthenticated } = useAuth();
   const { showNotification }      = useNotification();
-
-  const regularProducts  = useProducts() || [];
-  const preOrderProducts = usePreOrderProducts() || [];
-  const products         = [...regularProducts, ...preOrderProducts];
+  const collectionProducts = useCollectionProducts() || [];
+  const regularProducts    = useProducts() || [];
+  const preOrderProducts   = usePreOrderProducts() || [];
+  // Merge all sources and deduplicate by _id
+  const allProductsMap = new Map();
+  [...collectionProducts, ...regularProducts, ...preOrderProducts].forEach(p => {
+    allProductsMap.set(p._id?.toString(), p);
+  });
+  const products = Array.from(allProductsMap.values());
 
   const cartItems     = useCart();
   const createOrder   = useCreateOrder();
@@ -43,7 +48,6 @@ const Checkout = () => {
   const [isEditingAddress, setIsEditingAddress] = useState(false);
   const [errors, setErrors]                     = useState({ phone: '', zipCode: '' });
 
-  // Promo summary from cart (via nav state) — read-only, no input here
   const cartPromo = location.state?.appliedPromo || null;
 
   const [formData, setFormData] = useState({
@@ -84,24 +88,22 @@ const Checkout = () => {
   }, [cartItems.length, products.length]);
 
   // ── Helpers ──────────────────────────────────────────────────────
-  const getProductById = (id) => products.find(p => p._id === id || p.id === id);
+  const getProductById = (id) => products.find(p => p._id?.toString() === id?.toString() || p.id === id);
   const getQty         = (item) => item.qty ?? item.quantity ?? 1;
   const getTotalPcs    = () => cartItems.reduce((sum, item) => sum + getQty(item), 0);
 
-  // Use saved finalPrice (discounted) if available, else original product price
   const getEffectivePrice = (item, product) => {
     if (item.finalPrice !== undefined && item.finalPrice !== null) return item.finalPrice;
+    if (item.price !== undefined && item.price !== null) return item.price;
     return product?.price ?? 0;
   };
 
-  // Subtotal = sum of effective (already-discounted) prices
   const calculateSubtotal = () =>
     cartItems.reduce((total, item) => {
       const product = getProductById(item.productId || item.id);
       return total + getEffectivePrice(item, product) * getQty(item);
     }, 0);
 
-  // Total peso saved = original price - effective price, across all promo items
   const calculateTotalDiscount = () =>
     cartItems.reduce((total, item) => {
       if (!item.promoCode) return total;
@@ -114,7 +116,7 @@ const Checkout = () => {
   const subtotal      = calculateSubtotal();
   const shippingFee   = calcShipping(getTotalPcs());
   const totalDiscount = calculateTotalDiscount();
-  const finalTotal    = subtotal + shippingFee; // subtotal is already discounted per item
+  const finalTotal    = subtotal + shippingFee;
 
   // ── Validation ────────────────────────────────────────────────────
   const validatePhone = (phone) => {
@@ -198,22 +200,41 @@ const Checkout = () => {
   // ── Submit ────────────────────────────────────────────────────────
   const handleSubmit = async (e) => {
     e.preventDefault();
+    console.log('🟡 SUBMIT FIRED | isFormReady:', isFormReady(), '| cartItems:', cartItems.length);
+
     if (!isFormReady()) {
+      console.log('❌ Form not ready — contact:', isContactComplete(), '| address:', isAddressComplete());
       showNotification('Please fill in and save all required fields', 'error');
       if (!isContactComplete()) setIsEditingContact(true);
       if (!isAddressComplete()) setIsEditingAddress(true);
       return;
     }
+
+    // Wait for products to load if still empty
+    if (products.length === 0) {
+      setLoading(false);
+      showNotification('Products are still loading. Please wait a moment and try again.', 'warning');
+      return;
+    }
+
     for (const item of cartItems) {
       const product = getProductById(item.productId || item.id);
-      if (!product) { showNotification('Product not found', 'error'); return; }
-      if (product.stock < getQty(item)) {
+      console.log('📦 product check:', item.productId || item.id, '→', product?.name, '| stock:', product?.stock, '| qty:', getQty(item));
+      if (!product) {
+        // Product might be a preorder or deleted — skip stock check, don't block
+        console.warn('⚠️ Product not found in local list, skipping stock check:', item.productId || item.id);
+        continue;
+      }
+      if (product.stock !== undefined && product.stock < getQty(item)) {
+        console.log('❌ Insufficient stock');
         showNotification(`Insufficient stock for ${product.name}. Available: ${product.stock}`, 'error');
         return;
       }
     }
 
+    console.log('🟢 All checks passed — proceeding to createOrder...');
     setLoading(true);
+
     try {
       // Deduct stock
       for (const item of cartItems) {
@@ -224,13 +245,12 @@ const Checkout = () => {
       const orderId  = `DK-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
       const shipping = calcShipping(getTotalPcs());
 
-      // Order items use effective (discounted) price
       const orderItems = cartItems.map(item => {
         const product = getProductById(item.productId || item.id);
         return {
           id:          item.productId || item.id,
           name:        product?.name  || 'Unknown',
-          price:       getEffectivePrice(item, product), // discounted price per unit
+          price:       getEffectivePrice(item, product),
           image:       product?.image || '',
           quantity:    getQty(item),
           isPreOrder:  product?.isPreOrder  || false,
@@ -238,22 +258,21 @@ const Checkout = () => {
         };
       });
 
-      // Original subtotal (before discount) for record-keeping
       const originalSubtotal = cartItems.reduce((total, item) => {
         const product = getProductById(item.productId || item.id);
         return total + (product?.price ?? 0) * getQty(item);
       }, 0);
 
-      // Promo summary from first promo item in cart
       const promoItem = cartItems.find(i => i.promoCode);
 
+      console.log('📝 Calling createOrder...');
       await createOrder({
         orderId,
         email:           savedContact.email,
         customerName:    savedContact.fullName,
         phone:           savedContact.phone,
         items:           orderItems,
-        total:           originalSubtotal + shipping,   // original, pre-discount
+        total:           originalSubtotal + shipping,
         subtotal:        originalSubtotal,
         shippingFee:     shipping,
         ...(totalDiscount > 0 && promoItem && {
@@ -270,15 +289,26 @@ const Checkout = () => {
         paymentStatus:   'pending',
       });
 
-      // PayMongo charges the DISCOUNTED finalTotal
-      const { paymentLinkUrl } = await createPaymentLink({
-        orderId,
-        amount:        finalTotal,
-        description:   `DKMerch Order ${orderId}${promoItem ? ` (Promo: ${promoItem.promoCode})` : ''}`,
-        customerName:  savedContact.fullName,
-        customerEmail: savedContact.email,
-        customerPhone: savedContact.phone,
-      });
+      console.log('✅ createOrder done — calling createPaymentLink...');
+      // Create PayMongo payment link
+      let paymentLinkUrl;
+      try {
+        const result = await createPaymentLink({
+          orderId,
+          amount:        finalTotal,
+          description:   `DKMerch Order ${orderId}${promoItem ? ` (Promo: ${promoItem.promoCode})` : ''}`,
+          customerName:  savedContact.fullName,
+          customerEmail: savedContact.email,
+          customerPhone: savedContact.phone,
+        });
+        paymentLinkUrl = result.paymentLinkUrl;
+        console.log('✅ PayMongo link created:', paymentLinkUrl);
+      } catch (payError) {
+        console.error('PayMongo error:', payError);
+        setLoading(false);
+        showNotification('Payment setup failed. Please try again or contact support.', 'error');
+        return;
+      }
 
       try {
         await sendOrderConfirmation({
@@ -327,7 +357,9 @@ const Checkout = () => {
         <div className="item-details">
           <p className="item-name">
             {product.name}
-            {product.isPreOrder && <span className="item-preorder-badge">PRE-ORDER</span>}
+            {product.isPreOrder && (
+              <span className="item-preorder-badge">PRE-ORDER</span>
+            )}
             {hasPromo && (
               <span className="item-promo-tag">
                 <i className="fas fa-tag"></i> {item.promoDiscount}% OFF
@@ -349,7 +381,6 @@ const Checkout = () => {
           )}
         </div>
 
-        {/* Price column */}
         <div className="item-price-col">
           <div className={`item-price${hasPromo ? ' item-price-promo' : ''}`}>
             ₱{itemTotal.toLocaleString()}
@@ -367,10 +398,8 @@ const Checkout = () => {
   return (
     <div className="checkout-page">
       <div className="checkout-container">
-        <div className="checkout-header">
-          <h1>Checkout</h1>
-          <p>Complete your order and get ready for K-Pop paradise</p>
-        </div>
+
+        {/* ── checkout-header REMOVED ── */}
 
         <form onSubmit={handleSubmit} className="checkout-form">
           <div className="checkout-grid">
@@ -427,8 +456,16 @@ const Checkout = () => {
                       <input type="tel" name="phone" value={formData.phone} onChange={handleChange}
                         placeholder="09XXXXXXXXX" maxLength="11"
                         className={errors.phone ? 'input-error' : ''} />
-                      {errors.phone && <span className="error-message"><i className="fas fa-exclamation-circle"></i> {errors.phone}</span>}
-                      {!errors.phone && formData.phone?.length === 11 && <span className="success-message"><i className="fas fa-check-circle"></i> Valid phone number</span>}
+                      {errors.phone && (
+                        <span className="error-message">
+                          <i className="fas fa-exclamation-circle"></i> {errors.phone}
+                        </span>
+                      )}
+                      {!errors.phone && formData.phone?.length === 11 && (
+                        <span className="success-message">
+                          <i className="fas fa-check-circle"></i> Valid phone number
+                        </span>
+                      )}
                     </div>
                   </div>
                 )}
@@ -485,14 +522,22 @@ const Checkout = () => {
                       <input type="text" name="zipCode" value={formData.zipCode} onChange={handleChange}
                         placeholder="1000" maxLength="4"
                         className={errors.zipCode ? 'input-error' : ''} />
-                      {errors.zipCode && <span className="error-message"><i className="fas fa-exclamation-circle"></i> {errors.zipCode}</span>}
-                      {!errors.zipCode && formData.zipCode?.length === 4 && <span className="success-message"><i className="fas fa-check-circle"></i> Valid zip code</span>}
+                      {errors.zipCode && (
+                        <span className="error-message">
+                          <i className="fas fa-exclamation-circle"></i> {errors.zipCode}
+                        </span>
+                      )}
+                      {!errors.zipCode && formData.zipCode?.length === 4 && (
+                        <span className="success-message">
+                          <i className="fas fa-check-circle"></i> Valid zip code
+                        </span>
+                      )}
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* ── PROMO APPLIED — read-only from cart ── */}
+              {/* ── PROMO APPLIED ── */}
               {totalDiscount > 0 && (
                 <div className="checkout-section">
                   <h2>Promo Applied</h2>
@@ -551,7 +596,6 @@ const Checkout = () => {
                 <h2>Order Summary</h2>
 
                 <div className="summary-items">
-                  {/* Non-promo items */}
                   {nonPromoCartItems.length > 0 && (
                     <>
                       {promoCartItems.length > 0 && (
@@ -562,8 +606,6 @@ const Checkout = () => {
                       {nonPromoCartItems.map(item => renderSummaryItem(item))}
                     </>
                   )}
-
-                  {/* Promo items */}
                   {promoCartItems.length > 0 && (
                     <>
                       <div className="summary-group-label summary-group-label-promo">
@@ -590,7 +632,6 @@ const Checkout = () => {
                 )}
 
                 <div className="summary-totals">
-                  {/* Show original total only if there's a discount */}
                   {totalDiscount > 0 && (
                     <div className="summary-row summary-row-original">
                       <span>Original Price</span>
@@ -599,12 +640,10 @@ const Checkout = () => {
                       </span>
                     </div>
                   )}
-
                   <div className="summary-row">
                     <span>Subtotal</span>
                     <span>₱{subtotal.toLocaleString()}</span>
                   </div>
-
                   <div className="summary-row">
                     <span>Shipping ({totalPcs} pc{totalPcs !== 1 ? 's' : ''})</span>
                     <span>
@@ -613,7 +652,6 @@ const Checkout = () => {
                         : `₱${shippingFee.toLocaleString()}`}
                     </span>
                   </div>
-
                   {totalDiscount > 0 && (
                     <div className="summary-row promo-discount-row">
                       <span>
@@ -623,12 +661,10 @@ const Checkout = () => {
                       <span className="promo-discount-amount">−₱{totalDiscount.toLocaleString()}</span>
                     </div>
                   )}
-
                   <div className="summary-row total">
                     <span>Total</span>
                     <span>₱{finalTotal.toLocaleString()}</span>
                   </div>
-
                   {totalDiscount > 0 && (
                     <div className="promo-savings-checkout">
                       <i className="fas fa-piggy-bank"></i>
@@ -642,11 +678,13 @@ const Checkout = () => {
                   className={`btn btn-primary btn-checkout${!isFormReady() || loading ? ' btn-checkout-disabled' : ''}`}
                   disabled={loading || !isFormReady()}
                 >
-                  {loading
-                    ? <><i className="fas fa-spinner fa-spin"></i> Processing...</>
-                    : !isFormReady()
-                      ? <><i className="fas fa-lock"></i> Complete Your Info First</>
-                      : <>Pay ₱{finalTotal.toLocaleString()} Securely</>}
+                  {loading ? (
+                    <><i className="fas fa-spinner fa-spin"></i> Processing...</>
+                  ) : !isFormReady() ? (
+                    <><i className="fas fa-lock"></i> Complete Your Info First</>
+                  ) : (
+                    <>Pay ₱{finalTotal.toLocaleString()} Securely</>
+                  )}
                 </button>
 
                 {!isFormReady() && !loading && (

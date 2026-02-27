@@ -16,7 +16,6 @@ const SITE_URL = process.env.SITE_URL || "https://dkmerchwebsite.vercel.app";
 function resolveImageUrl(image: string): string {
   if (!image) return "";
   if (image.startsWith("http://") || image.startsWith("https://")) return image;
-  // e.g. "/images/blackpink.jpg" → "https://dkmerchwebsite.vercel.app/images/blackpink.jpg"
   return `${SITE_URL}${image.startsWith("/") ? "" : "/"}${image}`;
 }
 
@@ -24,7 +23,6 @@ function resolveImageUrl(image: string): string {
 function isValidEmail(email: string): boolean {
   if (!email || typeof email !== "string") return false;
   const trimmed = email.trim();
-  // Basic email regex
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
 }
 
@@ -228,7 +226,6 @@ export const checkAndReleasePreOrders = internalAction({
           requestId: req._id,
         });
 
-        // ✅ Only send if valid email
         if (isValidEmail(req.userEmail)) {
           await ctx.runAction(internal.preOrderRequests.sendPreOrderAvailableEmail, {
             to: req.userEmail,
@@ -239,7 +236,6 @@ export const checkAndReleasePreOrders = internalAction({
             requestId: req._id,
           });
 
-          // ✅ Rate limit: wait 600ms between sends (max ~1.5 req/sec, under the 2/sec limit)
           await delay(600);
         }
       }
@@ -258,6 +254,7 @@ export const sendPreOrderAvailableEmail = internalAction({
     requestId: v.optional(v.string()),
   },
   handler: async (ctx, { to, userName, productName, productImage, productPrice }) => {
+    // ✅ FIXED: ?tab=available — auto-opens Available tab on My Pre-Orders page
     const preOrderLink = `${SITE_URL}/my-preorders?tab=available`;
     const absoluteImage = resolveImageUrl(productImage);
 
@@ -292,7 +289,7 @@ export const sendPreOrderAvailableEmail = internalAction({
           <a href="${preOrderLink}" style="display: inline-block; background: linear-gradient(135deg, #fc1268, #9c27b0); color: white; text-decoration: none; padding: 14px 36px; border-radius: 10px; font-size: 16px; font-weight: 700; margin-bottom: 16px;">
             🛍️ View My Pre-Orders
           </a>
-          <p style="color: #9ca3af; font-size: 13px; margin: 8px 0 0;">Go to My Pre-Orders tab to add the item to your cart.</p>
+          <p style="color: #9ca3af; font-size: 13px; margin: 8px 0 0;">Clicking the button will open directly to your Available items.</p>
         </div>
         <div style="background: #f8f9fa; padding: 16px; text-align: center; border-top: 1px solid #e9ecef;">
           <p style="color: #aaa; font-size: 12px; margin: 0;">© 2026 DKMerch · K-Pop Paradise</p>
@@ -323,7 +320,6 @@ export const announceNewPreOrderToAllUsers = action({
   handler: async (ctx, { productName, productImage, productPrice, releaseDate, releaseTime }) => {
     const absoluteImage = resolveImageUrl(productImage);
 
-    // ── Format release date for display (PHT) ──
     const releaseDateFormatted = new Date(`${releaseDate}T${releaseTime}:00+08:00`)
       .toLocaleString("en-PH", {
         timeZone: "Asia/Manila",
@@ -335,15 +331,13 @@ export const announceNewPreOrderToAllUsers = action({
         hour12: true,
       });
 
-    // ── Get all users from DB ──
     const users: any[] = await ctx.runQuery(internal.preOrderRequests.getAllUsers, {});
-
-    // ── Filter to valid emails only ──
     const validUsers = users.filter((u) => isValidEmail(u.email));
 
     console.log(`[announceNewPreOrder] Total users: ${users.length}, Valid emails: ${validUsers.length}`);
 
-    const preOrderPageLink = `${SITE_URL}/pre-order`;
+    // ✅ FIXED: /preorder — correct route (walang hyphen)
+    const preOrderPageLink = `${SITE_URL}/preorder`;
     const imageUrl = absoluteImage;
     let successCount = 0;
     let failCount = 0;
@@ -351,21 +345,15 @@ export const announceNewPreOrderToAllUsers = action({
     for (const user of validUsers) {
       const html = `
         <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.12);">
-          
-          <!-- Header -->
           <div style="background: linear-gradient(135deg, #3b82f6, #9c27b0); padding: 36px 32px; text-align: center;">
             <div style="font-size: 48px; margin-bottom: 10px;">⏰</div>
             <h1 style="color: white; margin: 0 0 8px; font-size: 26px; font-weight: 900;">New Pre-Order Available!</h1>
             <p style="color: rgba(255,255,255,0.9); margin: 0; font-size: 15px;">DKMerch K-Pop Paradise</p>
           </div>
-
-          <!-- Body -->
           <div style="padding: 32px;">
             <p style="color: #374151; font-size: 16px; margin: 0 0 24px;">
               Hi <strong>${user.name || "DKMerch Fan"}</strong>! 🌟 A new item is now open for pre-order!
             </p>
-
-            <!-- Product Card -->
             <table width="100%" cellpadding="0" cellspacing="0" style="background: #f8f9fa; border-radius: 12px; margin-bottom: 24px; overflow: hidden;">
               <tr>
                 <td width="100" style="padding: 16px; vertical-align: middle;">
@@ -378,23 +366,17 @@ export const announceNewPreOrderToAllUsers = action({
                 </td>
               </tr>
             </table>
-
-            <!-- Release Date Notice -->
             <div style="background: linear-gradient(135deg, #eff6ff, #f5f3ff); border: 2px solid #3b82f6; border-radius: 12px; padding: 16px; margin-bottom: 24px; text-align: center;">
               <p style="margin: 0 0 6px; font-size: 13px; color: #6b7280; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">🗓 Release Date</p>
               <p style="margin: 0; font-size: 18px; font-weight: 800; color: #1e40af;">${releaseDateFormatted}</p>
               <p style="margin: 8px 0 0; font-size: 13px; color: #6b7280;">You'll be notified again once it's available to add to cart!</p>
             </div>
-
-            <!-- CTA -->
             <div style="text-align: center;">
               <a href="${preOrderPageLink}" style="display: inline-block; background: linear-gradient(135deg, #3b82f6, #9c27b0); color: white; text-decoration: none; padding: 14px 36px; border-radius: 10px; font-size: 16px; font-weight: 700;">
                 🛒 Pre-Order Now
               </a>
             </div>
           </div>
-
-          <!-- Footer -->
           <div style="background: #f8f9fa; padding: 16px; text-align: center; border-top: 1px solid #e9ecef;">
             <p style="color: #aaa; font-size: 12px; margin: 0;">© 2026 DKMerch · K-Pop Paradise</p>
           </div>
@@ -413,7 +395,6 @@ export const announceNewPreOrderToAllUsers = action({
         failCount++;
       }
 
-      // ✅ Rate limit: 600ms delay between each email (stays under Resend's 2 req/sec)
       await delay(600);
     }
 

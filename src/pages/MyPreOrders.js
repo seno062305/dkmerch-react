@@ -32,7 +32,6 @@ const MyPreOrders = () => {
   const [removingId, setRemovingId] = useState(null);
   const [showLoginModal, setShowLoginModal] = useState(false);
 
-  // ✅ FIX: Read ?tab= from URL so email link auto-opens the Available tab
   const getInitialTab = () => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab');
@@ -42,14 +41,12 @@ const MyPreOrders = () => {
 
   const [activeTab, setActiveTab] = useState(getInitialTab);
 
-  // ✅ Also update tab if URL changes (e.g. browser back/forward)
   useEffect(() => {
     const handlePopState = () => setActiveTab(getInitialTab());
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // ✅ Update URL when tab changes (without full page reload)
   const handleTabChange = (tab) => {
     setActiveTab(tab);
     const url = new URL(window.location.href);
@@ -64,10 +61,15 @@ const MyPreOrders = () => {
   const markAddedToCart = useMutation(api.preOrderRequests.markPreOrderAddedToCart);
   const removePreOrder = useMutation(api.preOrderRequests.removePreOrder);
 
-  const myPreOrders = useQuery(
+  // ✅ FIX: Don't default to [] — keep undefined to detect loading state
+  const myPreOrdersRaw = useQuery(
     api.preOrderRequests.getMyPreOrders,
     isAuthenticated && user?._id ? { userId: user._id } : 'skip'
-  ) || [];
+  );
+
+  // ✅ undefined = still loading, [] = loaded but empty
+  const isLoading = myPreOrdersRaw === undefined;
+  const myPreOrders = myPreOrdersRaw || [];
 
   if (!isAuthenticated) {
     return (
@@ -91,19 +93,37 @@ const MyPreOrders = () => {
     );
   }
 
-  // ── Tab filtering ──
+  // ✅ Show loading spinner while Convex is fetching
+  if (isLoading) {
+    return (
+      <main className="mypreorders-main">
+        <div className="page-header">
+          <div className="container">
+            <h1 className="page-title">
+              <i className="fas fa-clock"></i> My Pre-Orders
+            </h1>
+            <p className="page-description">Track your upcoming K-Pop merchandise releases</p>
+          </div>
+        </div>
+        <div className="mpo-empty-state">
+          <i className="fas fa-spinner fa-spin" style={{ fontSize: '48px', color: '#fc1268' }}></i>
+          <h3 style={{ marginTop: '16px' }}>Loading your pre-orders...</h3>
+        </div>
+      </main>
+    );
+  }
+
   const filteredOrders = myPreOrders.filter((req) => {
     if (activeTab === 'upcoming') return !req.isAvailable && !req.addedToCart;
     if (activeTab === 'available') return req.isAvailable && !req.addedToCart;
     if (activeTab === 'added') return req.addedToCart;
-    return true; // 'all'
+    return true;
   });
 
-  const upcomingCount = myPreOrders.filter((r) => !r.isAvailable && !r.addedToCart).length;
+  const upcomingCount  = myPreOrders.filter((r) => !r.isAvailable && !r.addedToCart).length;
   const availableCount = myPreOrders.filter((r) => r.isAvailable && !r.addedToCart).length;
-  const addedCount = myPreOrders.filter((r) => r.addedToCart).length;
+  const addedCount     = myPreOrders.filter((r) => r.addedToCart).length;
 
-  // ── Add to cart handler ──
   const handleAddToCart = async (req) => {
     setLoadingId(req._id);
     try {
@@ -125,7 +145,6 @@ const MyPreOrders = () => {
     }
   };
 
-  // ── Remove handler ──
   const handleRemove = async (req) => {
     setRemovingId(req._id);
     try {
@@ -154,7 +173,6 @@ const MyPreOrders = () => {
       <div className="mpo-page">
         <div className="container">
 
-          {/* ── Summary Stats ── */}
           <div className="mpo-stats">
             <div className="mpo-stat">
               <span className="mpo-stat-num">{myPreOrders.length}</span>
@@ -174,7 +192,6 @@ const MyPreOrders = () => {
             </div>
           </div>
 
-          {/* ── Tabs ── */}
           <div className="mpo-tabs">
             <button
               className={`mpo-tab ${activeTab === 'all' ? 'active' : ''}`}
@@ -203,7 +220,6 @@ const MyPreOrders = () => {
             </button>
           </div>
 
-          {/* ── Cards ── */}
           {myPreOrders.length === 0 ? (
             <div className="mpo-empty-state">
               <i className="fas fa-shopping-bag"></i>
@@ -243,7 +259,7 @@ const MyPreOrders = () => {
 
 // ── Card ───────────────────────────────────────────────────────────────────
 const PreOrderCard = ({ req, loadingId, removingId, onAddToCart, onRemove, fmt12, fmtDate }) => {
-  const isLoading = loadingId === req._id;
+  const isLoading  = loadingId === req._id;
   const isRemoving = removingId === req._id;
 
   const releaseLabel = (() => {
@@ -261,22 +277,18 @@ const PreOrderCard = ({ req, loadingId, removingId, onAddToCart, onRemove, fmt12
 
   return (
     <div className={`mpo-card mpo-card--${status}`}>
-      {/* Status Badge */}
       <div className={`mpo-status-badge mpo-status-badge--${status}`}>
         {status === 'available' && <><span className="mpo-pulse"></span> Available Now!</>}
-        {status === 'upcoming' && <><i className="fas fa-clock"></i> Upcoming</>}
-        {status === 'added' && <><i className="fas fa-check"></i> Added to Cart</>}
+        {status === 'upcoming'  && <><i className="fas fa-clock"></i> Upcoming</>}
+        {status === 'added'     && <><i className="fas fa-check"></i> Added to Cart</>}
       </div>
 
-      {/* Image */}
       <div className="mpo-card-image">
         <img src={req.productImage} alt={req.productName} />
       </div>
 
-      {/* Info */}
       <div className="mpo-card-info">
         <h3 className="mpo-card-name">{req.productName}</h3>
-
         <div className="mpo-card-price">₱{req.productPrice?.toLocaleString()}</div>
 
         {releaseLabel && (
@@ -293,7 +305,6 @@ const PreOrderCard = ({ req, loadingId, removingId, onAddToCart, onRemove, fmt12
           <span><i className="fas fa-calendar-plus"></i> Pre-ordered {new Date(req.preOrderedAt).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
         </div>
 
-        {/* Actions */}
         <div className="mpo-card-actions">
           {status === 'available' && (
             <button
@@ -322,7 +333,6 @@ const PreOrderCard = ({ req, loadingId, removingId, onAddToCart, onRemove, fmt12
             </div>
           )}
 
-          {/* Remove button — visible for upcoming and added-to-cart only */}
           {status !== 'available' && (
             <button
               className="mpo-btn-remove"

@@ -1,6 +1,6 @@
 // src/App.js
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { useCart, useRemoveFromCart, useCartCount } from './context/cartUtils';
 import { useWishlist, useWishlistCount } from './context/wishlistUtils';
@@ -15,7 +15,7 @@ import TrackOrder from './pages/TrackOrder';
 import Help from './pages/Help';
 import Settings from './pages/Settings';
 import PromoRedirect from './pages/PromoRedirect';
-import MyPreOrders from './pages/MyPreOrders'; // ✅ NEW
+import MyPreOrders from './pages/MyPreOrders';
 
 import LoginModal from './components/LoginModal';
 import CartModal from './components/CartModal';
@@ -44,16 +44,51 @@ const RiderRoute = ({ children }) => {
   return children;
 };
 
-// ✅ NEW: Protected route para sa logged-in users lang
+// ✅ ProtectedRoute — kapag hindi naka-login, ipakita ang login modal
+//    at i-redirect pabalik sa intended page after login
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated } = useAuth();
-  if (!isAuthenticated) return <Navigate to="/" replace />;
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [showLoginModal, setShowLoginModal] = useState(false);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      // Save intended URL so we can redirect after login
+      sessionStorage.setItem('redirectAfterLogin', location.pathname + location.search);
+      setShowLoginModal(true);
+    }
+  }, [isAuthenticated, location]);
+
+  if (!isAuthenticated) {
+    return (
+      <>
+        {/* Show blank-ish page with login modal on top */}
+        {showLoginModal && (
+          <LoginModal
+            onClose={() => {
+              setShowLoginModal(false);
+              navigate('/');
+            }}
+            onLoginSuccess={() => {
+              setShowLoginModal(false);
+              const redirect = sessionStorage.getItem('redirectAfterLogin') || '/';
+              sessionStorage.removeItem('redirectAfterLogin');
+              navigate(redirect);
+            }}
+          />
+        )}
+      </>
+    );
+  }
+
   return children;
 };
 
 function AppContent() {
   const location = useLocation();
-  const { role } = useAuth();
+  const navigate = useNavigate();
+  const { role, isAuthenticated } = useAuth();
 
   const cartItems       = useCart();
   const cartCount       = useCartCount();
@@ -72,6 +107,16 @@ function AppContent() {
     window.addEventListener('openLoginModal', handleOpenLogin);
     return () => window.removeEventListener('openLoginModal', handleOpenLogin);
   }, []);
+
+  // ✅ After login via header modal, redirect if there's a saved URL
+  const handleLoginSuccess = () => {
+    setShowLoginModal(false);
+    const redirect = sessionStorage.getItem('redirectAfterLogin');
+    if (redirect) {
+      sessionStorage.removeItem('redirectAfterLogin');
+      navigate(redirect);
+    }
+  };
 
   const isAdminRoute = location.pathname.startsWith('/admin');
   const isRiderRoute = location.pathname.startsWith('/rider');
@@ -106,7 +151,7 @@ function AppContent() {
         <Route path="/order-success" element={<OrderSuccess />} />
         <Route path="/promo/:code" element={<PromoRedirect />} />
 
-        {/* ✅ NEW: My Pre-Orders page — protected, login required */}
+        {/* ✅ Protected — shows login modal if not logged in, redirects back after */}
         <Route path="/my-preorders" element={
           <ProtectedRoute>
             <MyPreOrders />
@@ -134,7 +179,10 @@ function AppContent() {
       {!hideHeaderFooter && <Footer />}
 
       {showLoginModal && (
-        <LoginModal onClose={() => setShowLoginModal(false)} />
+        <LoginModal
+          onClose={() => setShowLoginModal(false)}
+          onLoginSuccess={handleLoginSuccess}
+        />
       )}
 
       {showCartModal && (

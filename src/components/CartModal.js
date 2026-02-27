@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../context/NotificationContext';
-import { useProducts, usePreOrderProducts } from '../utils/productStorage';
+import { useProducts, usePreOrderProducts, useCollectionProducts } from '../utils/productStorage';
 import { useUpdateCartQtyById, useRemoveFromCartById } from '../context/cartUtils';
 import './CartModal.css';
 
@@ -9,12 +9,17 @@ const CartModal = ({ cart, onClose }) => {
   const navigate = useNavigate();
   const { showNotification } = useNotification();
 
-  const regularProducts  = useProducts() || [];
-  const preOrderProducts = usePreOrderProducts() || [];
-  const allProducts      = [...regularProducts, ...preOrderProducts];
+  const regularProducts    = useProducts() || [];
+  const preOrderProducts   = usePreOrderProducts() || [];
+  const collectionProducts = useCollectionProducts() || []; // ✅ includes released pre-orders
 
-  // ID-based mutations — each cart item has its own _id
-  const updateQtyById     = useUpdateCartQtyById();
+  // ✅ Merge all, deduplicate by _id so released pre-orders are findable
+  const allProducts = [...new Map(
+    [...regularProducts, ...preOrderProducts, ...collectionProducts]
+      .map(p => [p._id || p.id, p])
+  ).values()];
+
+  const updateQtyById      = useUpdateCartQtyById();
   const removeFromCartById = useRemoveFromCartById();
 
   React.useEffect(() => {
@@ -39,16 +44,15 @@ const CartModal = ({ cart, onClose }) => {
 
   const getQty = (item) => item.qty ?? item.quantity ?? 1;
 
-  // Effective price: use finalPrice if promo was applied
   const getEffectivePrice = (item, product) => {
     if (item.finalPrice !== undefined && item.finalPrice !== null) return item.finalPrice;
-    return product?.price ?? 0;
+    // ✅ Fallback to item.price (stored from pre-order add-to-cart) if product not found
+    return product?.price ?? item.price ?? 0;
   };
 
   const getTotalPieces = () =>
     cart.reduce((sum, item) => sum + getQty(item), 0);
 
-  // Subtotal uses effective (discounted) prices
   const calculateSubtotal = () =>
     cart.reduce((total, item) => {
       const product = findProduct(item.productId || item.id);
@@ -77,7 +81,6 @@ const CartModal = ({ cart, onClose }) => {
   const finalTotal    = subtotal + shipping;
   const totalPcs      = getTotalPieces();
 
-  // For checkout: collect all unique promos applied
   const promoItems = cart.filter(i => i.promoCode);
   const cartPromo  = promoItems.length > 0 ? {
     code:           promoItems[0].promoCode,
@@ -85,7 +88,6 @@ const CartModal = ({ cart, onClose }) => {
     discountAmount: totalDiscount,
   } : null;
 
-  // ── Actions ─────────────────────────────────────
   const handleRemoveItem = async (item) => {
     if (window.confirm('Remove this item from cart?')) {
       await removeFromCartById(item._id);
@@ -121,24 +123,29 @@ const CartModal = ({ cart, onClose }) => {
     navigate('/checkout', { state: { appliedPromo: cartPromo } });
   };
 
-  // ── Render a single cart item ────────────────────
   const renderCartItem = (item) => {
     const productId      = item.productId || item.id;
     const product        = findProduct(productId);
-    if (!product) return null;
+
+    // ✅ Use stored item data as fallback if product not found in local state
+    const displayName    = product?.name  ?? item.name  ?? 'Product';
+    const displayImage   = product?.image ?? item.image ?? '';
+    const displayGroup   = product?.kpopGroup ?? '';
+    const displayCat     = product?.category  ?? '';
+    const displayStock   = product?.stock ?? 99;
 
     const qty            = getQty(item);
-    const atMaxStock     = qty >= product.stock;
+    const atMaxStock     = qty >= displayStock;
     const hasPromo       = !!item.promoCode;
     const effectivePrice = getEffectivePrice(item, product);
     const itemTotal      = effectivePrice * qty;
-    const originalTotal  = product.price * qty;
+    const originalTotal  = (product?.price ?? item.price ?? 0) * qty;
     const savedAmount    = hasPromo ? originalTotal - itemTotal : 0;
 
     return (
       <div key={item._id} className={`cart-item${hasPromo ? ' cart-item-promo' : ''}`}>
         <div className="cart-item-image">
-          <img src={product.image} alt={product.name} />
+          <img src={displayImage} alt={displayName} />
           {hasPromo && (
             <div className="cart-item-promo-badge">
               <i className="fas fa-tag"></i> {item.promoDiscount}% OFF
@@ -149,26 +156,15 @@ const CartModal = ({ cart, onClose }) => {
         <div className="cart-item-details">
           <div className="cart-item-name-row">
             <div className="cart-item-name">
-              {product.name}
-              {product.isPreOrder && (
-                <span className="cart-preorder-badge">PRE-ORDER</span>
-              )}
+              {displayName}
             </div>
-            <div className="cart-item-stock-info">{product.stock} available</div>
+            <div className="cart-item-stock-info">{displayStock} available</div>
           </div>
 
-          <div className="cart-item-meta">{product.kpopGroup} • {product.category}</div>
-
-          {product.isPreOrder && product.releaseDate && (
-            <div className="cart-preorder-release">
-              <i className="fas fa-calendar-alt"></i>
-              Expected: {new Date(product.releaseDate).toLocaleDateString('en-PH', {
-                year: 'numeric', month: 'long', day: 'numeric'
-              })}
-            </div>
+          {(displayGroup || displayCat) && (
+            <div className="cart-item-meta">{displayGroup}{displayGroup && displayCat ? ' • ' : ''}{displayCat}</div>
           )}
 
-          {/* Price row */}
           <div className="cart-item-price-row">
             <span className={`cart-item-price${hasPromo ? ' cart-item-price-discounted' : ''}`}>
               ₱{itemTotal.toLocaleString()}
@@ -185,7 +181,6 @@ const CartModal = ({ cart, onClose }) => {
             )}
           </div>
 
-          {/* Promo tag */}
           {hasPromo && (
             <div className="cart-item-promo-tag">
               <i className="fas fa-tag"></i> {item.promoCode}
@@ -218,7 +213,6 @@ const CartModal = ({ cart, onClose }) => {
     );
   };
 
-  // Separate promo and non-promo items for grouped display
   const promoCartItems    = cart.filter(i => !!i.promoCode);
   const nonPromoCartItems = cart.filter(i => !i.promoCode);
 
@@ -240,7 +234,6 @@ const CartModal = ({ cart, onClose }) => {
           ) : (
             <>
               <div className="cart-items">
-                {/* Non-promo items first */}
                 {nonPromoCartItems.length > 0 && (
                   <>
                     {promoCartItems.length > 0 && (
@@ -252,7 +245,6 @@ const CartModal = ({ cart, onClose }) => {
                   </>
                 )}
 
-                {/* Promo items group */}
                 {promoCartItems.length > 0 && (
                   <>
                     <div className="cart-group-label cart-group-label-promo">
@@ -263,7 +255,6 @@ const CartModal = ({ cart, onClose }) => {
                 )}
               </div>
 
-              {/* Summary */}
               <div className="cart-summary">
                 {totalPcs < 10 && (
                   <div className="shipping-notice">

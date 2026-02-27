@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import './AdminInventory.css';
-import { useProducts, useUpdateProduct } from '../utils/productStorage';
+import { useQuery } from 'convex/react';
+import { api } from '../../convex/_generated/api';
+import { useUpdateProduct } from '../utils/productStorage';
 
 const AdminInventory = () => {
-  const products = useProducts() || [];
+  const products = useQuery(api.products.getAllProductsAdmin) || [];
   const updateProduct = useUpdateProduct();
 
   const [activeTab, setActiveTab] = useState('stock');
@@ -22,9 +24,9 @@ const AdminInventory = () => {
 
   const lowStockProducts = filteredProducts.filter(p => p.stock <= 10);
 
-  const totalProducts = products.length;
-  const totalStock = products.reduce((sum, p) => sum + (p.stock || 0), 0);
-  const lowStockCount = products.filter(p => p.stock <= 10).length;
+  const totalProducts   = products.length;
+  const totalStock      = products.reduce((sum, p) => sum + (p.stock || 0), 0);
+  const lowStockCount   = products.filter(p => p.stock <= 10).length;
   const outOfStockCount = products.filter(p => p.stock === 0).length;
 
   const handleStockEdit = (productId, currentStock) => {
@@ -52,8 +54,8 @@ const AdminInventory = () => {
 
   const getStockStatus = (stock) => {
     if (stock === 0) return { label: 'Out of Stock', class: 'out-of-stock' };
-    if (stock <= 5) return { label: 'Critical', class: 'critical' };
-    if (stock <= 10) return { label: 'Low Stock', class: 'low-stock' };
+    if (stock <= 5)  return { label: 'Critical',     class: 'critical' };
+    if (stock <= 10) return { label: 'Low Stock',    class: 'low-stock' };
     return { label: 'In Stock', class: 'in-stock' };
   };
 
@@ -90,7 +92,12 @@ const AdminInventory = () => {
       <div className="inventory-filters">
         <div className="search-box">
           <i className="fas fa-search"></i>
-          <input type="text" placeholder="Search products..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+          <input
+            type="text"
+            placeholder="Search products..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
         </div>
         <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="filter-select">
           <option value="all">All Categories</option>
@@ -130,8 +137,6 @@ const AdminInventory = () => {
                               <img src={product.image} alt={product.name} />
                               <div className="product-info">
                                 <strong>{product.name}</strong>
-                                {product.isPreOrder && <span className="badge pre-order">Pre-Order</span>}
-                                {product.isSale && <span className="badge sale">Sale</span>}
                               </div>
                             </div>
                           </td>

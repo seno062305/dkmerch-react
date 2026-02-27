@@ -19,17 +19,14 @@ const getLast6Months = (nowMs) => {
 };
 
 const AdminSalesReports = () => {
-  // ── Server time as base (anti-cheat) ──
   const serverTime = useQuery(api.orders.getServerTime);
   const allOrders  = useQuery(api.orders.getAllOrders) || [];
 
-  // Live clock: starts from server time, ticks every second
   const serverOffsetRef = useRef(0);
   const [liveNowMs, setLiveNowMs] = useState(Date.now());
 
   useEffect(() => {
     if (serverTime?.now) {
-      // Calculate offset between server and client
       serverOffsetRef.current = serverTime.now - Date.now();
       setLiveNowMs(Date.now() + serverOffsetRef.current);
     }
@@ -53,13 +50,15 @@ const AdminSalesReports = () => {
   const effectiveStart = startDate || defaultStart;
   const effectiveEnd   = endDate   || defaultEnd;
 
+  // ✅ max date capped at today (no future dates, and no 5-digit years)
+  const maxDate = toDateStr(nowMs);
+
   const isPaid = (o) =>
     o.paymentStatus === 'paid' || ['completed','Completed','Delivered','delivered'].includes(o.status || o.orderStatus || '');
 
   const isCompleted = (o) =>
     ['completed', 'Completed', 'Delivered', 'delivered'].includes(o.status || o.orderStatus || '');
 
-  // ── Filter by date range ──
   const filtered = useMemo(() => {
     const start = new Date(effectiveStart);
     const end   = new Date(effectiveEnd);
@@ -70,8 +69,6 @@ const AdminSalesReports = () => {
     });
   }, [allOrders, effectiveStart, effectiveEnd]);
 
-  // ── Summary stats ──
-  // Total Revenue = all PAID orders (includes completed + still being processed)
   const summary = useMemo(() => {
     const paidOrders      = filtered.filter(isPaid);
     const completedOrders = filtered.filter(isCompleted);
@@ -84,7 +81,6 @@ const AdminSalesReports = () => {
     };
   }, [filtered]);
 
-  // ── Last 6 months trend (server-time based) ──
   const last6 = useMemo(() => getLast6Months(nowMs), [nowMs]);
 
   const salesTrend = useMemo(() => {
@@ -109,7 +105,6 @@ const AdminSalesReports = () => {
     });
   }, [allOrders, last6]);
 
-  // ── Top 5 products ──
   const topProducts = useMemo(() => {
     const map = {};
     filtered.filter(isCompleted).forEach(o => {
@@ -169,10 +164,12 @@ const AdminSalesReports = () => {
             <label htmlFor="startDate">
               <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" /></svg>
             </label>
+            {/* ✅ max capped at today — prevents 5-digit year input */}
             <input
               type="date"
               id="startDate"
               value={effectiveStart}
+              min="2020-01-01"
               max={effectiveEnd}
               onChange={e => setStartDate(e.target.value)}
             />
@@ -182,12 +179,13 @@ const AdminSalesReports = () => {
             <label htmlFor="endDate">
               <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" /></svg>
             </label>
+            {/* ✅ max capped at today */}
             <input
               type="date"
               id="endDate"
               value={effectiveEnd}
               min={effectiveStart}
-              max={toDateStr(nowMs)}
+              max={maxDate}
               onChange={e => setEndDate(e.target.value)}
             />
           </div>

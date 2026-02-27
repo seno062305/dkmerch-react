@@ -11,6 +11,11 @@ export const usePreOrderProducts = () => {
   return useQuery(api.products.getPreOrderProducts) || [];
 };
 
+// ✅ NEW: Released pre-orders + regular products (for cart, collections, etc.)
+export const useCollectionProducts = () => {
+  return useQuery(api.products.getCollectionProducts) || [];
+};
+
 export const useAddProduct = () => useMutation(api.products.addProduct);
 export const useUpdateProduct = () => useMutation(api.products.updateProduct);
 export const useDeleteProduct = () => useMutation(api.products.deleteProduct);

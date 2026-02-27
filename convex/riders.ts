@@ -164,3 +164,89 @@ export const loginRider = mutation({
     };
   },
 });
+
+// ─────────────────────────────────────────────────────
+// ✅ GPS TRACKING MUTATIONS & QUERIES
+// ─────────────────────────────────────────────────────
+
+// Called every 10 seconds by the rider's browser
+export const updateRiderLocation = mutation({
+  args: {
+    orderId: v.string(),
+    riderEmail: v.string(),
+    riderName: v.string(),
+    lat: v.number(),
+    lng: v.number(),
+    accuracy: v.optional(v.number()),
+    heading: v.optional(v.number()),
+    speed: v.optional(v.number()),
+    isTracking: v.boolean(),
+  },
+  handler: async ({ db }, args) => {
+    // Check if a location record already exists for this orderId
+    const existing = await db
+      .query("riderLocations")
+      .withIndex("by_orderId", q => q.eq("orderId", args.orderId))
+      .first();
+
+    if (existing) {
+      // Update in place — upsert pattern
+      await db.patch(existing._id, {
+        lat: args.lat,
+        lng: args.lng,
+        accuracy: args.accuracy,
+        heading: args.heading,
+        speed: args.speed,
+        isTracking: args.isTracking,
+        updatedAt: Date.now(),
+      });
+    } else {
+      // First location ping — create the record
+      await db.insert("riderLocations", {
+        orderId: args.orderId,
+        riderEmail: args.riderEmail,
+        riderName: args.riderName,
+        lat: args.lat,
+        lng: args.lng,
+        accuracy: args.accuracy,
+        heading: args.heading,
+        speed: args.speed,
+        isTracking: args.isTracking,
+        updatedAt: Date.now(),
+      });
+    }
+
+    return { success: true };
+  },
+});
+
+// Called by customer's TrackOrder page — live query (auto-updates)
+export const getRiderLocation = query({
+  args: { orderId: v.string() },
+  handler: async ({ db }, { orderId }) => {
+    return await db
+      .query("riderLocations")
+      .withIndex("by_orderId", q => q.eq("orderId", orderId))
+      .first();
+  },
+});
+
+// Stop tracking — called when rider confirms delivery or manually stops
+export const stopRiderTracking = mutation({
+  args: { orderId: v.string() },
+  handler: async ({ db }, { orderId }) => {
+    const existing = await db
+      .query("riderLocations")
+      .withIndex("by_orderId", q => q.eq("orderId", orderId))
+      .first();
+
+    if (existing) {
+      await db.patch(existing._id, {
+        isTracking: false,
+        updatedAt: Date.now(),
+      });
+    }
+
+    return { success: true };
+  },
+});

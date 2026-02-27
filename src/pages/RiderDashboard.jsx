@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useQuery, useMutation } from 'convex/react';
@@ -21,6 +21,14 @@ const RiderDashboard = () => {
   const [notifyingId, setNotifyingId] = useState(null);
   const fileInputRefs = useRef({});
 
+  // ── GPS TRACKING STATE ──
+  // trackingOrderId = orderId currently being tracked (null if not tracking)
+  const [trackingOrderId, setTrackingOrderId] = useState(null);
+  const [gpsError, setGpsError] = useState(null);
+  const [currentPosition, setCurrentPosition] = useState(null); // { lat, lng, accuracy }
+  const trackingIntervalRef = useRef(null);
+  const watchIdRef = useRef(null);
+
   // ── CONVEX QUERIES ──
   const riderInfo = useQuery(
     api.riders.getRiderByEmail,
@@ -36,6 +44,8 @@ const RiderDashboard = () => {
   const updateOrderFields = useMutation(api.orders.updateOrderFields);
   const updatePickupStatus = useMutation(api.pickupRequests.updatePickupStatus);
   const deletePickupRequest = useMutation(api.pickupRequests.deletePickupRequest);
+  const updateRiderLocation = useMutation(api.riders.updateRiderLocation);
+  const stopRiderTracking = useMutation(api.riders.stopRiderTracking);
 
   // ── DERIVED DATA ──
   const confirmedOrders = allOrders.filter(o =>
@@ -50,6 +60,133 @@ const RiderDashboard = () => {
 
   const pendingPickupsCount = myPickups.filter(p => p.status === 'pending').length;
   const activeDeliveriesCount = myDeliveries.length;
+
+  // ── GPS TRACKING LOGIC ──
+  // Send location to Convex
+  const sendLocation = useCallback(async (orderId, pos, isTracking = true) => {
+    if (!riderInfo || !orderId) return;
+    try {
+      await updateRiderLocation({
+        orderId,
+        riderEmail: user.email,
+        riderName: riderInfo.fullName,
+        lat: pos.lat,
+        lng: pos.lng,
+        accuracy: pos.accuracy,
+        heading: pos.heading ?? undefined,
+        speed: pos.speed ?? undefined,
+        isTracking,
+      });
+    } catch (err) {
+      console.error('Failed to send location:', err);
+    }
+  }, [updateRiderLocation, riderInfo, user]);
+
+  // Start GPS tracking for a specific order
+  const startTracking = useCallback((orderId) => {
+    if (!navigator.geolocation) {
+      setGpsError('GPS not supported on this device.');
+      return;
+    }
+
+    setGpsError(null);
+    setTrackingOrderId(orderId);
+
+    // Continuously watch position (most accurate)
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (position) => {
+        const pos = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+          heading: position.coords.heading,
+          speed: position.coords.speed,
+        };
+        setCurrentPosition(pos);
+        setGpsError(null);
+      },
+      (err) => {
+        console.error('GPS watch error:', err);
+        setGpsError(getGpsErrorMessage(err));
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0,
+      }
+    );
+
+    // Send to Convex every 10 seconds
+    trackingIntervalRef.current = setInterval(() => {
+      setCurrentPosition(pos => {
+        if (pos) {
+          sendLocation(orderId, pos, true);
+        }
+        return pos;
+      });
+    }, 10000);
+
+    // Send immediately on start
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const pos = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+          heading: position.coords.heading,
+          speed: position.coords.speed,
+        };
+        setCurrentPosition(pos);
+        sendLocation(orderId, pos, true);
+      },
+      (err) => {
+        setGpsError(getGpsErrorMessage(err));
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  }, [sendLocation]);
+
+  // Stop GPS tracking
+  const stopTracking = useCallback(async (orderId) => {
+    // Clear interval & watch
+    if (trackingIntervalRef.current) {
+      clearInterval(trackingIntervalRef.current);
+      trackingIntervalRef.current = null;
+    }
+    if (watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+
+    // Mark as not tracking in Convex
+    if (orderId) {
+      try {
+        await stopRiderTracking({ orderId });
+      } catch (err) {
+        console.error('Failed to stop tracking:', err);
+      }
+    }
+
+    setTrackingOrderId(null);
+    setCurrentPosition(null);
+  }, [stopRiderTracking]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (trackingIntervalRef.current) clearInterval(trackingIntervalRef.current);
+      if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
+    };
+  }, []);
+
+  const getGpsErrorMessage = (err) => {
+    switch (err.code) {
+      case 1: return '❌ Location access denied. Please allow location permission in your browser settings.';
+      case 2: return '📡 GPS signal unavailable. Make sure you\'re outdoors or try again.';
+      case 3: return '⏱ GPS timed out. Please try again.';
+      default: return '⚠️ Unknown GPS error. Please try again.';
+    }
+  };
 
   // ── HELPERS ──
   const toggleExpanded = (id, setFn) => setFn(prev => ({ ...prev, [id]: !prev[id] }));
@@ -81,8 +218,12 @@ const RiderDashboard = () => {
     return map[status] || status;
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     if (window.confirm('Are you sure you want to logout?')) {
+      // Stop any active tracking before logout
+      if (trackingOrderId) {
+        await stopTracking(trackingOrderId);
+      }
       logout();
       navigate('/', { replace: true });
     }
@@ -156,7 +297,10 @@ const RiderDashboard = () => {
         status: 'out_for_delivery',
       });
 
-      alert('📦 Customer notified!\n\nAsk the customer for their OTP code when you arrive.');
+      // ✅ Auto-start GPS tracking when rider notifies customer
+      startTracking(delivery.orderId);
+
+      alert('📦 Customer notified!\n\n📍 GPS tracking has started automatically.\nThe customer can now see your location in real-time.\n\nAsk the customer for their OTP code when you arrive.');
     } catch (err) {
       console.error(err);
       alert('Failed to notify customer. Please try again.');
@@ -227,6 +371,9 @@ const RiderDashboard = () => {
         requestId: delivery._id,
         status: 'completed',
       });
+
+      // ✅ Stop GPS tracking on delivery completion
+      await stopTracking(delivery.orderId);
 
       setOtpInputs(prev => { const n = { ...prev }; delete n[delivery._id]; return n; });
       setPhotoData(prev => { const n = { ...prev }; delete n[delivery._id]; return n; });
@@ -311,6 +458,19 @@ const RiderDashboard = () => {
             <span className="rider-plate">{riderInfo.plateNumber}</span>
           </div>
         </div>
+
+        {/* ✅ GPS Tracking Status in Sidebar */}
+        {trackingOrderId && (
+          <div className="rider-gps-sidebar-status">
+            <span className="rider-gps-dot"></span>
+            <span>
+              GPS Active
+              {currentPosition && (
+                <small> · ±{Math.round(currentPosition.accuracy || 0)}m</small>
+              )}
+            </span>
+          </div>
+        )}
 
         <nav className="rider-nav">
           <button className={`rider-nav-link ${tab === 'available' ? 'active' : ''}`} onClick={() => handleNavClick('available')}>
@@ -478,6 +638,15 @@ const RiderDashboard = () => {
               <p>Notify the customer you're on the way, then confirm delivery with their OTP.</p>
             </div>
 
+            {/* GPS Error Banner */}
+            {gpsError && (
+              <div className="rider-gps-error-banner">
+                <i className="fas fa-exclamation-triangle"></i>
+                <span>{gpsError}</span>
+                <button onClick={() => setGpsError(null)}>✕</button>
+              </div>
+            )}
+
             {myDeliveries.length === 0 ? (
               <div className="rider-empty">
                 <i className="fas fa-shipping-fast"></i>
@@ -492,6 +661,7 @@ const RiderDashboard = () => {
                   const isExpanded = expandedDeliveries[delivery._id];
                   const errMsg = otpErrors[delivery._id];
                   const hasPhoto = !!photoData[delivery._id];
+                  const isThisBeingTracked = trackingOrderId === delivery.orderId;
 
                   return (
                     <div key={delivery._id} className="rider-compact-card">
@@ -505,6 +675,12 @@ const RiderDashboard = () => {
                           <span className={`rider-delivery-badge ${isOutForDelivery ? 'badge-ofd' : ''}`}>
                             {isOutForDelivery ? '🚚 On the Way' : '✅ Pickup Approved'}
                           </span>
+                          {/* ✅ GPS Tracking badge */}
+                          {isThisBeingTracked && (
+                            <span className="rider-gps-active-badge">
+                              <span className="rider-gps-dot"></span> GPS On
+                            </span>
+                          )}
                           <button className="rider-view-btn" onClick={() => toggleExpanded(delivery._id, setExpandedDeliveries)}>
                             <i className={`fas fa-chevron-${isExpanded ? 'up' : 'down'}`}></i> {isExpanded ? 'Hide' : 'View'}
                           </button>
@@ -525,6 +701,55 @@ const RiderDashboard = () => {
                             <div className="rider-info-row"><i className="fas fa-motorcycle"></i><span><strong>Vehicle:</strong> {riderInfo.vehicleType}</span></div>
                             <div className="rider-info-row"><i className="fas fa-id-card"></i><span><strong>Plate:</strong> {riderInfo.plateNumber}</span></div>
                           </div>
+
+                          {/* ✅ GPS Tracking Panel — shown when out_for_delivery */}
+                          {isOutForDelivery && (
+                            <div className={`rider-gps-panel ${isThisBeingTracked ? 'gps-panel-active' : ''}`}>
+                              <div className="rider-gps-panel-title">
+                                <i className="fas fa-map-marker-alt"></i>
+                                <span>GPS Location Sharing</span>
+                                {isThisBeingTracked && <span className="rider-gps-live-tag">LIVE</span>}
+                              </div>
+
+                              {isThisBeingTracked ? (
+                                <>
+                                  <div className="rider-gps-status-row">
+                                    <span className="rider-gps-dot"></span>
+                                    <span>
+                                      Sending location to customer every 10 seconds
+                                      {currentPosition && (
+                                        <> · <strong>±{Math.round(currentPosition.accuracy || 0)}m accuracy</strong></>
+                                      )}
+                                    </span>
+                                  </div>
+                                  {currentPosition && (
+                                    <div className="rider-gps-coords">
+                                      <i className="fas fa-crosshairs"></i>
+                                      {currentPosition.lat.toFixed(6)}, {currentPosition.lng.toFixed(6)}
+                                    </div>
+                                  )}
+                                  <button
+                                    className="rider-gps-stop-btn"
+                                    onClick={() => stopTracking(delivery.orderId)}
+                                  >
+                                    <i className="fas fa-stop-circle"></i> Stop Sharing Location
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <p className="rider-gps-desc">
+                                    Share your real-time location so the customer can track you on the map.
+                                  </p>
+                                  <button
+                                    className="rider-gps-start-btn"
+                                    onClick={() => startTracking(delivery.orderId)}
+                                  >
+                                    <i className="fas fa-location-arrow"></i> Start Location Sharing
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          )}
 
                           {isApproved && (
                             <button

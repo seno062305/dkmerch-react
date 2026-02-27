@@ -8,11 +8,12 @@ import { useNavigate } from "react-router-dom";
 import { useMutation, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
 
-const LoginModal = ({ onClose }) => {
+// ✅ Added onLoginSuccess prop — called after successful user login
+//    so ProtectedRoute can redirect back to intended page (e.g. /my-preorders)
+const LoginModal = ({ onClose, onLoginSuccess }) => {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  // ── VIEW: 'login' | 'forgot' ──────────────────
   const [view, setView] = useState("login");
 
   const [formData, setFormData] = useState({
@@ -27,7 +28,6 @@ const LoginModal = ({ onClose }) => {
   const [error, setError] = useState("");
   const [isRiderMode, setIsRiderMode] = useState(false);
 
-  // ── FORGOT PASSWORD STATE ─────────────────────
   const [forgotEmail, setForgotEmail] = useState("");
   const [verificationCode, setVerificationCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -47,7 +47,6 @@ const LoginModal = ({ onClose }) => {
     hasNumber: false, hasSymbol: false
   });
 
-  // ── CONVEX ───────────────────────────────────────
   const resetPasswordByEmail = useMutation(api.users.resetPasswordByEmail);
   const sendPasswordResetCode = useAction(api.sendEmail.sendPasswordResetCode);
 
@@ -77,7 +76,6 @@ const LoginModal = ({ onClose }) => {
     return () => clearTimeout(t);
   }, [passwordCooldown]);
 
-  // ── HELPERS ──────────────────────────────────────
   const isNewPwValid = () => Object.values(newPwValidation).every(v => v === true);
 
   const getStrength = (validation) => {
@@ -131,7 +129,7 @@ const LoginModal = ({ onClose }) => {
     </div>
   );
 
-  // ── LOGIN HANDLERS ────────────────────────────
+  // ── LOGIN HANDLER ─────────────────────────────
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -157,7 +155,14 @@ const LoginModal = ({ onClose }) => {
         return;
       }
 
-      onClose();
+      // ✅ Regular user login success
+      // If onLoginSuccess is provided (from ProtectedRoute), call it so it can
+      // redirect back to the intended page (e.g. /my-preorders from email link)
+      if (onLoginSuccess) {
+        onLoginSuccess();
+      } else {
+        onClose();
+      }
     } catch (err) {
       setError("Login failed. Please try again.");
     } finally {
@@ -187,7 +192,6 @@ const LoginModal = ({ onClose }) => {
     setError("");
   };
 
-  // ── FORGOT PASSWORD HANDLERS ─────────────────
   const handleSendCode = async () => {
     if (passwordCooldown > 0) return;
     if (!forgotEmail.trim() || !/\S+@\S+\.\S+/.test(forgotEmail)) {
@@ -243,7 +247,6 @@ const LoginModal = ({ onClose }) => {
       if (result?.success) {
         setResetMsg("✅ Password reset successful! You can now log in.");
         setTimeout(() => {
-          // Reset forgot form and go back to login
           setForgotEmail("");
           setVerificationCode("");
           setNewPassword("");
@@ -263,7 +266,6 @@ const LoginModal = ({ onClose }) => {
     }
   };
 
-  // ── EARLY RETURNS ─────────────────────────────
   if (showRegister) {
     return <RegisterModal onClose={handleRegisterSuccess} />;
   }
@@ -281,9 +283,6 @@ const LoginModal = ({ onClose }) => {
           </svg>
         </button>
 
-        {/* ══════════════════════════════════════
-            FORGOT PASSWORD VIEW
-        ══════════════════════════════════════ */}
         {view === "forgot" ? (
           <>
             <div className="login-modal-header">
@@ -297,8 +296,6 @@ const LoginModal = ({ onClose }) => {
             </div>
 
             <form onSubmit={handleResetPassword} className="login-form">
-
-              {/* Email */}
               <div className="input-group">
                 <label>Email Address</label>
                 <div className="input-wrapper">
@@ -317,7 +314,6 @@ const LoginModal = ({ onClose }) => {
                 </div>
               </div>
 
-              {/* Verification Code + Send Button */}
               <div className="input-group">
                 <label>Verification Code</label>
                 <div className="forgot-code-row">
@@ -354,7 +350,6 @@ const LoginModal = ({ onClose }) => {
                 )}
               </div>
 
-              {/* New Password */}
               <div className="input-group">
                 <label>New Password</label>
                 <div className="input-wrapper">
@@ -394,7 +389,6 @@ const LoginModal = ({ onClose }) => {
                 )}
               </div>
 
-              {/* Confirm New Password */}
               <div className="input-group">
                 <label>Confirm New Password</label>
                 <div className="input-wrapper">
@@ -464,178 +458,172 @@ const LoginModal = ({ onClose }) => {
           </>
 
         ) : (
-        /* ══════════════════════════════════════
-            LOGIN VIEW
-        ══════════════════════════════════════ */
-        <>
-          {/* 🛵 Rider Login Toggle Button */}
-          <button
-            className={`rider-toggle-btn ${isRiderMode ? 'rider-mode-active' : ''}`}
-            onClick={toggleRiderMode}
-            title={isRiderMode ? "Switch to User Login" : "Rider Login"}
-            aria-label="Rider Login"
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor">
-              <path d="M19 7c0-1.1-.9-2-2-2h-3v2h3v2.65L13.52 14H10V9H6c-2.21 0-4 1.79-4 4v3h2c0 1.66 1.34 3 3 3s3-1.34 3-3h4.48L19 10.35V7zm-13 8c-.55 0-1-.45-1-1h2c0 .55-.45 1-1 1z"/>
-              <path d="M5 6h5v2H5zm14 7c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3zm0 4c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1z"/>
-            </svg>
-            <span>{isRiderMode ? "Rider" : "Rider"}</span>
-          </button>
-
-          <div className="login-modal-header">
-            <div className={`login-icon ${isRiderMode ? 'rider-icon-mode' : ''}`}>
-              {isRiderMode ? (
-                <svg viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M19 7c0-1.1-.9-2-2-2h-3v2h3v2.65L13.52 14H10V9H6c-2.21 0-4 1.79-4 4v3h2c0 1.66 1.34 3 3 3s3-1.34 3-3h4.48L19 10.35V7zm-13 8c-.55 0-1-.45-1-1h2c0 .55-.45 1-1 1z"/>
-                  <path d="M5 6h5v2H5zm14 7c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3zm0 4c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1z"/>
-                </svg>
-              ) : (
-                <svg viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
-                </svg>
-              )}
-            </div>
-            <h2>{isRiderMode ? "Rider Login" : "Welcome Back!"}</h2>
-            <p className="login-subtitle">
-              {isRiderMode
-                ? "Log in to your DKMerch Rider account"
-                : "Log in to your DKMerch account"}
-            </p>
-            {isRiderMode && (
-              <div className="rider-mode-badge">
-                🛵 Rider Portal
-              </div>
-            )}
-          </div>
-
-          <form onSubmit={handleSubmit} className="login-form">
-            {error && (
-              <div className="error-banner">
-                <svg viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                </svg>
-                <span>{error}</span>
-              </div>
-            )}
-
-            <div className="input-group">
-              <label htmlFor="email">Email / Username</label>
-              <div className="input-wrapper">
-                <svg className="input-icon" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
-                  <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
-                </svg>
-                <input
-                  type="text"
-                  id="email"
-                  name="email"
-                  placeholder={isRiderMode ? "Enter your rider email" : "Enter your email or username"}
-                  className="form-input"
-                  value={formData.email}
-                  onChange={handleChange}
-                  required
-                  autoComplete="username"
-                />
-              </div>
-            </div>
-
-            <div className="input-group">
-              <label htmlFor="password">Password</label>
-              <div className="input-wrapper">
-                <svg className="input-icon" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                </svg>
-                <input
-                  type={showPassword ? "text" : "password"}
-                  id="password"
-                  name="password"
-                  placeholder={isRiderMode ? "Enter your @rider password" : "Enter your password"}
-                  className="form-input password-input"
-                  value={formData.password}
-                  onChange={handleChange}
-                  required
-                  autoComplete="current-password"
-                />
-                <button
-                  type="button"
-                  className="password-toggle"
-                  onClick={() => setShowPassword(!showPassword)}
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                >
-                  <PwToggleIcon show={showPassword} />
-                </button>
-              </div>
-              {isRiderMode && (
-                <p className="rider-password-hint">
-                  🔑 Rider passwords must start with <strong>@rider</strong> (max 10 characters)
-                </p>
-              )}
-            </div>
-
-            <div className="forgot-password-wrapper">
-              <button
-                type="button"
-                className="forgot-password-link"
-                onClick={() => setView("forgot")}
-              >
-                Forgot Password?
-              </button>
-            </div>
-
+          <>
             <button
-              type="submit"
-              className={`login-submit-btn ${isRiderMode ? 'rider-submit-mode' : ''}`}
-              disabled={isLoading}
+              className={`rider-toggle-btn ${isRiderMode ? 'rider-mode-active' : ''}`}
+              onClick={toggleRiderMode}
+              title={isRiderMode ? "Switch to User Login" : "Rider Login"}
+              aria-label="Rider Login"
             >
-              {isLoading ? (
-                <>
-                  <svg className="spinner" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  Logging in...
-                </>
-              ) : (
-                <>
-                  <svg viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M3 3a1 1 0 011 1v12a1 1 0 11-2 0V4a1 1 0 011-1zm7.707 3.293a1 1 0 010 1.414L9.414 9H17a1 1 0 110 2H9.414l1.293 1.293a1 1 0 01-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                  {isRiderMode ? "Rider Log In" : "Log In"}
-                </>
-              )}
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19 7c0-1.1-.9-2-2-2h-3v2h3v2.65L13.52 14H10V9H6c-2.21 0-4 1.79-4 4v3h2c0 1.66 1.34 3 3 3s3-1.34 3-3h4.48L19 10.35V7zm-13 8c-.55 0-1-.45-1-1h2c0 .55-.45 1-1 1z"/>
+                <path d="M5 6h5v2H5zm14 7c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3zm0 4c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1z"/>
+              </svg>
+              <span>{isRiderMode ? "Rider" : "Rider"}</span>
             </button>
 
-            <div className="divider">
-              <span>OR</span>
+            <div className="login-modal-header">
+              <div className={`login-icon ${isRiderMode ? 'rider-icon-mode' : ''}`}>
+                {isRiderMode ? (
+                  <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M19 7c0-1.1-.9-2-2-2h-3v2h3v2.65L13.52 14H10V9H6c-2.21 0-4 1.79-4 4v3h2c0 1.66 1.34 3 3 3s3-1.34 3-3h4.48L19 10.35V7zm-13 8c-.55 0-1-.45-1-1h2c0 .55-.45 1-1 1z"/>
+                    <path d="M5 6h5v2H5zm14 7c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3zm0 4c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1z"/>
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
+                  </svg>
+                )}
+              </div>
+              <h2>{isRiderMode ? "Rider Login" : "Welcome Back!"}</h2>
+              <p className="login-subtitle">
+                {isRiderMode
+                  ? "Log in to your DKMerch Rider account"
+                  : "Log in to your DKMerch account"}
+              </p>
+              {isRiderMode && (
+                <div className="rider-mode-badge">
+                  🛵 Rider Portal
+                </div>
+              )}
             </div>
 
-            {isRiderMode ? (
-              <div className="signup-section">
-                <p>
-                  Want to be a rider?{" "}
-                  <button type="button" className="signup-link" onClick={() => setShowRiderRegister(true)}>
-                    Apply Now
-                  </button>
-                </p>
-                <p style={{ marginTop: '10px' }}>
-                  Not a rider?{" "}
-                  <button type="button" className="signup-link" onClick={toggleRiderMode}>
-                    User Login
-                  </button>
-                </p>
+            <form onSubmit={handleSubmit} className="login-form">
+              {error && (
+                <div className="error-banner">
+                  <svg viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                  <span>{error}</span>
+                </div>
+              )}
+
+              <div className="input-group">
+                <label htmlFor="email">Email / Username</label>
+                <div className="input-wrapper">
+                  <svg className="input-icon" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
+                    <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
+                  </svg>
+                  <input
+                    type="text"
+                    id="email"
+                    name="email"
+                    placeholder={isRiderMode ? "Enter your rider email" : "Enter your email or username"}
+                    className="form-input"
+                    value={formData.email}
+                    onChange={handleChange}
+                    required
+                    autoComplete="username"
+                  />
+                </div>
               </div>
-            ) : (
-              <div className="signup-section">
-                <p>
-                  New to DKMerch?{" "}
-                  <button type="button" className="signup-link" onClick={handleSwitchToRegister}>
-                    Create an account
+
+              <div className="input-group">
+                <label htmlFor="password">Password</label>
+                <div className="input-wrapper">
+                  <svg className="input-icon" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                  </svg>
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    id="password"
+                    name="password"
+                    placeholder={isRiderMode ? "Enter your @rider password" : "Enter your password"}
+                    className="form-input password-input"
+                    value={formData.password}
+                    onChange={handleChange}
+                    required
+                    autoComplete="current-password"
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle"
+                    onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    <PwToggleIcon show={showPassword} />
                   </button>
-                </p>
+                </div>
+                {isRiderMode && (
+                  <p className="rider-password-hint">
+                    🔑 Rider passwords must start with <strong>@rider</strong> (max 10 characters)
+                  </p>
+                )}
               </div>
-            )}
-          </form>
-        </>
+
+              <div className="forgot-password-wrapper">
+                <button
+                  type="button"
+                  className="forgot-password-link"
+                  onClick={() => setView("forgot")}
+                >
+                  Forgot Password?
+                </button>
+              </div>
+
+              <button
+                type="submit"
+                className={`login-submit-btn ${isRiderMode ? 'rider-submit-mode' : ''}`}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <>
+                    <svg className="spinner" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Logging in...
+                  </>
+                ) : (
+                  <>
+                    <svg viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M3 3a1 1 0 011 1v12a1 1 0 11-2 0V4a1 1 0 011-1zm7.707 3.293a1 1 0 010 1.414L9.414 9H17a1 1 0 110 2H9.414l1.293 1.293a1 1 0 01-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                    {isRiderMode ? "Rider Log In" : "Log In"}
+                  </>
+                )}
+              </button>
+
+              <div className="divider"><span>OR</span></div>
+
+              {isRiderMode ? (
+                <div className="signup-section">
+                  <p>
+                    Want to be a rider?{" "}
+                    <button type="button" className="signup-link" onClick={() => setShowRiderRegister(true)}>
+                      Apply Now
+                    </button>
+                  </p>
+                  <p style={{ marginTop: '10px' }}>
+                    Not a rider?{" "}
+                    <button type="button" className="signup-link" onClick={toggleRiderMode}>
+                      User Login
+                    </button>
+                  </p>
+                </div>
+              ) : (
+                <div className="signup-section">
+                  <p>
+                    New to DKMerch?{" "}
+                    <button type="button" className="signup-link" onClick={handleSwitchToRegister}>
+                      Create an account
+                    </button>
+                  </p>
+                </div>
+              )}
+            </form>
+          </>
         )}
       </div>
     </div>

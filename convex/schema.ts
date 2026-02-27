@@ -10,6 +10,8 @@ export default defineSchema({
     password: v.string(),
     role: v.string(),
     status: v.optional(v.string()),
+    suspendReason: v.optional(v.string()),
+    registeredAt: v.optional(v.string()),
     fullName: v.optional(v.string()),
     phone: v.optional(v.string()),
     address: v.optional(v.string()),
@@ -18,6 +20,23 @@ export default defineSchema({
   })
     .index("by_email", ["email"])
     .index("by_username", ["username"]),
+
+  registrationAttempts: defineTable({
+    fingerprint: v.string(),
+    attemptedAt: v.number(),
+    email: v.string(),
+  }).index("by_fingerprint", ["fingerprint"]),
+
+  reviews: defineTable({
+    productId: v.string(),
+    userEmail: v.string(),
+    userName: v.string(),
+    rating: v.number(),
+    review: v.string(),
+    createdAt: v.string(),
+  })
+    .index("by_product", ["productId"])
+    .index("by_product_user", ["productId", "userEmail"]),
 
   products: defineTable({
     name: v.string(),
@@ -28,7 +47,7 @@ export default defineSchema({
     description: v.optional(v.string()),
     status: v.optional(v.string()),
     releaseDate: v.optional(v.string()),
-    releaseTime: v.optional(v.string()), // ✅ NEW: "HH:MM" format e.g. "01:00"
+    releaseTime: v.optional(v.string()),
     kpopGroup: v.optional(v.string()),
     originalPrice: v.optional(v.number()),
     isSale: v.optional(v.boolean()),
@@ -106,7 +125,6 @@ export default defineSchema({
     .index("by_orderId", ["orderId"])
     .index("by_email", ["email"]),
 
-  // ── PROMOS ───────────────────────────────────────
   promos: defineTable({
     code: v.string(),
     name: v.string(),
@@ -155,8 +173,6 @@ export default defineSchema({
     rejectedAt: v.optional(v.string()),
   }).index("by_rider", ["riderId"]),
 
-  // ── PRE-ORDER REQUESTS (per user) ──────────────────────────────────────
-  // ✅ NEW TABLE: Ini-track dito ang pre-orders ng bawat user
   preOrderRequests: defineTable({
     userId: v.string(),
     productId: v.string(),
@@ -165,15 +181,32 @@ export default defineSchema({
     productName: v.string(),
     productImage: v.string(),
     productPrice: v.number(),
-    releaseDate: v.string(),         // "YYYY-MM-DD"
-    releaseTime: v.string(),         // "HH:MM" 24hr e.g. "01:00" (PHT)
-    releaseTimestampMs: v.number(),  // ✅ UTC ms — server-side, hindi madadaya ng user device
-    isAvailable: v.boolean(),        // true kapag nag-release na
-    addedToCart: v.boolean(),        // true kapag na-add na sa cart ng user
-    notifiedAt: v.union(v.string(), v.null()), // ISO string ng oras na na-notify
-    preOrderedAt: v.string(),        // ISO string ng oras na nag-pre-order
+    releaseDate: v.string(),
+    releaseTime: v.string(),
+    releaseTimestampMs: v.number(),
+    isAvailable: v.boolean(),
+    addedToCart: v.boolean(),
+    notifiedAt: v.union(v.string(), v.null()),
+    preOrderedAt: v.string(),
   })
     .index("by_user", ["userId"])
     .index("by_user_product", ["userId", "productId"])
     .index("by_product", ["productId"]),
+
+  // ✅ NEW: Real-time rider GPS locations
+  // One record per orderId — upserted every 10 seconds by the rider
+  riderLocations: defineTable({
+    orderId: v.string(),       // links to orders.orderId
+    riderEmail: v.string(),    // rider's email
+    riderName: v.string(),
+    lat: v.number(),           // latitude
+    lng: v.number(),           // longitude
+    accuracy: v.optional(v.number()), // GPS accuracy in meters
+    heading: v.optional(v.number()),  // direction in degrees (0-360)
+    speed: v.optional(v.number()),    // speed in m/s
+    isTracking: v.boolean(),   // true = rider actively tracking, false = stopped
+    updatedAt: v.number(),     // Date.now() timestamp for freshness check
+  })
+    .index("by_orderId", ["orderId"])
+    .index("by_riderEmail", ["riderEmail"]),
 });

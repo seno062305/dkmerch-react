@@ -100,6 +100,17 @@ const AdminPromos = () => {
     if (formData.startDate === formData.endDate && formData.startTime && formData.endTime
         && formData.startTime >= formData.endTime)
       errs.endTime = 'End time must be after start time on the same day.';
+
+    // ✅ Validate year is max 4 digits
+    const yearCheck = (dateStr, field) => {
+      if (dateStr) {
+        const yr = parseInt(dateStr.split('-')[0], 10);
+        if (yr > 9999) errs[field] = 'Year must be 4 digits only (max 9999).';
+      }
+    };
+    yearCheck(formData.startDate, 'startDate');
+    yearCheck(formData.endDate, 'endDate');
+
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -333,8 +344,11 @@ const AdminPromos = () => {
 
                 <div className="form-group">
                   <label>Start Date <span className="req">*</span></label>
+                  {/* ✅ max="9999-12-31" prevents 5-digit year */}
                   <input type="date" name="startDate" value={formData.startDate}
                     onChange={handleInputChange}
+                    min="2020-01-01"
+                    max="9999-12-31"
                     className={errors.startDate ? 'input-error' : ''} />
                   {errors.startDate && <span className="field-error">{errors.startDate}</span>}
                 </div>
@@ -353,8 +367,11 @@ const AdminPromos = () => {
 
                 <div className="form-group">
                   <label>End Date <span className="req">*</span></label>
+                  {/* ✅ max="9999-12-31" prevents 5-digit year */}
                   <input type="date" name="endDate" value={formData.endDate}
-                    onChange={handleInputChange} min={formData.startDate || today}
+                    onChange={handleInputChange}
+                    min={formData.startDate || today}
+                    max="9999-12-31"
                     className={errors.endDate ? 'input-error' : ''} />
                   {errors.endDate && <span className="field-error">{errors.endDate}</span>}
                 </div>

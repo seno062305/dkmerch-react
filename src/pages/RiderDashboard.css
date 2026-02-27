@@ -1238,3 +1238,393 @@
     font-size: 40px;
   }
 }
+
+/* ═══════════════════════════════════════════════════════
+   GPS TRACKING — RiderDashboard.css additions
+   Add these at the bottom of your RiderDashboard.css
+   ═══════════════════════════════════════════════════════ */
+
+/* GPS Sidebar Status */
+.rider-gps-sidebar-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 12px 8px;
+  padding: 8px 12px;
+  background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+  border: 1.5px solid #86efac;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #14532d;
+}
+
+.rider-gps-sidebar-status small {
+  font-weight: 400;
+  color: #166534;
+  margin-left: 2px;
+}
+
+/* GPS Active Badge (on delivery card) */
+.rider-gps-active-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #d1fae5;
+  color: #065f46;
+  border: 1px solid #6ee7b7;
+  border-radius: 20px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* GPS Dot (animated) */
+.rider-gps-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #16a34a;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 0 rgba(22,163,74,0.4);
+  animation: gpsPulse 1.5s infinite;
+}
+
+@keyframes gpsPulse {
+  0%   { box-shadow: 0 0 0 0 rgba(22,163,74,0.5); }
+  70%  { box-shadow: 0 0 0 7px rgba(22,163,74,0); }
+  100% { box-shadow: 0 0 0 0 rgba(22,163,74,0); }
+}
+
+/* GPS Panel */
+.rider-gps-panel {
+  margin-bottom: 12px;
+  background: white;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+  transition: all 0.25s;
+}
+
+.rider-gps-panel.gps-panel-active {
+  background: linear-gradient(135deg, #f0fdf4, #e8f5e9);
+  border-color: #86efac;
+}
+
+.rider-gps-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #1a1f36;
+  margin-bottom: 10px;
+}
+
+.rider-gps-panel-title i {
+  color: #fc1268;
+  font-size: 14px;
+}
+
+.rider-gps-live-tag {
+  margin-left: auto;
+  background: #16a34a;
+  color: white;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 20px;
+  letter-spacing: 0.5px;
+  animation: gpsLiveBlink 2s ease-in-out infinite;
+}
+
+@keyframes gpsLiveBlink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.6; }
+}
+
+.rider-gps-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #166534;
+  margin-bottom: 8px;
+}
+
+.rider-gps-coords {
+  font-size: 11px;
+  color: #64748b;
+  font-family: monospace;
+  padding: 4px 8px;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.rider-gps-coords i {
+  color: #94a3b8;
+  font-size: 10px;
+}
+
+.rider-gps-desc {
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+.rider-gps-start-btn {
+  width: 100%;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #fc1268, #ff4d94);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s;
+  box-shadow: 0 3px 12px rgba(252,18,104,0.3);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.rider-gps-start-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(252,18,104,0.4);
+}
+
+.rider-gps-stop-btn {
+  width: 100%;
+  padding: 10px 14px;
+  background: transparent;
+  color: #dc2626;
+  border: 1.5px solid #fca5a5;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.2s;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.rider-gps-stop-btn:hover {
+  background: #fee2e2;
+  border-color: #dc2626;
+}
+
+/* GPS Error Banner */
+.rider-gps-error-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #fef2f2;
+  border: 1.5px solid #fca5a5;
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 13px;
+  color: #991b1b;
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+
+.rider-gps-error-banner i { color: #dc2626; flex-shrink: 0; margin-top: 2px; }
+
+.rider-gps-error-banner button {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: #991b1b;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════
+   LEAFLET MAP — TrackOrder.css additions
+   Add these at the bottom of your TrackOrder.css
+   ═══════════════════════════════════════════════════════ */
+
+/* Map Section wrapper in TrackingModal */
+.rider-map-section {
+  margin-bottom: 24px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 2px solid #e2e8f0;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+}
+
+.rider-map-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #1a1f36, #2d3561);
+  color: white;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.rider-map-section-title i { color: #fc1268; font-size: 14px; }
+
+/* Map status bar */
+.rider-map-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.rider-map-status-bar.status-waiting  { background: #fef3c7; color: #92400e; }
+.rider-map-status-bar.status-live     { background: #d1fae5; color: #065f46; }
+.rider-map-status-bar.status-stale    { background: #fff3cd; color: #856404; }
+.rider-map-status-bar.status-stopped  { background: #f8f9fa; color: #64748b; }
+
+.map-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dot-live    { background: #16a34a; animation: gpsPulse 1.5s infinite; }
+.dot-waiting { background: #f59e0b; animation: gpsPulse 2s infinite; }
+.dot-stale   { background: #f59e0b; }
+.dot-stopped { background: #94a3b8; }
+
+@keyframes gpsPulse {
+  0%   { box-shadow: 0 0 0 0 rgba(22,163,74,0.5); }
+  70%  { box-shadow: 0 0 0 6px rgba(22,163,74,0); }
+  100% { box-shadow: 0 0 0 0 rgba(22,163,74,0); }
+}
+
+/* The Leaflet map container */
+.rider-map-container {
+  width: 100%;
+  height: 300px;
+  background: #e8e8e8;
+}
+
+/* Accuracy info below map */
+.rider-map-accuracy {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  font-size: 11px;
+  color: #64748b;
+  background: #f8f9fa;
+  border-top: 1px solid #e2e8f0;
+}
+
+.rider-map-accuracy i { color: #94a3b8; font-size: 10px; }
+
+/* Map loading error */
+.rider-map-error {
+  height: 200px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #f8f9fa;
+  color: #64748b;
+  gap: 10px;
+  padding: 20px;
+  text-align: center;
+}
+
+.rider-map-error i { font-size: 36px; color: #cbd5e1; }
+.rider-map-error p { font-size: 13px; margin: 0; }
+
+/* ─── LEAFLET CUSTOM MARKER ─── */
+/* These are injected via divIcon HTML */
+.rider-map-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+.rider-map-marker {
+  position: relative;
+  width: 48px;
+  height: 48px;
+}
+
+.rider-map-marker-inner {
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, #fc1268, #ff4d94);
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px rgba(252,18,104,0.5);
+  position: absolute;
+  top: 0;
+  left: 4px;
+}
+
+.rider-map-marker-inner i {
+  transform: rotate(45deg);
+  color: white;
+  font-size: 16px;
+}
+
+.rider-map-pulse {
+  position: absolute;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(252,18,104,0.2);
+  top: -4px;
+  left: 0;
+  animation: markerPulse 2s ease-out infinite;
+}
+
+@keyframes markerPulse {
+  0%   { transform: scale(0.5); opacity: 1; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+
+/* Leaflet popup customization */
+.rider-map-popup {
+  font-family: 'Segoe UI', sans-serif;
+  min-width: 140px;
+  text-align: center;
+}
+
+.rider-map-popup strong {
+  display: block;
+  font-size: 13px;
+  color: #1a1f36;
+  margin-bottom: 3px;
+}
+
+.rider-map-popup small {
+  font-size: 11px;
+  color: #64748b;
+}
+
+/* Override Leaflet default popup arrow color */
+.leaflet-popup-content-wrapper {
+  border-radius: 10px !important;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15) !important;
+}

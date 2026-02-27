@@ -252,42 +252,26 @@ footer {
   font-weight: 600;
 }
 
-/* ✅ UNIFIED WHITE PAGE HEADER — applies to all main pages */
+/* ✅ HIDE PAGE HEADERS — Collections, PreOrder, TrackOrder, Help, MyPreOrders */
 .preorder-main .page-header,
 .trackorder-main .page-header,
 .wishlist-main .page-header,
 .collections-main .page-header,
 .help-main .page-header,
 .mypreorders-main .page-header {
-  background: #f8f6f6 !important;
-  background-image: none !important;
-  border-bottom: 1px solid #e0e0e0;
-  padding: 50px 0;
-  margin-bottom: 0;
+  display: none !important;
 }
 
-.preorder-main .page-title,
-.trackorder-main .page-title,
-.wishlist-main .page-title,
-.collections-main .page-title,
-.help-main .page-title,
-.mypreorders-main .page-title {
-  color: var(--dark-color) !important;
-  -webkit-text-fill-color: var(--dark-color) !important;
-  text-shadow: none !important;
-  background: none !important;
-  font-size: 32px !important;
+/* Remove top margin/padding left by hidden headers */
+.preorder-main .preorder-page,
+.trackorder-main .track-order-page,
+.help-main .help-page,
+.mypreorders-main .mpo-page {
+  padding-top: 32px;
 }
 
-.preorder-main .page-description,
-.trackorder-main .page-description,
-.wishlist-main .page-description,
-.collections-main .page-description,
-.help-main .page-description,
-.mypreorders-main .page-description {
-  color: var(--gray-color) !important;
-  opacity: 1 !important;
-  font-size: 15px !important;
+.collections-page {
+  padding-top: 0;
 }
 
 @media (max-width: 576px) {

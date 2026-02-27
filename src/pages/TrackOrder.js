@@ -1,10 +1,178 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useQuery, useAction } from 'convex/react';
+import { api } from '../../convex/_generated/api';
 import { useUserOrders, useOrdersByEmail, useUpdateOrderOtp } from '../utils/orderStorage';
 import { useProducts, usePreOrderProducts } from '../utils/productStorage';
 import './TrackOrder.css';
 
+// ─── LEAFLET MAP COMPONENT ───────────────────────────────────────────────────
+const RiderMap = ({ orderId, riderName }) => {
+  const mapRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const markerRef = useRef(null);
+  const accuracyCircleRef = useRef(null);
+  const [mapReady, setMapReady] = useState(false);
+  const [mapError, setMapError] = useState(null);
+
+  const locationData = useQuery(
+    api.riders.getRiderLocation,
+    orderId ? { orderId } : 'skip'
+  );
+
+  const isStale = locationData
+    ? Date.now() - locationData.updatedAt > 30000
+    : true;
+
+  useEffect(() => {
+    if (mapInstanceRef.current || !mapRef.current) return;
+
+    if (!document.getElementById('leaflet-css')) {
+      const link = document.createElement('link');
+      link.id = 'leaflet-css';
+      link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(link);
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.onload = () => {
+      try {
+        const L = window.L;
+        const defaultLat = 12.8797;
+        const defaultLng = 121.7740;
+
+        const map = L.map(mapRef.current, {
+          zoomControl: true,
+          attributionControl: true,
+        }).setView([defaultLat, defaultLng], 6);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '© OpenStreetMap contributors',
+          maxZoom: 19,
+        }).addTo(map);
+
+        const riderIcon = L.divIcon({
+          className: 'rider-map-icon',
+          html: `
+            <div class="rider-map-marker">
+              <div class="rider-map-marker-inner">
+                <i class="fas fa-motorcycle"></i>
+              </div>
+              <div class="rider-map-pulse"></div>
+            </div>
+          `,
+          iconSize: [48, 48],
+          iconAnchor: [24, 48],
+          popupAnchor: [0, -48],
+        });
+
+        const marker = L.marker([defaultLat, defaultLng], { icon: riderIcon })
+          .addTo(map)
+          .bindPopup(`<div class="rider-map-popup"><strong>🛵 ${riderName || 'Your Rider'}</strong><br><small>On the way to you!</small></div>`);
+
+        mapInstanceRef.current = map;
+        markerRef.current = marker;
+        setMapReady(true);
+      } catch (err) {
+        setMapError('Failed to initialize map.');
+        console.error('Leaflet init error:', err);
+      }
+    };
+    script.onerror = () => setMapError('Failed to load map. Check your internet connection.');
+    document.head.appendChild(script);
+
+    return () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+        markerRef.current = null;
+        accuracyCircleRef.current = null;
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!mapReady || !mapInstanceRef.current || !markerRef.current) return;
+    if (!locationData || !locationData.isTracking) return;
+
+    const L = window.L;
+    const map = mapInstanceRef.current;
+    const marker = markerRef.current;
+    const { lat, lng, accuracy } = locationData;
+
+    marker.setLatLng([lat, lng]);
+    marker.getPopup()?.setContent(
+      `<div class="rider-map-popup">
+        <strong>🛵 ${locationData.riderName || riderName || 'Your Rider'}</strong><br>
+        <small>Updated ${formatTimeAgo(locationData.updatedAt)}</small>
+      </div>`
+    );
+
+    if (accuracyCircleRef.current) map.removeLayer(accuracyCircleRef.current);
+    if (accuracy && accuracy < 500) {
+      accuracyCircleRef.current = L.circle([lat, lng], {
+        radius: accuracy,
+        color: '#fc1268',
+        fillColor: '#fc1268',
+        fillOpacity: 0.08,
+        weight: 1.5,
+        dashArray: '4 4',
+      }).addTo(map);
+    }
+
+    map.panTo([lat, lng], { animate: true, duration: 0.8 });
+    if (map.getZoom() < 15) map.setView([lat, lng], 15, { animate: true });
+  }, [locationData, mapReady, riderName]);
+
+  const formatTimeAgo = (timestamp) => {
+    const diff = Math.floor((Date.now() - timestamp) / 1000);
+    if (diff < 10) return 'just now';
+    if (diff < 60) return `${diff}s ago`;
+    return `${Math.floor(diff / 60)}m ago`;
+  };
+
+  if (mapError) {
+    return (
+      <div className="rider-map-error">
+        <i className="fas fa-map-marked-alt"></i>
+        <p>{mapError}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rider-map-wrapper">
+      <div className={`rider-map-status-bar ${
+        !locationData ? 'status-waiting' :
+        !locationData.isTracking ? 'status-stopped' :
+        isStale ? 'status-stale' : 'status-live'
+      }`}>
+        {!locationData ? (
+          <><span className="map-status-dot dot-waiting"></span> Waiting for rider to share location…</>
+        ) : !locationData.isTracking ? (
+          <><span className="map-status-dot dot-stopped"></span> Rider stopped sharing location</>
+        ) : isStale ? (
+          <><span className="map-status-dot dot-stale"></span> Location may be outdated (last update: {formatTimeAgo(locationData.updatedAt)})</>
+        ) : (
+          <><span className="map-status-dot dot-live"></span> Live · Updated {formatTimeAgo(locationData.updatedAt)}</>
+        )}
+      </div>
+      <div ref={mapRef} className="rider-map-container" />
+      {locationData?.isTracking && locationData.accuracy && (
+        <div className="rider-map-accuracy">
+          <i className="fas fa-crosshairs"></i>
+          GPS accuracy: ±{Math.round(locationData.accuracy)}m
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── MAIN TRACK ORDER PAGE ────────────────────────────────────────────────────
 const TrackOrder = () => {
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
@@ -16,7 +184,7 @@ const TrackOrder = () => {
   const [trackingEmail, setTrackingEmail] = useState('');
   const [searchEmail, setSearchEmail] = useState('');
   const [showTrackedOrders, setShowTrackedOrders] = useState(false);
-  const [lightboxData, setLightboxData] = useState(null); // { images: [], index: 0 }
+  const [lightboxData, setLightboxData] = useState(null);
   const [removeConfirm, setRemoveConfirm] = useState(null);
   const [hiddenOrders, setHiddenOrders] = useState(() => {
     try { return JSON.parse(localStorage.getItem('hiddenDeliveredOrders') || '[]'); } catch { return []; }
@@ -59,6 +227,7 @@ const TrackOrder = () => {
       'Cancelled': 'status-cancelled', 'pending': 'status-processing',
       'confirmed': 'status-confirmed', 'shipped': 'status-shipped',
       'completed': 'status-delivered', 'cancelled': 'status-cancelled',
+      'Pending Payment': 'status-pending-payment',
     };
     return map[status] || 'status-processing';
   };
@@ -71,9 +240,13 @@ const TrackOrder = () => {
       cancelled: 'Cancelled', Processing: 'Processing', Confirmed: 'Confirmed',
       Shipped: 'Shipped', 'Out for Delivery': 'Out for Delivery',
       Delivered: 'Delivered', Cancelled: 'Cancelled',
+      'Pending Payment': 'Pending Payment',
     };
     return labels[s] || s;
   };
+
+  const isPendingPayment = (order) =>
+    order.status === 'Pending Payment' && order.paymentStatus !== 'paid';
 
   const isDelivered = (order) => {
     const s = (order.orderStatus || order.status || '').toLowerCase();
@@ -107,14 +280,13 @@ const TrackOrder = () => {
     }
 
     return [
-      {
-        label: 'Order Placed', icon: 'fa-shopping-cart', completed: true, time: placedAt,
-        desc: 'Your order has been placed successfully.',
-      },
+      { label: 'Order Placed', icon: 'fa-shopping-cart', completed: true, time: placedAt, desc: 'Your order has been placed successfully.' },
       {
         label: 'Payment Confirmed', icon: 'fa-credit-card',
         completed: order.paymentStatus === 'paid', time: paidAt,
-        desc: order.paymentStatus === 'paid' ? 'Payment received via PayMongo.' : 'Waiting for payment confirmation.',
+        desc: order.paymentStatus === 'paid'
+          ? 'Payment received via PayMongo.'
+          : 'Waiting for payment confirmation.',
       },
       {
         label: 'Order Confirmed', icon: 'fa-check-circle',
@@ -160,23 +332,12 @@ const TrackOrder = () => {
     setRemoveConfirm(null);
   };
 
-  // Open lightbox with all images of an order, starting at a given index
-  const openLightbox = (images, startIndex = 0) => {
-    setLightboxData({ images, index: startIndex });
-  };
-
+  const openLightbox  = (images, startIndex = 0) => setLightboxData({ images, index: startIndex });
   const closeLightbox = () => setLightboxData(null);
+  const lightboxNext  = () => setLightboxData(prev => ({ ...prev, index: (prev.index + 1) % prev.images.length }));
+  const lightboxPrev  = () => setLightboxData(prev => ({ ...prev, index: (prev.index - 1 + prev.images.length) % prev.images.length }));
 
-  const lightboxNext = () => {
-    setLightboxData(prev => ({ ...prev, index: (prev.index + 1) % prev.images.length }));
-  };
-
-  const lightboxPrev = () => {
-    setLightboxData(prev => ({ ...prev, index: (prev.index - 1 + prev.images.length) % prev.images.length }));
-  };
-
-  const visibleOrders = orders.filter(o => !hiddenOrders.includes(o._id));
-
+  const visibleOrders   = orders.filter(o => !hiddenOrders.includes(o._id));
   const activeOrders    = visibleOrders.filter(o => !isDelivered(o) && !isCancelledOrder(o));
   const deliveredOrders = visibleOrders.filter(o => isDelivered(o));
   const cancelledOrders = visibleOrders.filter(o => isCancelledOrder(o));
@@ -215,19 +376,19 @@ const TrackOrder = () => {
   const OrderCard = ({ order, onViewDetails }) => {
     const scrollRef = useRef(null);
     const [activeImgIdx, setActiveImgIdx] = useState(0);
+    const [continuingPayment, setContinuingPayment] = useState(false);
+    const createPaymentLink = useAction(api.payments.createPaymentLink);
+
     const ordDate     = order._creationTime ? new Date(order._creationTime) : null;
     const orderStatus = getDisplayStatus(order);
     const statusKey   = order.orderStatus || order.status || 'pending';
     const delivered   = isDelivered(order);
     const releaseDate = getPreOrderReleaseDate(order);
+    const needsPayment = isPendingPayment(order);
 
-    // Collect all item images
     const itemImages = (order.items || []).map(item => {
       const product = getProductById(item.id);
-      return {
-        src: item.image || product?.image || null,
-        name: item.name || product?.name || 'Item',
-      };
+      return { src: item.image || product?.image || null, name: item.name || product?.name || 'Item' };
     }).filter(i => i.src);
 
     const hasImages = itemImages.length > 0;
@@ -240,70 +401,67 @@ const TrackOrder = () => {
       }
     };
 
-    const handleImgClick = (idx) => {
-      openLightbox(itemImages.map(i => i.src), idx);
+    // ✅ Continue Payment — re-use existing paymentLinkUrl or create new one
+    const handleContinuePayment = async () => {
+      setContinuingPayment(true);
+      try {
+        // If order already has a payment link, just redirect
+        if (order.paymentLinkUrl) {
+          window.location.href = order.paymentLinkUrl;
+          return;
+        }
+        // Otherwise create a new payment link
+        const result = await createPaymentLink({
+          orderId:       order.orderId,
+          amount:        order.finalTotal ?? order.total,
+          description:   `DKMerch Order ${order.orderId}`,
+          customerName:  order.customerName,
+          customerEmail: order.email,
+          customerPhone: order.phone,
+        });
+        window.location.href = result.paymentLinkUrl;
+      } catch (err) {
+        console.error('Continue payment error:', err);
+        alert('Failed to load payment page. Please try again.');
+        setContinuingPayment(false);
+      }
     };
 
     return (
       <div className="order-card">
-        {/* ── Multi-image strip ── */}
         <div className="order-card-img-wrap">
           <span className={`order-status-overlay ${getStatusClass(statusKey)}`}>{orderStatus}</span>
-
           {hasImages ? (
             <>
               <div className="order-img-strip" ref={scrollRef}>
                 {itemImages.map((img, idx) => (
-                  <div
-                    key={idx}
-                    className={`order-img-slide ${idx === activeImgIdx ? 'active' : ''}`}
-                    onClick={() => handleImgClick(idx)}
-                    title="Click to enlarge"
-                  >
+                  <div key={idx} className={`order-img-slide ${idx === activeImgIdx ? 'active' : ''}`}
+                    onClick={() => openLightbox(itemImages.map(i => i.src), idx)} title="Click to enlarge">
                     <img src={img.src} alt={img.name} />
                     <div className="order-img-zoom"><i className="fas fa-search-plus"></i></div>
                   </div>
                 ))}
               </div>
-
-              {/* Dot indicators — only show if more than 1 image */}
               {itemImages.length > 1 && (
                 <div className="order-img-dots">
                   {itemImages.map((_, idx) => (
-                    <button
-                      key={idx}
-                      className={`order-img-dot ${idx === activeImgIdx ? 'active' : ''}`}
-                      onClick={() => scrollTo(idx)}
-                      aria-label={`Image ${idx + 1}`}
-                    />
+                    <button key={idx} className={`order-img-dot ${idx === activeImgIdx ? 'active' : ''}`} onClick={() => scrollTo(idx)} />
                   ))}
                 </div>
               )}
-
-              {/* Arrow nav — only if more than 1 */}
               {itemImages.length > 1 && (
                 <>
-                  <button
-                    className="order-img-arrow order-img-arrow-left"
-                    onClick={() => scrollTo((activeImgIdx - 1 + itemImages.length) % itemImages.length)}
-                    aria-label="Previous image"
-                  >
+                  <button className="order-img-arrow order-img-arrow-left" onClick={() => scrollTo((activeImgIdx - 1 + itemImages.length) % itemImages.length)}>
                     <i className="fas fa-chevron-left"></i>
                   </button>
-                  <button
-                    className="order-img-arrow order-img-arrow-right"
-                    onClick={() => scrollTo((activeImgIdx + 1) % itemImages.length)}
-                    aria-label="Next image"
-                  >
+                  <button className="order-img-arrow order-img-arrow-right" onClick={() => scrollTo((activeImgIdx + 1) % itemImages.length)}>
                     <i className="fas fa-chevron-right"></i>
                   </button>
                 </>
               )}
             </>
           ) : (
-            <div className="order-no-img-wrap">
-              <i className="fas fa-box order-no-img"></i>
-            </div>
+            <div className="order-no-img-wrap"><i className="fas fa-box order-no-img"></i></div>
           )}
         </div>
 
@@ -311,9 +469,7 @@ const TrackOrder = () => {
           <p className="order-card-id">Order #{order.orderId?.slice(-8) || 'N/A'}</p>
           <p className="order-card-name">
             {order.items?.[0]?.name || getProductById(order.items?.[0]?.id)?.name || 'Order'}
-            {(order.items?.length || 1) > 1 && (
-              <span className="order-and-more"> +{order.items.length - 1} more</span>
-            )}
+            {(order.items?.length || 1) > 1 && <span className="order-and-more"> +{order.items.length - 1} more</span>}
           </p>
           {releaseDate && (
             <div className="order-card-preorder-badge">
@@ -335,9 +491,31 @@ const TrackOrder = () => {
           <div className="order-card-price-row">
             <span className="order-card-price">₱{order.total?.toLocaleString()}</span>
           </div>
-          <button className="btn btn-primary btn-small order-view-btn" onClick={() => onViewDetails(order)}>
-            <i className="fas fa-search"></i> View Details
-          </button>
+
+          {/* ✅ Continue Payment button for unpaid orders */}
+          {needsPayment ? (
+            <button
+              className="btn btn-continue-payment"
+              onClick={handleContinuePayment}
+              disabled={continuingPayment}
+            >
+              {continuingPayment
+                ? <><i className="fas fa-spinner fa-spin"></i> Loading...</>
+                : <><i className="fas fa-credit-card"></i> Continue Payment</>
+              }
+            </button>
+          ) : (
+            <button className="btn btn-primary btn-small order-view-btn" onClick={() => onViewDetails(order)}>
+              <i className="fas fa-search"></i> View Details
+            </button>
+          )}
+
+          {needsPayment && (
+            <button className="btn btn-outline btn-small order-view-btn" style={{ marginTop: '6px' }} onClick={() => onViewDetails(order)}>
+              <i className="fas fa-search"></i> View Details
+            </button>
+          )}
+
           {delivered && (
             <button className="btn order-remove-btn" onClick={() => setRemoveConfirm(order._id)}>
               <i className="fas fa-trash-alt"></i> Remove
@@ -353,7 +531,6 @@ const TrackOrder = () => {
     if (!lightboxData) return null;
     const { images, index } = lightboxData;
     const hasMultiple = images.length > 1;
-
     useEffect(() => {
       const onKey = (e) => {
         if (e.key === 'Escape') closeLightbox();
@@ -363,53 +540,20 @@ const TrackOrder = () => {
       window.addEventListener('keydown', onKey);
       return () => window.removeEventListener('keydown', onKey);
     }, [hasMultiple]);
-
     return (
       <div className="order-lightbox" onClick={closeLightbox}>
-        <button className="lightbox-close" onClick={closeLightbox}>
-          <i className="fas fa-times"></i>
-        </button>
-
-        {hasMultiple && (
-          <button className="lightbox-arrow lightbox-arrow-left" onClick={(e) => { e.stopPropagation(); lightboxPrev(); }}>
-            <i className="fas fa-chevron-left"></i>
-          </button>
-        )}
-
-        <img
-          src={images[index]}
-          alt={`Item ${index + 1}`}
-          onClick={e => e.stopPropagation()}
-        />
-
-        {hasMultiple && (
-          <button className="lightbox-arrow lightbox-arrow-right" onClick={(e) => { e.stopPropagation(); lightboxNext(); }}>
-            <i className="fas fa-chevron-right"></i>
-          </button>
-        )}
-
-        {hasMultiple && (
-          <div className="lightbox-dots">
-            {images.map((_, i) => (
-              <button
-                key={i}
-                className={`lightbox-dot ${i === index ? 'active' : ''}`}
-                onClick={(e) => { e.stopPropagation(); setLightboxData(prev => ({ ...prev, index: i })); }}
-              />
-            ))}
-          </div>
-        )}
-
-        {hasMultiple && (
-          <div className="lightbox-counter">{index + 1} / {images.length}</div>
-        )}
+        <button className="lightbox-close" onClick={closeLightbox}><i className="fas fa-times"></i></button>
+        {hasMultiple && <button className="lightbox-arrow lightbox-arrow-left" onClick={(e) => { e.stopPropagation(); lightboxPrev(); }}><i className="fas fa-chevron-left"></i></button>}
+        <img src={images[index]} alt={`Item ${index + 1}`} onClick={e => e.stopPropagation()} />
+        {hasMultiple && <button className="lightbox-arrow lightbox-arrow-right" onClick={(e) => { e.stopPropagation(); lightboxNext(); }}><i className="fas fa-chevron-right"></i></button>}
+        {hasMultiple && <div className="lightbox-dots">{images.map((_, i) => <button key={i} className={`lightbox-dot ${i === index ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); setLightboxData(prev => ({ ...prev, index: i })); }} />)}</div>}
+        {hasMultiple && <div className="lightbox-counter">{index + 1} / {images.length}</div>}
       </div>
     );
   };
 
   if (isAuthenticated && user) {
     const activeTab = FILTERS.find(f => f.key === filter);
-
     return (
       <main className="trackorder-main">
         <div className="page-header">
@@ -422,32 +566,20 @@ const TrackOrder = () => {
           <section className="track-order-page">
             <div className="orders-tab-bar">
               {FILTERS.map(f => (
-                <button
-                  key={f.key}
-                  className={`orders-tab-btn ${filter === f.key ? 'active' : ''}`}
-                  onClick={() => setFilter(f.key)}
-                >
+                <button key={f.key} className={`orders-tab-btn ${filter === f.key ? 'active' : ''}`} onClick={() => setFilter(f.key)}>
                   <i className={`fas ${f.icon}`}></i>
                   <span className="tab-label">{f.label}</span>
-                  {f.count > 0 && (
-                    <span className={`tab-count ${filter === f.key ? 'tab-count-active' : ''}`}>
-                      {f.count}
-                    </span>
-                  )}
+                  {f.count > 0 && <span className={`tab-count ${filter === f.key ? 'tab-count-active' : ''}`}>{f.count}</span>}
                 </button>
               ))}
             </div>
-
             <div className="tab-context-bar">
               <i className={`fas ${activeTab?.icon}`}></i>
               <span>
                 <strong>{activeTab?.label}</strong> — {activeTab?.desc}
-                {filteredOrders.length > 0 && (
-                  <span className="tab-context-count"> · {filteredOrders.length} order{filteredOrders.length !== 1 ? 's' : ''}</span>
-                )}
+                {filteredOrders.length > 0 && <span className="tab-context-count"> · {filteredOrders.length} order{filteredOrders.length !== 1 ? 's' : ''}</span>}
               </span>
             </div>
-
             {filteredOrders.length === 0 ? (
               <div className="orders-empty">
                 <i className={`fas ${activeTab?.icon}`}></i>
@@ -465,14 +597,11 @@ const TrackOrder = () => {
               </div>
             ) : (
               <div className="orders-grid">
-                {filteredOrders.map(order => (
-                  <OrderCard key={order._id} order={order} onViewDetails={handleOpenModal} />
-                ))}
+                {filteredOrders.map(order => <OrderCard key={order._id} order={order} onViewDetails={handleOpenModal} />)}
               </div>
             )}
           </section>
         </div>
-
         {selectedOrder && (
           <TrackingModal order={selectedOrder} products={products} onClose={handleCloseModal}
             getTimelineSteps={getTimelineSteps} getStatusClass={getStatusClass} getDisplayStatus={getDisplayStatus} />
@@ -486,9 +615,7 @@ const TrackOrder = () => {
               <p>Are you sure you want to remove this delivered order from your list?</p>
               <div className="remove-confirm-actions">
                 <button className="btn btn-outline" onClick={() => setRemoveConfirm(null)}>Cancel</button>
-                <button className="btn btn-danger" onClick={() => handleRemoveOrder(removeConfirm)}>
-                  <i className="fas fa-trash-alt"></i> Yes, Remove
-                </button>
+                <button className="btn btn-danger" onClick={() => handleRemoveOrder(removeConfirm)}><i className="fas fa-trash-alt"></i> Yes, Remove</button>
               </div>
             </div>
           </div>
@@ -519,9 +646,7 @@ const TrackOrder = () => {
                     value={trackingEmail} onChange={(e) => setTrackingEmail(e.target.value)} required />
                   <small>Enter the email you used when placing your order</small>
                 </div>
-                <button type="submit" className="btn btn-primary">
-                  <i className="fas fa-search"></i> Find My Orders
-                </button>
+                <button type="submit" className="btn btn-primary"><i className="fas fa-search"></i> Find My Orders</button>
               </form>
             </div>
             <div className="tracking-info">
@@ -541,9 +666,7 @@ const TrackOrder = () => {
                 <p>Found {emailOrders.length} order{emailOrders.length > 1 ? 's' : ''} for {searchEmail}</p>
               </div>
               <div className="orders-grid">
-                {emailOrders.map(order => (
-                  <OrderCard key={order._id} order={order} onViewDetails={handleOpenModal} />
-                ))}
+                {emailOrders.map(order => <OrderCard key={order._id} order={order} onViewDetails={handleOpenModal} />)}
               </div>
             </div>
           )}
@@ -568,11 +691,14 @@ const TrackOrder = () => {
 // ─── TRACKING MODAL ─────────────────────────────────────────────────────────
 const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusClass, getDisplayStatus }) => {
   const updateOrderOtp = useUpdateOrderOtp();
+  const createPaymentLink = useAction(api.payments.createPaymentLink);
   const [generatingOtp, setGeneratingOtp] = useState(false);
   const [localOtp, setLocalOtp] = useState(order.deliveryOtp || null);
+  const [continuingPayment, setContinuingPayment] = useState(false);
 
   const isCancelled      = (order.orderStatus || order.status || '').toLowerCase() === 'cancelled';
   const isOutForDelivery = (order.orderStatus || order.status || '').toLowerCase() === 'out_for_delivery';
+  const needsPayment     = order.status === 'Pending Payment' && order.paymentStatus !== 'paid';
   const timelineSteps    = getTimelineSteps(order);
 
   useEffect(() => {
@@ -599,12 +725,33 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
     }
   };
 
+  const handleContinuePayment = async () => {
+    setContinuingPayment(true);
+    try {
+      if (order.paymentLinkUrl) {
+        window.location.href = order.paymentLinkUrl;
+        return;
+      }
+      const result = await createPaymentLink({
+        orderId:       order.orderId,
+        amount:        order.finalTotal ?? order.total,
+        description:   `DKMerch Order ${order.orderId}`,
+        customerName:  order.customerName,
+        customerEmail: order.email,
+        customerPhone: order.phone,
+      });
+      window.location.href = result.paymentLinkUrl;
+    } catch (err) {
+      console.error('Continue payment error:', err);
+      alert('Failed to load payment page. Please try again.');
+      setContinuingPayment(false);
+    }
+  };
+
   return (
     <div className="tracking-modal-overlay" onClick={onClose}>
       <div className="tracking-modal" onClick={e => e.stopPropagation()}>
-        <button className="modal-close-btn" onClick={onClose} type="button">
-          <i className="fas fa-times"></i>
-        </button>
+        <button className="modal-close-btn" onClick={onClose} type="button"><i className="fas fa-times"></i></button>
         <div className="tracking-result">
           <div className="result-header">
             <h2>Order #{order.orderId?.slice(-8) || 'N/A'}</h2>
@@ -612,6 +759,27 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
               {getDisplayStatus(order)}
             </div>
           </div>
+
+          {/* ✅ Continue Payment banner inside modal */}
+          {needsPayment && (
+            <div className="pending-payment-banner">
+              <div className="pending-payment-icon"><i className="fas fa-exclamation-circle"></i></div>
+              <div className="pending-payment-text">
+                <strong>Payment Incomplete</strong>
+                <p>Your order is reserved but payment was not completed.</p>
+              </div>
+              <button
+                className="btn btn-continue-payment"
+                onClick={handleContinuePayment}
+                disabled={continuingPayment}
+              >
+                {continuingPayment
+                  ? <><i className="fas fa-spinner fa-spin"></i> Loading...</>
+                  : <><i className="fas fa-credit-card"></i> Complete Payment</>
+                }
+              </button>
+            </div>
+          )}
 
           {order.riderInfo && !isCancelled && (
             <div className="rider-info-banner">
@@ -631,6 +799,16 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
                 <strong>Order Cancelled</strong>
                 <p>{order.cancelReason || 'This order has been cancelled.'}</p>
               </div>
+            </div>
+          )}
+
+          {isOutForDelivery && (
+            <div className="rider-map-section">
+              <div className="rider-map-section-title">
+                <i className="fas fa-map-marked-alt"></i>
+                <span>Real-Time Rider Location</span>
+              </div>
+              <RiderMap orderId={order.orderId} riderName={order.riderInfo?.name} />
             </div>
           )}
 
@@ -678,15 +856,11 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
             <div className="timeline">
               {timelineSteps.map((step, index) => (
                 <div key={index} className={`timeline-item ${step.completed ? 'completed' : ''} ${step.isCancelled ? 'cancelled-step' : ''}`}>
-                  <div className="timeline-marker">
-                    <i className={`fas ${step.icon}`}></i>
-                  </div>
+                  <div className="timeline-marker"><i className={`fas ${step.icon}`}></i></div>
                   <div className="timeline-content">
                     <h4>{step.label}</h4>
                     {step.time && step.completed && (
-                      <span className="timeline-timestamp">
-                        <i className="fas fa-clock"></i> {step.time}
-                      </span>
+                      <span className="timeline-timestamp"><i className="fas fa-clock"></i> {step.time}</span>
                     )}
                     <p className={step.completed ? 'timeline-desc-done' : 'timeline-desc-pending'}>
                       {step.desc || (step.completed ? 'Completed' : 'Pending')}
@@ -716,8 +890,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
                     <strong>{item.name || product?.name}</strong>
                     {isPreOrder && releaseDate && (
                       <span className="item-preorder-release">
-                        <i className="fas fa-calendar-alt"></i>{' '}
-                        Expected: {new Date(releaseDate).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}
+                        <i className="fas fa-calendar-alt"></i> Expected: {new Date(releaseDate).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}
                       </span>
                     )}
                     <span>Qty: {qty}</span>

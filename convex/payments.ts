@@ -3,6 +3,25 @@ import { action, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { api } from "./_generated/api";
 
+// ✅ Works in both Node.js and Convex edge runtime (no Buffer dependency)
+function toBase64(str: string): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  let result = "";
+  let i = 0;
+  const bytes: number[] = [];
+  for (let j = 0; j < str.length; j++) bytes.push(str.charCodeAt(j));
+  while (i < bytes.length) {
+    const b0 = bytes[i++] ?? 0;
+    const b1 = bytes[i] !== undefined ? bytes[i++] : -1;
+    const b2 = bytes[i] !== undefined ? bytes[i++] : -1;
+    result += chars[b0 >> 2];
+    result += chars[((b0 & 3) << 4) | (b1 === -1 ? 0 : b1 >> 4)];
+    result += b1 === -1 ? "=" : chars[((b1 & 15) << 2) | (b2 === -1 ? 0 : b2 >> 6)];
+    result += b2 === -1 ? "=" : chars[b2 & 63];
+  }
+  return result;
+}
+
 // Create a PayMongo checkout session and save to order
 export const createPaymentLink = action({
   args: {
@@ -18,7 +37,7 @@ export const createPaymentLink = action({
     const secretKey = process.env.PAYMONGO_SECRET_KEY;
     if (!secretKey) throw new Error("PayMongo secret key not configured");
 
-    const encoded = btoa(`${secretKey}:`);
+    const encoded = toBase64(`${secretKey}:`);
     const baseUrl = process.env.SITE_URL || "https://dkmerchwebsite.vercel.app";
 
     const response = await fetch("https://api.paymongo.com/v1/checkout_sessions", {
@@ -56,6 +75,7 @@ export const createPaymentLink = action({
 
     if (!response.ok) {
       const error = await response.json();
+      console.error("PayMongo API error:", JSON.stringify(error));
       throw new Error(`PayMongo error: ${JSON.stringify(error)}`);
     }
 
@@ -92,32 +112,27 @@ export const savePaymentLink = mutation({
 });
 
 // ── Helper: extract payment method from PayMongo response ──
-// PayMongo stores method in multiple possible locations depending on API version
 const extractPaymentMethod = (payments: any[], attrs?: any): string => {
-  // 1. Check payments[] array first (most reliable)
   if (payments?.length) {
     const paidPayment = payments.find((p: any) => p.attributes?.status === "paid") || payments[0];
     const fromPayments =
-      paidPayment?.attributes?.source?.type ||           // checkout session payment source
-      paidPayment?.attributes?.payment_method_type ||    // payment intent type
-      paidPayment?.attributes?.type ||                   // older API
+      paidPayment?.attributes?.source?.type ||
+      paidPayment?.attributes?.payment_method_type ||
+      paidPayment?.attributes?.type ||
       "";
     if (fromPayments) return normalizeMethod(fromPayments);
   }
-
-  // 2. Fallback: check payment_intent on session
   const fromIntent =
     attrs?.payment_intent?.attributes?.payment_method_options
       ? Object.keys(attrs.payment_intent.attributes.payment_method_options)[0]
       : "";
   if (fromIntent) return normalizeMethod(fromIntent);
-
   return "";
 };
 
 const normalizeMethod = (raw: string): string => {
   const r = raw.toLowerCase();
-  if (r === "gcash")            return "GCash";
+  if (r === "gcash")                   return "GCash";
   if (r === "paymaya" || r === "maya") return "Maya";
   if (r === "card" || r === "dob")     return "Card";
   return raw;
@@ -134,7 +149,7 @@ export const checkPaymentStatus = action({
 
     if (secretKey && order?.paymentLinkId) {
       try {
-        const encoded  = btoa(`${secretKey}:`);
+        const encoded  = toBase64(`${secretKey}:`);
         const response = await fetch(
           `https://api.paymongo.com/v1/checkout_sessions/${order.paymentLinkId}`,
           { headers: { Authorization: `Basic ${encoded}` } }
@@ -148,29 +163,24 @@ export const checkPaymentStatus = action({
           const payments: any[]     = attrs?.payments ?? [];
           const hasSucceededPayment = payments.some((p: any) => p.attributes?.status === "paid");
 
-          // Extract exact payment method (GCash / Maya / Card)
           const paymentMethod = extractPaymentMethod(payments, attrs);
 
           if (sessionStatus === "completed" || paymentIntentStatus === "succeeded" || hasSucceededPayment) {
             await ctx.runMutation(api.payments.markOrderPaid, { orderId, paymentMethod });
-            // Return paymentMethod so OrderSuccess.js knows if we got a specific method
-            // If empty string, OrderSuccess.js will retry to get the specific method
             return { status: "paid", paymentMethod };
           }
 
-          // Session not yet completed — return pending so caller can retry
           if (!hasSucceededPayment) {
             return { status: "pending", paymentMethod: "" };
           }
         }
       } catch (err) {
-        console.warn("PayMongo API check failed, trusting redirect:", err);
+        console.warn("PayMongo API check failed:", err);
+        return { status: "pending", paymentMethod: "" };
       }
     }
 
-    // PayMongo ONLY redirects to success_url after successful payment — trust the redirect
-    await ctx.runMutation(api.payments.markOrderPaid, { orderId, paymentMethod: "" });
-    return { status: "paid" };
+    return { status: "pending", paymentMethod: "" };
   },
 });
 
@@ -192,11 +202,7 @@ export const markOrderPaid = mutation({
       paymentStatus: "paid",
       paidAt:        new Date().toISOString(),
     };
-
-    // Save specific payment method if available (GCash / Maya / Card)
-    if (paymentMethod) {
-      updates.paymentMethod = paymentMethod;
-    }
+    if (paymentMethod) updates.paymentMethod = paymentMethod;
 
     await db.patch(order._id, updates);
     return { success: true };

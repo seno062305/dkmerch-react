@@ -8,7 +8,8 @@ const OrderSuccess = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const orderId = searchParams.get('orderId');
-  const checkPaymentStatus = useAction(api.payments.checkPaymentStatus);
+  const checkPaymentStatus  = useAction(api.payments.checkPaymentStatus);
+  const sendOrderConfirmation = useAction(api.sendEmail.sendOrderConfirmation);
 
   const [status, setStatus] = useState('checking');
 
@@ -27,39 +28,61 @@ const OrderSuccess = () => {
   useEffect(() => {
     if (order === undefined) return; // still loading
 
-    // Already paid — just show success
+    // Already paid — just show success (email was already sent at checkout)
     if (order?.paymentStatus === 'paid') {
       setStatus('paid');
       return;
     }
 
-    // Retry up to 5x with increasing delay to wait for PayMongo to populate payments[]
-    // PayMongo sometimes takes a few seconds to attach payment method info
+    // Retry up to 6x with increasing delays to wait for PayMongo to confirm
     const verifyWithRetry = async () => {
-      const delays = [1500, 2000, 2500, 3000, 3000]; // total ~12 seconds max
+      const delays = [2000, 2500, 3000, 3000, 3000, 3000]; // ~16 seconds max
       for (let attempt = 0; attempt < delays.length; attempt++) {
         await new Promise(res => setTimeout(res, delays[attempt]));
         try {
           const result = await checkPaymentStatus({ orderId });
-          // If we got a specific payment method, we're done
-          if (result?.paymentMethod && result.paymentMethod !== '') {
+
+          if (result?.status === 'paid') {
             setStatus('paid');
+
+            // ✅ Send email notification after payment confirmed
+            // Only send if order has email (avoid duplicate if already sent at checkout)
+            if (order?.email && order?.paymentStatus !== 'paid') {
+              try {
+                await sendOrderConfirmation({
+                  to:          order.email,
+                  name:        order.customerName || order.email,
+                  orderId:     orderId,
+                  items:       (order.items || []).map((i) => ({
+                    name:     i.name,
+                    price:    i.price,
+                    quantity: i.quantity,
+                  })),
+                  total:          order.total,
+                  promoCode:      order.promoCode,
+                  discountAmount: order.discountAmount,
+                  finalTotal:     order.finalTotal ?? order.total,
+                  shippingFee:    order.shippingFee ?? 0,
+                });
+              } catch (emailErr) {
+                console.warn('Email send failed after payment:', emailErr);
+              }
+            }
             return;
           }
-          // If status is paid but no method yet, keep retrying (except last attempt)
-          if (result?.status === 'paid' && attempt === delays.length - 1) {
-            setStatus('paid');
-            return;
-          }
+
+          // Still pending — keep retrying
+          console.log(`Payment check attempt ${attempt + 1}: still pending...`);
+
         } catch (err) {
           console.warn(`Payment verification attempt ${attempt + 1} failed:`, err);
-          if (attempt === delays.length - 1) {
-            // Last attempt failed — still show success (PayMongo redirect = paid)
-            setStatus('paid');
-          }
+        }
+
+        // Last attempt — show success anyway (redirect from PayMongo = paid)
+        if (attempt === delays.length - 1) {
+          setStatus('paid');
         }
       }
-      setStatus('paid');
     };
 
     verifyWithRetry();

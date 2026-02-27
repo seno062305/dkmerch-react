@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import './AdminProducts.css';
-import { useQuery } from 'convex/react';
+import { useQuery, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useAddProduct, useUpdateProduct, useDeleteProduct } from '../utils/productStorage';
 
@@ -20,18 +20,20 @@ const emptyForm = {
 };
 
 const AdminProducts = () => {
-  // ✅ FIX: Use getAllProductsAdmin — fetches ALL products (regular + pre-order + released)
-  // This ensures released pre-orders are still visible and editable in admin
   const products = useQuery(api.products.getAllProductsAdmin) || [];
 
   const addProduct    = useAddProduct();
   const updateProduct = useUpdateProduct();
   const deleteProduct = useDeleteProduct();
 
+  // ✅ NEW: Action to email all users when a new pre-order is added
+  const announceNewPreOrder = useAction(api.preOrderRequests.announceNewPreOrderToAllUsers);
+
   const [form, setForm]           = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
   const [searchTerm, setSearchTerm]         = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
+  const [submitting, setSubmitting]         = useState(false);
   const fileInputRef = useRef(null);
 
   const handleChange = (e) => {
@@ -80,12 +82,36 @@ const AdminProducts = () => {
       status:        form.isPreOrder ? 'preorder' : form.isSale ? 'sale' : 'available',
     };
 
-    if (editingId) {
-      await updateProduct({ id: editingId, ...productData });
-      setEditingId(null);
-    } else {
-      await addProduct(productData);
+    setSubmitting(true);
+    try {
+      if (editingId) {
+        // ── Editing existing product ──
+        await updateProduct({ id: editingId, ...productData });
+        setEditingId(null);
+      } else {
+        // ── Adding new product ──
+        await addProduct(productData);
+
+        // ✅ If new pre-order, email ALL users to announce it
+        if (form.isPreOrder && form.releaseDate && form.releaseTime) {
+          try {
+            await announceNewPreOrder({
+              productName:  form.name,
+              productImage: form.image,
+              productPrice: Number(form.price),
+              releaseDate:  form.releaseDate,
+              releaseTime:  form.releaseTime,
+            });
+          } catch (emailErr) {
+            // Don't block the product add if email fails
+            console.error('Email announcement failed:', emailErr);
+          }
+        }
+      }
+    } finally {
+      setSubmitting(false);
     }
+
     setForm(emptyForm);
   };
 
@@ -126,14 +152,12 @@ const AdminProducts = () => {
     return matchesSearch && matchesCategory;
   });
 
-  // ✅ Helper: check if a pre-order product has already been released
+  // ✅ Proper PHT timestamp check
   const isReleased = (product) => {
     if (!product.isPreOrder) return false;
     if (!product.releaseDate) return false;
     const rt = product.releaseTime || '00:00';
-    const [h, m] = rt.split(':').map(Number);
-    const [yr, mo, dy] = product.releaseDate.split('-').map(Number);
-    const releaseMs = Date.UTC(yr, mo - 1, dy, h - 8, m, 0);
+    const releaseMs = new Date(`${product.releaseDate}T${rt}:00+08:00`).getTime();
     return Date.now() >= releaseMs;
   };
 
@@ -145,8 +169,8 @@ const AdminProducts = () => {
   const formatReleaseDateTime = (dateStr, timeStr) => {
     if (!dateStr) return null;
     const time = timeStr || '00:00';
-    const date = new Date(`${dateStr}T${time}:00`);
-    return date.toLocaleString('en-PH', {
+    return new Date(`${dateStr}T${time}:00+08:00`).toLocaleString('en-PH', {
+      timeZone: 'Asia/Manila',
       year: 'numeric', month: 'long', day: 'numeric',
       hour: 'numeric', minute: '2-digit', hour12: true,
     });
@@ -303,6 +327,7 @@ const AdminProducts = () => {
                     value={form.releaseDate}
                     onChange={handleChange}
                     min={today}
+                    max="9999-12-31"
                     required={form.isPreOrder}
                   />
                 </div>
@@ -332,14 +357,37 @@ const AdminProducts = () => {
                     </div>
                   </div>
                 )}
+
+                {/* ✅ Notice to admin that email will be sent on add */}
+                {!editingId && (
+                  <div className="form-group full-width">
+                    <div style={{
+                      background: '#eff6ff',
+                      border: '1.5px solid #bfdbfe',
+                      borderRadius: '10px',
+                      padding: '12px 16px',
+                      fontSize: '14px',
+                      color: '#1e40af',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                    }}>
+                      <i className="fas fa-envelope" style={{ color: '#3b82f6', fontSize: '16px' }}></i>
+                      <span>📧 All registered users will receive an email announcement when this pre-order is added.</span>
+                    </div>
+                  </div>
+                )}
               </>
             )}
           </div>
 
           <div className="form-actions">
-            <button type="submit" className="submit-btn">
+            <button type="submit" className="submit-btn" disabled={submitting}>
               <i className={editingId ? "fas fa-save" : "fas fa-plus"}></i>
-              {editingId ? 'Update Product' : 'Add Product'}
+              {submitting
+                ? (editingId ? 'Updating...' : 'Adding & Sending Emails...')
+                : (editingId ? 'Update Product' : 'Add Product')
+              }
             </button>
           </div>
         </form>
@@ -380,13 +428,11 @@ const AdminProducts = () => {
                   <div className="product-image">
                     <img src={product.image} alt={product.name} />
                     <div className="product-badges">
-                      {/* ✅ Show "Released" badge if pre-order but already released */}
                       {product.isPreOrder && released && (
                         <span className="badge released">
                           <i className="fas fa-check-circle"></i> Released
                         </span>
                       )}
-                      {/* ✅ Show "Pre-Order" badge only if NOT yet released */}
                       {product.isPreOrder && !released && (
                         <span className="badge pre-order">
                           <i className="fas fa-clock"></i> Pre-Order
@@ -408,8 +454,6 @@ const AdminProducts = () => {
                       <span className="group"><i className="fas fa-users"></i> {product.kpopGroup}</span>
                       <span className="stock"><i className="fas fa-box"></i> Stock: {product.stock}</span>
                     </div>
-
-                    {/* ✅ Show release date info with proper label */}
                     {product.isPreOrder && product.releaseDate && (
                       <div className={`release-date-info ${released ? 'release-date-info--released' : ''}`}>
                         <i className={`fas ${released ? 'fa-check-circle' : 'fa-calendar-alt'}`}></i>
@@ -417,7 +461,6 @@ const AdminProducts = () => {
                         {formatReleaseDateTime(product.releaseDate, product.releaseTime)}
                       </div>
                     )}
-
                     <div className="product-pricing">
                       <div className="price">₱{product.price.toLocaleString()}</div>
                       {product.originalPrice > product.price && (
