@@ -121,17 +121,16 @@ const GPS = {
 const FullscreenMapModal = ({ address, customerName, onClose }) => {
   const mapRef         = useRef(null);
   const mapInstanceRef = useRef(null);
-  const unmountedRef   = useRef(false);   // ✅ guard: prevents setState after unmount
+  const unmountedRef   = useRef(false);
   const [geocoding, setGeocoding] = useState(true);
 
-  // Lock body scroll while modal is open
   useEffect(() => {
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = ''; };
   }, []);
 
   useEffect(() => {
-    unmountedRef.current = false; // reset on each mount
+    unmountedRef.current = false;
 
     if (!mapRef.current || mapInstanceRef.current) return;
 
@@ -176,14 +175,12 @@ const FullscreenMapModal = ({ address, customerName, onClose }) => {
 
         mapInstanceRef.current = map;
 
-        // ✅ invalidateSize after animation
         setTimeout(() => {
           if (!unmountedRef.current && mapInstanceRef.current) {
             try { mapInstanceRef.current.invalidateSize(); } catch {}
           }
         }, 350);
 
-        // ✅ Geocode — check unmounted before every setState/map call
         const encoded = encodeURIComponent(address + ', Philippines');
         fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&limit=1`, {
           headers: { 'Accept-Language': 'en' }
@@ -224,7 +221,6 @@ const FullscreenMapModal = ({ address, customerName, onClose }) => {
       }, 100);
     }
 
-    // ✅ Single cleanup function — handles both cases
     return () => {
       unmountedRef.current = true;
       if (intervalId !== null) { clearInterval(intervalId); intervalId = null; }
@@ -236,12 +232,8 @@ const FullscreenMapModal = ({ address, customerName, onClose }) => {
   }, [address, customerName]);
 
   return (
-    // ✅ Clicking the dark overlay closes the modal
     <div className="fullscreen-map-overlay" onClick={onClose}>
-      {/* ✅ Stop propagation so clicking inside modal doesn't close it */}
       <div className="fullscreen-map-modal" onClick={e => e.stopPropagation()}>
-
-        {/* Header */}
         <div className="fullscreen-map-header">
           <div className="fullscreen-map-header-left">
             <i className="fas fa-map-marked-alt"></i>
@@ -255,7 +247,6 @@ const FullscreenMapModal = ({ address, customerName, onClose }) => {
           </button>
         </div>
 
-        {/* Loading bar */}
         {geocoding && (
           <div className="fullscreen-map-loading">
             <div className="fullscreen-map-loading-bar"></div>
@@ -263,10 +254,8 @@ const FullscreenMapModal = ({ address, customerName, onClose }) => {
           </div>
         )}
 
-        {/* Map — takes all available height */}
         <div ref={mapRef} className="fullscreen-map-container" />
 
-        {/* Footer hint */}
         <div className="fullscreen-map-footer">
           <span><i className="fas fa-hand-pointer"></i> Pinch to zoom · Drag to pan</span>
           <span className="fullscreen-map-footer-right">
@@ -285,16 +274,17 @@ const CustomerMap = ({ orderId, allOrders }) => {
   const mapRef         = useRef(null);
   const mapInstanceRef = useRef(null);
   const markerRef      = useRef(null);
-  const unmountedRef   = useRef(false);  // ✅ guard against setState after unmount
+  const unmountedRef   = useRef(false);
   const [mapError, setMapError]             = useState(null);
   const [leafletLoaded, setLeafletLoaded]   = useState(!!window.L);
   const [geocoding, setGeocoding]           = useState(false);
   const [addressText, setAddressText]       = useState('');
   const [showFullscreen, setShowFullscreen] = useState(false);
 
-  // ✅ Get order data including customer name from passed allOrders prop
+  // ✅ FIX: Get order data accurately from allOrders (the actual Convex orders table)
+  // Check multiple possible field names for address and customer name
   const order        = allOrders.find(o => o.orderId === orderId);
-  const address      = order?.shippingAddress || order?.address || '';
+  const address      = order?.shippingAddress || order?.address || order?.deliveryAddress || '';
   const customerName = order?.customerName || order?.name || '';
 
   // Load Leaflet once
@@ -398,7 +388,7 @@ const CustomerMap = ({ orderId, allOrders }) => {
       .finally(() => { if (!unmountedRef.current) setGeocoding(false); });
   }, [address, customerName, leafletLoaded]);
 
-  // Cleanup on unmount — set unmounted flag FIRST to stop all pending setState
+  // Cleanup on unmount
   useEffect(() => {
     unmountedRef.current = false;
     return () => {
@@ -434,7 +424,6 @@ const CustomerMap = ({ orderId, allOrders }) => {
   return (
     <>
       <div className="customer-map-wrapper">
-        {/* Address bar */}
         <div className="customer-map-address-bar">
           <i className="fas fa-home"></i>
           <span>{addressText || address}</span>
@@ -447,7 +436,6 @@ const CustomerMap = ({ orderId, allOrders }) => {
           </div>
         )}
 
-        {/* Map + View Full Map button */}
         <div className="customer-map-inner-wrapper">
           <div ref={mapRef} className="customer-map-container" />
 
@@ -462,7 +450,6 @@ const CustomerMap = ({ orderId, allOrders }) => {
           </button>
         </div>
 
-        {/* Zoom hint bar */}
         <div className="customer-map-zoom-hint">
           <i className="fas fa-search-plus"></i>
           <span>Use <strong>+</strong> / <strong>−</strong> on map to zoom</span>
@@ -476,7 +463,6 @@ const CustomerMap = ({ orderId, allOrders }) => {
         </div>
       </div>
 
-      {/* ✅ Fullscreen modal — passes customerName so header shows correct name */}
       {showFullscreen && address && (
         <FullscreenMapModal
           address={address}
@@ -509,11 +495,8 @@ const RiderDashboard = () => {
   const [gpsError, setGpsError]               = useState(null);
   const [currentPosition, setCurrentPosition] = useState(() => GPS.lastPosition());
 
-  // ✅ Track whether auto-start has already been attempted this session
   const autoStartAttemptedRef = useRef(false);
-
-  // ✅ File input refs for photo proof upload (keyed by delivery._id)
-  const fileInputRefs = useRef({});
+  const fileInputRefs         = useRef({});
 
   // SESSION GUARD STATE
   const [kickedOut, setKickedOut]             = useState(false);
@@ -546,7 +529,7 @@ const RiderDashboard = () => {
     if (GPS.isActive()) GPS.updateSendFn(updateRiderLocation);
   });
 
-  // Restore GPS state on mount (e.g. page refresh)
+  // Restore GPS state on mount
   useEffect(() => {
     const activeId = GPS.activeOrderId();
     const lastPos  = GPS.lastPosition();
@@ -589,8 +572,15 @@ const RiderDashboard = () => {
       return getLatestTime(b) - getLatestTime(a);
     });
 
+  // ✅ FIX: myDeliveries now cross-checks with allOrders to filter out deleted orders
+  // If the order no longer exists in Convex, don't show the delivery card
   const myDeliveries = myPickups
-    .filter(p => p.status === 'approved' || p.status === 'out_for_delivery')
+    .filter(p => {
+      if (p.status !== 'approved' && p.status !== 'out_for_delivery') return false;
+      // ✅ Only show if the order still exists in allOrders
+      const orderExists = allOrders.some(o => o.orderId === p.orderId);
+      return orderExists;
+    })
     .sort((a, b) => {
       if (a.status === 'out_for_delivery' && b.status !== 'out_for_delivery') return -1;
       if (b.status === 'out_for_delivery' && a.status !== 'out_for_delivery') return 1;
@@ -602,15 +592,12 @@ const RiderDashboard = () => {
   const pendingPickupsCount   = myPickups.filter(p => p.status === 'pending').length;
   const activeDeliveriesCount = myDeliveries.length;
 
-  // ─────────────────────────────────────────────────────────────────────────
   // ✅ AUTO-START GPS on login if there's an active out_for_delivery order
-  // Only runs once after riderInfo and myDeliveries are both loaded
-  // ─────────────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (autoStartAttemptedRef.current) return;
     if (!riderInfo || !user?.email || !user?.sessionId) return;
     if (myDeliveries.length === 0) return;
-    if (GPS.isActive()) return; // already tracking from page load
+    if (GPS.isActive()) return;
 
     const activeDelivery = myDeliveries.find(d => d.status === 'out_for_delivery');
     if (!activeDelivery) return;
@@ -631,7 +618,6 @@ const RiderDashboard = () => {
     });
     setTrackingOrderId(activeDelivery.orderId);
     setTab('deliver');
-    // Auto-expand the active delivery card
     setExpandedDeliveries(prev => ({ ...prev, [activeDelivery._id]: true }));
   }, [riderInfo, myDeliveries, user, updateRiderLocation]);
 
@@ -692,6 +678,7 @@ const RiderDashboard = () => {
     setCurrentPosition(null);
   }, [stopRiderTracking]);
 
+  // ✅ FIX: toggleExpanded now purely toggles — no longer overridden by trackingOrderId
   const toggleExpanded = (id, setFn) => setFn(prev => ({ ...prev, [id]: !prev[id] }));
 
   const getMyRequestStatus = (orderId) => {
@@ -718,7 +705,6 @@ const RiderDashboard = () => {
     return map[status] || status;
   };
 
-  // ✅ closeSidebar fires invalidateSize on all maps after transition
   const closeSidebar = useCallback(() => {
     setSidebarOpen(false);
     setTimeout(() => {
@@ -759,7 +745,7 @@ const RiderDashboard = () => {
   };
 
   const notifyCustomer = async (delivery) => {
-    if (!window.confirm(`Notify "${delivery.customerName}" that their order is on the way?`)) return;
+    if (!window.confirm(`Notify the customer that their order is on the way?`)) return;
     setNotifyingId(delivery._id);
     try {
       await updateOrderFields({
@@ -813,10 +799,19 @@ const RiderDashboard = () => {
     finally { setConfirmingId(null); }
   };
 
-  const handleDeletePickup = async (pickupId, status) => {
+  // ✅ FIX: handleDeletePickup now also cleans up GPS if it was tracking that order
+  const handleDeletePickup = async (pickupId, status, orderId) => {
     if (['approved', 'out_for_delivery'].includes(status)) { alert('❌ Cannot delete an active pickup. Complete the delivery first.'); return; }
     if (!window.confirm('Remove this pickup record from your list?')) return;
-    try { await deletePickupRequest({ requestId: pickupId }); }
+    try {
+      await deletePickupRequest({ requestId: pickupId });
+      // Clean up GPS if it was tracking this order
+      if (GPS.activeOrderId() === orderId) {
+        GPS.stopLocal();
+        setTrackingOrderId(null);
+        setCurrentPosition(null);
+      }
+    }
     catch (err) { console.error(err); alert('Failed to remove pickup.'); }
   };
 
@@ -1077,7 +1072,7 @@ const RiderDashboard = () => {
                           {req.status === 'out_for_delivery' && <div className="rider-ofd-notice">🚚 Customer notified. Go to <strong>Deliver</strong> tab to confirm delivery.</div>}
                           {req.status === 'completed'        && <div className="rider-completed-notice">🎉 Delivery confirmed and completed!</div>}
                           {['completed', 'rejected', 'pending'].includes(req.status) && (
-                            <button className="rider-delete-btn" onClick={() => handleDeletePickup(req._id, req.status)}>
+                            <button className="rider-delete-btn" onClick={() => handleDeletePickup(req._id, req.status, req.orderId)}>
                               <i className="fas fa-trash-alt"></i> Remove from List
                             </button>
                           )}
@@ -1118,15 +1113,18 @@ const RiderDashboard = () => {
                 {myDeliveries.map(delivery => {
                   const isOutForDelivery   = delivery.status === 'out_for_delivery';
                   const isApproved         = delivery.status === 'approved';
-                  const isExpanded         = expandedDeliveries[delivery._id] || trackingOrderId === delivery.orderId;
+
+                  // ✅ FIX: isExpanded is now PURELY from expandedDeliveries state
+                  // No longer overridden by trackingOrderId (which caused Hide to not work)
+                  const isExpanded         = !!expandedDeliveries[delivery._id];
                   const errMsg             = otpErrors[delivery._id];
                   const hasPhoto           = !!photoData[delivery._id];
                   const isThisBeingTracked = trackingOrderId === delivery.orderId;
 
-                  // ✅ Get customer name from actual order data
+                  // ✅ Get customer name + address directly from allOrders (source of truth)
                   const ord          = allOrders.find(o => o.orderId === delivery.orderId);
                   const customerName = ord?.customerName || ord?.name || delivery.customerName || 'Customer';
-                  const addr         = ord?.shippingAddress || ord?.address || delivery.customerAddress || '';
+                  const addr         = ord?.shippingAddress || ord?.address || ord?.deliveryAddress || delivery.customerAddress || '';
                   const phone        = ord?.phone || '';
 
                   return (
@@ -1134,7 +1132,6 @@ const RiderDashboard = () => {
                       <div className="rider-compact-row">
                         <div className="rider-compact-left">
                           <span className="rider-order-id">#{delivery.orderId?.slice(-8)}</span>
-                          {/* ✅ Shows customer name from order */}
                           <span className="rider-compact-customer"><i className="fas fa-user"></i> {customerName}</span>
                           <span className="rider-compact-total">₱{(delivery.total || 0).toLocaleString()}</span>
                         </div>
@@ -1147,6 +1144,7 @@ const RiderDashboard = () => {
                               <span className="rider-gps-dot"></span> GPS On
                             </span>
                           )}
+                          {/* ✅ FIX: Hide button now works — toggles expandedDeliveries only */}
                           <button className="rider-view-btn" onClick={() => toggleExpanded(delivery._id, setExpandedDeliveries)}>
                             <i className={`fas fa-chevron-${isExpanded ? 'up' : 'down'}`}></i> {isExpanded ? 'Hide' : 'View'}
                           </button>
@@ -1161,7 +1159,6 @@ const RiderDashboard = () => {
                             </div>
                             <div className="rider-info-row">
                               <i className="fas fa-user-circle"></i>
-                              {/* ✅ Customer name from order */}
                               <span><strong>Name:</strong> {customerName}</span>
                             </div>
                             <div className="rider-info-row">
@@ -1178,7 +1175,6 @@ const RiderDashboard = () => {
                             <div className="customer-map-section-title">
                               <i className="fas fa-map-marked-alt"></i> Customer Location
                             </div>
-                            {/* ✅ Pass allOrders so CustomerMap can find the order + customer name */}
                             <CustomerMap orderId={delivery.orderId} allOrders={allOrders} />
                           </div>
 
