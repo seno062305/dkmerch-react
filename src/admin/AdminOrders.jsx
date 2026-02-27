@@ -71,8 +71,8 @@ const AdminOrders = () => {
         }
       }
 
-      return matchesTab && matchesSearch && matchesDate;
-    });
+return matchesTab && matchesSearch && matchesDate;
+    }).sort((a, b) => (b._creationTime || 0) - (a._creationTime || 0));
   }, [validOrders, activeTab, searchTerm, startDate, endDate]);
 
 
