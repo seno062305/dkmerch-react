@@ -15,7 +15,6 @@ const calcShipping = (totalPcs) => {
   return 10 + totalPcs * 10;
 };
 
-// ─── ADDRESS MAP + AUTOCOMPLETE ──────────────────────────────────────────────
 const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) => {
   const mapRef         = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -30,7 +29,6 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) 
   const [mapVisible, setMapVisible]           = useState(false);
   const [statusText, setStatusText]           = useState('');
 
-  // ── Load Leaflet once ──
   useEffect(() => {
     if (window.L) { setLeafletReady(true); return; }
     if (!document.getElementById('leaflet-css')) {
@@ -54,7 +52,6 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) 
     document.head.appendChild(script);
   }, []);
 
-  // ── Geocode helper ──
   const geocodeAddress = useCallback(async (addr) => {
     if (!addr) return;
     if (!mapInstanceRef.current || !markerRef.current) {
@@ -92,16 +89,12 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) 
     setGeocoding(false);
   }, [onSelectSuggestion]);
 
-  // ── Init map ──
   useEffect(() => {
     if (!mapVisible || mapInstanceRef.current || !mapRef.current || !leafletReady) return;
-
     try {
       const L = window.L;
-
-      // ✅ If customer has saved coords from a previous order, use those as start position
-      const startLat = savedCoords?.lat ?? 14.5995;
-      const startLng = savedCoords?.lng ?? 120.9842;
+      const startLat  = savedCoords?.lat ?? 14.5995;
+      const startLng  = savedCoords?.lng ?? 120.9842;
       const startZoom = savedCoords ? 17 : 13;
 
       const map = L.map(mapRef.current, {
@@ -110,9 +103,15 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) 
         scrollWheelZoom: false,
       }).setView([startLat, startLng], startZoom);
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors',
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles © Esri — Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye',
         maxZoom: 19,
+      }).addTo(map);
+
+      // ✅ Labels overlay
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 19,
+        opacity: 0.85,
       }).addTo(map);
 
       const icon = L.divIcon({
@@ -134,15 +133,12 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) 
             : '<strong>📍 Delivery Address</strong>'
         );
 
-      // ✅ If saved coords exist, open the popup immediately so customer sees it
       if (savedCoords) {
         marker.openPopup();
-        // Also notify parent right away so coords are set even before dragging
         onSelectSuggestion({ address: value || '', lat: startLat, lng: startLng });
         setStatusText('📍 Showing your last saved location — drag the pin to adjust');
       }
 
-      // ── When marker is dragged — reverse geocode and update address ──
       marker.on('dragend', async () => {
         const { lat, lng } = marker.getLatLng();
         setGeocoding(true);
@@ -177,7 +173,6 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) 
           pendingGeocode.current = null;
           geocodeAddress(addr);
         } else if (!savedCoords && value) {
-          // Only auto-geocode if no saved coords (saved coords are already placed)
           geocodeAddress(value);
         } else if (!savedCoords) {
           setStatusText('Select an address suggestion or drag the pin to set location');
@@ -189,7 +184,6 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapVisible, leafletReady]);
 
-  // ── Cleanup on unmount ──
   useEffect(() => {
     return () => {
       clearTimeout(debounceRef.current);
@@ -201,7 +195,6 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) 
     };
   }, []);
 
-  // ── Autocomplete via Nominatim ──
   const fetchSuggestions = useCallback(async (query) => {
     if (!query || query.length < 4) { setSuggestions([]); return; }
     try {
@@ -232,7 +225,6 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) 
     onChange(s.address);
     setSuggestions([]);
     setShowSuggestions(false);
-
     if (!mapVisible) {
       pendingGeocode.current = s.address;
       setMapVisible(true);
@@ -258,9 +250,7 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) 
     } else {
       setMapVisible(true);
       setTimeout(() => {
-        if (mapInstanceRef.current) {
-          mapInstanceRef.current.invalidateSize();
-        }
+        if (mapInstanceRef.current) mapInstanceRef.current.invalidateSize();
       }, 350);
     }
   };
@@ -279,28 +269,17 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) 
             placeholder="Start typing your address…"
             autoComplete="off"
           />
-          <button
-            type="button"
-            className="address-map-toggle-btn"
-            onClick={handleToggleMap}
-            title={mapVisible ? 'Hide map' : 'Show map'}
-          >
+          <button type="button" className="address-map-toggle-btn" onClick={handleToggleMap} title={mapVisible ? 'Hide map' : 'Show map'}>
             <i className={`fas fa-map${mapVisible ? '-marked-alt' : ''}`}></i>
             {mapVisible ? ' Hide Map' : ' View on Map'}
           </button>
         </div>
-
-        {/* ✅ Show saved location hint if customer has previous coords */}
         {savedCoords && !mapVisible && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '6px',
-            marginTop: '6px', fontSize: '12px', color: '#2563eb', fontWeight: 600,
-          }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', fontSize: '12px', color: '#2563eb', fontWeight: 600 }}>
             <i className="fas fa-map-marker-alt" style={{ color: '#fc1268' }}></i>
             Saved pin location available — click "View on Map" to see it
           </div>
         )}
-
         {showSuggestions && suggestions.length > 0 && (
           <ul className="address-suggestions-list">
             {suggestions.map((s, i) => (
@@ -312,16 +291,11 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) 
           </ul>
         )}
       </div>
-
       {mapVisible && (
         <div className="address-map-preview-wrap">
           <div className="address-map-preview-header">
             <i className={geocoding ? 'fas fa-spinner fa-spin' : 'fas fa-map-marked-alt'}></i>
-            <span>
-              {geocoding
-                ? 'Locating on map…'
-                : statusText || 'Select an address suggestion or drag the pin'}
-            </span>
+            <span>{geocoding ? 'Locating on map…' : statusText || 'Select an address suggestion or drag the pin'}</span>
           </div>
           <div ref={mapRef} className="address-map-preview-container" />
           <div className="address-map-preview-hint">
@@ -364,19 +338,13 @@ const Checkout = () => {
   const [isEditingContact, setIsEditingContact] = useState(false);
   const [isEditingAddress, setIsEditingAddress] = useState(false);
   const [errors, setErrors]                     = useState({ phone: '', zipCode: '' });
-
   const cartPromo = location.state?.appliedPromo || null;
 
-  const [formData, setFormData] = useState({
-    fullName: '', email: '', phone: '',
-    address: '', city: '', zipCode: '', notes: ''
-  });
+  const [formData, setFormData] = useState({ fullName: '', email: '', phone: '', address: '', city: '', zipCode: '', notes: '' });
   const [savedContact, setSavedContact] = useState({ fullName: '', email: '', phone: '' });
   const [savedAddress, setSavedAddress] = useState({ address: '', city: '', zipCode: '' });
   const [addressCoords, setAddressCoords] = useState(null);
-
-  // ✅ Load saved coords from profile (from last order's pin location)
-  const [savedCoords, setSavedCoords] = useState(null);
+  const [savedCoords, setSavedCoords]     = useState(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -399,8 +367,6 @@ const Checkout = () => {
     setSavedAddress({ address: init.address, city: init.city, zipCode: init.zipCode });
     setIsEditingContact(!init.fullName || !init.email || !init.phone);
     setIsEditingAddress(!init.address  || !init.city  || !init.zipCode);
-
-    // ✅ Load saved pin coords from profile if available
     if (profile?.addressLat && profile?.addressLng) {
       const coords = { lat: profile.addressLat, lng: profile.addressLng };
       setSavedCoords(coords);
@@ -415,22 +381,19 @@ const Checkout = () => {
     }
   }, [cartItems.length, products.length]);
 
-  const getProductById = (id) => products.find(p => p._id?.toString() === id?.toString() || p.id === id);
-  const getQty         = (item) => item.qty ?? item.quantity ?? 1;
-  const getTotalPcs    = () => cartItems.reduce((sum, item) => sum + getQty(item), 0);
-
+  const getProductById   = (id) => products.find(p => p._id?.toString() === id?.toString() || p.id === id);
+  const getQty           = (item) => item.qty ?? item.quantity ?? 1;
+  const getTotalPcs      = () => cartItems.reduce((sum, item) => sum + getQty(item), 0);
   const getEffectivePrice = (item, product) => {
     if (item.finalPrice !== undefined && item.finalPrice !== null) return item.finalPrice;
     if (item.price !== undefined && item.price !== null) return item.price;
     return product?.price ?? 0;
   };
-
   const calculateSubtotal = () =>
     cartItems.reduce((total, item) => {
       const product = getProductById(item.productId || item.id);
       return total + getEffectivePrice(item, product) * getQty(item);
     }, 0);
-
   const calculateTotalDiscount = () =>
     cartItems.reduce((total, item) => {
       if (!item.promoCode) return total;
@@ -452,7 +415,6 @@ const Checkout = () => {
     if (cleaned.length === 11 && !cleaned.startsWith('09')) return 'Phone number must start with 09';
     return '';
   };
-
   const validateZipCode = (zipCode) => {
     const cleaned = zipCode.replace(/\s/g, '');
     if (!/^\d*$/.test(cleaned)) return 'Zip code must contain only numbers';
@@ -477,12 +439,8 @@ const Checkout = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleAddressChange = (val) => {
-    setFormData(prev => ({ ...prev, address: val }));
-  };
-
-  // ✅ When customer pins/drags on map, save the coords
-  const handleAddressSelect = ({ address, lat, lng }) => {
+  const handleAddressChange  = (val) => setFormData(prev => ({ ...prev, address: val }));
+  const handleAddressSelect  = ({ address, lat, lng }) => {
     setFormData(prev => ({ ...prev, address }));
     setAddressCoords({ lat, lng });
   };
@@ -490,14 +448,11 @@ const Checkout = () => {
   const isContactComplete = () =>
     savedContact.fullName.trim() && savedContact.email.trim() &&
     savedContact.phone.trim() && !validatePhone(savedContact.phone);
-
   const isAddressComplete = () =>
     savedAddress.address.trim() && savedAddress.city.trim() &&
     savedAddress.zipCode.trim() && !validateZipCode(savedAddress.zipCode);
-
   const isFormReady = () =>
-    isContactComplete() && isAddressComplete() &&
-    !isEditingContact && !isEditingAddress;
+    isContactComplete() && isAddressComplete() && !isEditingContact && !isEditingAddress;
 
   const handleSaveContact = async () => {
     if (!formData.fullName.trim()) { showNotification('Please enter your full name', 'error'); return; }
@@ -524,7 +479,6 @@ const Checkout = () => {
     setSavedAddress({ address: formData.address, city: formData.city, zipCode: formData.zipCode });
     setIsEditingAddress(false);
     try {
-      // ✅ Save coords to profile too so next order pre-loads the map pin
       await saveProfile({
         userId: user?._id || user?.id,
         fullName: savedContact.fullName, email: savedContact.email, phone: savedContact.phone,
@@ -535,7 +489,6 @@ const Checkout = () => {
     } catch { showNotification('Address saved locally', 'success'); }
   };
 
-  // ── Submit ────────────────────────────────────────────────────────
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!isFormReady()) {
@@ -563,10 +516,8 @@ const Checkout = () => {
         const product = getProductById(item.productId || item.id);
         if (product) await updateProduct({ id: product._id, stock: product.stock - getQty(item) });
       }
-
       const orderId  = `DK-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
       const shipping = calcShipping(getTotalPcs());
-
       const orderItems = cartItems.map(item => {
         const product = getProductById(item.productId || item.id);
         return {
@@ -579,14 +530,11 @@ const Checkout = () => {
           releaseDate: product?.releaseDate || null,
         };
       });
-
       const originalSubtotal = cartItems.reduce((total, item) => {
         const product = getProductById(item.productId || item.id);
         return total + (product?.price ?? 0) * getQty(item);
       }, 0);
-
       const promoItem = cartItems.find(i => i.promoCode);
-
       await createOrder({
         orderId,
         email:           savedContact.email,
@@ -605,34 +553,25 @@ const Checkout = () => {
         status:          'Pending Payment',
         orderStatus:     'pending',
         shippingAddress: `${savedAddress.address}, ${savedAddress.city} ${savedAddress.zipCode}`,
-        // ✅ Save the exact pin coordinates with the order
-        ...(addressCoords ? {
-          addressLat: addressCoords.lat,
-          addressLng: addressCoords.lng,
-        } : {}),
+        ...(addressCoords ? { addressLat: addressCoords.lat, addressLng: addressCoords.lng } : {}),
         paymentMethod:   'paymongo',
         notes:           formData.notes || '',
         paymentStatus:   'pending',
       });
-
-      // ✅ Also persist the coords to user profile for next order pre-fill
       if (addressCoords) {
         try {
           await saveProfile({
             userId: user?._id || user?.id,
             fullName: savedContact.fullName, email: savedContact.email, phone: savedContact.phone,
             address: savedAddress.address, city: savedAddress.city, zipCode: savedAddress.zipCode,
-            addressLat: addressCoords.lat,
-            addressLng: addressCoords.lng,
+            addressLat: addressCoords.lat, addressLng: addressCoords.lng,
           });
-        } catch { /* non-critical */ }
+        } catch { }
       }
-
       let paymentLinkUrl;
       try {
         const result = await createPaymentLink({
-          orderId,
-          amount:        finalTotal,
+          orderId, amount: finalTotal,
           description:   `DKMerch Order ${orderId}${promoItem ? ` (Promo: ${promoItem.promoCode})` : ''}`,
           customerName:  savedContact.fullName,
           customerEmail: savedContact.email,
@@ -645,7 +584,6 @@ const Checkout = () => {
         showNotification('Payment setup failed. Please try again or contact support.', 'error');
         return;
       }
-
       try {
         await sendOrderConfirmation({
           to:   savedContact.email,
@@ -659,7 +597,6 @@ const Checkout = () => {
           shippingFee:    shipping,
         });
       } catch (emailErr) { console.warn('Email failed:', emailErr); }
-
       await clearCart();
       setLoading(false);
       showNotification('Order created! Redirecting to payment... 💳', 'success');
@@ -683,7 +620,6 @@ const Checkout = () => {
     const effectivePrice = getEffectivePrice(item, product);
     const itemTotal      = effectivePrice * qty;
     const originalTotal  = product.price * qty;
-
     return (
       <div key={item._id || `${item.productId}-${item.promoCode || 'nopromo'}`}
            className={`summary-item${hasPromo ? ' summary-item-promo' : ''}`}>
@@ -691,38 +627,22 @@ const Checkout = () => {
         <div className="item-details">
           <p className="item-name">
             {product.name}
-            {product.isPreOrder && (
-              <span className="item-preorder-badge">PRE-ORDER</span>
-            )}
-            {hasPromo && (
-              <span className="item-promo-tag">
-                <i className="fas fa-tag"></i> {item.promoDiscount}% OFF
-              </span>
-            )}
+            {product.isPreOrder && <span className="item-preorder-badge">PRE-ORDER</span>}
+            {hasPromo && <span className="item-promo-tag"><i className="fas fa-tag"></i> {item.promoDiscount}% OFF</span>}
           </p>
           <p className="item-meta">{product.kpopGroup}</p>
           {product.isPreOrder && product.releaseDate && (
             <p className="item-release-date">
               <i className="fas fa-calendar-alt"></i>{' '}
-              Expected: {new Date(product.releaseDate).toLocaleDateString('en-PH', {
-                year: 'numeric', month: 'long', day: 'numeric'
-              })}
+              Expected: {new Date(product.releaseDate).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}
             </p>
           )}
           <p className="item-qty">Qty: {qty}</p>
-          {product.stock < qty && (
-            <p className="item-error">⚠️ Only {product.stock} in stock</p>
-          )}
+          {product.stock < qty && <p className="item-error">⚠️ Only {product.stock} in stock</p>}
         </div>
         <div className="item-price-col">
-          <div className={`item-price${hasPromo ? ' item-price-promo' : ''}`}>
-            ₱{itemTotal.toLocaleString()}
-          </div>
-          {hasPromo && (
-            <div className="item-price-original-small">
-              ₱{originalTotal.toLocaleString()}
-            </div>
-          )}
+          <div className={`item-price${hasPromo ? ' item-price-promo' : ''}`}>₱{itemTotal.toLocaleString()}</div>
+          {hasPromo && <div className="item-price-original-small">₱{originalTotal.toLocaleString()}</div>}
         </div>
       </div>
     );
@@ -735,114 +655,56 @@ const Checkout = () => {
           <div className="checkout-grid">
             <div className="checkout-details">
 
-              {/* ── CONTACT ── */}
               <div className="checkout-section">
                 <div className="section-header">
                   <h2>
                     Contact Information
-                    {isContactComplete() && !isEditingContact && (
-                      <span className="section-complete-badge">
-                        <i className="fas fa-check-circle"></i> Saved
-                      </span>
-                    )}
+                    {isContactComplete() && !isEditingContact && <span className="section-complete-badge"><i className="fas fa-check-circle"></i> Saved</span>}
                   </h2>
-                  {!isEditingContact ? (
-                    <button type="button" className="edit-info-btn" onClick={() => setIsEditingContact(true)}>
-                      <i className="fas fa-pen"></i> Edit
-                    </button>
-                  ) : (
-                    <button type="button" className="save-info-btn" onClick={handleSaveContact}>
-                      <i className="fas fa-check"></i> Save
-                    </button>
-                  )}
+                  {!isEditingContact
+                    ? <button type="button" className="edit-info-btn" onClick={() => setIsEditingContact(true)}><i className="fas fa-pen"></i> Edit</button>
+                    : <button type="button" className="save-info-btn" onClick={handleSaveContact}><i className="fas fa-check"></i> Save</button>
+                  }
                 </div>
                 {!isEditingContact ? (
                   <div className="info-display-grid">
-                    <div className="info-display-item">
-                      <span className="info-label"><i className="fas fa-user"></i> Full Name</span>
-                      <span className="info-value">{savedContact.fullName || <span className="info-missing">Not set — click Edit</span>}</span>
-                    </div>
-                    <div className="info-display-item">
-                      <span className="info-label"><i className="fas fa-envelope"></i> Email</span>
-                      <span className="info-value">{savedContact.email || <span className="info-missing">Not set — click Edit</span>}</span>
-                    </div>
-                    <div className="info-display-item info-display-full">
-                      <span className="info-label"><i className="fas fa-phone"></i> Phone Number</span>
-                      <span className="info-value">{savedContact.phone || <span className="info-missing">Not set — click Edit</span>}</span>
-                    </div>
+                    <div className="info-display-item"><span className="info-label"><i className="fas fa-user"></i> Full Name</span><span className="info-value">{savedContact.fullName || <span className="info-missing">Not set — click Edit</span>}</span></div>
+                    <div className="info-display-item"><span className="info-label"><i className="fas fa-envelope"></i> Email</span><span className="info-value">{savedContact.email || <span className="info-missing">Not set — click Edit</span>}</span></div>
+                    <div className="info-display-item info-display-full"><span className="info-label"><i className="fas fa-phone"></i> Phone Number</span><span className="info-value">{savedContact.phone || <span className="info-missing">Not set — click Edit</span>}</span></div>
                   </div>
                 ) : (
                   <div className="form-grid">
-                    <div className="form-group">
-                      <label>Full Name</label>
-                      <input type="text" name="fullName" value={formData.fullName} onChange={handleChange} placeholder="Juan Dela Cruz" />
-                    </div>
-                    <div className="form-group">
-                      <label>Email</label>
-                      <input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="juan@example.com" />
-                    </div>
+                    <div className="form-group"><label>Full Name</label><input type="text" name="fullName" value={formData.fullName} onChange={handleChange} placeholder="Juan Dela Cruz" /></div>
+                    <div className="form-group"><label>Email</label><input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="juan@example.com" /></div>
                     <div className="form-group full-width">
                       <label>Phone Number</label>
-                      <input type="tel" name="phone" value={formData.phone} onChange={handleChange}
-                        placeholder="09XXXXXXXXX" maxLength="11"
-                        className={errors.phone ? 'input-error' : ''} />
-                      {errors.phone && (
-                        <span className="error-message">
-                          <i className="fas fa-exclamation-circle"></i> {errors.phone}
-                        </span>
-                      )}
-                      {!errors.phone && formData.phone?.length === 11 && (
-                        <span className="success-message">
-                          <i className="fas fa-check-circle"></i> Valid phone number
-                        </span>
-                      )}
+                      <input type="tel" name="phone" value={formData.phone} onChange={handleChange} placeholder="09XXXXXXXXX" maxLength="11" className={errors.phone ? 'input-error' : ''} />
+                      {errors.phone && <span className="error-message"><i className="fas fa-exclamation-circle"></i> {errors.phone}</span>}
+                      {!errors.phone && formData.phone?.length === 11 && <span className="success-message"><i className="fas fa-check-circle"></i> Valid phone number</span>}
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* ── ADDRESS ── */}
               <div className="checkout-section">
                 <div className="section-header">
                   <h2>
                     Shipping Address
-                    {isAddressComplete() && !isEditingAddress && (
-                      <span className="section-complete-badge">
-                        <i className="fas fa-check-circle"></i> Saved
-                      </span>
-                    )}
+                    {isAddressComplete() && !isEditingAddress && <span className="section-complete-badge"><i className="fas fa-check-circle"></i> Saved</span>}
                   </h2>
-                  {!isEditingAddress ? (
-                    <button type="button" className="edit-info-btn" onClick={() => setIsEditingAddress(true)}>
-                      <i className="fas fa-pen"></i> Edit
-                    </button>
-                  ) : (
-                    <button type="button" className="save-info-btn" onClick={handleSaveAddress}>
-                      <i className="fas fa-check"></i> Save
-                    </button>
-                  )}
+                  {!isEditingAddress
+                    ? <button type="button" className="edit-info-btn" onClick={() => setIsEditingAddress(true)}><i className="fas fa-pen"></i> Edit</button>
+                    : <button type="button" className="save-info-btn" onClick={handleSaveAddress}><i className="fas fa-check"></i> Save</button>
+                  }
                 </div>
-
                 {!isEditingAddress ? (
                   <div className="info-display-grid">
-                    <div className="info-display-item info-display-full">
-                      <span className="info-label"><i className="fas fa-map-marker-alt"></i> Street Address</span>
-                      <span className="info-value">{savedAddress.address || <span className="info-missing">Not set — click Edit</span>}</span>
-                    </div>
-                    <div className="info-display-item">
-                      <span className="info-label"><i className="fas fa-city"></i> City</span>
-                      <span className="info-value">{savedAddress.city || <span className="info-missing">Not set</span>}</span>
-                    </div>
-                    <div className="info-display-item">
-                      <span className="info-label"><i className="fas fa-map-pin"></i> Zip Code</span>
-                      <span className="info-value">{savedAddress.zipCode || <span className="info-missing">Not set</span>}</span>
-                    </div>
-                    {/* ✅ Show saved pin indicator in display mode */}
+                    <div className="info-display-item info-display-full"><span className="info-label"><i className="fas fa-map-marker-alt"></i> Street Address</span><span className="info-value">{savedAddress.address || <span className="info-missing">Not set — click Edit</span>}</span></div>
+                    <div className="info-display-item"><span className="info-label"><i className="fas fa-city"></i> City</span><span className="info-value">{savedAddress.city || <span className="info-missing">Not set</span>}</span></div>
+                    <div className="info-display-item"><span className="info-label"><i className="fas fa-map-pin"></i> Zip Code</span><span className="info-value">{savedAddress.zipCode || <span className="info-missing">Not set</span>}</span></div>
                     {savedCoords && (
                       <div className="info-display-item info-display-full" style={{ background: '#f0fdf4', borderColor: '#86efac' }}>
-                        <span className="info-label" style={{ color: '#16a34a' }}>
-                          <i className="fas fa-map-marker-alt"></i> Map Pin
-                        </span>
+                        <span className="info-label" style={{ color: '#16a34a' }}><i className="fas fa-map-marker-alt"></i> Map Pin</span>
                         <span className="info-value" style={{ fontSize: '13px', color: '#166534' }}>
                           <i className="fas fa-check-circle" style={{ color: '#16a34a', marginRight: '6px' }}></i>
                           Exact location saved — rider will navigate to your pin
@@ -854,7 +716,6 @@ const Checkout = () => {
                   <div className="form-grid">
                     <div className="form-group full-width">
                       <label>Street Address</label>
-                      {/* ✅ Pass savedCoords so map opens on the customer's last pinned location */}
                       <AddressMapPicker
                         value={formData.address}
                         onChange={handleAddressChange}
@@ -862,31 +723,17 @@ const Checkout = () => {
                         savedCoords={savedCoords}
                       />
                     </div>
-                    <div className="form-group">
-                      <label>City</label>
-                      <input type="text" name="city" value={formData.city} onChange={handleChange} placeholder="Manila" />
-                    </div>
+                    <div className="form-group"><label>City</label><input type="text" name="city" value={formData.city} onChange={handleChange} placeholder="Manila" /></div>
                     <div className="form-group">
                       <label>Zip Code</label>
-                      <input type="text" name="zipCode" value={formData.zipCode} onChange={handleChange}
-                        placeholder="1000" maxLength="4"
-                        className={errors.zipCode ? 'input-error' : ''} />
-                      {errors.zipCode && (
-                        <span className="error-message">
-                          <i className="fas fa-exclamation-circle"></i> {errors.zipCode}
-                        </span>
-                      )}
-                      {!errors.zipCode && formData.zipCode?.length === 4 && (
-                        <span className="success-message">
-                          <i className="fas fa-check-circle"></i> Valid zip code
-                        </span>
-                      )}
+                      <input type="text" name="zipCode" value={formData.zipCode} onChange={handleChange} placeholder="1000" maxLength="4" className={errors.zipCode ? 'input-error' : ''} />
+                      {errors.zipCode && <span className="error-message"><i className="fas fa-exclamation-circle"></i> {errors.zipCode}</span>}
+                      {!errors.zipCode && formData.zipCode?.length === 4 && <span className="success-message"><i className="fas fa-check-circle"></i> Valid zip code</span>}
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* ── PROMO APPLIED ── */}
               {totalDiscount > 0 && (
                 <div className="checkout-section">
                   <h2>Promo Applied</h2>
@@ -894,25 +741,18 @@ const Checkout = () => {
                     <div className="promo-applied-left">
                       <span className="promo-applied-icon">🎉</span>
                       <div>
-                        <span className="promo-applied-code">
-                          {cartItems.find(i => i.promoCode)?.promoCode}
-                        </span>
+                        <span className="promo-applied-code">{cartItems.find(i => i.promoCode)?.promoCode}</span>
                         <span className="promo-applied-desc">
                           {cartItems.find(i => i.promoCode)?.promoDiscount}% off applied on promo items ·{' '}
-                          <strong style={{ color: '#16a34a' }}>
-                            You save ₱{totalDiscount.toLocaleString()}
-                          </strong>
+                          <strong style={{ color: '#16a34a' }}>You save ₱{totalDiscount.toLocaleString()}</strong>
                         </span>
                       </div>
                     </div>
-                    <span className="promo-checkout-applied-badge">
-                      <i className="fas fa-check-circle"></i> Applied in Cart
-                    </span>
+                    <span className="promo-checkout-applied-badge"><i className="fas fa-check-circle"></i> Applied in Cart</span>
                   </div>
                 </div>
               )}
 
-              {/* ── PAYMENT ── */}
               <div className="checkout-section">
                 <h2>Payment</h2>
                 <div className="payment-info-notice">
@@ -931,88 +771,56 @@ const Checkout = () => {
                 </div>
               </div>
 
-              {/* ── NOTES ── */}
               <div className="checkout-section">
                 <h2>Order Notes <span className="notes-optional">(Optional)</span></h2>
-                <textarea name="notes" value={formData.notes} onChange={handleChange}
-                  placeholder="Any special instructions for your order..." rows="4"></textarea>
+                <textarea name="notes" value={formData.notes} onChange={handleChange} placeholder="Any special instructions for your order..." rows="4"></textarea>
               </div>
             </div>
 
-            {/* ── ORDER SUMMARY ── */}
             <div className="order-summary">
               <div className="summary-card">
                 <h2>Order Summary</h2>
                 <div className="summary-items">
                   {nonPromoCartItems.length > 0 && (
                     <>
-                      {promoCartItems.length > 0 && (
-                        <div className="summary-group-label">
-                          <i className="fas fa-shopping-bag"></i> Regular Items
-                        </div>
-                      )}
+                      {promoCartItems.length > 0 && <div className="summary-group-label"><i className="fas fa-shopping-bag"></i> Regular Items</div>}
                       {nonPromoCartItems.map(item => renderSummaryItem(item))}
                     </>
                   )}
                   {promoCartItems.length > 0 && (
                     <>
-                      <div className="summary-group-label summary-group-label-promo">
-                        <i className="fas fa-tag"></i> Promo Items
-                      </div>
+                      <div className="summary-group-label summary-group-label-promo"><i className="fas fa-tag"></i> Promo Items</div>
                       {promoCartItems.map(item => renderSummaryItem(item))}
                     </>
                   )}
                 </div>
-
                 <div className="summary-divider"></div>
-
                 {totalPcs > 0 && totalPcs < 10 && (
                   <div className="shipping-nudge">
                     <i className="fas fa-truck"></i>
                     Add <strong>{10 - totalPcs} more pc{10 - totalPcs > 1 ? 's' : ''}</strong> for <strong>FREE shipping!</strong>
                   </div>
                 )}
-                {totalPcs >= 10 && (
-                  <div className="shipping-nudge shipping-nudge-free">
-                    <i className="fas fa-check-circle"></i>
-                    You got FREE shipping!
-                  </div>
-                )}
-
+                {totalPcs >= 10 && <div className="shipping-nudge shipping-nudge-free"><i className="fas fa-check-circle"></i> You got FREE shipping!</div>}
                 <div className="summary-totals">
                   {totalDiscount > 0 && (
                     <div className="summary-row summary-row-original">
                       <span>Original Price</span>
-                      <span className="summary-strikethrough">
-                        ₱{(subtotal + totalDiscount).toLocaleString()}
-                      </span>
+                      <span className="summary-strikethrough">₱{(subtotal + totalDiscount).toLocaleString()}</span>
                     </div>
                   )}
-                  <div className="summary-row">
-                    <span>Subtotal</span>
-                    <span>₱{subtotal.toLocaleString()}</span>
-                  </div>
+                  <div className="summary-row"><span>Subtotal</span><span>₱{subtotal.toLocaleString()}</span></div>
                   <div className="summary-row">
                     <span>Shipping ({totalPcs} pc{totalPcs !== 1 ? 's' : ''})</span>
-                    <span>
-                      {shippingFee === 0
-                        ? <span className="free-shipping-text">FREE</span>
-                        : `₱${shippingFee.toLocaleString()}`}
-                    </span>
+                    <span>{shippingFee === 0 ? <span className="free-shipping-text">FREE</span> : `₱${shippingFee.toLocaleString()}`}</span>
                   </div>
                   {totalDiscount > 0 && (
                     <div className="summary-row promo-discount-row">
-                      <span>
-                        <i className="fas fa-tag" style={{ marginRight: '6px', color: '#ec4899' }}></i>
-                        Promo Discount
-                      </span>
+                      <span><i className="fas fa-tag" style={{ marginRight: '6px', color: '#ec4899' }}></i>Promo Discount</span>
                       <span className="promo-discount-amount">−₱{totalDiscount.toLocaleString()}</span>
                     </div>
                   )}
-                  <div className="summary-row total">
-                    <span>Total</span>
-                    <span>₱{finalTotal.toLocaleString()}</span>
-                  </div>
+                  <div className="summary-row total"><span>Total</span><span>₱{finalTotal.toLocaleString()}</span></div>
                   {totalDiscount > 0 && (
                     <div className="promo-savings-checkout">
                       <i className="fas fa-piggy-bank"></i>
@@ -1020,32 +828,26 @@ const Checkout = () => {
                     </div>
                   )}
                 </div>
-
                 <button
                   type="submit"
                   className={`btn btn-primary btn-checkout${!isFormReady() || loading ? ' btn-checkout-disabled' : ''}`}
                   disabled={loading || !isFormReady()}
                 >
-                  {loading ? (
-                    <><i className="fas fa-spinner fa-spin"></i> Processing...</>
-                  ) : !isFormReady() ? (
-                    <><i className="fas fa-lock"></i> Complete Your Info First</>
-                  ) : (
-                    <>Pay ₱{finalTotal.toLocaleString()} Securely</>
-                  )}
+                  {loading
+                    ? <><i className="fas fa-spinner fa-spin"></i> Processing...</>
+                    : !isFormReady()
+                      ? <><i className="fas fa-lock"></i> Complete Your Info First</>
+                      : <>Pay ₱{finalTotal.toLocaleString()} Securely</>
+                  }
                 </button>
-
                 {!isFormReady() && !loading && (
                   <p className="form-incomplete-hint">
                     <i className="fas fa-exclamation-circle"></i>{' '}
-                    {isEditingContact
-                      ? 'Click "Save" on Contact Information to continue.'
-                      : isEditingAddress
-                        ? 'Click "Save" on Shipping Address to continue.'
-                        : 'Fill in and save your contact and address info above.'}
+                    {isEditingContact ? 'Click "Save" on Contact Information to continue.'
+                      : isEditingAddress ? 'Click "Save" on Shipping Address to continue.'
+                      : 'Fill in and save your contact and address info above.'}
                   </p>
                 )}
-
                 <div className="security-info">
                   <i className="fas fa-shield-alt"></i>
                   <p>Secured by PayMongo. Your payment info is protected.</p>

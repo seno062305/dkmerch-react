@@ -16,6 +16,22 @@ const formatTimeAgo = (timestamp) => {
   return `${Math.floor(diff / 60)}m ago`;
 };
 
+// ─── SATELLITE TILE LAYERS ───────────────────────────────────────────────────
+// Esri World Imagery — free, no API key required
+const SATELLITE_LAYER = {
+  url        : 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  attribution: 'Tiles © Esri — Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+  maxZoom    : 19,
+};
+
+// Esri Labels overlay — shows street/place names on top of satellite
+const LABELS_LAYER = {
+  url        : 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+  attribution: '',
+  maxZoom    : 19,
+  opacity    : 0.85,
+};
+
 // ─── LEAFLET MAP COMPONENT ───────────────────────────────────────────────────
 const RiderMap = ({ orderId, riderName }) => {
   const mapRef            = useRef(null);
@@ -37,19 +53,16 @@ const RiderMap = ({ orderId, riderName }) => {
     ? Date.now() - locationData.updatedAt > 60000
     : true;
 
-  // Re-render "X seconds ago" label every 10s
   useEffect(() => {
     const interval = setInterval(() => forceUpdate(n => n + 1), 10000);
     return () => clearInterval(interval);
   }, []);
 
-  // ✅ FIX: Reset pending buffer when orderId changes
   useEffect(() => {
     if (!orderId) return;
     pendingLocRef.current = null;
   }, [orderId]);
 
-  // Load Leaflet CSS + JS once
   useEffect(() => {
     if (window.L) { setLeafletLoaded(true); return; }
     if (!document.getElementById('leaflet-css')) {
@@ -73,7 +86,6 @@ const RiderMap = ({ orderId, riderName }) => {
     document.head.appendChild(script);
   }, []);
 
-  // Apply location data to map marker + accuracy circle
   const applyLocation = useCallback((data) => {
     if (!data?.lat || !data?.lng) return;
     if (!mapInstanceRef.current || !markerRef.current || !window.L) return;
@@ -101,25 +113,22 @@ const RiderMap = ({ orderId, riderName }) => {
         radius      : accuracy,
         color       : '#fc1268',
         fillColor   : '#fc1268',
-        fillOpacity : 0.07,
+        fillOpacity : 0.1,
         weight      : 1.5,
         dashArray   : '4 4',
       }).addTo(map);
     }
 
-    // ✅ FIX: Use flyTo for smooth zoom, always zoom to street level
     const targetZoom = Math.max(map.getZoom(), 16);
     map.flyTo([lat, lng], targetZoom, { animate: true, duration: 1.2 });
   }, [riderName]);
 
-  // Init map once Leaflet is ready
   useEffect(() => {
     if (!leafletLoaded || mapInstanceRef.current || !mapRef.current) return;
 
     try {
       const L = window.L;
 
-      // ✅ FIX: start at zoom 15, zoom controls at bottom-right
       const map = L.map(mapRef.current, {
         zoomControl       : true,
         attributionControl: true,
@@ -128,12 +137,19 @@ const RiderMap = ({ orderId, riderName }) => {
         doubleClickZoom   : true,
       }).setView([14.5995, 120.9842], 15);
 
-      // ✅ Move zoom control to bottom-right for mobile usability
       map.zoomControl.setPosition('bottomright');
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors',
-        maxZoom    : 19,
+      // ✅ SATELLITE: Esri World Imagery base layer
+      L.tileLayer(SATELLITE_LAYER.url, {
+        attribution: SATELLITE_LAYER.attribution,
+        maxZoom    : SATELLITE_LAYER.maxZoom,
+      }).addTo(map);
+
+      // ✅ LABELS: street names/places on top of satellite
+      L.tileLayer(LABELS_LAYER.url, {
+        attribution: LABELS_LAYER.attribution,
+        maxZoom    : LABELS_LAYER.maxZoom,
+        opacity    : LABELS_LAYER.opacity,
       }).addTo(map);
 
       const riderIcon = L.divIcon({
@@ -174,19 +190,15 @@ const RiderMap = ({ orderId, riderName }) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leafletLoaded]);
 
-  // React to Convex location updates
   useEffect(() => {
     if (!locationData?.lat || !locationData?.lng) return;
-
     if (!mapReady || !mapInstanceRef.current) {
       pendingLocRef.current = locationData;
       return;
     }
-
     applyLocation(locationData);
   }, [locationData, mapReady, applyLocation]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (mapInstanceRef.current) {
@@ -227,9 +239,7 @@ const RiderMap = ({ orderId, riderName }) => {
       <div className={`rider-map-status-bar ${statusClass}`}>
         {statusContent}
       </div>
-
       <div ref={mapRef} className="rider-map-container" />
-
       {locationData?.isTracking && (
         <div className="rider-map-accuracy">
           {locationData.accuracy && (
@@ -242,7 +252,6 @@ const RiderMap = ({ orderId, riderName }) => {
           )}
         </div>
       )}
-
       {!locationData && (
         <div className="rider-map-waiting-overlay">
           <div className="rider-map-waiting-inner">
@@ -334,7 +343,6 @@ const TrackOrder = () => {
     return s === 'cancelled';
   };
 
-  // ✅ FIX: More robust status check — handles all formats
   const isOutForDeliveryStatus = (order) => {
     const checkStr = (val) => {
       if (!val) return false;
@@ -456,7 +464,6 @@ const TrackOrder = () => {
     return null;
   };
 
-  // ─── ORDER CARD ─────────────────────────────────────────────────────────────
   const OrderCard = ({ order, onViewDetails }) => {
     const scrollRef = useRef(null);
     const [activeImgIdx, setActiveImgIdx]           = useState(0);
@@ -590,7 +597,6 @@ const TrackOrder = () => {
     );
   };
 
-  // ─── LIGHTBOX ────────────────────────────────────────────────────────────────
   const Lightbox = () => {
     if (!lightboxData) return null;
     const { images, index } = lightboxData;
@@ -631,7 +637,6 @@ const TrackOrder = () => {
     );
   };
 
-  // ─── LOGGED-IN VIEW ──────────────────────────────────────────────────────────
   if (isAuthenticated && user) {
     const activeTab = FILTERS.find(f => f.key === filter);
     return (
@@ -719,7 +724,6 @@ const TrackOrder = () => {
     );
   }
 
-  // ─── GUEST VIEW ──────────────────────────────────────────────────────────────
   return (
     <main className="trackorder-main">
       <div className="page-header">
@@ -862,7 +866,6 @@ const TrackingModal = ({
         </button>
         <div className="tracking-result">
 
-          {/* Header */}
           <div className="result-header">
             <h2>Order #{order.orderId?.slice(-8) || 'N/A'}</h2>
             <div className={`status-badge ${getStatusClass(order.orderStatus || order.status)}`}>
@@ -870,7 +873,6 @@ const TrackingModal = ({
             </div>
           </div>
 
-          {/* Pending payment banner */}
           {needsPayment && (
             <div className="pending-payment-banner">
               <div className="pending-payment-icon"><i className="fas fa-exclamation-circle"></i></div>
@@ -886,7 +888,6 @@ const TrackingModal = ({
             </div>
           )}
 
-          {/* Rider info banner */}
           {order.riderInfo && !isCancelled && (
             <div className="rider-info-banner">
               <div className="rider-info-icon"><i className="fas fa-motorcycle"></i></div>
@@ -900,7 +901,6 @@ const TrackingModal = ({
             </div>
           )}
 
-          {/* Cancelled banner */}
           {isCancelled && (
             <div className="cancelled-banner">
               <div className="cancelled-banner-icon"><i className="fas fa-ban"></i></div>
@@ -911,7 +911,6 @@ const TrackingModal = ({
             </div>
           )}
 
-          {/* ✅ LIVE MAP — shows only when out_for_delivery */}
           {isOutForDelivery && (
             <div className="rider-map-section">
               <div className="rider-map-section-title">
@@ -923,7 +922,6 @@ const TrackingModal = ({
             </div>
           )}
 
-          {/* OTP section */}
           {isOutForDelivery && (
             <div className="customer-otp-section">
               {!localOtp ? (
@@ -972,7 +970,6 @@ const TrackingModal = ({
             </div>
           )}
 
-          {/* Timeline */}
           <div className="tracking-timeline">
             <h3>Order Timeline</h3>
             <div className="timeline">
@@ -999,7 +996,6 @@ const TrackingModal = ({
             </div>
           </div>
 
-          {/* Order items */}
           <div className="order-items-timeline">
             <h3>Order Items</h3>
             {order.items?.map((item, index) => {
