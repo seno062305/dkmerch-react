@@ -8,8 +8,6 @@ import { useNavigate } from "react-router-dom";
 import { useMutation, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
 
-// ✅ Added onLoginSuccess prop — called after successful user login
-//    so ProtectedRoute can redirect back to intended page (e.g. /my-preorders)
 const LoginModal = ({ onClose, onLoginSuccess }) => {
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -136,7 +134,11 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
     setIsLoading(true);
 
     try {
-      const result = await login(formData.email, formData.password);
+      // ✅ Pass mode — "rider" or "user" — so AuthContext knows which table to check
+      // Riders can ONLY log in via rider mode → only checked against riderApplications
+      // Customers/admin can ONLY log in via user mode → only checked against users table
+      const mode = isRiderMode ? "rider" : "user";
+      const result = await login(formData.email, formData.password, mode);
 
       if (!result.success) {
         setError(result.message);
@@ -155,9 +157,7 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
         return;
       }
 
-      // ✅ Regular user login success
-      // If onLoginSuccess is provided (from ProtectedRoute), call it so it can
-      // redirect back to the intended page (e.g. /my-preorders from email link)
+      // Regular user login success
       if (onLoginSuccess) {
         onLoginSuccess();
       } else {

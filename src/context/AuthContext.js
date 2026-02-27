@@ -1,280 +1,203 @@
-// convex/riders.ts
-import { query, mutation } from "./_generated/server";
-import { v } from "convex/values";
+// src/context/AuthContext.js
+import React, { createContext, useContext, useEffect, useState } from "react";
+import { useMutation } from "convex/react";
+import { api } from "../../convex/_generated/api";
 
-const genSessionId = () =>
-  `${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${Math.random().toString(36).slice(2, 10)}`;
+const AuthContext = createContext(null);
 
-export const getAllRiders = query(async ({ db }) => {
-  return await db.query("riderApplications").collect();
-});
+const SESSION_KEY = "riderSessionId"; // sessionStorage key for rider session only
 
-export const getRiderByEmail = query({
-  args: { email: v.string() },
-  handler: async ({ db }, { email }) => {
-    return await db
-      .query("riderApplications")
-      .withIndex("by_email", q => q.eq("email", email))
-      .first();
-  },
-});
+export const AuthProvider = ({ children }) => {
+  const [user, setUser]                       = useState(null);
+  const [role, setRole]                       = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isReady, setIsReady]                 = useState(false);
 
-export const getRidersByStatus = query({
-  args: { status: v.string() },
-  handler: async ({ db }, { status }) => {
-    return await db
-      .query("riderApplications")
-      .withIndex("by_status", q => q.eq("status", status))
-      .collect();
-  },
-});
+  const loginUserMutation  = useMutation(api.users.loginUser);
+  const seedAdminMutation  = useMutation(api.users.seedAdmin);
+  const loginRiderMutation = useMutation(api.riders.loginRider);
+  const createUserMutation = useMutation(api.users.createUser);
 
-export const createRiderApplication = mutation({
-  args: {
-    fullName: v.string(),
-    email: v.string(),
-    phone: v.string(),
-    address: v.optional(v.string()),
-    vehicleType: v.optional(v.string()),
-    plateNumber: v.optional(v.string()),
-    licenseNumber: v.optional(v.string()),
-    password: v.optional(v.string()),
-  },
-  handler: async ({ db }, args) => {
-    const existing = await db
-      .query("riderApplications")
-      .withIndex("by_email", q => q.eq("email", email))
-      .first();
-    if (existing) {
-      return { success: false, message: "This email is already registered as a rider applicant." };
+  useEffect(() => {
+    seedAdminMutation({}).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const storedUser = JSON.parse(localStorage.getItem("authUser") || "null");
+    if (storedUser) {
+      setUser(storedUser);
+      setRole(storedUser.role);
+      setIsAuthenticated(true);
+
+      if (storedUser.role === "rider") {
+        const savedSession = sessionStorage.getItem(SESSION_KEY);
+        if (!savedSession) {
+          localStorage.removeItem("authUser");
+          setUser(null);
+          setRole(null);
+          setIsAuthenticated(false);
+        } else {
+          setUser({ ...storedUser, sessionId: savedSession });
+        }
+      }
     }
-    const id = await db.insert("riderApplications", {
-      fullName: args.fullName,
-      email: args.email,
-      phone: args.phone,
-      vehicleType: args.vehicleType,
-      status: "pending",
-      appliedAt: new Date().toISOString(),
-      address: args.address,
-      plateNumber: args.plateNumber,
-      licenseNumber: args.licenseNumber,
-      password: args.password,
+    setIsReady(true);
+  }, []);
+
+  // ─────────────────────────────────────────────────────────────────
+  // ✅ login() accepts an optional `mode` param:
+  //    mode = "user"  → only tries users table (customers + admin)
+  //    mode = "rider" → only tries riderApplications table
+  //    mode = undefined → legacy behavior (tries user first, then rider)
+  //
+  // LoginModal passes mode="user" for customer login
+  // and mode="rider" for rider login — fully separated.
+  // ─────────────────────────────────────────────────────────────────
+  const login = async (identifier, password, mode) => {
+    try {
+
+      // ══════════════════════════════════════════
+      // RIDER LOGIN — only when mode === "rider"
+      // ══════════════════════════════════════════
+      if (mode === "rider") {
+        const riderResult = await loginRiderMutation({ email: identifier, password });
+
+        // riderExists = false means the email is not in riderApplications at all
+        if (!riderResult.riderExists) {
+          return {
+            success: false,
+            message: "No rider account found with this email. Please register as a rider first.",
+          };
+        }
+
+        // riderExists = true but login failed (wrong pw, pending, rejected, suspended)
+        if (!riderResult.success) {
+          return { success: false, message: riderResult.message };
+        }
+
+        // ✅ Rider login success
+        const sessionRider = {
+          _id: riderResult.rider._id,
+          id:  riderResult.rider._id,
+          name:  riderResult.rider.name,
+          email: riderResult.rider.email,
+          role:  "rider",
+        };
+
+        localStorage.setItem("authUser", JSON.stringify(sessionRider));
+        sessionStorage.setItem(SESSION_KEY, riderResult.sessionId);
+
+        const userWithSession = { ...sessionRider, sessionId: riderResult.sessionId };
+        setUser(userWithSession);
+        setRole("rider");
+        setIsAuthenticated(true);
+        return { success: true, role: "rider" };
+      }
+
+      // ══════════════════════════════════════════
+      // USER / ADMIN LOGIN — only when mode === "user" (or undefined for legacy)
+      // ══════════════════════════════════════════
+      if (mode === "user" || !mode) {
+        const result = await loginUserMutation({ identifier, password });
+
+        if (result.success && result.user) {
+          const sessionUser = {
+            _id:      result.user._id,
+            id:       result.user._id,
+            name:     result.user.name,
+            username: result.user.username,
+            email:    result.user.email,
+            phone:    result.user.phone || '',
+            role:     result.user.role,
+          };
+          localStorage.setItem("authUser", JSON.stringify(sessionUser));
+          setUser(sessionUser);
+          setRole(sessionUser.role);
+          setIsAuthenticated(true);
+          return { success: true, role: sessionUser.role };
+        }
+
+        // ✅ mode === "user" → do NOT fall through to rider login
+        // Show the error from users table only
+        if (mode === "user") {
+          return {
+            success: false,
+            message: result.message || "Invalid email/username or password.",
+          };
+        }
+
+        // Legacy (no mode): still try rider as fallback
+        const riderResult = await loginRiderMutation({ email: identifier, password });
+
+        if (riderResult.riderExists) {
+          if (riderResult.success && riderResult.rider) {
+            const sessionRider = {
+              _id:   riderResult.rider._id,
+              id:    riderResult.rider._id,
+              name:  riderResult.rider.name,
+              email: riderResult.rider.email,
+              role:  "rider",
+            };
+            localStorage.setItem("authUser", JSON.stringify(sessionRider));
+            sessionStorage.setItem(SESSION_KEY, riderResult.sessionId);
+            const userWithSession = { ...sessionRider, sessionId: riderResult.sessionId };
+            setUser(userWithSession);
+            setRole("rider");
+            setIsAuthenticated(true);
+            return { success: true, role: "rider" };
+          }
+          return { success: false, message: riderResult.message };
+        }
+
+        return {
+          success: false,
+          message: result.message || "Invalid username/email or password.",
+        };
+      }
+
+      return { success: false, message: "Unknown login mode." };
+
+    } catch (err) {
+      console.error("Login error:", err);
+      return { success: false, message: "Login failed. Please try again." };
+    }
+  };
+
+  const register = async ({ name, username, email, password }) => {
+    try {
+      const result = await createUserMutation({ name, username, email, password, role: "user" });
+      return result;
+    } catch (err) {
+      console.error("Register error:", err);
+      return { success: false, message: "Registration failed. Please try again." };
+    }
+  };
+
+  const updateUser = (updatedFields) => {
+    setUser(prev => {
+      const updated = { ...prev, ...updatedFields };
+      const toStore = { ...updated };
+      delete toStore.sessionId;
+      localStorage.setItem("authUser", JSON.stringify(toStore));
+      return updated;
     });
-    return { success: true, id };
-  },
-});
+  };
 
-export const approveRider = mutation({
-  args: { id: v.id("riderApplications") },
-  handler: async ({ db }, { id }) => {
-    await db.patch(id, { status: "approved" });
-    return { success: true };
-  },
-});
+  const logout = () => {
+    localStorage.removeItem("authUser");
+    sessionStorage.removeItem(SESSION_KEY);
+    setUser(null);
+    setRole(null);
+    setIsAuthenticated(false);
+  };
 
-export const updateRiderStatus = mutation({
-  args: { id: v.id("riderApplications"), status: v.string() },
-  handler: async ({ db }, { id, status }) => {
-    await db.patch(id, { status });
-    return { success: true };
-  },
-});
+  if (!isReady) return null;
 
-export const updateRider = mutation({
-  args: {
-    id: v.id("riderApplications"),
-    fullName: v.optional(v.string()),
-    email: v.optional(v.string()),
-    phone: v.optional(v.string()),
-    status: v.optional(v.string()),
-    vehicleType: v.optional(v.string()),
-  },
-  handler: async ({ db }, { id, ...updates }) => {
-    const filtered = Object.fromEntries(
-      Object.entries(updates).filter(([, val]) => val !== undefined)
-    );
-    await db.patch(id, filtered);
-    return { success: true };
-  },
-});
+  return (
+    <AuthContext.Provider value={{ user, role, isAuthenticated, login, register, logout, updateUser }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
 
-export const deleteRider = mutation({
-  args: { id: v.id("riderApplications") },
-  handler: async ({ db }, { id }) => {
-    await db.delete(id);
-    return { success: true };
-  },
-});
-
-// ✅ loginRider generates + saves sessionId directly in Convex
-// Returns sessionId to client — client stores in sessionStorage only (not localStorage)
-export const loginRider = mutation({
-  args: { email: v.string(), password: v.string() },
-  handler: async ({ db }, { email, password }) => {
-    const rider = await db
-      .query("riderApplications")
-      .withIndex("by_email", q => q.eq("email", email))
-      .first();
-
-    if (!rider) {
-      return { success: false, riderExists: false, message: "No rider account found." };
-    }
-
-    const status = rider.status?.toLowerCase();
-
-    if (status === "pending") {
-      return {
-        success: false, riderExists: true,
-        message: "⏳ Your rider application is still pending admin approval. Please wait.",
-      };
-    }
-    if (status === "rejected") {
-      return {
-        success: false, riderExists: true,
-        message: "❌ Your rider application was not approved. Please contact support.",
-      };
-    }
-    if (status === "suspended") {
-      return {
-        success: false, riderExists: true,
-        message: "🚫 Your rider account has been suspended. Please contact admin.",
-      };
-    }
-    if (rider.password && rider.password !== password) {
-      return {
-        success: false, riderExists: true,
-        message: "Incorrect password. Please try again.",
-      };
-    }
-
-    // ✅ Generate and persist sessionId in Convex — source of truth
-    const newSessionId = genSessionId();
-    await db.patch(rider._id, {
-      activeSessionId: newSessionId,
-      activeDeviceAt: Date.now(),
-    });
-
-    return {
-      success: true,
-      riderExists: true,
-      rider: {
-        _id: rider._id,
-        name: rider.fullName,
-        email: rider.email,
-        role: "rider",
-        status: rider.status,
-      },
-      sessionId: newSessionId, // ✅ client stores this in sessionStorage only
-    };
-  },
-});
-
-// ─────────────────────────────────────────────────────
-// ✅ SESSION CHECK — Convex live query
-// Fires automatically whenever activeSessionId changes in DB
-// Old device detects mismatch within milliseconds
-// ─────────────────────────────────────────────────────
-export const checkRiderSession = query({
-  args: {
-    email: v.string(),
-    sessionId: v.string(),
-  },
-  handler: async ({ db }, { email, sessionId }) => {
-    const rider = await db
-      .query("riderApplications")
-      .withIndex("by_email", q => q.eq("email", email))
-      .first();
-
-    if (!rider) return { valid: false, reason: "rider_not_found" };
-    if (!rider.activeSessionId) return { valid: true };
-
-    const isValid = rider.activeSessionId === sessionId;
-    return {
-      valid: isValid,
-      reason: isValid ? "ok" : "new_device_logged_in",
-      activeDeviceAt: rider.activeDeviceAt,
-    };
-  },
-});
-
-// ─────────────────────────────────────────────────────
-// ✅ GPS TRACKING
-// ─────────────────────────────────────────────────────
-export const updateRiderLocation = mutation({
-  args: {
-    orderId: v.string(),
-    riderEmail: v.string(),
-    riderName: v.string(),
-    lat: v.number(),
-    lng: v.number(),
-    accuracy: v.optional(v.number()),
-    heading: v.optional(v.number()),
-    speed: v.optional(v.number()),
-    isTracking: v.boolean(),
-    sessionId: v.optional(v.string()),
-  },
-  handler: async ({ db }, args) => {
-    const existing = await db
-      .query("riderLocations")
-      .withIndex("by_orderId", q => q.eq("orderId", args.orderId))
-      .first();
-
-    if (existing) {
-      await db.patch(existing._id, {
-        lat: args.lat,
-        lng: args.lng,
-        accuracy: args.accuracy,
-        heading: args.heading,
-        speed: args.speed,
-        isTracking: args.isTracking,
-        updatedAt: Date.now(),
-        sessionId: args.sessionId,
-      });
-    } else {
-      await db.insert("riderLocations", {
-        orderId: args.orderId,
-        riderEmail: args.riderEmail,
-        riderName: args.riderName,
-        lat: args.lat,
-        lng: args.lng,
-        accuracy: args.accuracy,
-        heading: args.heading,
-        speed: args.speed,
-        isTracking: args.isTracking,
-        updatedAt: Date.now(),
-        sessionId: args.sessionId,
-      });
-    }
-
-    return { success: true };
-  },
-});
-
-export const getRiderLocation = query({
-  args: { orderId: v.string() },
-  handler: async ({ db }, { orderId }) => {
-    return await db
-      .query("riderLocations")
-      .withIndex("by_orderId", q => q.eq("orderId", orderId))
-      .first();
-  },
-});
-
-export const stopRiderTracking = mutation({
-  args: { orderId: v.string() },
-  handler: async ({ db }, { orderId }) => {
-    const existing = await db
-      .query("riderLocations")
-      .withIndex("by_orderId", q => q.eq("orderId", orderId))
-      .first();
-
-    if (existing) {
-      await db.patch(existing._id, {
-        isTracking: false,
-        updatedAt: Date.now(),
-      });
-    }
-
-    return { success: true };
-  },
-});
+export const useAuth = () => useContext(AuthContext);

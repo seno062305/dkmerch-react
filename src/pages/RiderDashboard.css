@@ -1763,3 +1763,285 @@
   flex-shrink: 0;
   color: #f59e0b;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   PASTE THESE AT THE BOTTOM OF RiderDashboard.css
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ─── BURGER BUTTON — hidden on desktop, shown on mobile ─── */
+.rider-burger-btn {
+  display: none; /* Hidden on desktop — sidebar is always visible */
+}
+
+/* ─── MOBILE TOP HEADER BAR ─── */
+.rider-mobile-header {
+  display: none; /* Hidden on desktop */
+}
+
+/* ─── SIDEBAR CLOSE BUTTON ─── */
+.rider-sidebar-close {
+  display: none; /* Hidden on desktop — no need to close what's always open */
+  background: none;
+  border: none;
+  color: #64748b;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: all 0.2s;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.rider-sidebar-close:hover {
+  background: #f1f5f9;
+  color: #1a1f36;
+}
+
+/* ─── NEWEST CARD HIGHLIGHT ─── */
+.rider-card-newest {
+  border-color: #fc1268 !important;
+  box-shadow: 0 4px 16px rgba(252,18,104,0.15) !important;
+  position: relative;
+}
+
+.rider-newest-tag {
+  background: linear-gradient(135deg, #fc1268, #ff4d94);
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 12px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  letter-spacing: 0.3px;
+}
+
+.rider-newest-tag i {
+  font-size: 10px;
+}
+
+/* ═══════════════════════════
+   MOBILE RESPONSIVE — OVERRIDE
+═══════════════════════════ */
+
+@media (max-width: 768px) {
+
+  /* ─── SHOW MOBILE HEADER ─── */
+  .rider-mobile-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    height: 56px;
+    background: white;
+    border-bottom: 1px solid #f0f0f0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    position: sticky;
+    top: 0;
+    z-index: 200;
+    flex-shrink: 0;
+  }
+
+  /* ─── SHOW BURGER BUTTON ─── */
+  .rider-burger-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: #f8fafc;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 10px;
+    color: #1a1f36;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    flex-shrink: 0;
+  }
+
+  .rider-burger-btn:hover {
+    background: #fff0f5;
+    border-color: #fc1268;
+    color: #fc1268;
+  }
+
+  .rider-mobile-logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 18px;
+    font-weight: 800;
+    color: #1a1f36;
+  }
+
+  .rider-mobile-logo i {
+    color: #fc1268;
+    font-size: 18px;
+  }
+
+  .rider-mobile-header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .rider-mobile-gps-pill {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: #d1fae5;
+    color: #065f46;
+    border: 1px solid #6ee7b7;
+    border-radius: 20px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .rider-mobile-avatar {
+    width: 36px;
+    height: 36px;
+    background: #fff0f5;
+    border: 1.5px solid #ffd6e7;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fc1268;
+    font-size: 18px;
+  }
+
+  /* ─── SIDEBAR: becomes a slide-in drawer on mobile ─── */
+  .rider-sidebar {
+    position: fixed !important;
+    left: -280px; /* hidden offscreen */
+    top: 0;
+    bottom: 0;
+    width: 280px !important;
+    z-index: 300 !important;
+    transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 4px 0 24px rgba(0,0,0,0.15);
+    min-height: 100vh !important;
+    height: 100vh !important;
+    overflow-y: auto;
+  }
+
+  .rider-sidebar.open {
+    left: 0;
+  }
+
+  /* ─── SHOW close button inside sidebar on mobile ─── */
+  .rider-sidebar-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ─── SIDEBAR HEADER: logo + close button side by side ─── */
+  .rider-sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 16px 16px;
+  }
+
+  .rider-tagline {
+    display: block !important; /* show tagline inside sidebar */
+    font-size: 11px;
+  }
+
+  /* ─── NAV: vertical inside sidebar (revert from horizontal) ─── */
+  .rider-nav {
+    flex-direction: column !important;
+    padding: 8px 12px;
+    gap: 2px;
+    overflow-x: visible;
+  }
+
+  .rider-nav-link {
+    flex-direction: row !important;
+    gap: 12px !important;
+    padding: 11px 14px !important;
+    border-radius: 8px !important;
+    justify-content: flex-start !important;
+    align-items: center !important;
+    text-align: left !important;
+    font-size: 14px !important;
+    border: none !important;
+    background: transparent !important;
+    position: relative;
+  }
+
+  .rider-nav-link.active {
+    background: #fff0f5 !important;
+  }
+
+  .rider-nav-link i {
+    width: 20px !important;
+    font-size: 16px !important;
+    text-align: center;
+    margin-bottom: 0 !important;
+  }
+
+  .rider-nav-link span {
+    font-size: 14px !important;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .rider-nav-badge {
+    position: static !important;
+    margin-left: auto !important;
+    top: auto !important;
+    right: auto !important;
+  }
+
+  /* ─── SIDEBAR OVERLAY ─── */
+  .rider-sidebar-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 250;
+    opacity: 0;
+    transition: opacity 0.3s;
+    backdrop-filter: blur(2px);
+  }
+
+  .rider-sidebar-overlay.open {
+    display: block;
+    opacity: 1;
+  }
+
+  /* ─── MAIN: no left margin (sidebar is now a drawer) ─── */
+  .rider-main {
+    margin-left: 0 !important;
+    padding: 16px;
+    padding-top: 16px;
+  }
+
+  /* ─── DASHBOARD: column layout ─── */
+  .rider-dashboard {
+    flex-direction: column;
+  }
+
+}
+
+/* Small phones */
+@media (max-width: 480px) {
+  .rider-mobile-header {
+    height: 52px;
+    padding: 0 12px;
+  }
+
+  .rider-mobile-logo {
+    font-size: 16px;
+  }
+
+  .rider-main {
+    padding: 12px;
+  }
+}

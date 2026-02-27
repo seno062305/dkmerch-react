@@ -5,6 +5,118 @@ import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import './RiderDashboard.css';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ✅ WINDOW-LEVEL GPS TRACKER
+// Lives outside React — survives logout and component unmount.
+// Only dies when the browser tab is closed or page is hard-refreshed.
+// ─────────────────────────────────────────────────────────────────────────────
+const GPS = {
+  _watchId:    null,
+  _interval:   null,
+  _orderId:    null,
+  _riderEmail: null,
+  _riderName:  null,
+  _sessionId:  null,
+  _sendFn:     null,
+  _lastPos:    null,
+
+  isActive()      { return this._interval !== null; },
+  activeOrderId() { return this._orderId; },
+  lastPosition()  { return this._lastPos; },
+
+  start({ orderId, riderEmail, riderName, sessionId, sendFn }) {
+    if (this._interval) return;
+    if (!navigator.geolocation) return;
+
+    this._orderId    = orderId;
+    this._riderEmail = riderEmail;
+    this._riderName  = riderName;
+    this._sessionId  = sessionId;
+    this._sendFn     = sendFn;
+
+    this._watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        this._lastPos = {
+          lat:      pos.coords.latitude,
+          lng:      pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+          heading:  pos.coords.heading,
+          speed:    pos.coords.speed,
+        };
+      },
+      (err) => console.error('GPS watch error:', err),
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+
+    this._interval = setInterval(() => {
+      if (this._lastPos && this._sendFn) {
+        this._sendFn({
+          orderId:    this._orderId,
+          riderEmail: this._riderEmail,
+          riderName:  this._riderName,
+          lat:        this._lastPos.lat,
+          lng:        this._lastPos.lng,
+          accuracy:   this._lastPos.accuracy,
+          heading:    this._lastPos.heading  ?? undefined,
+          speed:      this._lastPos.speed    ?? undefined,
+          isTracking: true,
+          sessionId:  this._sessionId,
+        }).catch(err => console.error('Location send failed:', err));
+      }
+    }, 10000);
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        this._lastPos = {
+          lat:      pos.coords.latitude,
+          lng:      pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+          heading:  pos.coords.heading,
+          speed:    pos.coords.speed,
+        };
+        if (this._sendFn) {
+          this._sendFn({
+            orderId:    this._orderId,
+            riderEmail: this._riderEmail,
+            riderName:  this._riderName,
+            lat:        this._lastPos.lat,
+            lng:        this._lastPos.lng,
+            accuracy:   this._lastPos.accuracy,
+            heading:    this._lastPos.heading  ?? undefined,
+            speed:      this._lastPos.speed    ?? undefined,
+            isTracking: true,
+            sessionId:  this._sessionId,
+          }).catch(() => {});
+        }
+      },
+      (err) => console.error('GPS initial fix failed:', err),
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  },
+
+  updateSendFn(fn) { this._sendFn = fn; },
+
+  stopLocal() {
+    if (this._interval)         { clearInterval(this._interval); this._interval = null; }
+    if (this._watchId !== null) { navigator.geolocation.clearWatch(this._watchId); this._watchId = null; }
+    this._lastPos = null;
+  },
+
+  async stopOnDelivery(stopFn) {
+    const orderId = this._orderId;
+    this.stopLocal();
+    this._orderId    = null;
+    this._riderEmail = null;
+    this._riderName  = null;
+    this._sessionId  = null;
+    this._sendFn     = null;
+    if (orderId && stopFn) {
+      try { await stopFn({ orderId }); } catch (e) { console.error(e); }
+    }
+  },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 const RiderDashboard = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -21,31 +133,22 @@ const RiderDashboard = () => {
   const [notifyingId, setNotifyingId] = useState(null);
   const fileInputRefs = useRef({});
 
-  // ── GPS TRACKING STATE ──
-  const [trackingOrderId, setTrackingOrderId] = useState(null);
+  // ── GPS UI STATE ──
+  const [trackingOrderId, setTrackingOrderId] = useState(() => GPS.activeOrderId());
   const [gpsError, setGpsError] = useState(null);
-  const [currentPosition, setCurrentPosition] = useState(null);
-  const trackingIntervalRef = useRef(null);
-  const watchIdRef = useRef(null);
+  const [currentPosition, setCurrentPosition] = useState(() => GPS.lastPosition());
 
   // ── SESSION GUARD STATE ──
-  // ✅ "kicked" = another device logged in and took over this session
   const [kickedOut, setKickedOut] = useState(false);
-  const [kickedCountdown, setKickedCountdown] = useState(180); // 3-minute countdown
-  const sessionCheckIntervalRef = useRef(null);
+  const [kickedCountdown, setKickedCountdown] = useState(180);
   const countdownIntervalRef = useRef(null);
-  const hasBeenKickedRef = useRef(false); // prevent double-trigger
+  const hasBeenKickedRef = useRef(false);
 
   // ── CONVEX QUERIES ──
-  const riderInfo = useQuery(
-    api.riders.getRiderByEmail,
-    user?.email ? { email: user.email } : 'skip'
-  );
-
-  const allOrders = useQuery(api.orders.getAllOrders) || [];
+  const riderInfo  = useQuery(api.riders.getRiderByEmail, user?.email ? { email: user.email } : 'skip');
+  const allOrders  = useQuery(api.orders.getAllOrders) || [];
   const allPickups = useQuery(api.pickupRequests.getAllPickupRequests) || [];
 
-  // ✅ Poll session validity — live Convex query, auto-updates when DB changes
   const sessionCheck = useQuery(
     api.riders.checkRiderSession,
     user?.email && user?.sessionId
@@ -54,49 +157,104 @@ const RiderDashboard = () => {
   );
 
   // ── CONVEX MUTATIONS ──
-  const createPickupRequest  = useMutation(api.pickupRequests.createPickupRequest);
-  const updateOrderStatus    = useMutation(api.orders.updateOrderStatus);
-  const updateOrderFields    = useMutation(api.orders.updateOrderFields);
-  const updatePickupStatus   = useMutation(api.pickupRequests.updatePickupStatus);
-  const deletePickupRequest  = useMutation(api.pickupRequests.deletePickupRequest);
-  const updateRiderLocation  = useMutation(api.riders.updateRiderLocation);
-  const stopRiderTracking    = useMutation(api.riders.stopRiderTracking);
+  const createPickupRequest = useMutation(api.pickupRequests.createPickupRequest);
+  const updateOrderFields   = useMutation(api.orders.updateOrderFields);
+  const updatePickupStatus  = useMutation(api.pickupRequests.updatePickupStatus);
+  const deletePickupRequest = useMutation(api.pickupRequests.deletePickupRequest);
+  const updateRiderLocation = useMutation(api.riders.updateRiderLocation);
+  const stopRiderTracking   = useMutation(api.riders.stopRiderTracking);
 
-  // ── DERIVED DATA ──
-  const confirmedOrders = allOrders.filter(o =>
-    (o.orderStatus === 'confirmed' || o.status === 'Confirmed') &&
-    !allPickups.some(p => p.orderId === o.orderId && p.status === 'approved')
-  );
+  // ✅ Every render — keep GPS sendFn fresh (Convex mutation refs change across renders)
+  useEffect(() => {
+    if (GPS.isActive()) GPS.updateSendFn(updateRiderLocation);
+  });
 
-  const myPickups   = allPickups.filter(p => p.riderEmail === user?.email);
-  const myDeliveries = myPickups.filter(p =>
-    p.status === 'approved' || p.status === 'out_for_delivery'
-  );
+  // ✅ On mount — immediately sync UI from GPS object.
+  // Fixes rider logout → login again: GPS is still running in window memory
+  // but RiderDashboard remounted with fresh state. Restore UI to match GPS reality.
+  useEffect(() => {
+    const activeId = GPS.activeOrderId();
+    const lastPos  = GPS.lastPosition();
+    if (activeId) {
+      setTrackingOrderId(activeId);
+      setTab('deliver'); // auto-switch to Deliver tab so rider sees active delivery
+    }
+    if (lastPos) setCurrentPosition(lastPos);
+  }, []); // runs once on mount only
+
+  // ✅ Sync UI state from GPS object every 2 seconds
+  useEffect(() => {
+    const sync = setInterval(() => {
+      setTrackingOrderId(GPS.activeOrderId());
+      setCurrentPosition(GPS.lastPosition());
+    }, 2000);
+    return () => clearInterval(sync);
+  }, []);
+
+  // ── DERIVED DATA (with sorting) ──
+
+  // ✅ Sort confirmed orders: pinaka-bago (pinaka-recently confirmed) sa taas
+  // Gumagamit ng confirmedAt kung available, fallback sa _creationTime
+  const confirmedOrders = allOrders
+    .filter(o =>
+      (o.orderStatus === 'confirmed' || o.status === 'Confirmed') &&
+      !allPickups.some(p => p.orderId === o.orderId && p.status === 'approved')
+    )
+    .sort((a, b) => {
+      const aTime = a.confirmedAt ? new Date(a.confirmedAt).getTime() : (a._creationTime || 0);
+      const bTime = b.confirmedAt ? new Date(b.confirmedAt).getTime() : (b._creationTime || 0);
+      return bTime - aTime; // newest first
+    });
+
+  const myPickups = allPickups
+    .filter(p => p.riderEmail === user?.email)
+    .sort((a, b) => {
+      // ✅ Primary sort: pinaka-recently approved/actioned ng admin ang nasa taas
+      // Gumagamit ng approvedAt (set ng admin), fallback sa requestedAt, fallback sa _creationTime
+      const getLatestTime = (p) => {
+        if (p.approvedAt)   return new Date(p.approvedAt).getTime();
+        if (p.requestedAt)  return new Date(p.requestedAt).getTime();
+        return p._creationTime || 0;
+      };
+      return getLatestTime(b) - getLatestTime(a); // newest first
+    });
+
+  // ✅ Active deliveries: out_for_delivery first, then approved, newest first
+  const myDeliveries = myPickups
+    .filter(p => p.status === 'approved' || p.status === 'out_for_delivery')
+    .sort((a, b) => {
+      if (a.status === 'out_for_delivery' && b.status !== 'out_for_delivery') return -1;
+      if (b.status === 'out_for_delivery' && a.status !== 'out_for_delivery') return 1;
+      const aTime = a.requestedAt ? new Date(a.requestedAt).getTime() : 0;
+      const bTime = b.requestedAt ? new Date(b.requestedAt).getTime() : 0;
+      return bTime - aTime;
+    });
 
   const pendingPickupsCount   = myPickups.filter(p => p.status === 'pending').length;
   const activeDeliveriesCount = myDeliveries.length;
 
-  // ─────────────────────────────────────────────────────────────
-  // ✅ SESSION GUARD: detect when another device logs in
-  // Convex live query fires automatically — no polling needed
-  // ─────────────────────────────────────────────────────────────
+  // ── SESSION GUARD ──
+  const handleForcedLogout = useCallback(() => {
+    logout();
+    navigate('/', { replace: true });
+  }, [logout, navigate]);
+
   useEffect(() => {
     if (!sessionCheck) return;
-    if (hasBeenKickedRef.current) return; // already handling
+    if (hasBeenKickedRef.current) return;
 
     if (!sessionCheck.valid && sessionCheck.reason === 'new_device_logged_in') {
       hasBeenKickedRef.current = true;
       setKickedOut(true);
       setKickedCountdown(180);
 
-      // Stop local GPS quietly — new device is now tracking
-      stopTrackingLocal();
+      GPS.stopLocal();
+      setTrackingOrderId(null);
+      setCurrentPosition(null);
 
-      // Start 3-minute countdown then force logout
       countdownIntervalRef.current = setInterval(() => {
         setKickedCountdown(prev => {
           if (prev <= 1) {
-            // Time's up — force logout
             clearInterval(countdownIntervalRef.current);
             handleForcedLogout();
             return 0;
@@ -108,134 +266,37 @@ const RiderDashboard = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionCheck]);
 
-  // Cleanup countdown on unmount
   useEffect(() => {
-    return () => {
-      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-    };
+    return () => { if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current); };
   }, []);
 
-  const handleForcedLogout = useCallback(() => {
-    stopTrackingLocal();
-    logout();
-    navigate('/', { replace: true });
-  }, [logout, navigate]);
-
-  // ── GPS TRACKING LOGIC ──
-  const sendLocation = useCallback(async (orderId, pos, isTracking = true) => {
-    if (!riderInfo || !orderId) return;
-    try {
-      await updateRiderLocation({
-        orderId,
-        riderEmail: user.email,
-        riderName: riderInfo.fullName,
-        lat: pos.lat,
-        lng: pos.lng,
-        accuracy: pos.accuracy,
-        heading: pos.heading ?? undefined,
-        speed: pos.speed ?? undefined,
-        isTracking,
-        sessionId: user.sessionId, // ✅ tag each location ping with session
-      });
-    } catch (err) {
-      console.error('Failed to send location:', err);
-    }
-  }, [updateRiderLocation, riderInfo, user]);
-
+  // ── GPS ACTIONS ──
   const startTracking = useCallback((orderId) => {
-    if (!navigator.geolocation) {
-      setGpsError('GPS not supported on this device.');
-      return;
-    }
+    if (!navigator.geolocation) { setGpsError('GPS not supported on this device.'); return; }
+    if (!riderInfo) return;
 
     setGpsError(null);
+    GPS.start({
+      orderId,
+      riderEmail: user.email,
+      riderName:  riderInfo.fullName,
+      sessionId:  user.sessionId,
+      sendFn:     updateRiderLocation,
+    });
     setTrackingOrderId(orderId);
+  }, [riderInfo, user, updateRiderLocation]);
 
-    watchIdRef.current = navigator.geolocation.watchPosition(
-      (position) => {
-        const pos = {
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-          accuracy: position.coords.accuracy,
-          heading: position.coords.heading,
-          speed: position.coords.speed,
-        };
-        setCurrentPosition(pos);
-        setGpsError(null);
-      },
-      (err) => {
-        console.error('GPS watch error:', err);
-        setGpsError(getGpsErrorMessage(err));
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-    );
-
-    trackingIntervalRef.current = setInterval(() => {
-      setCurrentPosition(pos => {
-        if (pos) sendLocation(orderId, pos, true);
-        return pos;
-      });
-    }, 10000);
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const pos = {
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-          accuracy: position.coords.accuracy,
-          heading: position.coords.heading,
-          speed: position.coords.speed,
-        };
-        setCurrentPosition(pos);
-        sendLocation(orderId, pos, true);
-      },
-      (err) => { setGpsError(getGpsErrorMessage(err)); },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-    );
-  }, [sendLocation]);
-
-  // ✅ Clears local browser GPS only — Convex record stays alive
   const stopTrackingLocal = useCallback(() => {
-    if (trackingIntervalRef.current) {
-      clearInterval(trackingIntervalRef.current);
-      trackingIntervalRef.current = null;
-    }
-    if (watchIdRef.current !== null) {
-      navigator.geolocation.clearWatch(watchIdRef.current);
-      watchIdRef.current = null;
-    }
+    GPS.stopLocal();
     setTrackingOrderId(null);
     setCurrentPosition(null);
   }, []);
 
-  // ✅ Only called on delivery completion — marks Convex as stopped
-  const stopTrackingOnDelivery = useCallback(async (orderId) => {
-    stopTrackingLocal();
-    if (orderId) {
-      try {
-        await stopRiderTracking({ orderId });
-      } catch (err) {
-        console.error('Failed to stop tracking:', err);
-      }
-    }
-  }, [stopRiderTracking, stopTrackingLocal]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (trackingIntervalRef.current) clearInterval(trackingIntervalRef.current);
-      if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
-    };
-  }, []);
-
-  const getGpsErrorMessage = (err) => {
-    switch (err.code) {
-      case 1: return '❌ Location access denied. Please allow location permission in your browser settings.';
-      case 2: return '📡 GPS signal unavailable. Make sure you\'re outdoors or try again.';
-      case 3: return '⏱ GPS timed out. Please try again.';
-      default: return '⚠️ Unknown GPS error. Please try again.';
-    }
-  };
+  const stopTrackingOnDelivery = useCallback(async () => {
+    await GPS.stopOnDelivery(stopRiderTracking);
+    setTrackingOrderId(null);
+    setCurrentPosition(null);
+  }, [stopRiderTracking]);
 
   const toggleExpanded = (id, setFn) => setFn(prev => ({ ...prev, [id]: !prev[id] }));
 
@@ -263,100 +324,54 @@ const RiderDashboard = () => {
     return map[status] || status;
   };
 
-  // ✅ Logout — only clears local state, GPS stays in Convex
+  // ✅ Logout — GPS keeps running so customer map stays live
   const handleLogout = async () => {
-    if (window.confirm('Are you sure you want to logout?\n\n📍 GPS tracking will remain active for ongoing deliveries.')) {
-      stopTrackingLocal();
+    if (window.confirm(
+      'Are you sure you want to logout?\n\n📍 GPS tracking will continue running for the customer until delivery is confirmed.'
+    )) {
       logout();
       navigate('/', { replace: true });
     }
   };
 
-  const handleNavClick = (newTab) => {
-    setTab(newTab);
-    setSidebarOpen(false);
-  };
+  const handleNavClick = (newTab) => { setTab(newTab); setSidebarOpen(false); };
 
   // ── ACTIONS ──
   const requestPickup = async (order) => {
     if (!riderInfo) return;
-
-    const alreadyApproved = allPickups.find(
-      p => p.orderId === order.orderId && p.status === 'approved'
-    );
-    if (alreadyApproved) {
-      alert('❌ Sorry! Another rider was already approved for this order.');
-      return;
-    }
-
-    const alreadyRequested = myPickups.find(
-      p => p.orderId === order.orderId && p.status === 'pending'
-    );
-    if (alreadyRequested) {
-      alert('You already have a pending request for this order.');
-      return;
-    }
-
+    const alreadyApproved = allPickups.find(p => p.orderId === order.orderId && p.status === 'approved');
+    if (alreadyApproved) { alert('❌ Sorry! Another rider was already approved for this order.'); return; }
+    const alreadyRequested = myPickups.find(p => p.orderId === order.orderId && p.status === 'pending');
+    if (alreadyRequested) { alert('You already have a pending request for this order.'); return; }
     try {
       await createPickupRequest({
-        orderId: order.orderId,
-        riderId: riderInfo._id,
-        riderName: riderInfo.fullName,
-        riderEmail: user.email,
-        riderPhone: riderInfo.phone || '',
-        riderVehicle: riderInfo.vehicleType || '',
-        riderPlate: riderInfo.plateNumber || '',
-        customerName: order.customerName || order.name || '',
-        total: order.total || 0,
-        requestedAt: new Date().toISOString(),
-        status: 'pending',
+        orderId: order.orderId, riderId: riderInfo._id, riderName: riderInfo.fullName,
+        riderEmail: user.email, riderPhone: riderInfo.phone || '', riderVehicle: riderInfo.vehicleType || '',
+        riderPlate: riderInfo.plateNumber || '', customerName: order.customerName || order.name || '',
+        total: order.total || 0, requestedAt: new Date().toISOString(), status: 'pending',
       });
       alert('✅ Pickup request sent! Waiting for admin approval.');
-    } catch (err) {
-      console.error(err);
-      alert('Failed to send pickup request. Please try again.');
-    }
+    } catch (err) { console.error(err); alert('Failed to send pickup request. Please try again.'); }
   };
 
   const notifyCustomer = async (delivery) => {
     if (!window.confirm(`Notify "${delivery.customerName}" that their order is on the way?`)) return;
     setNotifyingId(delivery._id);
-
     try {
       await updateOrderFields({
-        orderId: delivery.orderId,
-        orderStatus: 'out_for_delivery',
-        status: 'Out for Delivery',
-        riderInfo: {
-          name: riderInfo.fullName,
-          phone: riderInfo.phone,
-          vehicle: riderInfo.vehicleType,
-          plate: riderInfo.plateNumber,
-        },
+        orderId: delivery.orderId, orderStatus: 'out_for_delivery', status: 'Out for Delivery',
+        riderInfo: { name: riderInfo.fullName, phone: riderInfo.phone, vehicle: riderInfo.vehicleType, plate: riderInfo.plateNumber },
       });
-
-      await updatePickupStatus({
-        requestId: delivery._id,
-        status: 'out_for_delivery',
-      });
-
+      await updatePickupStatus({ requestId: delivery._id, status: 'out_for_delivery' });
       startTracking(delivery.orderId);
-
       alert('📦 Customer notified!\n\n📍 GPS tracking has started automatically.\nThe customer can now see your location in real-time.\n\nAsk the customer for their OTP code when you arrive.');
-    } catch (err) {
-      console.error(err);
-      alert('Failed to notify customer. Please try again.');
-    } finally {
-      setNotifyingId(null);
-    }
+    } catch (err) { console.error(err); alert('Failed to notify customer. Please try again.'); }
+    finally { setNotifyingId(null); }
   };
 
   const handlePhotoSelect = (deliveryId, file) => {
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      setOtpErrors(prev => ({ ...prev, [deliveryId]: 'Photo must be under 5MB.' }));
-      return;
-    }
+    if (file.size > 5 * 1024 * 1024) { setOtpErrors(prev => ({ ...prev, [deliveryId]: 'Photo must be under 5MB.' })); return; }
     const reader = new FileReader();
     reader.onload = (e) => {
       setPhotoData(prev => ({ ...prev, [deliveryId]: e.target.result }));
@@ -368,95 +383,44 @@ const RiderDashboard = () => {
   const confirmDelivery = async (delivery) => {
     const inputOtp = (otpInputs[delivery._id] || '').trim();
     const photo    = photoData[delivery._id];
+    const order    = allOrders.find(o => o.orderId === delivery.orderId || o.orderId?.trim() === delivery.orderId?.trim());
 
-    const order = allOrders.find(o =>
-      o.orderId === delivery.orderId ||
-      o.orderId?.trim() === delivery.orderId?.trim()
-    );
-
-    if (!order) {
-      setOtpErrors(prev => ({
-        ...prev,
-        [delivery._id]: '⏳ Order data is still loading. Please wait a moment and try again.',
-      }));
-      return;
-    }
-    if (!inputOtp) {
-      setOtpErrors(prev => ({ ...prev, [delivery._id]: 'Please enter the OTP from the customer.' }));
-      return;
-    }
-    if (!order.deliveryOtp) {
-      setOtpErrors(prev => ({
-        ...prev,
-        [delivery._id]: '⏳ The customer has not generated their OTP yet. Ask them to open their tracking page.',
-      }));
-      return;
-    }
-    if (inputOtp !== order.deliveryOtp) {
-      setOtpErrors(prev => ({
-        ...prev,
-        [delivery._id]: '❌ Incorrect OTP. Please ask the customer for the correct code.',
-      }));
-      return;
-    }
-
+    if (!order)             { setOtpErrors(prev => ({ ...prev, [delivery._id]: '⏳ Order data is still loading. Please wait a moment and try again.' })); return; }
+    if (!inputOtp)          { setOtpErrors(prev => ({ ...prev, [delivery._id]: 'Please enter the OTP from the customer.' })); return; }
+    if (!order.deliveryOtp) { setOtpErrors(prev => ({ ...prev, [delivery._id]: '⏳ The customer has not generated their OTP yet. Ask them to open their tracking page.' })); return; }
+    if (inputOtp !== order.deliveryOtp) { setOtpErrors(prev => ({ ...prev, [delivery._id]: '❌ Incorrect OTP. Please ask the customer for the correct code.' })); return; }
     if (!window.confirm('Confirm delivery? This will mark the order as Completed.')) return;
 
     setConfirmingId(delivery._id);
     const timestamp = new Date().toISOString();
-
     try {
       await updateOrderFields({
-        orderId: delivery.orderId,
-        orderStatus: 'completed',
-        status: 'Delivered',
-        deliveryOtpVerified: true,
-        deliveryConfirmedAt: timestamp,
+        orderId: delivery.orderId, orderStatus: 'completed', status: 'Delivered',
+        deliveryOtpVerified: true, deliveryConfirmedAt: timestamp,
         ...(photo ? { deliveryProofPhoto: photo } : {}),
       });
-
-      await updatePickupStatus({
-        requestId: delivery._id,
-        status: 'completed',
-      });
-
+      await updatePickupStatus({ requestId: delivery._id, status: 'completed' });
       await stopTrackingOnDelivery(delivery.orderId);
-
       setOtpInputs(prev => { const n = { ...prev }; delete n[delivery._id]; return n; });
       setPhotoData(prev => { const n = { ...prev }; delete n[delivery._id]; return n; });
       setOtpErrors(prev => { const n = { ...prev }; delete n[delivery._id]; return n; });
-
       alert('🎉 Delivery confirmed! Order marked as Completed.');
-    } catch (err) {
-      console.error(err);
-      alert('Failed to confirm delivery. Please try again.');
-    } finally {
-      setConfirmingId(null);
-    }
+    } catch (err) { console.error(err); alert('Failed to confirm delivery. Please try again.'); }
+    finally { setConfirmingId(null); }
   };
 
   const handleDeletePickup = async (pickupId, status) => {
-    if (['approved', 'out_for_delivery'].includes(status)) {
-      alert('❌ Cannot delete an active pickup. Complete the delivery first.');
-      return;
-    }
+    if (['approved', 'out_for_delivery'].includes(status)) { alert('❌ Cannot delete an active pickup. Complete the delivery first.'); return; }
     if (!window.confirm('Remove this pickup record from your list?')) return;
-    try {
-      await deletePickupRequest({ requestId: pickupId });
-    } catch (err) {
-      console.error(err);
-      alert('Failed to remove pickup.');
-    }
+    try { await deletePickupRequest({ requestId: pickupId }); }
+    catch (err) { console.error(err); alert('Failed to remove pickup.'); }
   };
 
   // ── LOADING / NOT APPROVED ──
   if (riderInfo === undefined) {
     return (
       <div className="rider-dashboard">
-        <div className="rider-not-approved">
-          <div className="rider-na-icon">🛵</div>
-          <h2>Loading...</h2>
-        </div>
+        <div className="rider-not-approved"><div className="rider-na-icon">🛵</div><h2>Loading...</h2></div>
       </div>
     );
   }
@@ -474,10 +438,7 @@ const RiderDashboard = () => {
     );
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // ✅ KICKED-OUT OVERLAY — shown when new device logs in
-  // Rider has 3 minutes before forced logout
-  // ─────────────────────────────────────────────────────────────
+  // ── KICKED-OUT OVERLAY ──
   if (kickedOut) {
     const mins = Math.floor(kickedCountdown / 60);
     const secs = kickedCountdown % 60;
@@ -487,23 +448,13 @@ const RiderDashboard = () => {
           <div className="rider-kicked-card">
             <div className="rider-kicked-icon">📱</div>
             <h2>Logged In on Another Device</h2>
-            <p>
-              Your rider account was just logged in on a <strong>new device</strong>.
-              GPS tracking has automatically switched to that device.
-            </p>
-            <p className="rider-kicked-note">
-              If this wasn't you, please change your password immediately.
-            </p>
+            <p>Your rider account was just logged in on a <strong>new device</strong>. GPS tracking has automatically switched to that device.</p>
+            <p className="rider-kicked-note">If this wasn't you, please change your password immediately.</p>
             <div className="rider-kicked-countdown">
-              <span className="rider-kicked-timer">
-                {mins}:{secs.toString().padStart(2, '0')}
-              </span>
+              <span className="rider-kicked-timer">{mins}:{secs.toString().padStart(2, '0')}</span>
               <small>This session will close automatically</small>
             </div>
-            <button
-              className="rider-kicked-logout-btn"
-              onClick={handleForcedLogout}
-            >
+            <button className="rider-kicked-logout-btn" onClick={handleForcedLogout}>
               <i className="fas fa-sign-out-alt"></i> Logout Now
             </button>
           </div>
@@ -515,12 +466,29 @@ const RiderDashboard = () => {
   return (
     <div className="rider-dashboard">
 
-      {/* BURGER */}
-      <button className="rider-burger-btn" onClick={() => setSidebarOpen(true)} aria-label="Open menu">
-        <i className="fas fa-bars"></i>
-      </button>
+      {/* ✅ MOBILE TOP HEADER BAR — only visible on mobile */}
+      <header className="rider-mobile-header">
+        <button className="rider-burger-btn" onClick={() => setSidebarOpen(true)} aria-label="Open menu">
+          <i className="fas fa-bars"></i>
+        </button>
+        <div className="rider-mobile-logo">
+          <i className="fas fa-motorcycle"></i>
+          <span>DKMerch</span>
+        </div>
+        <div className="rider-mobile-header-right">
+          {trackingOrderId && (
+            <span className="rider-mobile-gps-pill">
+              <span className="rider-gps-dot"></span>
+              GPS
+            </span>
+          )}
+          <div className="rider-mobile-avatar">
+            <i className="fas fa-user-circle"></i>
+          </div>
+        </div>
+      </header>
 
-      {/* OVERLAY */}
+      {/* SIDEBAR OVERLAY */}
       <div className={`rider-sidebar-overlay ${sidebarOpen ? 'open' : ''}`} onClick={() => setSidebarOpen(false)} />
 
       {/* SIDEBAR */}
@@ -530,6 +498,7 @@ const RiderDashboard = () => {
             <div className="rider-logo"><i className="fas fa-motorcycle"></i><span>DKMerch</span></div>
             <div className="rider-tagline">Rider Dashboard</div>
           </div>
+          {/* ✅ Close button — always visible inside sidebar */}
           <button className="rider-sidebar-close" onClick={() => setSidebarOpen(false)} aria-label="Close menu">
             <i className="fas fa-times"></i>
           </button>
@@ -547,12 +516,7 @@ const RiderDashboard = () => {
         {trackingOrderId && (
           <div className="rider-gps-sidebar-status">
             <span className="rider-gps-dot"></span>
-            <span>
-              GPS Active
-              {currentPosition && (
-                <small> · ±{Math.round(currentPosition.accuracy || 0)}m</small>
-              )}
-            </span>
+            <span>GPS Active{currentPosition && <small> · ±{Math.round(currentPosition.accuracy || 0)}m</small>}</span>
           </div>
         )}
 
@@ -594,7 +558,7 @@ const RiderDashboard = () => {
               <div className="rider-page-header-top">
                 <div>
                   <h1>📦 Available Orders</h1>
-                  <p>Confirmed orders ready for pickup.</p>
+                  <p>Confirmed orders ready for pickup — sorted by most recently confirmed.</p>
                 </div>
                 <div className="rider-live-badge">
                   <span className="sync-dot"></span>
@@ -611,11 +575,17 @@ const RiderDashboard = () => {
               </div>
             ) : (
               <div className="rider-compact-list">
-                {confirmedOrders.map(order => {
-                  const reqStatus = getMyRequestStatus(order.orderId);
+                {confirmedOrders.map((order, idx) => {
+                  const reqStatus  = getMyRequestStatus(order.orderId);
                   const isExpanded = expandedOrders[order.orderId];
+                  const isNewest   = idx === 0;
                   return (
-                    <div key={order.orderId} className="rider-compact-card">
+                    <div key={order.orderId} className={`rider-compact-card ${isNewest ? 'rider-card-newest' : ''}`}>
+                      {isNewest && (
+                        <div className="rider-newest-tag">
+                          <i className="fas fa-bolt"></i> Just Confirmed
+                        </div>
+                      )}
                       <div className="rider-compact-row">
                         <div className="rider-compact-left">
                           <span className="rider-order-id">#{order.orderId?.slice(-8)}</span>
@@ -638,13 +608,15 @@ const RiderDashboard = () => {
                           </button>
                         </div>
                       </div>
-
                       {isExpanded && (
                         <div className="rider-expanded-body">
                           <div className="rider-info-row"><i className="fas fa-map-marker-alt"></i><span><strong>Address:</strong> {order.shippingAddress || order.address || 'N/A'}</span></div>
                           <div className="rider-info-row"><i className="fas fa-phone"></i><span><strong>Phone:</strong> {order.phone || 'N/A'}</span></div>
                           <div className="rider-info-row"><i className="fas fa-box"></i><span><strong>Items:</strong> {order.items?.length || 0} item(s)</span></div>
                           <div className="rider-info-row"><i className="fas fa-calendar"></i><span><strong>Date:</strong> {new Date(order._creationTime).toLocaleDateString('en-PH')}</span></div>
+                          {order.confirmedAt && (
+                            <div className="rider-info-row"><i className="fas fa-check-circle"></i><span><strong>Confirmed:</strong> {new Date(order.confirmedAt).toLocaleString('en-PH')}</span></div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -660,7 +632,7 @@ const RiderDashboard = () => {
           <div className="rider-content">
             <div className="rider-page-header">
               <h1>🚚 My Pickup Requests</h1>
-              <p>Track your pickup request statuses. Approved ones will appear in the <strong>Deliver</strong> tab.</p>
+              <p>Active and recent pickup requests — approved ones appear first.</p>
             </div>
 
             {myPickups.length === 0 ? (
@@ -672,7 +644,7 @@ const RiderDashboard = () => {
             ) : (
               <div className="rider-compact-list">
                 {myPickups.map(req => {
-                  const style = getPickupStatusStyle(req.status);
+                  const style      = getPickupStatusStyle(req.status);
                   const isExpanded = expandedPickups[req._id];
                   return (
                     <div key={req._id} className="rider-compact-card">
@@ -691,7 +663,6 @@ const RiderDashboard = () => {
                           </button>
                         </div>
                       </div>
-
                       {isExpanded && (
                         <div className="rider-expanded-body">
                           <div className="rider-info-row"><i className="fas fa-calendar"></i><span><strong>Requested:</strong> {new Date(req.requestedAt).toLocaleDateString('en-PH')}</span></div>
@@ -739,11 +710,11 @@ const RiderDashboard = () => {
             ) : (
               <div className="rider-compact-list">
                 {myDeliveries.map(delivery => {
-                  const isOutForDelivery = delivery.status === 'out_for_delivery';
-                  const isApproved = delivery.status === 'approved';
-                  const isExpanded = expandedDeliveries[delivery._id];
-                  const errMsg = otpErrors[delivery._id];
-                  const hasPhoto = !!photoData[delivery._id];
+                  const isOutForDelivery   = delivery.status === 'out_for_delivery';
+                  const isApproved         = delivery.status === 'approved';
+                  const isExpanded         = expandedDeliveries[delivery._id];
+                  const errMsg             = otpErrors[delivery._id];
+                  const hasPhoto           = !!photoData[delivery._id];
                   const isThisBeingTracked = trackingOrderId === delivery.orderId;
 
                   return (
@@ -798,9 +769,7 @@ const RiderDashboard = () => {
                                     <span className="rider-gps-dot"></span>
                                     <span>
                                       Sending location to customer every 10 seconds
-                                      {currentPosition && (
-                                        <> · <strong>±{Math.round(currentPosition.accuracy || 0)}m accuracy</strong></>
-                                      )}
+                                      {currentPosition && <> · <strong>±{Math.round(currentPosition.accuracy || 0)}m accuracy</strong></>}
                                     </span>
                                   </div>
                                   {currentPosition && (
@@ -854,10 +823,7 @@ const RiderDashboard = () => {
                                   <span className="otp-required-tag">*Required</span>
                                 </label>
                                 <input
-                                  type="text"
-                                  className="rider-otp-input"
-                                  placeholder="Enter 4-digit OTP"
-                                  maxLength={4}
+                                  type="text" className="rider-otp-input" placeholder="Enter 4-digit OTP" maxLength={4}
                                   value={otpInputs[delivery._id] || ''}
                                   onChange={(e) => {
                                     const val = e.target.value.replace(/\D/g, '').slice(0, 4);
@@ -890,9 +856,7 @@ const RiderDashboard = () => {
                                   )}
                                 </div>
                                 <input
-                                  type="file"
-                                  accept="image/*"
-                                  style={{ display: 'none' }}
+                                  type="file" accept="image/*" style={{ display: 'none' }}
                                   ref={el => (fileInputRefs.current[delivery._id] = el)}
                                   onChange={(e) => handlePhotoSelect(delivery._id, e.target.files[0])}
                                 />
