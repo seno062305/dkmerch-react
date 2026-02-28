@@ -73,7 +73,7 @@ export const createOrder = mutation({
   },
 });
 
-// ─── SHARED HELPER: fires customer email + rider email + DB notification ─────
+// ─── SHARED HELPER ────────────────────────────────────────────────────────────
 async function onOrderConfirmed(
   scheduler: any,
   db: any,
@@ -88,7 +88,6 @@ async function onOrderConfirmed(
   const shippingAddr   = order.shippingAddress || 'N/A';
   const now            = new Date().toISOString();
 
-  // ✅ 1. Email to CUSTOMER — order confirmed
   if (order.email) {
     await scheduler.runAfter(0, internal.sendEmail.sendOrderConfirmedEmail, {
       to:              order.email,
@@ -100,7 +99,6 @@ async function onOrderConfirmed(
     });
   }
 
-  // ✅ 2. Email to RIDER (test inbox: dkmerchtest@gmail.com)
   await scheduler.runAfter(0, internal.sendEmail.sendRiderNewOrderEmail, {
     orderId,
     customerName,
@@ -109,7 +107,6 @@ async function onOrderConfirmed(
     shippingAddress: shippingAddr,
   });
 
-  // ✅ 3. In-app bell notification for riders (DB insert)
   await db.insert("riderNotifications", {
     type:         "new_order",
     orderId,
@@ -144,7 +141,6 @@ export const updateOrderStatus = mutation({
 
     await db.patch(order._id, updates);
 
-    // ✅ Trigger emails + bell notif when admin confirms
     if (orderStatus === 'confirmed') {
       await onOrderConfirmed(scheduler, db, order, orderId);
     }
@@ -190,7 +186,6 @@ export const updateOrderFields = mutation({
       filtered.deliveryConfirmedAt = filtered.deliveryConfirmedAt || now;
     if (filtered.orderStatus === 'cancelled') filtered.cancelledAt = now;
 
-    // ✅ Trigger emails + bell notif when admin confirms (via updateOrderFields path too)
     if (filtered.orderStatus === 'confirmed') {
       await onOrderConfirmed(scheduler, db, order, orderId);
     }
@@ -246,6 +241,61 @@ export const updatePaymentSource = mutation({
     if (paymentStatus) updates.paymentStatus = paymentStatus;
 
     await db.patch(order._id, updates);
+    return { success: true };
+  },
+});
+
+// ─── REFUND MUTATIONS ─────────────────────────────────────────────────────────
+
+// ✅ Customer requests a refund
+export const requestRefund = mutation({
+  args: {
+    orderId:       v.string(),
+    refundReason:  v.string(),
+    refundComment: v.optional(v.string()),
+  },
+  handler: async ({ db }, { orderId, refundReason, refundComment }) => {
+    const order = await db.query("orders")
+      .withIndex("by_orderId", q => q.eq("orderId", orderId))
+      .first();
+    if (!order) return { success: false, error: 'Order not found' };
+
+    // Only allow refund on delivered orders that don't already have a refund request
+    const status = (order.orderStatus || order.status || '').toLowerCase();
+    const isDelivered = status === 'delivered' || status === 'completed';
+    if (!isDelivered) return { success: false, error: 'Order is not delivered' };
+    if (order.refundStatus) return { success: false, error: 'Refund already requested' };
+
+    await db.patch(order._id, {
+      refundStatus:      'requested',
+      refundReason,
+      refundComment:     refundComment || '',
+      refundRequestedAt: new Date().toISOString(),
+    });
+
+    return { success: true };
+  },
+});
+
+// ✅ Admin approves or rejects a refund
+export const resolveRefund = mutation({
+  args: {
+    orderId:        v.string(),
+    refundStatus:   v.string(), // 'approved' | 'rejected'
+    refundAdminNote: v.optional(v.string()),
+  },
+  handler: async ({ db }, { orderId, refundStatus, refundAdminNote }) => {
+    const order = await db.query("orders")
+      .withIndex("by_orderId", q => q.eq("orderId", orderId))
+      .first();
+    if (!order) return { success: false };
+
+    await db.patch(order._id, {
+      refundStatus,
+      refundAdminNote: refundAdminNote || '',
+      refundResolvedAt: new Date().toISOString(),
+    });
+
     return { success: true };
   },
 });

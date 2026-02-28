@@ -98,12 +98,21 @@ function AppContent() {
   const wishlistCount   = useWishlistCount();
 
   const [showLoginModal, setShowLoginModal]     = useState(false);
+  const [loginDefaultRiderMode, setLoginDefaultRiderMode] = useState(false);
   const [showCartModal, setShowCartModal]       = useState(false);
   const [showProductModal, setShowProductModal] = useState(false);
   const [currentProduct, setCurrentProduct]     = useState(null);
 
   useEffect(() => {
-    const handleOpenLogin = () => setShowLoginModal(true);
+    const handleOpenLogin = (e) => {
+      // Check if opened from Riders icon
+      if (e?.detail?.riderMode) {
+        setLoginDefaultRiderMode(true);
+      } else {
+        setLoginDefaultRiderMode(false);
+      }
+      setShowLoginModal(true);
+    };
     window.addEventListener('openLoginModal', handleOpenLogin);
     return () => window.removeEventListener('openLoginModal', handleOpenLogin);
   }, []);
@@ -111,6 +120,7 @@ function AppContent() {
   // ✅ After login via header modal, redirect if there's a saved URL
   const handleLoginSuccess = () => {
     setShowLoginModal(false);
+    setLoginDefaultRiderMode(false);
     const redirect = sessionStorage.getItem('redirectAfterLogin');
     if (redirect) {
       sessionStorage.removeItem('redirectAfterLogin');
@@ -180,8 +190,12 @@ function AppContent() {
 
       {showLoginModal && (
         <LoginModal
-          onClose={() => setShowLoginModal(false)}
+          onClose={() => {
+            setShowLoginModal(false);
+            setLoginDefaultRiderMode(false);
+          }}
           onLoginSuccess={handleLoginSuccess}
+          defaultRiderMode={loginDefaultRiderMode}
         />
       )}
 

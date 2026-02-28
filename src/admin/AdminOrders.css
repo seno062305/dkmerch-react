@@ -411,7 +411,7 @@
   word-break: break-word;
 }
 
-/* ── PROOF OF DELIVERY CARD ── */
+/* ------ PROOF OF DELIVERY CARD ------ */
 .pod-card {
   background: #f8f9fa;
   border: 2px solid #e2e8f0;
@@ -689,7 +689,7 @@
   font-weight: 700;
 }
 
-/* ── STATUS FLOW NOTICES ── */
+/* ------ STATUS FLOW NOTICES ------ */
 .status-flow-notice {
   display: flex;
   align-items: flex-start;
@@ -912,7 +912,7 @@
   box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
 }
 
-/* ── PRODUCT REVIEWS ── */
+/* ------ PRODUCT REVIEWS ------ */
 .reviews-list {
   display: flex;
   flex-direction: column;
@@ -1001,7 +1001,7 @@
   color: #94a3b8;
 }
 
-/* ── CANCEL REASON DISPLAY ── */
+/* ------ CANCEL REASON DISPLAY ------ */
 .cancel-reason-display {
   display: flex;
   align-items: flex-start;
@@ -1028,7 +1028,7 @@
   font-weight: 500;
 }
 
-/* ── CANCEL REASON MODAL ── */
+/* ------ CANCEL REASON MODAL ------ */
 .cancel-reason-overlay {
   position: fixed;
   inset: 0;
@@ -1256,9 +1256,9 @@
   transform: none;
 }
 
-/* ══════════════════════════
+/* ======
    RESPONSIVE
-══════════════════════════ */
+====== */
 
 @media (max-width: 1024px) {
   .admin-orders-page { padding: 20px; }
@@ -1327,7 +1327,7 @@
   .order-modal { border-radius: 12px; }
   .modal-body { padding: 16px; }
 }
-/* ── ADD THESE TO AdminOrders.css ── */
+/* ------ ADD THESE TO AdminOrders.css ------ */
 
 /* Flow info banner at top of page */
 .admin-flow-info {
@@ -1434,11 +1434,11 @@
 
 .flow-notice.purple i { color: #7c3aed; }
 
-/* ══════════════════════════════════════
+/* ======
    ADD THESE TO THE BOTTOM OF AdminOrders.css
-══════════════════════════════════════ */
+====== */
 
-/* ── Promo pill in modal header ── */
+/* ------ Promo pill in modal header ------ */
 .promo-admin-pill {
   display: inline-flex;
   align-items: center;
@@ -1456,7 +1456,7 @@
 
 .promo-admin-pill i { font-size: 11px; }
 
-/* ── Promo card in order modal ── */
+/* ------ Promo card in order modal ------ */
 .promo-admin-card {
   background: linear-gradient(135deg, #fdf2f8, #fce7f3);
   border: 1.5px solid #f9a8d4;
@@ -1519,7 +1519,7 @@
 .promo-admin-row span { color: #6b7280; font-weight: 500; }
 .promo-admin-row strong { color: #1a1a1a; font-weight: 700; }
 
-/* ── REPLACE these rules in AdminOrders.css (search and replace each block) ── */
+/* ------ REPLACE these rules in AdminOrders.css (search and replace each block) ------ */
 
 /* Fix: Amount Saved row — was red, now green */
 .promo-admin-row.discount {
@@ -1552,7 +1552,7 @@
   font-weight: 800;
 }
 
-/* ── Promo discount row in order totals ── */
+/* ------ Promo discount row in order totals ------ */
 .total-row.promo-discount-admin-row {
   color: #16a34a;
 }
@@ -1562,7 +1562,7 @@
   font-size: 16px;
 }
 
-/* ── Promo savings note at bottom of totals ── */
+/* ------ Promo savings note at bottom of totals ------ */
 .promo-admin-savings-note {
   margin-top: 12px;
   padding: 12px 14px;
@@ -1585,7 +1585,7 @@
 
 .promo-admin-savings-note strong { color: #be185d; }
 
-/* ── ADD/REPLACE THESE RESPONSIVE STYLES AT BOTTOM OF AdminOrders.css ── */
+/* ------ ADD/REPLACE THESE RESPONSIVE STYLES AT BOTTOM OF AdminOrders.css ------ */
 
 /* Order Modal — full responsive */
 .order-modal-overlay {
@@ -1625,9 +1625,9 @@
   overflow-y: auto;
 }
 
-/* ══════════════════════════
+/* ======
    RESPONSIVE — Orders Modal
-══════════════════════════ */
+====== */
 
 @media (max-width: 768px) {
   .order-modal-overlay {
@@ -1708,11 +1708,11 @@
   .status-buttons  { grid-template-columns: 1fr; }
 }
 
-/* ══════════════════════════════════════════════════════
+/* ======
    APPEND THESE TO THE BOTTOM OF AdminOrders.css
-══════════════════════════════════════════════════════ */
+====== */
 
-/* ── Date filter group ── */
+/* ------ Date filter group ------ */
 .date-filter-group {
   flex-shrink: 0;
 }
@@ -1777,7 +1777,7 @@
   background: #fecaca;
 }
 
-/* ── Stats bar ── */
+/* ------ Stats bar ------ */
 .orders-stats-bar {
   display: flex;
   align-items: center;
@@ -1838,7 +1838,7 @@
   border-left: 1px solid #e5e7eb;
 }
 
-/* ── Method badge in table ── */
+/* ------ Method badge in table ------ */
 .method-badge {
   display: inline-flex;
   align-items: center;
@@ -1852,7 +1852,7 @@
   font-size: 12px;
 }
 
-/* ── Method badge pill in modal header ── */
+/* ------ Method badge pill in modal header ------ */
 .method-badge-pill {
   display: inline-flex;
   align-items: center;
@@ -1865,7 +1865,7 @@
   background: white;
 }
 
-/* ── Method display in modal info grid ── */
+/* ------ Method display in modal info grid ------ */
 .method-display {
   display: flex;
   align-items: center;
@@ -1878,7 +1878,7 @@
   font-size: 15px;
 }
 
-/* ── Responsive adjustments for new elements ── */
+/* ------ Responsive adjustments for new elements ------ */
 @media (max-width: 900px) {
   .orders-filters {
     flex-direction: column;
@@ -1927,3 +1927,263 @@
     font-size: 17px;
   }
 }
+
+/* ======
+   REFUND STYLES — append to bottom of AdminOrders.css
+====== */
+
+/* ------ Refund tab button ------ */
+.tab-btn-refund.active {
+  color: #f59e0b;
+  border-bottom-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.tab-refund-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  background: #ef4444;
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 10px;
+  margin-left: 4px;
+  animation: refundPulse 2s ease-in-out infinite;
+}
+
+@keyframes refundPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.65; }
+}
+
+/* ------ Refund info banner (top of page on refund tab) ------ */
+.admin-refund-info-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #fff7ed;
+  border: 1.5px solid #fed7aa;
+  border-radius: 10px;
+  padding: 13px 18px;
+  margin-bottom: 20px;
+  font-size: 13px;
+  color: #c2410c;
+}
+
+.admin-refund-info-banner i { color: #f97316; font-size: 16px; flex-shrink: 0; }
+.admin-refund-info-banner strong { color: #9a3412; }
+
+/* ------ Refund status column badges ------ */
+.refund-table-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
+.refund-table-pending  { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+.refund-table-approved { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
+.refund-table-rejected { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+
+/* ------ Row highlight for pending refund ------ */
+.row-refund-pending {
+  background: #fffbeb !important;
+}
+
+.row-refund-pending:hover {
+  background: #fef3c7 !important;
+}
+
+/* ------ Refund pill in modal header ------ */
+.refund-header-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 20px;
+}
+
+.refund-header-requested { background: #fef3c7; color: #92400e; border: 1.5px solid #fde68a; }
+.refund-header-approved  { background: #d1fae5; color: #065f46; border: 1.5px solid #6ee7b7; }
+.refund-header-rejected  { background: #fee2e2; color: #991b1b; border: 1.5px solid #fca5a5; }
+
+/* ------ Admin refund card in modal ------ */
+.admin-refund-card {
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1.5px solid #e2e8f0;
+}
+
+.admin-refund-requested { border-color: #fde68a; }
+.admin-refund-approved  { border-color: #6ee7b7; }
+.admin-refund-rejected  { border-color: #fca5a5; }
+
+.admin-refund-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  background: #f8f9fa;
+}
+
+.admin-refund-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 13px;
+}
+
+.admin-refund-row:last-child { border-bottom: none; }
+.admin-refund-row span { color: #6b7280; font-weight: 500; flex-shrink: 0; }
+.admin-refund-row strong { color: #1a1f36; font-weight: 600; text-align: right; }
+
+/* ------ Refund action area ------ */
+.admin-refund-action {
+  padding: 16px;
+  background: white;
+  border-top: 1.5px solid #fde68a;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.admin-refund-note-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #374151;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.admin-refund-note-label i { color: #6b7280; }
+
+.admin-refund-note-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+  color: #1a1f36;
+}
+
+.admin-refund-note-input:focus {
+  outline: none;
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245,158,11,0.12);
+}
+
+.admin-refund-action-btns {
+  display: flex;
+  gap: 10px;
+}
+
+.admin-refund-reject-btn {
+  flex: 1;
+  padding: 11px 14px;
+  background: white;
+  border: 1.5px solid #fca5a5;
+  color: #dc2626;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  transition: all 0.2s;
+}
+
+.admin-refund-reject-btn:hover:not(:disabled) {
+  background: #fef2f2;
+  border-color: #dc2626;
+}
+
+.admin-refund-approve-btn {
+  flex: 1;
+  padding: 11px 14px;
+  background: #16a34a;
+  border: none;
+  color: white;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  transition: all 0.2s;
+  box-shadow: 0 3px 10px rgba(22,163,74,0.25);
+}
+
+.admin-refund-approve-btn:hover:not(:disabled) {
+  background: #15803d;
+  transform: translateY(-1px);
+}
+
+.admin-refund-reject-btn:disabled,
+.admin-refund-approve-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ------ Resolved banner ------ */
+.admin-refund-resolved {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  border-top: 1.5px solid;
+}
+
+.admin-refund-resolved.approved {
+  background: #f0fdf4;
+  border-color: #86efac;
+  color: #15803d;
+}
+
+.admin-refund-resolved.rejected {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  color: #dc2626;
+}
+
+.admin-refund-resolved i { font-size: 16px; }
+
+/* ------ Refund sidebar badge (in AdminSidebar.jsx) ------ */
+.refund-sidebar-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  background: #f59e0b;
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  animation: refundPulse 2s ease-in-out infinite;
+}
+
+.refund-sidebar-badge i { font-size: 9px; }

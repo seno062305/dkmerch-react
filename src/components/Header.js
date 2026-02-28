@@ -3,7 +3,6 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
-import RiderRegistrationModal from './RiderRegistrationModal';
 import './Header.css';
 
 const Header = ({ cartCount, wishlistCount, onCartClick }) => {
@@ -16,7 +15,6 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [selectedIndex, setSelectedIndex] = useState(-1);
-  const [showRiderModal, setShowRiderModal] = useState(false);
   const dropdownRef = useRef(null);
   const lastScrollTarget = useRef(null);
 
@@ -72,8 +70,8 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
   }, []);
 
   useEffect(() => {
-    document.body.style.overflow = (showMobileMenu || showSearch || showRiderModal) ? 'hidden' : '';
-  }, [showMobileMenu, showSearch, showRiderModal]);
+    document.body.style.overflow = (showMobileMenu || showSearch) ? 'hidden' : '';
+  }, [showMobileMenu, showSearch]);
 
   useEffect(() => {
     const scrollTarget = location.state?.scrollTo;
@@ -263,7 +261,11 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
             )}
 
             {!isAuthenticated && (
-              <button className="header-action-item rider-register-btn" onClick={() => setShowRiderModal(true)} title="Apply as Rider">
+              <button
+                className="header-action-item rider-register-btn"
+                onClick={() => window.dispatchEvent(new CustomEvent('openLoginModal', { detail: { riderMode: true } }))}
+                title="Apply as Rider"
+              >
                 <i className="fas fa-motorcycle"></i><span>Riders</span>
               </button>
             )}
@@ -338,8 +340,6 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
           </div>
         </div>
       )}
-
-      {showRiderModal && <RiderRegistrationModal onClose={() => setShowRiderModal(false)} />}
     </header>
   );
 };

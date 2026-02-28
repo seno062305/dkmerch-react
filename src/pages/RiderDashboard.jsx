@@ -43,6 +43,7 @@ const GPS = {
       (err) => console.error('GPS watch error:', err),
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
+    // ✅ Send location to Convex every 10 seconds
     this._interval = setInterval(() => {
       if (this._lastPos && this._sendFn) {
         this._sendFn({
@@ -126,7 +127,6 @@ const fetchRoute = async (fromLat, fromLng, toLat, toLng) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Directional arrow icon builder
-// heading: 0-360° from North  |  null = no GPS heading (plain dot)
 // ─────────────────────────────────────────────────────────────────────────────
 const buildRiderIconHtml = (heading) => {
   const hasHeading = heading !== null && heading !== undefined && !isNaN(Number(heading));
@@ -230,7 +230,6 @@ const FullscreenMapModal = ({ address, customerName, coords, riderCoords, riderH
         const map = L.map(mapRef.current, { zoomControl: false, tap: false, scrollWheelZoom: true })
           .setView([startLat, startLng], coords ? 16 : 14);
         L.control.zoom({ position: 'bottomright' }).addTo(map);
-        // ✅ OSM normal map (no satellite)
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
           maxZoom: 19,
@@ -338,18 +337,20 @@ const FullscreenMapModal = ({ address, customerName, coords, riderCoords, riderH
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Customer map (inline)
+// Customer map (inline) — with auto-refresh rider position every 10s
 // ─────────────────────────────────────────────────────────────────────────────
 const CustomerMap = ({ orderId, allOrders, riderCoords, riderHeading }) => {
-  const mapRef         = useRef(null);
-  const mapInstanceRef = useRef(null);
-  const markerRef      = useRef(null);
-  const routeLayerRef  = useRef(null);
-  const riderMarkerRef = useRef(null);
-  const unmountedRef   = useRef(false);
-  const routeDrawnRef  = useRef(false);
-  const prevRiderRef   = useRef(null);
-  const prevHeadingRef = useRef(null);
+  const mapRef             = useRef(null);
+  const mapInstanceRef     = useRef(null);
+  const markerRef          = useRef(null);
+  const routeLayerRef      = useRef(null);
+  const riderMarkerRef     = useRef(null);
+  const unmountedRef       = useRef(false);
+  const routeDrawnRef      = useRef(false);
+  const prevRiderRef       = useRef(null);
+  const prevHeadingRef     = useRef(null);
+  // ✅ Track position where route was last drawn — to redraw when rider moves significantly
+  const lastRouteRiderRef  = useRef(null);
 
   const [mapError, setMapError]           = useState(null);
   const [leafletLoaded, setLeafletLoaded] = useState(!!window.L);
@@ -389,7 +390,6 @@ const CustomerMap = ({ orderId, allOrders, riderCoords, riderHeading }) => {
       const map = L.map(mapRef.current, { zoomControl: false, tap: false, scrollWheelZoom: false, dragging: true })
         .setView([startLat, startLng], savedCoords ? 16 : 14);
       L.control.zoom({ position: 'bottomright' }).addTo(map);
-      // ✅ OSM normal map (no satellite)
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         maxZoom: 19,
@@ -437,6 +437,17 @@ const CustomerMap = ({ orderId, allOrders, riderCoords, riderHeading }) => {
         prevRiderRef.current  = { lat: riderCoords.lat, lng: riderCoords.lng };
         prevHeadingRef.current = riderHeading;
 
+        // ✅ FIX: Check if rider moved >50m from where route was last drawn
+        // If so, reset routeDrawnRef so route is redrawn with updated path
+        if (routeDrawnRef.current && lastRouteRiderRef.current) {
+          const dLat = Math.abs(lastRouteRiderRef.current.lat - riderCoords.lat);
+          const dLng = Math.abs(lastRouteRiderRef.current.lng - riderCoords.lng);
+          if (dLat > 0.0005 || dLng > 0.0005) {
+            // Rider moved ~55m+ — redraw route
+            routeDrawnRef.current = false;
+          }
+        }
+
         if (!riderMarkerRef.current) {
           const riderIcon = L.divIcon({
             className: '',
@@ -463,6 +474,7 @@ const CustomerMap = ({ orderId, allOrders, riderCoords, riderHeading }) => {
 
         if (!routeDrawnRef.current) {
           routeDrawnRef.current = true;
+          lastRouteRiderRef.current = { lat: riderCoords.lat, lng: riderCoords.lng };
           try { mapInstanceRef.current.fitBounds([[riderCoords.lat, riderCoords.lng], [custLat, custLng]], { padding: [30, 30] }); } catch {}
           fetchRoute(riderCoords.lat, riderCoords.lng, custLat, custLng).then(latlngs => {
             if (unmountedRef.current || !latlngs || !mapInstanceRef.current) return;
@@ -696,6 +708,7 @@ const RiderDashboard = () => {
     if (lastPos)   setCurrentPosition(lastPos);
   }, []);
 
+  // ✅ Sync currentPosition every 2s so map updates in real-time
   useEffect(() => {
     const sync = setInterval(() => {
       setTrackingOrderId(GPS.activeOrderId());
@@ -821,7 +834,7 @@ const RiderDashboard = () => {
     setTrackingOrderId(orderId);
   }, [riderInfo, user, updateRiderLocation]);
 
-  const stopTrackingLocal    = useCallback(() => { GPS.stopLocal(); setTrackingOrderId(null); setCurrentPosition(null); }, []);
+  const stopTrackingLocal      = useCallback(() => { GPS.stopLocal(); setTrackingOrderId(null); setCurrentPosition(null); }, []);
   const stopTrackingOnDelivery = useCallback(async () => { await GPS.stopOnDelivery(stopRiderTracking); setTrackingOrderId(null); setCurrentPosition(null); }, [stopRiderTracking]);
 
   const toggleExpanded   = (id, setFn) => setFn(prev => ({ ...prev, [id]: !prev[id] }));
@@ -1198,7 +1211,7 @@ const RiderDashboard = () => {
                                 />
                               </div>
                               <div className="rider-photo-group">
-                                <label className="rider-otp-label"><i className="fas fa-camera"></i> Photo Proof<span className="otp-optional-tag">(Optional)</span></label>
+                                <label className="rider-otp-label"><i className="fas fa-camera"></i> Photo Proof<span className="proof-optional-tag">(Optional)</span></label>
                                 <div className={`rider-photo-dropzone ${hasPhoto ? 'has-photo' : ''}`} onClick={() => fileInputRefs.current[delivery._id]?.click()}>
                                   {hasPhoto ? (
                                     <div className="rider-photo-preview-wrap">

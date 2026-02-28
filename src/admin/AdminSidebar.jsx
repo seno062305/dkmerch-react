@@ -8,14 +8,18 @@ const AdminSidebar = ({ onLinkClick }) => {
   const { logout } = useAuth();
   const navigate = useNavigate();
 
-  // Orders badge
+  // Orders badge — pending + confirmed
   const allOrders = useQuery(api.orders.getAllOrders) ?? [];
-  const newOrderCount = allOrders.filter(o =>
-    o.orderId && o.items?.length > 0 &&
-    (o.orderStatus === 'pending' || o.orderStatus === 'confirmed')
+  const validOrders = allOrders.filter(o => o.orderId && o.items?.length > 0);
+
+  const newOrderCount = validOrders.filter(o =>
+    o.orderStatus === 'pending' || o.orderStatus === 'confirmed'
   ).length;
 
-  // ✅ Riders badge — pending applications + pending pickup requests
+  // ✅ Refund badge — orders with refundStatus === 'requested'
+  const refundCount = validOrders.filter(o => o.refundStatus === 'requested').length;
+
+  // Riders badge — pending applications + pending pickup requests
   const allRiders         = useQuery(api.riders.getAllRiders)                ?? [];
   const allPickupRequests = useQuery(api.pickupRequests.getAllPickupRequests) ?? [];
   const pendingApplications = allRiders.filter(r => r.status === 'pending').length;
@@ -62,8 +66,15 @@ const AdminSidebar = ({ onLinkClick }) => {
         <NavLink to="/admin/orders" className="admin-nav-link" onClick={handleNavClick}>
           <i className="fas fa-shopping-bag"></i>
           <span>Orders</span>
+          {/* Orders badge — pending/confirmed orders */}
           {newOrderCount > 0 && (
             <span className="order-badge">{newOrderCount}</span>
+          )}
+          {/* ✅ Refund badge — stacked below orders badge if there are pending refunds */}
+          {refundCount > 0 && (
+            <span className="refund-sidebar-badge" title={`${refundCount} refund request${refundCount > 1 ? 's' : ''}`}>
+              <i className="fas fa-undo-alt"></i> {refundCount}
+            </span>
           )}
         </NavLink>
 
@@ -85,7 +96,6 @@ const AdminSidebar = ({ onLinkClick }) => {
         <NavLink to="/admin/riders" className="admin-nav-link" onClick={handleNavClick}>
           <i className="fas fa-motorcycle"></i>
           <span>Riders</span>
-          {/* ✅ Shows total of pending applications + pending pickup requests */}
           {riderBadgeCount > 0 && (
             <span className="order-badge">{riderBadgeCount}</span>
           )}

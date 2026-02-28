@@ -6,56 +6,68 @@ import './AdminOrders.css';
 // ── Date helpers ──────────────────────────────────────────────────
 const toDateStr = (ms) => new Date(ms).toISOString().split('T')[0];
 const today     = toDateStr(Date.now());
-const thirtyDaysAgo = toDateStr(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-// Detect payment method label from saved data
 const getPaymentMethodLabel = (order) => {
   const raw = (order.paymentMethod || '').toLowerCase();
   if (raw === 'gcash' || raw.includes('gcash'))   return { label: 'GCash', icon: 'fa-mobile-alt',  color: '#007fff' };
   if (raw === 'maya'  || raw.includes('maya') || raw.includes('paymaya')) return { label: 'Maya', icon: 'fa-wallet', color: '#00b4aa' };
   if (raw === 'card'  || raw.includes('card'))    return { label: 'Card',  icon: 'fa-credit-card', color: '#6366f1' };
-  // Fallback for old orders saved before the fix (paymentMethod = 'paymongo')
   if (raw.includes('paymongo') || raw.includes('online')) return { label: 'GCash / Maya', icon: 'fa-money-bill-wave', color: '#6b7280' };
   return { label: order.paymentMethod || '—', icon: 'fa-money-bill', color: '#9ca3af' };
 };
 
+// ── Refund reason labels (must match TrackOrder.js) ───────────────
+const REFUND_REASON_LABELS = {
+  damaged:     '📦 Item arrived damaged',
+  wrong_item:  '❌ Wrong item received',
+  missing:     '🔍 Missing items',
+  not_as_desc: '📋 Not as described',
+  defective:   '⚠️ Defective / Not working',
+  others:      '💬 Others',
+};
+
 const AdminOrders = () => {
-  const [activeTab,    setActiveTab]    = useState('all');
+  const [activeTab,     setActiveTab]     = useState('all');
   const [selectedOrder, setSelectedOrder] = useState(null);
-  const [searchTerm,   setSearchTerm]   = useState('');
-  const [startDate,    setStartDate]    = useState('');
-  const [endDate,      setEndDate]      = useState('');
+  const [searchTerm,    setSearchTerm]    = useState('');
+  const [startDate,     setStartDate]     = useState('');
+  const [endDate,       setEndDate]       = useState('');
 
   const orders = useQuery(api.orders.getAllOrders) || [];
   const updateOrderStatusMutation = useMutation(api.orders.updateOrderStatus);
   const updateOrderFieldsMutation = useMutation(api.orders.updateOrderFields);
   const deleteOrderMutation       = useMutation(api.orders.deleteOrder);
+  const resolveRefundMutation     = useMutation(api.orders.resolveRefund);
 
   const validOrders = orders.filter(o => o.orderId && o.items?.length > 0);
+
+  // ✅ Count pending refund requests
+  const refundCount = validOrders.filter(o => o.refundStatus === 'requested').length;
 
   const tabCounts = {
     paid:    validOrders.filter(o => o.paymentStatus === 'paid' && (!o.orderStatus || o.orderStatus === 'pending')).length,
     pending: validOrders.filter(o => o.orderStatus === 'pending').length,
+    refund:  refundCount,
   };
 
   const filteredOrders = useMemo(() => {
     return validOrders.filter(order => {
-      // Tab filter
       let matchesTab = true;
       if (activeTab === 'paid') {
         matchesTab = order.paymentStatus === 'paid' && (!order.orderStatus || order.orderStatus === 'pending');
+      } else if (activeTab === 'refund') {
+        // ✅ Refund tab — show all orders with any refundStatus
+        matchesTab = !!order.refundStatus;
       } else if (activeTab !== 'all') {
         matchesTab = order.orderStatus === activeTab;
       }
 
-      // Search filter
       const matchesSearch =
         !searchTerm ||
         [order.orderId, order.customerName, order.email].some(f =>
           f?.toLowerCase().includes(searchTerm.toLowerCase())
         );
 
-      // Date filter
       let matchesDate = true;
       if (startDate || endDate) {
         const orderDate = new Date(order._creationTime || order.createdAt || 0);
@@ -71,11 +83,17 @@ const AdminOrders = () => {
         }
       }
 
-return matchesTab && matchesSearch && matchesDate;
-    }).sort((a, b) => (b._creationTime || 0) - (a._creationTime || 0));
+      return matchesTab && matchesSearch && matchesDate;
+    }).sort((a, b) => {
+      // ✅ On refund tab, sort by refundRequestedAt (newest first)
+      if (activeTab === 'refund') {
+        const aTime = a.refundRequestedAt ? new Date(a.refundRequestedAt).getTime() : 0;
+        const bTime = b.refundRequestedAt ? new Date(b.refundRequestedAt).getTime() : 0;
+        return bTime - aTime;
+      }
+      return (b._creationTime || 0) - (a._creationTime || 0);
+    });
   }, [validOrders, activeTab, searchTerm, startDate, endDate]);
-
-
 
   const getStatusColor = (status) => {
     const colors = {
@@ -150,6 +168,24 @@ return matchesTab && matchesSearch && matchesDate;
     }
   };
 
+  // ✅ Handle refund resolve (approve / reject)
+  const handleResolveRefund = async (orderId, refundStatus, adminNote) => {
+    try {
+      await resolveRefundMutation({ orderId, refundStatus, refundAdminNote: adminNote });
+      if (selectedOrder?.orderId === orderId) {
+        setSelectedOrder(prev => ({
+          ...prev,
+          refundStatus,
+          refundAdminNote:  adminNote,
+          refundResolvedAt: new Date().toISOString(),
+        }));
+      }
+    } catch (err) {
+      console.error('Failed to resolve refund:', err);
+      alert('Failed to resolve refund. Please try again.');
+    }
+  };
+
   const clearDateFilter = () => { setStartDate(''); setEndDate(''); };
 
   return (
@@ -164,9 +200,19 @@ return matchesTab && matchesSearch && matchesDate;
           { key: 'confirmed',        icon: 'fa-check-circle',  label: 'Confirmed' },
           { key: 'out_for_delivery', icon: 'fa-shipping-fast', label: 'Out for Delivery' },
           { key: 'completed',        icon: 'fa-check-double',  label: 'Completed' },
+          // ✅ Refund tab — shows badge if there are pending refunds
+          { key: 'refund',           icon: 'fa-undo-alt',      label: 'Refunds', count: tabCounts.refund },
         ].map(t => (
-          <button key={t.key} className={`tab-btn ${activeTab === t.key ? 'active' : ''}`} onClick={() => setActiveTab(t.key)}>
-            <i className={`fas ${t.icon}`}></i> {t.label}
+          <button
+            key={t.key}
+            className={`tab-btn ${activeTab === t.key ? 'active' : ''} ${t.key === 'refund' ? 'tab-btn-refund' : ''}`}
+            onClick={() => setActiveTab(t.key)}
+          >
+            <i className={`fas ${t.icon}`}></i>
+            {t.key === 'refund'
+              ? <>Refunds {t.count > 0 && <span className="tab-refund-badge">{t.count}</span>}</>
+              : t.label
+            }
           </button>
         ))}
       </div>
@@ -182,6 +228,16 @@ return matchesTab && matchesSearch && matchesDate;
         </span>
       </div>
 
+      {/* ✅ Refund info banner when on refund tab */}
+      {activeTab === 'refund' && refundCount > 0 && (
+        <div className="admin-refund-info-banner">
+          <i className="fas fa-exclamation-circle"></i>
+          <span>
+            <strong>{refundCount} pending refund request{refundCount > 1 ? 's' : ''}</strong> — review and approve or reject each request below.
+          </span>
+        </div>
+      )}
+
       {/* ── Filters ── */}
       <div className="orders-filters">
         <div className="filter-group">
@@ -193,32 +249,18 @@ return matchesTab && matchesSearch && matchesDate;
             onChange={e => setSearchTerm(e.target.value)}
           />
         </div>
-
-        {/* Date filter */}
         <div className="date-filter-group">
           <div className="date-filter-inputs">
             <div className="date-filter-item">
               <label htmlFor="orderStart"><i className="fas fa-calendar"></i></label>
-              <input
-                type="date"
-                id="orderStart"
-                value={startDate}
-                max={endDate || today}
-                onChange={e => setStartDate(e.target.value)}
-                placeholder="Start date"
-              />
+              <input type="date" id="orderStart" value={startDate} max={endDate || today}
+                onChange={e => setStartDate(e.target.value)} />
             </div>
             <span className="date-filter-sep">to</span>
             <div className="date-filter-item">
               <label htmlFor="orderEnd"><i className="fas fa-calendar"></i></label>
-              <input
-                type="date"
-                id="orderEnd"
-                value={endDate}
-                min={startDate}
-                max={today}
-                onChange={e => setEndDate(e.target.value)}
-              />
+              <input type="date" id="orderEnd" value={endDate} min={startDate} max={today}
+                onChange={e => setEndDate(e.target.value)} />
             </div>
             {(startDate || endDate) && (
               <button className="date-filter-clear" onClick={clearDateFilter}>
@@ -229,14 +271,12 @@ return matchesTab && matchesSearch && matchesDate;
         </div>
       </div>
 
-
-
       {/* ── Table ── */}
       <div className="orders-container">
         {filteredOrders.length === 0 ? (
           <div className="empty-orders">
-            <i className="fas fa-inbox"></i>
-            <p>No orders found</p>
+            <i className={`fas ${activeTab === 'refund' ? 'fa-undo-alt' : 'fa-inbox'}`}></i>
+            <p>{activeTab === 'refund' ? 'No refund requests found' : 'No orders found'}</p>
           </div>
         ) : (
           <div className="orders-table-container">
@@ -250,6 +290,8 @@ return matchesTab && matchesSearch && matchesDate;
                   <th>PAYMENT</th>
                   <th>METHOD</th>
                   <th>STATUS</th>
+                  {/* ✅ Extra column on refund tab */}
+                  {activeTab === 'refund' && <th>REFUND</th>}
                   <th>RIDER</th>
                   <th>DATE</th>
                   <th>ACTIONS</th>
@@ -259,7 +301,7 @@ return matchesTab && matchesSearch && matchesDate;
                 {filteredOrders.map(order => {
                   const pm = getPaymentMethodLabel(order);
                   return (
-                    <tr key={order.orderId}>
+                    <tr key={order.orderId} className={order.refundStatus === 'requested' ? 'row-refund-pending' : ''}>
                       <td><strong>#{order.orderId.slice(-8)}</strong></td>
                       <td>
                         <div className="customer-info">
@@ -291,6 +333,26 @@ return matchesTab && matchesSearch && matchesDate;
                           {getStatusLabel(order.orderStatus)}
                         </span>
                       </td>
+                      {/* ✅ Refund status column */}
+                      {activeTab === 'refund' && (
+                        <td>
+                          {order.refundStatus === 'requested' && (
+                            <span className="refund-table-badge refund-table-pending">
+                              <i className="fas fa-clock"></i> Pending
+                            </span>
+                          )}
+                          {order.refundStatus === 'approved' && (
+                            <span className="refund-table-badge refund-table-approved">
+                              <i className="fas fa-check-circle"></i> Approved
+                            </span>
+                          )}
+                          {order.refundStatus === 'rejected' && (
+                            <span className="refund-table-badge refund-table-rejected">
+                              <i className="fas fa-times-circle"></i> Rejected
+                            </span>
+                          )}
+                        </td>
+                      )}
                       <td>
                         {order.riderInfo ? (
                           <div style={{ fontSize: '12px' }}>
@@ -325,6 +387,7 @@ return matchesTab && matchesSearch && matchesDate;
           onUpdateStatus={handleUpdateStatus}
           onCancelWithReason={handleCancelWithReason}
           onDelete={handleDelete}
+          onResolveRefund={handleResolveRefund}
           getStatusColor={getStatusColor}
           getStatusLabel={getStatusLabel}
         />
@@ -336,9 +399,11 @@ return matchesTab && matchesSearch && matchesDate;
 /* ══════════════════════════════════════
    ORDER MODAL
 ══════════════════════════════════════ */
-const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDelete, getStatusColor, getStatusLabel }) => {
-  const [showCancelModal, setShowCancelModal] = useState(false);
-  const [proofExpanded,   setProofExpanded]   = useState(false);
+const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDelete, onResolveRefund, getStatusColor, getStatusLabel }) => {
+  const [showCancelModal,  setShowCancelModal]  = useState(false);
+  const [proofExpanded,    setProofExpanded]    = useState(false);
+  const [refundAdminNote,  setRefundAdminNote]  = useState('');
+  const [resolvingRefund,  setResolvingRefund]  = useState(false);
 
   const subtotal      = order.subtotal  || 0;
   const shippingFee   = order.shippingFee || 0;
@@ -354,11 +419,19 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
   const canConfirm     = isPaid && currentStatus === 'pending';
   const canCancel      = !isDone && !isRiderManaged;
   const hasPromo       = !!(order.promoCode && discount > 0);
-
   const hasDeliveryProof = !!(order.deliveryProofPhoto);
   const otpVerified      = !!(order.deliveryOtpVerified);
-
+  const hasRefund        = !!(order.refundStatus);
   const pm = getPaymentMethodLabel(order);
+
+  const handleRefundResolve = async (status) => {
+    setResolvingRefund(true);
+    try {
+      await onResolveRefund(order.orderId, status, refundAdminNote.trim());
+    } finally {
+      setResolvingRefund(false);
+    }
+  };
 
   return (
     <div className="order-modal-overlay" onClick={onClose}>
@@ -381,6 +454,13 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
               {hasPromo && (
                 <span className="promo-admin-pill">
                   <i className="fas fa-tag"></i> {order.promoCode}
+                </span>
+              )}
+              {/* ✅ Refund status pill in header */}
+              {hasRefund && (
+                <span className={`refund-header-pill refund-header-${order.refundStatus}`}>
+                  <i className={`fas ${order.refundStatus === 'requested' ? 'fa-clock' : order.refundStatus === 'approved' ? 'fa-check-circle' : 'fa-times-circle'}`}></i>
+                  {order.refundStatus === 'requested' ? 'Refund Pending' : order.refundStatus === 'approved' ? 'Refund Approved' : 'Refund Rejected'}
                 </span>
               )}
             </div>
@@ -480,6 +560,99 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                     )}
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* ✅ REFUND REQUEST SECTION */}
+          {hasRefund && (
+            <div className="modal-section">
+              <h3><i className="fas fa-undo-alt"></i> Refund Request</h3>
+              <div className={`admin-refund-card admin-refund-${order.refundStatus}`}>
+
+                {/* Refund details */}
+                <div className="admin-refund-details">
+                  <div className="admin-refund-row">
+                    <span>Reason</span>
+                    <strong>{REFUND_REASON_LABELS[order.refundReason] || order.refundReason || '—'}</strong>
+                  </div>
+                  {order.refundComment && (
+                    <div className="admin-refund-row">
+                      <span>Customer note</span>
+                      <strong style={{ fontStyle: 'italic' }}>"{order.refundComment}"</strong>
+                    </div>
+                  )}
+                  <div className="admin-refund-row">
+                    <span>Requested at</span>
+                    <strong>
+                      {order.refundRequestedAt
+                        ? new Date(order.refundRequestedAt).toLocaleString('en-PH')
+                        : '—'}
+                    </strong>
+                  </div>
+                  {order.refundStatus !== 'requested' && order.refundResolvedAt && (
+                    <div className="admin-refund-row">
+                      <span>Resolved at</span>
+                      <strong>{new Date(order.refundResolvedAt).toLocaleString('en-PH')}</strong>
+                    </div>
+                  )}
+                  {order.refundAdminNote && (
+                    <div className="admin-refund-row">
+                      <span>Admin note</span>
+                      <strong>{order.refundAdminNote}</strong>
+                    </div>
+                  )}
+                </div>
+
+                {/* ✅ Action area — only shown when status is 'requested' */}
+                {order.refundStatus === 'requested' && (
+                  <div className="admin-refund-action">
+                    <label className="admin-refund-note-label">
+                      <i className="fas fa-comment-alt"></i> Response note to customer <span style={{ color: '#9ca3af', fontWeight: 400 }}>(optional)</span>
+                    </label>
+                    <textarea
+                      className="admin-refund-note-input"
+                      placeholder="e.g. We've verified the issue and will process your refund within 3-5 business days..."
+                      value={refundAdminNote}
+                      onChange={e => setRefundAdminNote(e.target.value)}
+                      rows={2}
+                      maxLength={300}
+                    />
+                    <div className="admin-refund-action-btns">
+                      <button
+                        className="admin-refund-reject-btn"
+                        onClick={() => handleRefundResolve('rejected')}
+                        disabled={resolvingRefund}
+                      >
+                        {resolvingRefund ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-times-circle"></i>}
+                        Reject Refund
+                      </button>
+                      <button
+                        className="admin-refund-approve-btn"
+                        onClick={() => handleRefundResolve('approved')}
+                        disabled={resolvingRefund}
+                      >
+                        {resolvingRefund ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-check-circle"></i>}
+                        Approve Refund
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Status resolved banner */}
+                {order.refundStatus === 'approved' && (
+                  <div className="admin-refund-resolved approved">
+                    <i className="fas fa-check-circle"></i>
+                    <span>Refund has been <strong>approved</strong>.</span>
+                  </div>
+                )}
+                {order.refundStatus === 'rejected' && (
+                  <div className="admin-refund-resolved rejected">
+                    <i className="fas fa-times-circle"></i>
+                    <span>Refund request was <strong>rejected</strong>.</span>
+                  </div>
+                )}
+
               </div>
             </div>
           )}
