@@ -1,0 +1,42 @@
+{
+  "name": "DKMerch",
+  "short_name": "DKMerch",
+  "description": "DKMerch Rider Dashboard — deliver orders on the go",
+  "start_url": "/rider",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#fc1268",
+  "icons": [
+    {
+      "src": "/images/dklogo2-removebg-preview.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/images/dklogo2-removebg-preview.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["logistics", "productivity"],
+  "shortcuts": [
+    {
+      "name": "Available Orders",
+      "short_name": "Orders",
+      "description": "View available orders",
+      "url": "/rider?tab=available",
+      "icons": [{ "src": "/images/dklogo2-removebg-preview.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Deliver",
+      "short_name": "Deliver",
+      "description": "View active deliveries",
+      "url": "/rider?tab=deliver",
+      "icons": [{ "src": "/images/dklogo2-removebg-preview.png", "sizes": "96x96" }]
+    }
+  ]
+}

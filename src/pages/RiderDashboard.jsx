@@ -693,6 +693,30 @@ const RiderDashboard = () => {
   const [kickedAtTimestamp, setKickedAtTimestamp] = useState(null);
   const remainingCountdown = useKickedCountdown(kickedAtTimestamp);
 
+  // ── PWA Install ──
+  const [installPrompt, setInstallPrompt]     = useState(null);
+  const [showIosInstall, setShowIosInstall]   = useState(false);
+  const [isInstalled, setIsInstalled]         = useState(false);
+  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isInStandaloneMode = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+
+  useEffect(() => {
+    if (isInStandaloneMode) { setIsInstalled(true); return; }
+    const handler = (e) => { e.preventDefault(); setInstallPrompt(e); };
+    window.addEventListener('beforeinstallprompt', handler);
+    window.addEventListener('appinstalled', () => setIsInstalled(true));
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (isIos) { setShowIosInstall(true); return; }
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === 'accepted') setIsInstalled(true);
+    setInstallPrompt(null);
+  };
+
   const riderInfo  = useQuery(api.riders.getRiderByEmail,  user?.email ? { email: user.email } : 'skip');
   const allOrders  = useQuery(api.orders.getAllOrders)  || [];
   const allPickups = useQuery(api.pickupRequests.getAllPickupRequests) || [];
@@ -1005,8 +1029,50 @@ const RiderDashboard = () => {
           </button>
         </nav>
         <div className="rider-sync-indicator"><span className="sync-dot"></span><span className="sync-text">Live • Real-time</span></div>
+
+        {/* ── PWA Install Button ── */}
+        {!isInstalled && (isIos || installPrompt) && (
+          <button className="rider-install-btn" onClick={handleInstallClick}>
+            <i className="fas fa-download"></i>
+            <span>Install App</span>
+          </button>
+        )}
+
         <button className="rider-logout-btn" onClick={handleLogout}><i className="fas fa-sign-out-alt"></i><span>Logout</span></button>
       </aside>
+
+      {/* ── iOS Install Modal ── */}
+      {showIosInstall && (
+        <div className="rider-ios-install-overlay" onClick={() => setShowIosInstall(false)}>
+          <div className="rider-ios-install-modal" onClick={e => e.stopPropagation()}>
+            <button className="rider-ios-install-close" onClick={() => setShowIosInstall(false)}>
+              <i className="fas fa-times"></i>
+            </button>
+            <div className="rider-ios-install-icon">
+              <img src="/images/dklogo2-removebg-preview.png" alt="DKMerch" />
+            </div>
+            <h3>Install DKMerch</h3>
+            <p>Install this app on your iPhone for faster access to your deliveries.</p>
+            <div className="rider-ios-steps">
+              <div className="rider-ios-step">
+                <span className="rider-ios-step-num">1</span>
+                <span>Tap the <strong>Share</strong> button <i className="fas fa-share-square" style={{color:'#007AFF'}}></i> at the bottom of Safari</span>
+              </div>
+              <div className="rider-ios-step">
+                <span className="rider-ios-step-num">2</span>
+                <span>Scroll down and tap <strong>"Add to Home Screen"</strong> <i className="fas fa-plus-square" style={{color:'#007AFF'}}></i></span>
+              </div>
+              <div className="rider-ios-step">
+                <span className="rider-ios-step-num">3</span>
+                <span>Tap <strong>"Add"</strong> in the top right corner</span>
+              </div>
+            </div>
+            <button className="rider-ios-install-done" onClick={() => setShowIosInstall(false)}>
+              Got it! 👍
+            </button>
+          </div>
+        </div>
+      )}
 
       <main className="rider-main">
         {tab === 'available' && (
