@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useQuery, useAction } from 'convex/react';
+import { useQuery, useAction, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useUserOrders, useOrdersByEmail, useUpdateOrderOtp } from '../utils/orderStorage';
 import { useProducts, usePreOrderProducts } from '../utils/productStorage';
@@ -16,6 +16,151 @@ const formatTimeAgo = (timestamp) => {
   return `${Math.floor(diff / 60)}m ago`;
 };
 
+// ─── REFUND REASONS ───────────────────────────────────────────────────────────
+const REFUND_REASONS = [
+  { value: 'damaged',     label: '📦 Item arrived damaged',           desc: 'Product was broken or damaged during delivery' },
+  { value: 'wrong_item',  label: '❌ Wrong item received',             desc: 'Received a different product than ordered' },
+  { value: 'missing',     label: '🔍 Missing items',                   desc: 'Some items in the order were missing' },
+  { value: 'not_as_desc', label: '📋 Not as described',               desc: 'Item does not match the product description' },
+  { value: 'defective',   label: '⚠️ Defective / Not working',        desc: 'Product has a defect or does not function properly' },
+  { value: 'others',      label: '💬 Others',                         desc: 'Please describe your reason below' },
+];
+
+// ─── REFUND MODAL ─────────────────────────────────────────────────────────────
+const RefundModal = ({ order, onClose, onSuccess }) => {
+  const [selectedReason, setSelectedReason] = useState('');
+  const [comment, setComment]               = useState('');
+  const [submitting, setSubmitting]         = useState(false);
+  const [error, setError]                   = useState('');
+  const requestRefund = useMutation(api.orders.requestRefund);
+
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = ''; };
+  }, []);
+
+  const handleSubmit = async () => {
+    if (!selectedReason) { setError('Please select a reason for your refund request.'); return; }
+    if (selectedReason === 'others' && !comment.trim()) {
+      setError('Please describe your reason in the comment box.');
+      return;
+    }
+    setError('');
+    setSubmitting(true);
+    try {
+      const result = await requestRefund({
+        orderId:       order.orderId,
+        refundReason:  selectedReason,
+        refundComment: comment.trim(),
+      });
+      if (result?.success) {
+        onSuccess();
+      } else {
+        setError(result?.error || 'Failed to submit refund request. Please try again.');
+      }
+    } catch (err) {
+      console.error('Refund error:', err);
+      setError('Something went wrong. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="refund-modal-overlay" onClick={onClose}>
+      <div className="refund-modal" onClick={e => e.stopPropagation()}>
+        <button className="refund-modal-close" onClick={onClose}><i className="fas fa-times"></i></button>
+
+        <div className="refund-modal-header">
+          <div className="refund-modal-icon"><i className="fas fa-undo-alt"></i></div>
+          <div>
+            <h3>Request a Refund</h3>
+            <p>Order #{order.orderId?.slice(-8) || 'N/A'} · ₱{order.total?.toLocaleString()}</p>
+          </div>
+        </div>
+
+        <div className="refund-modal-body">
+          <p className="refund-modal-label">Why are you requesting a refund?</p>
+
+          <div className="refund-reasons-list">
+            {REFUND_REASONS.map(r => (
+              <button
+                key={r.value}
+                className={`refund-reason-btn ${selectedReason === r.value ? 'selected' : ''}`}
+                onClick={() => { setSelectedReason(r.value); setError(''); }}
+              >
+                <div className="refund-reason-check">
+                  {selectedReason === r.value
+                    ? <i className="fas fa-check-circle"></i>
+                    : <i className="far fa-circle"></i>}
+                </div>
+                <div className="refund-reason-text">
+                  <span className="refund-reason-label">{r.label}</span>
+                  <span className="refund-reason-desc">{r.desc}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          <div className={`refund-comment-wrap ${selectedReason === 'others' ? 'required' : ''}`}>
+            <label className="refund-modal-label">
+              {selectedReason === 'others' ? 'Describe your reason *' : 'Additional comments (optional)'}
+            </label>
+            <textarea
+              className="refund-comment-box"
+              placeholder={selectedReason === 'others'
+                ? 'Please explain why you want a refund...'
+                : 'Add any details that may help us process your request...'}
+              value={comment}
+              onChange={e => setComment(e.target.value)}
+              rows={3}
+              maxLength={500}
+            />
+            <span className="refund-comment-count">{comment.length}/500</span>
+          </div>
+
+          {error && (
+            <div className="refund-error-msg">
+              <i className="fas fa-exclamation-circle"></i> {error}
+            </div>
+          )}
+
+          <div className="refund-modal-note">
+            <i className="fas fa-info-circle"></i>
+            <span>Refund requests are reviewed within 1-3 business days. We may contact you for additional information.</span>
+          </div>
+        </div>
+
+        <div className="refund-modal-footer">
+          <button className="refund-cancel-btn" onClick={onClose} disabled={submitting}>Cancel</button>
+          <button className="refund-submit-btn" onClick={handleSubmit} disabled={submitting || !selectedReason}>
+            {submitting
+              ? <><i className="fas fa-spinner fa-spin"></i> Submitting...</>
+              : <><i className="fas fa-paper-plane"></i> Submit Refund Request</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── REFUND STATUS BADGE ──────────────────────────────────────────────────────
+const RefundBadge = ({ status }) => {
+  if (!status) return null;
+  const config = {
+    requested: { icon: 'fa-clock',        label: 'Refund Pending',  cls: 'refund-badge-pending'  },
+    approved:  { icon: 'fa-check-circle', label: 'Refund Approved', cls: 'refund-badge-approved' },
+    rejected:  { icon: 'fa-times-circle', label: 'Refund Rejected', cls: 'refund-badge-rejected' },
+  };
+  const c = config[status];
+  if (!c) return null;
+  return (
+    <span className={`refund-status-badge ${c.cls}`}>
+      <i className={`fas ${c.icon}`}></i> {c.label}
+    </span>
+  );
+};
+
 // ─── LEAFLET MAP COMPONENT ───────────────────────────────────────────────────
 const RiderMap = ({ orderId, riderName }) => {
   const mapRef            = useRef(null);
@@ -23,6 +168,7 @@ const RiderMap = ({ orderId, riderName }) => {
   const markerRef         = useRef(null);
   const accuracyCircleRef = useRef(null);
   const pendingLocRef     = useRef(null);
+  const lastLocRef        = useRef(null);
   const [mapReady, setMapReady]           = useState(false);
   const [mapError, setMapError]           = useState(null);
   const [leafletLoaded, setLeafletLoaded] = useState(!!window.L);
@@ -45,6 +191,7 @@ const RiderMap = ({ orderId, riderName }) => {
   useEffect(() => {
     if (!orderId) return;
     pendingLocRef.current = null;
+    lastLocRef.current    = null;
   }, [orderId]);
 
   useEffect(() => {
@@ -79,7 +226,8 @@ const RiderMap = ({ orderId, riderName }) => {
     const marker = markerRef.current;
     const { lat, lng, accuracy, updatedAt, riderName: rName, isTracking } = data;
 
-    marker.setLatLng([lat, lng]);
+    try { marker.setLatLng([lat, lng]); } catch {}
+
     marker.getPopup()?.setContent(
       `<div class="rider-map-popup">
         <strong>🛵 ${rName || riderName || 'Your Rider'}</strong><br>
@@ -91,20 +239,28 @@ const RiderMap = ({ orderId, riderName }) => {
 
     if (accuracyCircleRef.current) {
       try { map.removeLayer(accuracyCircleRef.current); } catch {}
+      accuracyCircleRef.current = null;
     }
     if (accuracy && accuracy < 2000) {
-      accuracyCircleRef.current = L.circle([lat, lng], {
-        radius      : accuracy,
-        color       : '#fc1268',
-        fillColor   : '#fc1268',
-        fillOpacity : 0.1,
-        weight      : 1.5,
-        dashArray   : '4 4',
-      }).addTo(map);
+      try {
+        accuracyCircleRef.current = L.circle([lat, lng], {
+          radius: accuracy, color: '#fc1268', fillColor: '#fc1268',
+          fillOpacity: 0.1, weight: 1.5, dashArray: '4 4',
+        }).addTo(map);
+      } catch {}
     }
 
-    const targetZoom = Math.max(map.getZoom(), 16);
-    map.flyTo([lat, lng], targetZoom, { animate: true, duration: 1.2 });
+    const prev  = lastLocRef.current;
+    const moved = !prev
+      || Math.abs(prev.lat - lat) > 0.00001
+      || Math.abs(prev.lng - lng) > 0.00001;
+    if (moved) {
+      lastLocRef.current = { lat, lng };
+      try {
+        const targetZoom = Math.max(map.getZoom(), 16);
+        map.flyTo([lat, lng], targetZoom, { animate: true, duration: 1.2 });
+      } catch {}
+    }
   }, [riderName]);
 
   useEffect(() => {
@@ -112,35 +268,25 @@ const RiderMap = ({ orderId, riderName }) => {
 
     try {
       const L = window.L;
-
       const map = L.map(mapRef.current, {
-        zoomControl       : true,
-        attributionControl: true,
-        tap               : false,
-        scrollWheelZoom   : true,
-        doubleClickZoom   : true,
+        zoomControl: true, attributionControl: true,
+        tap: false, scrollWheelZoom: true, doubleClickZoom: true,
       }).setView([14.5995, 120.9842], 15);
 
       map.zoomControl.setPosition('bottomright');
 
-      // ✅ OSM normal map — no satellite
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        maxZoom    : 19,
+        maxZoom: 19,
       }).addTo(map);
 
       const riderIcon = L.divIcon({
-        className : 'rider-map-icon',
-        html      : `
-          <div class="rider-map-marker">
-            <div class="rider-map-marker-inner">
-              <i class="fas fa-motorcycle"></i>
-            </div>
-            <div class="rider-map-pulse"></div>
-          </div>`,
-        iconSize    : [48, 48],
-        iconAnchor  : [24, 48],
-        popupAnchor : [0, -50],
+        className: 'rider-map-icon',
+        html: `<div class="rider-map-marker">
+          <div class="rider-map-marker-inner"><i class="fas fa-motorcycle"></i></div>
+          <div class="rider-map-pulse"></div>
+        </div>`,
+        iconSize: [48, 48], iconAnchor: [24, 48], popupAnchor: [0, -50],
       });
 
       const marker = L.marker([14.5995, 120.9842], { icon: riderIcon })
@@ -153,8 +299,7 @@ const RiderMap = ({ orderId, riderName }) => {
       mapInstanceRef.current = map;
       markerRef.current      = marker;
       setMapReady(true);
-
-      setTimeout(() => map.invalidateSize(), 300);
+      setTimeout(() => { try { map.invalidateSize(); } catch {} }, 300);
 
       if (pendingLocRef.current) {
         applyLocation(pendingLocRef.current);
@@ -184,6 +329,7 @@ const RiderMap = ({ orderId, riderName }) => {
         markerRef.current         = null;
         accuracyCircleRef.current = null;
         pendingLocRef.current     = null;
+        lastLocRef.current        = null;
       }
     };
   }, []);
@@ -213,9 +359,7 @@ const RiderMap = ({ orderId, riderName }) => {
 
   return (
     <div className="rider-map-wrapper">
-      <div className={`rider-map-status-bar ${statusClass}`}>
-        {statusContent}
-      </div>
+      <div className={`rider-map-status-bar ${statusClass}`}>{statusContent}</div>
       <div ref={mapRef} className="rider-map-container" />
       {locationData?.isTracking && (
         <div className="rider-map-accuracy">
@@ -256,6 +400,8 @@ const TrackOrder = () => {
   const [showTrackedOrders, setShowTrackedOrders] = useState(false);
   const [lightboxData, setLightboxData]           = useState(null);
   const [removeConfirm, setRemoveConfirm]         = useState(null);
+  const [refundOrder, setRefundOrder]             = useState(null);  // ✅ NEW
+  const [refundSuccess, setRefundSuccess]         = useState(false); // ✅ NEW
   const [hiddenOrders, setHiddenOrders]           = useState(() => {
     try { return JSON.parse(localStorage.getItem('hiddenDeliveredOrders') || '[]'); } catch { return []; }
   });
@@ -406,7 +552,10 @@ const TrackOrder = () => {
   const lightboxNext  = () => setLightboxData(prev => ({ ...prev, index: (prev.index + 1) % prev.images.length }));
   const lightboxPrev  = () => setLightboxData(prev => ({ ...prev, index: (prev.index - 1 + prev.images.length) % prev.images.length }));
 
-  const visibleOrders   = orders.filter(o => !hiddenOrders.includes(o._id));
+  const sortByNewest = (arr) =>
+    [...arr].sort((a, b) => (b._creationTime || 0) - (a._creationTime || 0));
+
+  const visibleOrders   = sortByNewest(orders.filter(o => !hiddenOrders.includes(o._id)));
   const activeOrders    = visibleOrders.filter(o => !isDelivered(o) && !isCancelledOrder(o));
   const deliveredOrders = visibleOrders.filter(o => isDelivered(o));
   const cancelledOrders = visibleOrders.filter(o => isCancelledOrder(o));
@@ -439,6 +588,13 @@ const TrackOrder = () => {
       if (product?.isPreOrder && product?.releaseDate) return product.releaseDate;
     }
     return null;
+  };
+
+  // ✅ Refund success handler
+  const handleRefundSuccess = () => {
+    setRefundOrder(null);
+    setRefundSuccess(true);
+    setTimeout(() => setRefundSuccess(false), 4000);
   };
 
   const OrderCard = ({ order, onViewDetails }) => {
@@ -534,6 +690,14 @@ const TrackOrder = () => {
               <span>Expected: {new Date(releaseDate).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
             </div>
           )}
+
+          {/* ✅ Refund status badge on card */}
+          {delivered && order.refundStatus && (
+            <div style={{ marginBottom: 6 }}>
+              <RefundBadge status={order.refundStatus} />
+            </div>
+          )}
+
           <div className="order-card-meta">
             <span className={`order-status-text ${getStatusClass(statusKey)}`}>
               <i className="fas fa-circle"></i> {orderStatus}
@@ -561,6 +725,13 @@ const TrackOrder = () => {
           ) : (
             <button className="btn btn-primary btn-small order-view-btn" onClick={() => onViewDetails(order)}>
               <i className="fas fa-search"></i> View Details
+            </button>
+          )}
+
+          {/* ✅ Refund button — only on delivered orders with no existing refund */}
+          {delivered && !order.refundStatus && (
+            <button className="btn order-refund-btn" onClick={() => setRefundOrder(order)}>
+              <i className="fas fa-undo-alt"></i> Request Refund
             </button>
           )}
 
@@ -626,6 +797,15 @@ const TrackOrder = () => {
         </div>
         <div className="container">
           <section className="track-order-page">
+
+            {/* ✅ Refund success toast */}
+            {refundSuccess && (
+              <div className="refund-success-toast">
+                <i className="fas fa-check-circle"></i>
+                Refund request submitted! We'll review it within 1-3 business days.
+              </div>
+            )}
+
             <div className="orders-tab-bar">
               {FILTERS.map(f => (
                 <button key={f.key} className={`orders-tab-btn ${filter === f.key ? 'active' : ''}`} onClick={() => setFilter(f.key)}>
@@ -678,8 +858,19 @@ const TrackOrder = () => {
             getStatusClass={getStatusClass}
             getDisplayStatus={getDisplayStatus}
             isOutForDeliveryStatus={isOutForDeliveryStatus}
+            onRequestRefund={(order) => { handleCloseModal(); setRefundOrder(order); }}
           />
         )}
+
+        {/* ✅ Refund modal */}
+        {refundOrder && (
+          <RefundModal
+            order={refundOrder}
+            onClose={() => setRefundOrder(null)}
+            onSuccess={handleRefundSuccess}
+          />
+        )}
+
         <Lightbox />
 
         {removeConfirm && (
@@ -744,7 +935,7 @@ const TrackOrder = () => {
                 <p>Found {emailOrders.length} order{emailOrders.length > 1 ? 's' : ''} for {searchEmail}</p>
               </div>
               <div className="orders-grid">
-                {emailOrders.map(order => (
+                {sortByNewest(emailOrders).map(order => (
                   <OrderCard key={order._id} order={order} onViewDetails={handleOpenModal} />
                 ))}
               </div>
@@ -769,6 +960,15 @@ const TrackOrder = () => {
           getStatusClass={getStatusClass}
           getDisplayStatus={getDisplayStatus}
           isOutForDeliveryStatus={isOutForDeliveryStatus}
+          onRequestRefund={(order) => { handleCloseModal(); setRefundOrder(order); }}
+        />
+      )}
+
+      {refundOrder && (
+        <RefundModal
+          order={refundOrder}
+          onClose={() => setRefundOrder(null)}
+          onSuccess={handleRefundSuccess}
         />
       )}
       <Lightbox />
@@ -780,6 +980,7 @@ const TrackOrder = () => {
 const TrackingModal = ({
   order, products, onClose,
   getTimelineSteps, getStatusClass, getDisplayStatus, isOutForDeliveryStatus,
+  onRequestRefund,
 }) => {
   const updateOrderOtp    = useUpdateOrderOtp();
   const createPaymentLink = useAction(api.payments.createPaymentLink);
@@ -790,6 +991,7 @@ const TrackingModal = ({
   const isCancelled      = (order.orderStatus || order.status || '').toLowerCase() === 'cancelled';
   const isOutForDelivery = isOutForDeliveryStatus(order);
   const needsPayment     = order.status === 'Pending Payment' && order.paymentStatus !== 'paid';
+  const delivered        = ['delivered','completed'].includes((order.orderStatus || order.status || '').toLowerCase());
   const timelineSteps    = getTimelineSteps(order);
 
   useEffect(() => {
@@ -886,6 +1088,39 @@ const TrackingModal = ({
                 <p>{order.cancelReason || 'This order has been cancelled.'}</p>
               </div>
             </div>
+          )}
+
+          {/* ✅ Refund status banner inside modal */}
+          {delivered && order.refundStatus && (
+            <div className={`refund-status-banner refund-banner-${order.refundStatus}`}>
+              <div className="refund-banner-icon">
+                {order.refundStatus === 'requested' && <i className="fas fa-clock"></i>}
+                {order.refundStatus === 'approved'  && <i className="fas fa-check-circle"></i>}
+                {order.refundStatus === 'rejected'  && <i className="fas fa-times-circle"></i>}
+              </div>
+              <div className="refund-banner-text">
+                <strong>
+                  {order.refundStatus === 'requested' && 'Refund Request Pending'}
+                  {order.refundStatus === 'approved'  && 'Refund Approved'}
+                  {order.refundStatus === 'rejected'  && 'Refund Request Rejected'}
+                </strong>
+                <p>
+                  {order.refundStatus === 'requested' && `Reason: ${REFUND_REASONS.find(r => r.value === order.refundReason)?.label || order.refundReason}`}
+                  {order.refundStatus === 'approved'  && (order.refundAdminNote || 'Your refund has been approved.')}
+                  {order.refundStatus === 'rejected'  && (order.refundAdminNote || 'Your refund request was not approved.')}
+                </p>
+                {order.refundComment && order.refundStatus === 'requested' && (
+                  <p style={{ fontStyle: 'italic', marginTop: 2 }}>"{order.refundComment}"</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ✅ Request Refund button inside modal — only for delivered with no refund yet */}
+          {delivered && !order.refundStatus && (
+            <button className="modal-refund-btn" onClick={() => onRequestRefund(order)}>
+              <i className="fas fa-undo-alt"></i> Request Refund
+            </button>
           )}
 
           {isOutForDelivery && (

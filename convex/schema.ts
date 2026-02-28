@@ -17,7 +17,6 @@ export default defineSchema({
     address: v.optional(v.string()),
     city: v.optional(v.string()),
     zipCode: v.optional(v.string()),
-    // ✅ Saved map pin coords — pre-loads on next checkout
     addressLat: v.optional(v.number()),
     addressLng: v.optional(v.number()),
   })
@@ -107,7 +106,6 @@ export default defineSchema({
     status: v.string(),
     orderStatus: v.optional(v.string()),
     shippingAddress: v.optional(v.string()),
-    // ✅ exact pin coordinates from customer's checkout map
     addressLat: v.optional(v.number()),
     addressLng: v.optional(v.number()),
     paymentMethod: v.string(),
@@ -127,6 +125,12 @@ export default defineSchema({
     outForDeliveryAt: v.optional(v.string()),
     deliveryConfirmedAt: v.optional(v.string()),
     cancelledAt: v.optional(v.string()),
+    refundStatus: v.optional(v.string()),
+    refundReason: v.optional(v.string()),
+    refundComment: v.optional(v.string()),
+    refundRequestedAt: v.optional(v.string()),
+    refundResolvedAt: v.optional(v.string()),
+    refundAdminNote: v.optional(v.string()),
   })
     .index("by_orderId", ["orderId"])
     .index("by_email", ["email"]),
@@ -161,8 +165,14 @@ export default defineSchema({
     name: v.optional(v.string()),
     activeSessionId: v.optional(v.string()),
     activeDeviceAt:  v.optional(v.number()),
-    // ✅ Timestamp (ms) when rider was kicked — used to persist countdown across reloads
     kickedAt: v.optional(v.number()),
+    // ── NEW: Identity verification photos (base64 or URL) ──
+    riderPhoto: v.optional(v.union(v.string(), v.null())),
+    validId1: v.optional(v.union(v.string(), v.null())),
+    validId2: v.optional(v.union(v.string(), v.null())),
+    // ── NEW: DKMerch Rider ID (auto-generated on approval) ──
+    dkRiderId: v.optional(v.string()),       // e.g. "DKR-2025-0001"
+    dkRiderIdGeneratedAt: v.optional(v.string()), // ISO timestamp
   })
     .index("by_email", ["email"])
     .index("by_status", ["status"]),
@@ -219,9 +229,8 @@ export default defineSchema({
     .index("by_orderId", ["orderId"])
     .index("by_riderEmail", ["riderEmail"]),
 
-  // ✅ NEW: Rider notifications — created when admin confirms an order
   riderNotifications: defineTable({
-    type: v.string(),        // "new_order"
+    type: v.string(),
     orderId: v.string(),
     customerName: v.string(),
     total: v.number(),

@@ -93,6 +93,37 @@
 
 .riders-table tr:hover td { background: #f9f0ff; }
 
+/* ── PHOTO INDICATORS in table ── */
+.riders-photo-indicators {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.photo-dot {
+  font-size: 16px;
+  opacity: 0.3;
+  filter: grayscale(1);
+  transition: all 0.2s;
+}
+
+.photo-dot.has-photo {
+  opacity: 1;
+  filter: grayscale(0);
+}
+
+/* ── DK RIDER ID BADGE ── */
+.dk-rider-id-badge {
+  background: linear-gradient(135deg, #6a0dad, #9b30ff);
+  color: white;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  display: inline-block;
+}
+
 /* ── BADGE ── */
 .rider-badge {
   padding: 4px 10px;
@@ -128,6 +159,7 @@
 .riders-btn:hover { opacity: 0.85; }
 .riders-btn.approve { background: #198754; color: white; }
 .riders-btn.reject  { background: #dc3545; color: white; }
+.riders-btn.view    { background: #6a0dad; color: white; }
 
 /* ── MISC ── */
 .riders-loading,
@@ -137,10 +169,403 @@
   padding: 20px 0;
 }
 
+/* ══════════════════════════════════════════════
+   APPLICATION DETAIL MODAL
+══════════════════════════════════════════════ */
+.id-card-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.app-detail-modal {
+  background: white;
+  border-radius: 16px;
+  padding: 28px;
+  width: 100%;
+  max-width: 560px;
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.app-detail-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #6a0dad;
+  margin-bottom: 18px;
+  padding-right: 36px;
+}
+
+.app-detail-section {
+  background: #f9f5ff;
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 18px;
+  border: 1px solid #e9d5ff;
+}
+
+.app-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.app-detail-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #7c3aed;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+
+.app-detail-value {
+  font-size: 13px;
+  color: #333;
+  word-break: break-all;
+}
+
+.app-detail-photos-header {
+  font-size: 14px;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 10px;
+}
+
+.app-detail-photos {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.app-photo-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.app-photo-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #555;
+}
+
+.app-photo-img {
+  width: 100%;
+  aspect-ratio: 3/4;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 2px solid #e9d5ff;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.app-photo-img:hover {
+  border-color: #7c3aed;
+  transform: scale(1.02);
+}
+
+.app-photo-missing {
+  width: 100%;
+  aspect-ratio: 3/4;
+  background: #f3f4f6;
+  border-radius: 8px;
+  border: 2px dashed #d1d5db;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: #9ca3af;
+  text-align: center;
+  padding: 8px;
+}
+
+.app-detail-actions {
+  display: flex;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+/* ── IMAGE VIEWER ── */
+.img-viewer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.9);
+  z-index: 11000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.img-viewer-img {
+  max-width: 90vw;
+  max-height: 85vh;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.img-viewer-hint {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
+  margin-top: 12px;
+}
+
+/* ══════════════════════════════════════════════
+   DK RIDER ID CARD MODAL
+══════════════════════════════════════════════ */
+.id-card-modal {
+  background: white;
+  border-radius: 20px;
+  padding: 28px;
+  width: 100%;
+  max-width: 440px;
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  text-align: center;
+}
+
+.id-card-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: #f1f5f9;
+  border: none;
+  border-radius: 50%;
+  width: 34px;
+  height: 34px;
+  font-size: 15px;
+  cursor: pointer;
+  color: #555;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.id-card-close:hover { background: #fee2e2; color: #dc2626; }
+
+.id-card-modal-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #6a0dad;
+  margin-bottom: 4px;
+}
+
+.id-card-modal-sub {
+  font-size: 13px;
+  color: #888;
+  margin-bottom: 20px;
+}
+
+/* ── THE ACTUAL ID CARD ── */
+.dk-id-card {
+  background: linear-gradient(135deg, #6a0dad 0%, #9b30ff 60%, #7c3aed 100%);
+  border-radius: 16px;
+  padding: 20px 22px 18px;
+  color: white;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(106, 13, 173, 0.45);
+  text-align: left;
+  margin-bottom: 20px;
+}
+
+.dk-id-bg-circle1 {
+  position: absolute;
+  top: -50px;
+  right: -50px;
+  width: 180px;
+  height: 180px;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.dk-id-bg-circle2 {
+  position: absolute;
+  bottom: -40px;
+  left: -40px;
+  width: 130px;
+  height: 130px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.dk-id-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.dk-id-logo {
+  font-size: 24px;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
+}
+
+.dk-id-brand {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+}
+
+.dk-id-brand-sub {
+  font-size: 10px;
+  opacity: 0.75;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+.dk-id-body {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.dk-id-photo {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid rgba(255, 255, 255, 0.65);
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.dk-id-photo-placeholder {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  flex-shrink: 0;
+}
+
+.dk-id-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.dk-id-name {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.2;
+  margin-bottom: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dk-id-role {
+  font-size: 10px;
+  opacity: 0.75;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.dk-id-details {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.dk-id-detail {
+  font-size: 11px;
+  opacity: 0.88;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dk-id-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.25);
+  padding-top: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+
+.dk-id-number {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.dk-id-number-label {
+  font-size: 9px;
+  opacity: 0.65;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-top: 2px;
+}
+
+.dk-id-valid {
+  font-size: 10px;
+  opacity: 0.7;
+  text-align: right;
+  line-height: 1.5;
+}
+
+/* ── ID CARD ACTIONS ── */
+.id-card-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.id-card-print-btn {
+  background: #6a0dad;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.id-card-print-btn:hover { background: #520a99; }
+
+.id-card-done-btn {
+  background: #f1f5f9;
+  color: #333;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.id-card-done-btn:hover { background: #e2e8f0; }
+
 /* ══════════════════════════
    RESPONSIVE
 ══════════════════════════ */
-
 @media (max-width: 1024px) {
   .admin-riders { padding: 20px; }
 }
@@ -160,6 +585,9 @@
   .riders-actions { gap: 6px; }
 
   .rider-badge { font-size: 11px; padding: 3px 8px; }
+
+  .app-detail-grid { grid-template-columns: 1fr; }
+  .app-detail-photos { grid-template-columns: repeat(3, 1fr); gap: 8px; }
 }
 
 @media (max-width: 480px) {
@@ -181,4 +609,11 @@
 
   .riders-empty,
   .riders-loading { font-size: 13px; }
+
+  .id-card-modal { padding: 20px 16px; }
+  .dk-id-card { padding: 16px 16px 14px; }
+  .dk-id-name { font-size: 15px; }
+
+  .app-detail-modal { padding: 20px 16px; }
+  .app-detail-photos { grid-template-columns: repeat(3, 1fr); }
 }

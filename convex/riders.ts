@@ -5,6 +5,13 @@ import { v } from "convex/values";
 const genSessionId = () =>
   `${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${Math.random().toString(36).slice(2, 10)}`;
 
+// ── Generate DKMerch Rider ID: DKR-YYYY-XXXX ──
+const generateDkRiderId = (sequence: number): string => {
+  const year = new Date().getFullYear();
+  const seq = String(sequence).padStart(4, '0');
+  return `DKR-${year}-${seq}`;
+};
+
 export const getAllRiders = query(async ({ db }) => {
   return await db.query("riderApplications").collect();
 });
@@ -39,6 +46,9 @@ export const createRiderApplication = mutation({
     plateNumber: v.optional(v.string()),
     licenseNumber: v.optional(v.string()),
     password: v.optional(v.string()),
+    riderPhoto: v.optional(v.union(v.string(), v.null())),
+    validId1: v.optional(v.union(v.string(), v.null())),
+    validId2: v.optional(v.union(v.string(), v.null())),
   },
   handler: async ({ db }, args) => {
     const existing = await db
@@ -59,6 +69,9 @@ export const createRiderApplication = mutation({
       plateNumber: args.plateNumber,
       licenseNumber: args.licenseNumber,
       password: args.password,
+      riderPhoto: args.riderPhoto,
+      validId1: args.validId1,
+      validId2: args.validId2,
     });
     return { success: true, id };
   },
@@ -67,8 +80,18 @@ export const createRiderApplication = mutation({
 export const approveRider = mutation({
   args: { id: v.id("riderApplications") },
   handler: async ({ db }, { id }) => {
-    await db.patch(id, { status: "approved" });
-    return { success: true };
+    // Count all approved riders to generate next sequence number
+    const allRiders = await db.query("riderApplications").collect();
+    const approvedCount = allRiders.filter(r => r.dkRiderId).length;
+    const nextSeq = approvedCount + 1;
+    const dkRiderId = generateDkRiderId(nextSeq);
+
+    await db.patch(id, {
+      status: "approved",
+      dkRiderId,
+      dkRiderIdGeneratedAt: new Date().toISOString(),
+    });
+    return { success: true, dkRiderId };
   },
 });
 
@@ -106,7 +129,6 @@ export const deleteRider = mutation({
   },
 });
 
-// ✅ loginRider generates + saves sessionId directly in Convex
 export const loginRider = mutation({
   args: { email: v.string(), password: v.string() },
   handler: async ({ db }, { email, password }) => {
@@ -146,12 +168,11 @@ export const loginRider = mutation({
       };
     }
 
-    // ✅ Generate and persist sessionId in Convex — source of truth
     const newSessionId = genSessionId();
     await db.patch(rider._id, {
       activeSessionId: newSessionId,
       activeDeviceAt: Date.now(),
-      kickedAt: undefined, // ✅ clear any previous kickedAt on fresh login
+      kickedAt: undefined,
     });
 
     return {
@@ -163,15 +184,13 @@ export const loginRider = mutation({
         email: rider.email,
         role: "rider",
         status: rider.status,
+        dkRiderId: rider.dkRiderId,
       },
       sessionId: newSessionId,
     };
   },
 });
 
-// ─────────────────────────────────────────────────────
-// ✅ SESSION CHECK — Convex live query
-// ─────────────────────────────────────────────────────
 export const checkRiderSession = query({
   args: {
     email: v.string(),
@@ -191,18 +210,11 @@ export const checkRiderSession = query({
       valid: isValid,
       reason: isValid ? "ok" : "new_device_logged_in",
       activeDeviceAt: rider.activeDeviceAt,
-      // ✅ Always return kickedAt so RiderDashboard can compute remaining countdown
       kickedAt: rider.kickedAt ?? null,
     };
   },
 });
 
-// ─────────────────────────────────────────────────────
-// ✅ SET KICKED AT — saves exact timestamp when rider is kicked
-// RiderDashboard calls this when it first detects session mismatch.
-// On reload, checkRiderSession returns kickedAt so countdown resumes
-// from where it left off — not reset to 3:00.
-// ─────────────────────────────────────────────────────
 export const setRiderKickedAt = mutation({
   args: { email: v.string(), kickedAt: v.number() },
   handler: async ({ db }, { email, kickedAt }) => {
@@ -216,9 +228,6 @@ export const setRiderKickedAt = mutation({
   },
 });
 
-// ─────────────────────────────────────────────────────
-// ✅ GPS TRACKING
-// ─────────────────────────────────────────────────────
 export const updateRiderLocation = mutation({
   args: {
     orderId: v.string(),
