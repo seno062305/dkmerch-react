@@ -467,7 +467,8 @@ export const sendRiderNewOrderEmail = internalAction({
   },
   handler: async (ctx, args): Promise<{ success: boolean; message?: string; id?: string }> => {
     const shortId = args.orderId.slice(-8).toUpperCase();
-    const riderUrl = `${SITE_URL}/rider`;
+    // ✅ Link directly to /rider?tab=available so RiderDashboard opens on Available Orders tab
+    const riderUrl = `${SITE_URL}/rider?tab=available`;
 
     const html = `<!DOCTYPE html>
 <html>
@@ -496,7 +497,7 @@ export const sendRiderNewOrderEmail = internalAction({
           </tr>
           <tr>
             <td style="padding:28px 36px;">
-              <p style="font-size:15px;color:#374151;margin:0 0 20px;">Hi Rider,</p>
+              <p style="font-size:15px;color:#374151;margin:0 0 20px;">Hi Rider 👋,</p>
               <p style="font-size:14px;color:#6b7280;line-height:1.6;margin:0 0 24px;">
                 Admin has confirmed a new customer order. Log in to the Rider Dashboard to request this pickup and start the delivery!
               </p>
@@ -530,16 +531,16 @@ export const sendRiderNewOrderEmail = internalAction({
                 </tr>
               </table>
               <div style="background:#fff7ed;border-radius:12px;border:1.5px solid #fed7aa;padding:18px 22px;margin-bottom:24px;text-align:center;">
-                <div style="font-size:12px;font-weight:700;color:#c2410c;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Act Fast!</div>
+                <div style="font-size:12px;font-weight:700;color:#c2410c;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">🔥 Act Fast!</div>
                 <div style="font-size:13px;color:#9a3412;line-height:1.7;margin-bottom:16px;">
                   Open your Rider Dashboard now to request this pickup before another rider takes it!
                 </div>
                 <a href="${riderUrl}" style="display:inline-block;background:linear-gradient(135deg,#fc1268,#ff4d94);color:white;text-decoration:none;padding:13px 28px;border-radius:10px;font-size:14px;font-weight:700;">
-                  Go to Rider Dashboard
+                  Go to Available Orders
                 </a>
               </div>
               <p style="font-size:13px;color:#9ca3af;line-height:1.6;margin:0;">
-                Dashboard: <a href="${riderUrl}" style="color:#fc1268;font-weight:700;">${riderUrl}</a>
+                Log in at <a href="${riderUrl}" style="color:#fc1268;font-weight:700;">${SITE_URL}/rider</a> → Available Orders
               </p>
             </td>
           </tr>

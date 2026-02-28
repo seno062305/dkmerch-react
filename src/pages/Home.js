@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery } from 'convex/react';
 import { useLocation } from 'react-router-dom';
 import { api } from '../../convex/_generated/api';
@@ -46,6 +46,20 @@ function isPromoExpired(promo, nowMs) {
   if (!endMs) return false;
   return nowMs > endMs;
 }
+
+// ✅ STRICT: only count orders that are actually delivered/completed
+// Same exact logic as AdminDashboard top selling computation
+const isSaleOrder = (o) => {
+  const status      = (o.status      || '').toLowerCase().trim();
+  const orderStatus = (o.orderStatus || '').toLowerCase().trim();
+
+  return (
+    status      === 'delivered'  ||
+    status      === 'completed'  ||
+    orderStatus === 'completed'  ||
+    orderStatus === 'delivered'
+  );
+};
 
 // ── Expired Promo Modal ──
 const ExpiredPromoModal = ({ promo, onClose }) => {
@@ -148,7 +162,7 @@ const Home = () => {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [highlightPromo, setHighlightPromo] = useState(null);
-  const [expiredPromo, setExpiredPromo] = useState(null); // for modal
+  const [expiredPromo, setExpiredPromo] = useState(null);
   const { showNotification } = useNotification();
   const location = useLocation();
 
@@ -157,6 +171,8 @@ const Home = () => {
   const wishlistItems          = useWishlist();
 
   const allPromos = useQuery(api.promos.getAllPromos) || [];
+  // ✅ Fetch all orders from Convex to compute real sales counts
+  const allOrders = useQuery(api.orders.getAllOrders) ?? [];
 
   // Re-check every 10 seconds
   useEffect(() => {
@@ -166,6 +182,30 @@ const Home = () => {
 
   const activePromo = pickActivePromo(allPromos, nowMs);
 
+  // ✅ Compute salesCount per product — ONLY from delivered/completed orders
+  // Tries all possible product ID fields that Convex might store on order items
+  const productSalesMap = useMemo(() => {
+    if (!allOrders || allOrders.length === 0) return {};
+
+    const map = {};
+    const saleOrders = allOrders.filter(isSaleOrder);
+
+    saleOrders.forEach(order => {
+      (order.items || []).forEach(item => {
+        // ✅ Try every possible field name for product ID on order items
+        const pid =
+          item.productId ||   // some schemas store as productId
+          item._id       ||   // Convex document id
+          item.id;            // plain id field
+
+        if (!pid) return;
+        map[pid] = (map[pid] || 0) + (Number(item.quantity) || 1);
+      });
+    });
+
+    return map;
+  }, [allOrders]);
+
   // ── Handle ?promo=CODE in URL (from email Shop Now link) ──
   useEffect(() => {
     if (allPromos.length === 0) return;
@@ -174,21 +214,17 @@ const Home = () => {
     const urlPromoCode = params.get('promo');
     if (!urlPromoCode) return;
 
-    // Find the matching promo
     const matchedPromo = allPromos.find(
       p => p.code.toUpperCase() === urlPromoCode.toUpperCase()
     );
 
     if (!matchedPromo) {
-      // Code not found at all
       showNotification(`Promo code "${urlPromoCode}" not found.`, 'error');
       return;
     }
 
-    // Check if expired
     if (isPromoExpired(matchedPromo, Date.now())) {
       setExpiredPromo(matchedPromo);
-      // Still scroll to collections
       setTimeout(() => {
         const section = document.getElementById('collections');
         if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -196,17 +232,14 @@ const Home = () => {
       return;
     }
 
-    // Check if not yet started (upcoming)
     const startMs = toUtcMs(matchedPromo.startDate, matchedPromo.startTime || '00:00');
     if (startMs && Date.now() < startMs) {
       showNotification(`Promo "${urlPromoCode}" hasn't started yet. Stay tuned!`, 'info');
       return;
     }
 
-    // Valid and active — set highlight
     setHighlightPromo(matchedPromo);
 
-    // Scroll to collections section after short delay
     setTimeout(() => {
       const section = document.getElementById('collections');
       if (section) {
@@ -286,7 +319,6 @@ const Home = () => {
 
   return (
     <div className="home-page">
-      {/* Expired Promo Modal */}
       {expiredPromo && (
         <ExpiredPromoModal
           promo={expiredPromo}
@@ -300,6 +332,7 @@ const Home = () => {
         onProductClick={setSelectedProduct}
         activePromo={activePromo}
         highlightPromo={highlightPromo}
+        productSalesMap={productSalesMap}
       />
 
       {selectedProduct && (
