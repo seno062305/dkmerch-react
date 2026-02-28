@@ -395,13 +395,18 @@ const TrackOrder = () => {
 
   const [filter, setFilter]                       = useState('active');
   const [selectedOrderId, setSelectedOrderId]     = useState(null);
+
+  // ✅ FIX: Separate input state from the committed search email
+  // trackingEmail = what user types in the input box
+  // searchEmail   = the value actually sent to Convex query (only updated on form submit)
   const [trackingEmail, setTrackingEmail]         = useState('');
   const [searchEmail, setSearchEmail]             = useState('');
   const [showTrackedOrders, setShowTrackedOrders] = useState(false);
+
   const [lightboxData, setLightboxData]           = useState(null);
   const [removeConfirm, setRemoveConfirm]         = useState(null);
-  const [refundOrder, setRefundOrder]             = useState(null);  // ✅ NEW
-  const [refundSuccess, setRefundSuccess]         = useState(false); // ✅ NEW
+  const [refundOrder, setRefundOrder]             = useState(null);
+  const [refundSuccess, setRefundSuccess]         = useState(false);
   const [hiddenOrders, setHiddenOrders]           = useState(() => {
     try { return JSON.parse(localStorage.getItem('hiddenDeliveredOrders') || '[]'); } catch { return []; }
   });
@@ -412,20 +417,46 @@ const TrackOrder = () => {
   const preOrderProducts = usePreOrderProducts() || [];
   const products         = [...regularProducts, ...preOrderProducts];
 
+  // ✅ FIX: Use a stable combined list — don't recompute selectedOrder
+  // from a list that changes every render due to input changes
   const allAvailableOrders = [...orders, ...emailOrders];
+
+  // ✅ FIX: selectedOrder is derived from the stable allAvailableOrders
+  // but selectedOrderId is only set/cleared explicitly by user actions
   const selectedOrder = selectedOrderId
-    ? allAvailableOrders.find(o => o._id === selectedOrderId)
+    ? allAvailableOrders.find(o => o._id === selectedOrderId) || null
     : null;
 
-  useEffect(() => {
-    if (!orderIdParam || selectedOrderId) return;
-    const found = [...orders, ...emailOrders].find(o => o.orderId === orderIdParam);
-    if (found) setSelectedOrderId(found._id);
-  }, [orderIdParam, orders, emailOrders, selectedOrderId]);
+  // ✅ FIX: Only auto-open order from URL param ONCE on mount
+  // Use a ref to track if we've already processed the URL param
+  const urlParamProcessedRef = useRef(false);
 
-  const handleCloseModal = () => setSelectedOrderId(null);
-  const handleOpenModal  = (order) => setSelectedOrderId(order._id);
-  const getProductById   = (id) => products.find(p => p._id === id || p.id === id);
+  useEffect(() => {
+    if (urlParamProcessedRef.current) return;
+    if (!orderIdParam) return;
+
+    const found = [...orders, ...emailOrders].find(o => o.orderId === orderIdParam);
+    if (found) {
+      urlParamProcessedRef.current = true;
+      setSelectedOrderId(found._id);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderIdParam, orders, emailOrders]);
+
+  // ✅ FIX: Stable close/open handlers using useCallback
+  // These won't be recreated on re-render, preventing stale closures
+  const handleCloseModal = useCallback(() => {
+    setSelectedOrderId(null);
+  }, []);
+
+  const handleOpenModal = useCallback((order) => {
+    setSelectedOrderId(order._id);
+  }, []);
+
+  const getProductById = useCallback(
+    (id) => products.find(p => p._id === id || p.id === id),
+    [products]
+  );
 
   const getStatusClass = (status) => {
     const map = {
@@ -573,11 +604,17 @@ const TrackOrder = () => {
     { key: 'cancelled', icon: 'fa-ban',           label: 'Cancelled',  count: cancelledOrders.length, desc: 'Cancelled orders' },
   ];
 
+  // ✅ FIX: Only update searchEmail on form submit — NOT on every keystroke
+  // This prevents Convex query from re-running while user is still typing,
+  // which caused emailOrders to update mid-render and reset selectedOrderId
   const handleFindMyOrders = (e) => {
     e.preventDefault();
-    if (!trackingEmail.trim()) { alert('Please enter your email address'); return; }
-    setSearchEmail(trackingEmail.trim());
+    const email = trackingEmail.trim();
+    if (!email) { alert('Please enter your email address'); return; }
+    setSearchEmail(email);
     setShowTrackedOrders(true);
+    // ✅ Clear any open modal when doing a new search
+    setSelectedOrderId(null);
   };
 
   const getPreOrderReleaseDate = (order) => {
@@ -590,7 +627,6 @@ const TrackOrder = () => {
     return null;
   };
 
-  // ✅ Refund success handler
   const handleRefundSuccess = () => {
     setRefundOrder(null);
     setRefundSuccess(true);
@@ -691,7 +727,6 @@ const TrackOrder = () => {
             </div>
           )}
 
-          {/* ✅ Refund status badge on card */}
           {delivered && order.refundStatus && (
             <div style={{ marginBottom: 6 }}>
               <RefundBadge status={order.refundStatus} />
@@ -728,7 +763,6 @@ const TrackOrder = () => {
             </button>
           )}
 
-          {/* ✅ Refund button — only on delivered orders with no existing refund */}
           {delivered && !order.refundStatus && (
             <button className="btn order-refund-btn" onClick={() => setRefundOrder(order)}>
               <i className="fas fa-undo-alt"></i> Request Refund
@@ -798,7 +832,6 @@ const TrackOrder = () => {
         <div className="container">
           <section className="track-order-page">
 
-            {/* ✅ Refund success toast */}
             {refundSuccess && (
               <div className="refund-success-toast">
                 <i className="fas fa-check-circle"></i>
@@ -851,6 +884,7 @@ const TrackOrder = () => {
 
         {selectedOrder && (
           <TrackingModal
+            key={selectedOrderId}
             order={selectedOrder}
             products={products}
             onClose={handleCloseModal}
@@ -862,7 +896,6 @@ const TrackOrder = () => {
           />
         )}
 
-        {/* ✅ Refund modal */}
         {refundOrder && (
           <RefundModal
             order={refundOrder}
@@ -892,6 +925,7 @@ const TrackOrder = () => {
     );
   }
 
+  // ─── NOT LOGGED IN VIEW ───────────────────────────────────────────────────
   return (
     <main className="trackorder-main">
       <div className="page-header">
@@ -905,12 +939,21 @@ const TrackOrder = () => {
           <div className="tracking-form-section">
             <div className="tracking-form">
               <h2>Find My Orders</h2>
+              {/* ✅ FIX: onSubmit only fires on explicit button click/Enter
+                  trackingEmail state is isolated to the input field
+                  searchEmail only updates when form is submitted */}
               <form onSubmit={handleFindMyOrders}>
                 <div className="form-group">
                   <label htmlFor="tracking-email">Email Address</label>
-                  <input type="email" id="tracking-email" className="form-control"
+                  <input
+                    type="email"
+                    id="tracking-email"
+                    className="form-control"
                     placeholder="Enter your email address"
-                    value={trackingEmail} onChange={e => setTrackingEmail(e.target.value)} required />
+                    value={trackingEmail}
+                    onChange={e => setTrackingEmail(e.target.value)}
+                    required
+                  />
                   <small>Enter the email you used when placing your order</small>
                 </div>
                 <button type="submit" className="btn btn-primary">
@@ -928,6 +971,7 @@ const TrackOrder = () => {
               </ul>
             </div>
           </div>
+
           {showTrackedOrders && emailOrders.length > 0 && (
             <div className="tracked-orders-section">
               <div className="tracked-orders-header">
@@ -941,6 +985,7 @@ const TrackOrder = () => {
               </div>
             </div>
           )}
+
           {showTrackedOrders && emailOrders.length === 0 && (
             <div className="orders-empty">
               <i className="fas fa-search"></i>
@@ -951,8 +996,11 @@ const TrackOrder = () => {
         </section>
       </div>
 
+      {/* ✅ FIX: key prop ensures modal fully remounts when order changes
+          This prevents stale state inside TrackingModal */}
       {selectedOrder && (
         <TrackingModal
+          key={selectedOrderId}
           order={selectedOrder}
           products={products}
           onClose={handleCloseModal}
@@ -1003,6 +1051,15 @@ const TrackingModal = ({
     if (order.deliveryOtp) setLocalOtp(order.deliveryOtp);
   }, [order.deliveryOtp]);
 
+  // ✅ FIX: Stable Escape key handler that calls onClose directly
+  useEffect(() => {
+    const handleKey = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [onClose]);
+
   const getProductById = (id) => products.find(p => p._id === id || p.id === id);
 
   const handleGenerateOtp = async () => {
@@ -1040,6 +1097,7 @@ const TrackingModal = ({
   return (
     <div className="tracking-modal-overlay" onClick={onClose}>
       <div className="tracking-modal" onClick={e => e.stopPropagation()}>
+        {/* ✅ FIX: Close button uses onClose directly — no intermediate state */}
         <button className="modal-close-btn" onClick={onClose} type="button">
           <i className="fas fa-times"></i>
         </button>
@@ -1090,7 +1148,6 @@ const TrackingModal = ({
             </div>
           )}
 
-          {/* ✅ Refund status banner inside modal */}
           {delivered && order.refundStatus && (
             <div className={`refund-status-banner refund-banner-${order.refundStatus}`}>
               <div className="refund-banner-icon">
@@ -1116,7 +1173,6 @@ const TrackingModal = ({
             </div>
           )}
 
-          {/* ✅ Request Refund button inside modal — only for delivered with no refund yet */}
           {delivered && !order.refundStatus && (
             <button className="modal-refund-btn" onClick={() => onRequestRefund(order)}>
               <i className="fas fa-undo-alt"></i> Request Refund
