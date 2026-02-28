@@ -43,7 +43,8 @@ const GPS = {
       (err) => console.error('GPS watch error:', err),
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
-    // ✅ Send location to Convex every 10 seconds
+
+    // ✅ Send location to Convex every 5 seconds (was 10s)
     this._interval = setInterval(() => {
       if (this._lastPos && this._sendFn) {
         this._sendFn({
@@ -59,7 +60,9 @@ const GPS = {
           sessionId:  this._sessionId,
         }).catch(err => console.error('Location send failed:', err));
       }
-    }, 10000);
+    }, 5000); // ✅ 5 seconds
+
+    // Send immediately on start
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         this._lastPos = {
@@ -337,7 +340,7 @@ const FullscreenMapModal = ({ address, customerName, coords, riderCoords, riderH
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Customer map (inline) — with auto-refresh rider position every 10s
+// Customer map (inline) — with auto-refresh rider position every 5s
 // ─────────────────────────────────────────────────────────────────────────────
 const CustomerMap = ({ orderId, allOrders, riderCoords, riderHeading }) => {
   const mapRef             = useRef(null);
@@ -349,7 +352,6 @@ const CustomerMap = ({ orderId, allOrders, riderCoords, riderHeading }) => {
   const routeDrawnRef      = useRef(false);
   const prevRiderRef       = useRef(null);
   const prevHeadingRef     = useRef(null);
-  // ✅ Track position where route was last drawn — to redraw when rider moves significantly
   const lastRouteRiderRef  = useRef(null);
 
   const [mapError, setMapError]           = useState(null);
@@ -437,13 +439,11 @@ const CustomerMap = ({ orderId, allOrders, riderCoords, riderHeading }) => {
         prevRiderRef.current  = { lat: riderCoords.lat, lng: riderCoords.lng };
         prevHeadingRef.current = riderHeading;
 
-        // ✅ FIX: Check if rider moved >50m from where route was last drawn
-        // If so, reset routeDrawnRef so route is redrawn with updated path
+        // Redraw route if rider moved >50m
         if (routeDrawnRef.current && lastRouteRiderRef.current) {
           const dLat = Math.abs(lastRouteRiderRef.current.lat - riderCoords.lat);
           const dLng = Math.abs(lastRouteRiderRef.current.lng - riderCoords.lng);
           if (dLat > 0.0005 || dLng > 0.0005) {
-            // Rider moved ~55m+ — redraw route
             routeDrawnRef.current = false;
           }
         }
@@ -657,13 +657,11 @@ const useKickedCountdown = (kickedAt) => {
 const RiderDashboard = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation(); // ── CHANGE 2: Added useLocation
+  const location = useLocation();
 
-  // ── CHANGE 3: Read ?tab from URL on initial mount
   const [tab, setTab] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     const urlTab = params.get('tab');
-    // If GPS is active on a delivery, deliver tab takes priority
     if (GPS.isActive()) return 'deliver';
     if (urlTab === 'available' || urlTab === 'my-pickups' || urlTab === 'deliver') return urlTab;
     return 'available';
@@ -742,7 +740,7 @@ const RiderDashboard = () => {
     if (lastPos)   setCurrentPosition(lastPos);
   }, []);
 
-  // ✅ Sync currentPosition every 2s so map updates in real-time
+  // ✅ Sync currentPosition every 2s so map updates smoothly
   useEffect(() => {
     const sync = setInterval(() => {
       setTrackingOrderId(GPS.activeOrderId());
@@ -1249,7 +1247,8 @@ const RiderDashboard = () => {
                                 <>
                                   <div className="rider-gps-status-row">
                                     <span className="rider-gps-dot"></span>
-                                    <span>Sending location every 10 seconds{currentPosition && <> · <strong>±{Math.round(currentPosition.accuracy || 0)}m</strong></>}</span>
+                                    {/* ✅ Updated label to reflect 5s interval */}
+                                    <span>Sending location every 5 seconds{currentPosition && <> · <strong>±{Math.round(currentPosition.accuracy || 0)}m</strong></>}</span>
                                   </div>
                                   {currentPosition && <div className="rider-gps-coords"><i className="fas fa-crosshairs"></i>{currentPosition.lat.toFixed(6)}, {currentPosition.lng.toFixed(6)}</div>}
                                   <button className="rider-gps-stop-btn" onClick={stopTrackingLocal}><i className="fas fa-stop-circle"></i> Stop Sharing Location</button>

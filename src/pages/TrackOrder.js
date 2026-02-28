@@ -174,17 +174,22 @@ const RiderMap = ({ orderId, riderName }) => {
   const [leafletLoaded, setLeafletLoaded] = useState(!!window.L);
   const [, forceUpdate] = useState(0);
 
+  // ✅ FIX: useQuery is already reactive/real-time via Convex websocket.
+  // No manual polling needed — Convex pushes updates automatically.
+  // forceUpdate interval is only for refreshing "X seconds ago" timestamps.
   const locationData = useQuery(
     api.riders.getRiderLocation,
     orderId ? { orderId } : 'skip'
   );
 
+  // ✅ FIX: Stale threshold reduced to 30s (was 60s) to match 5s GPS send interval
   const isStale = locationData
-    ? Date.now() - locationData.updatedAt > 60000
+    ? Date.now() - locationData.updatedAt > 30000
     : true;
 
+  // ✅ FIX: Refresh "X seconds ago" display every 5s (matches GPS send interval)
   useEffect(() => {
-    const interval = setInterval(() => forceUpdate(n => n + 1), 10000);
+    const interval = setInterval(() => forceUpdate(n => n + 1), 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -254,11 +259,13 @@ const RiderMap = ({ orderId, riderName }) => {
     const moved = !prev
       || Math.abs(prev.lat - lat) > 0.00001
       || Math.abs(prev.lng - lng) > 0.00001;
+
     if (moved) {
       lastLocRef.current = { lat, lng };
+      // ✅ FIX: Use panTo instead of flyTo for smooth marker movement
+      // flyTo resets zoom level which is jarring; panTo just smoothly moves
       try {
-        const targetZoom = Math.max(map.getZoom(), 16);
-        map.flyTo([lat, lng], targetZoom, { animate: true, duration: 1.2 });
+        map.panTo([lat, lng], { animate: true, duration: 0.8, easeLinearity: 0.5 });
       } catch {}
     }
   }, [riderName]);
@@ -312,6 +319,10 @@ const RiderMap = ({ orderId, riderName }) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leafletLoaded]);
 
+  // ✅ FIX: This effect fires automatically every time locationData changes
+  // because Convex useQuery is a real-time subscription (WebSocket).
+  // When the rider sends a new location (every 5s), Convex pushes the update
+  // here instantly — no manual polling needed on the customer side.
   useEffect(() => {
     if (!locationData?.lat || !locationData?.lng) return;
     if (!mapReady || !mapInstanceRef.current) {
@@ -396,9 +407,6 @@ const TrackOrder = () => {
   const [filter, setFilter]                       = useState('active');
   const [selectedOrderId, setSelectedOrderId]     = useState(null);
 
-  // ✅ FIX: Separate input state from the committed search email
-  // trackingEmail = what user types in the input box
-  // searchEmail   = the value actually sent to Convex query (only updated on form submit)
   const [trackingEmail, setTrackingEmail]         = useState('');
   const [searchEmail, setSearchEmail]             = useState('');
   const [showTrackedOrders, setShowTrackedOrders] = useState(false);
@@ -417,18 +425,12 @@ const TrackOrder = () => {
   const preOrderProducts = usePreOrderProducts() || [];
   const products         = [...regularProducts, ...preOrderProducts];
 
-  // ✅ FIX: Use a stable combined list — don't recompute selectedOrder
-  // from a list that changes every render due to input changes
   const allAvailableOrders = [...orders, ...emailOrders];
 
-  // ✅ FIX: selectedOrder is derived from the stable allAvailableOrders
-  // but selectedOrderId is only set/cleared explicitly by user actions
   const selectedOrder = selectedOrderId
     ? allAvailableOrders.find(o => o._id === selectedOrderId) || null
     : null;
 
-  // ✅ FIX: Only auto-open order from URL param ONCE on mount
-  // Use a ref to track if we've already processed the URL param
   const urlParamProcessedRef = useRef(false);
 
   useEffect(() => {
@@ -443,8 +445,6 @@ const TrackOrder = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderIdParam, orders, emailOrders]);
 
-  // ✅ FIX: Stable close/open handlers using useCallback
-  // These won't be recreated on re-render, preventing stale closures
   const handleCloseModal = useCallback(() => {
     setSelectedOrderId(null);
   }, []);
@@ -604,16 +604,12 @@ const TrackOrder = () => {
     { key: 'cancelled', icon: 'fa-ban',           label: 'Cancelled',  count: cancelledOrders.length, desc: 'Cancelled orders' },
   ];
 
-  // ✅ FIX: Only update searchEmail on form submit — NOT on every keystroke
-  // This prevents Convex query from re-running while user is still typing,
-  // which caused emailOrders to update mid-render and reset selectedOrderId
   const handleFindMyOrders = (e) => {
     e.preventDefault();
     const email = trackingEmail.trim();
     if (!email) { alert('Please enter your email address'); return; }
     setSearchEmail(email);
     setShowTrackedOrders(true);
-    // ✅ Clear any open modal when doing a new search
     setSelectedOrderId(null);
   };
 
@@ -939,9 +935,6 @@ const TrackOrder = () => {
           <div className="tracking-form-section">
             <div className="tracking-form">
               <h2>Find My Orders</h2>
-              {/* ✅ FIX: onSubmit only fires on explicit button click/Enter
-                  trackingEmail state is isolated to the input field
-                  searchEmail only updates when form is submitted */}
               <form onSubmit={handleFindMyOrders}>
                 <div className="form-group">
                   <label htmlFor="tracking-email">Email Address</label>
@@ -996,8 +989,6 @@ const TrackOrder = () => {
         </section>
       </div>
 
-      {/* ✅ FIX: key prop ensures modal fully remounts when order changes
-          This prevents stale state inside TrackingModal */}
       {selectedOrder && (
         <TrackingModal
           key={selectedOrderId}
@@ -1051,7 +1042,6 @@ const TrackingModal = ({
     if (order.deliveryOtp) setLocalOtp(order.deliveryOtp);
   }, [order.deliveryOtp]);
 
-  // ✅ FIX: Stable Escape key handler that calls onClose directly
   useEffect(() => {
     const handleKey = (e) => {
       if (e.key === 'Escape') onClose();
@@ -1097,7 +1087,6 @@ const TrackingModal = ({
   return (
     <div className="tracking-modal-overlay" onClick={onClose}>
       <div className="tracking-modal" onClick={e => e.stopPropagation()}>
-        {/* ✅ FIX: Close button uses onClose directly — no intermediate state */}
         <button className="modal-close-btn" onClick={onClose} type="button">
           <i className="fas fa-times"></i>
         </button>
@@ -1186,6 +1175,8 @@ const TrackingModal = ({
                 <span>Real-Time Rider Location</span>
                 <span className="rider-map-live-pill">LIVE</span>
               </div>
+              {/* ✅ RiderMap uses Convex real-time subscription — auto-updates
+                  every time rider sends location (every 5s). No refresh needed. */}
               <RiderMap orderId={order.orderId} riderName={order.riderInfo?.name} />
             </div>
           )}
