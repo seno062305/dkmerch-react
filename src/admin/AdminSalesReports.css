@@ -42,7 +42,7 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 
 .date-inputs {
@@ -133,13 +133,13 @@
   display: flex;
   gap: 14px;
   align-items: center;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .summary-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
 
 .card-icon {
@@ -157,10 +157,10 @@
   height: 22px;
 }
 
-.revenue-icon   { background: linear-gradient(135deg, #10b981 0%, #34d399 100%); color: white; }
-.orders-icon    { background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%); color: white; }
-.completed-icon { background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%); color: white; }
-.average-icon   { background: linear-gradient(135deg, #ec4899 0%, #f472b6 100%); color: white; }
+.revenue-icon   { background: linear-gradient(135deg, #10b981, #34d399); color: white; }
+.orders-icon    { background: linear-gradient(135deg, #3b82f6, #60a5fa); color: white; }
+.completed-icon { background: linear-gradient(135deg, #8b5cf6, #a78bfa); color: white; }
+.average-icon   { background: linear-gradient(135deg, #ec4899, #f472b6); color: white; }
 
 .card-content {
   display: flex;
@@ -186,7 +186,7 @@
   font-weight: 500;
 }
 
-/* ── Charts ── */
+/* ── Charts Grid ── */
 .charts-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -196,23 +196,70 @@
 
 .chart-container {
   background: white;
-  padding: 24px;
+  padding: 20px 24px 16px;
   border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
   min-width: 0;
 }
 
-.chart-container h3 {
-  font-size: 16px;
-  font-weight: 600;
-  color: #1a1a1a;
-  margin: 0 0 16px 0;
+/* ── Chart Header (title + filter pills) ── */
+.chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
 }
 
+.chart-header h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0;
+  white-space: nowrap;
+}
+
+/* ── Filter Pills ── */
+.chart-filter-pills {
+  display: flex;
+  gap: 4px;
+  background: #f3f4f6;
+  padding: 3px;
+  border-radius: 8px;
+}
+
+.chart-pill {
+  padding: 4px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 500;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.chart-pill:hover:not(.active) {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.chart-pill.active {
+  background: white;
+  color: #1a1a1a;
+  font-weight: 600;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+}
+
+/* ── Chart SVG containers ── */
 .line-chart,
 .bar-chart {
   width: 100%;
-  height: 200px;
+  height: 210px;
 }
 
 .chart-svg {
@@ -222,15 +269,22 @@
 }
 
 .axis-label {
-  font-size: 11px;
+  font-size: 10px;
   fill: #9ca3af;
   font-weight: 500;
 }
 
 .x-axis-label {
-  font-size: 12px;
+  font-size: 10px;
   fill: #6b7280;
   font-weight: 500;
+}
+
+/* ── Tooltip (rendered as SVG <g>) ──
+   No extra CSS needed — styled inline in JSX.
+   This class is just a hook for potential overrides. */
+.chart-tooltip-group {
+  pointer-events: none;
 }
 
 /* ── Top Products ── */
@@ -238,7 +292,7 @@
   background: white;
   padding: 24px;
   border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 
 .top-products-section h3 {
@@ -293,24 +347,12 @@
   color: #333;
 }
 
-.rank-cell {
-  text-align: center;
-  font-weight: 600;
-  color: #6b7280;
-}
-
-.product-name {
-  font-weight: 500;
-  color: #1f2937;
-}
+.rank-cell        { text-align: center; font-weight: 600; color: #6b7280; }
+.product-name     { font-weight: 500; color: #1f2937; }
+.revenue-cell     { font-weight: 600; color: #059669; }
 
 .products-table td:nth-child(3),
 .products-table td:nth-child(4) { text-align: right; }
-
-.revenue-cell {
-  font-weight: 600;
-  color: #059669;
-}
 
 .empty-state {
   text-align: center;
@@ -331,98 +373,52 @@
 
 /* ── Responsive ── */
 @media (max-width: 1200px) {
-  .summary-cards {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .charts-grid {
-    grid-template-columns: 1fr;
-  }
+  .summary-cards  { grid-template-columns: repeat(2, 1fr); }
+  .charts-grid    { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 900px) {
-  .admin-sales-reports {
-    padding: 20px 16px;
-  }
+  .admin-sales-reports { padding: 20px 16px; }
 
   .filter-section {
     flex-direction: column;
     align-items: flex-start;
   }
 
-  .server-time-badge {
-    width: 100%;
-    justify-content: center;
-  }
+  .server-time-badge { width: 100%; justify-content: center; }
 
-  .summary-cards {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
-  }
-
-  .card-value {
-    font-size: 18px;
-  }
+  .summary-cards { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .card-value    { font-size: 18px; }
 }
 
 @media (max-width: 600px) {
-  .reports-header h1 {
-    font-size: 24px;
-  }
+  .reports-header h1 { font-size: 24px; }
 
   .date-inputs {
     flex-direction: column;
     width: 100%;
   }
 
-  .date-input-group {
-    width: 100%;
-  }
+  .date-input-group,
+  .reset-date-btn { width: 100%; }
 
-  .reset-date-btn {
-    width: 100%;
-    text-align: center;
-  }
+  .reset-date-btn { text-align: center; }
 
-  .summary-cards {
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-  }
+  .summary-cards  { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .summary-card   { padding: 14px; gap: 10px; }
+  .card-icon      { width: 38px; height: 38px; }
+  .card-icon svg  { width: 18px; height: 18px; }
+  .card-value     { font-size: 16px; }
+  .card-label     { font-size: 11px; }
 
-  .summary-card {
-    padding: 14px;
-    gap: 10px;
-  }
+  .chart-container        { padding: 14px; }
+  .chart-header           { gap: 8px; }
+  .chart-filter-pills     { gap: 2px; }
+  .chart-pill             { padding: 3px 8px; font-size: 11px; }
 
-  .card-icon {
-    width: 38px;
-    height: 38px;
-  }
-
-  .card-icon svg {
-    width: 18px;
-    height: 18px;
-  }
-
-  .card-value {
-    font-size: 16px;
-  }
-
-  .card-label {
-    font-size: 11px;
-  }
-
-  .chart-container {
-    padding: 16px;
-  }
-
-  .top-products-section {
-    padding: 16px;
-  }
+  .top-products-section { padding: 16px; }
 }
 
 @media (max-width: 400px) {
-  .summary-cards {
-    grid-template-columns: 1fr;
-  }
+  .summary-cards { grid-template-columns: 1fr; }
 }
