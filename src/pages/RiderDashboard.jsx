@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
@@ -657,8 +657,18 @@ const useKickedCountdown = (kickedAt) => {
 const RiderDashboard = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation(); // ── CHANGE 2: Added useLocation
 
-  const [tab, setTab]                               = useState('available');
+  // ── CHANGE 3: Read ?tab from URL on initial mount
+  const [tab, setTab] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlTab = params.get('tab');
+    // If GPS is active on a delivery, deliver tab takes priority
+    if (GPS.isActive()) return 'deliver';
+    if (urlTab === 'available' || urlTab === 'my-pickups' || urlTab === 'deliver') return urlTab;
+    return 'available';
+  });
+
   const [sidebarOpen, setSidebarOpen]               = useState(false);
   const [expandedOrders, setExpandedOrders]         = useState({});
   const [expandedPickups, setExpandedPickups]       = useState({});
