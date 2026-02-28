@@ -37,10 +37,46 @@ import OrderSuccess from './pages/OrderSuccess';
 
 import './App.css';
 
+// ✅ FIXED RiderRoute — saves full URL (including ?tab=available) before showing login modal
 const RiderRoute = ({ children }) => {
   const { isAuthenticated, role } = useAuth();
-  if (!isAuthenticated) return <Navigate to="/" replace />;
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [showLoginModal, setShowLoginModal] = useState(false);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      // ✅ Save the full path + query string (e.g. /rider?tab=available)
+      sessionStorage.setItem('redirectAfterLogin', location.pathname + location.search);
+      setShowLoginModal(true);
+    }
+  }, [isAuthenticated, location]);
+
+  if (!isAuthenticated) {
+    return (
+      <>
+        {showLoginModal && (
+          <LoginModal
+            defaultRiderMode={true}
+            onClose={() => {
+              setShowLoginModal(false);
+              navigate('/');
+            }}
+            onLoginSuccess={() => {
+              setShowLoginModal(false);
+              const redirect = sessionStorage.getItem('redirectAfterLogin') || '/rider';
+              sessionStorage.removeItem('redirectAfterLogin');
+              navigate(redirect);
+            }}
+          />
+        )}
+      </>
+    );
+  }
+
+  // ✅ Logged in but wrong role — redirect home
   if (role !== 'rider') return <Navigate to="/" replace />;
+
   return children;
 };
 
@@ -54,7 +90,6 @@ const ProtectedRoute = ({ children }) => {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      // Save intended URL so we can redirect after login
       sessionStorage.setItem('redirectAfterLogin', location.pathname + location.search);
       setShowLoginModal(true);
     }
@@ -63,7 +98,6 @@ const ProtectedRoute = ({ children }) => {
   if (!isAuthenticated) {
     return (
       <>
-        {/* Show blank-ish page with login modal on top */}
         {showLoginModal && (
           <LoginModal
             onClose={() => {
@@ -105,7 +139,6 @@ function AppContent() {
 
   useEffect(() => {
     const handleOpenLogin = (e) => {
-      // Check if opened from Riders icon
       if (e?.detail?.riderMode) {
         setLoginDefaultRiderMode(true);
       } else {
@@ -168,6 +201,7 @@ function AppContent() {
           </ProtectedRoute>
         } />
 
+        {/* ✅ FIXED — RiderRoute now preserves ?tab=available after login */}
         <Route path="/rider" element={
           <RiderRoute>
             <RiderDashboard />
