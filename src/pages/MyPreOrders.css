@@ -110,10 +110,10 @@
   50% { opacity: 0.5; transform: scale(1.4); }
 }
 
-/* ── Grid ── */
+/* ── Grid — always 3 columns ── */
 .mpo-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 20px;
 }
 
@@ -374,19 +374,34 @@
 }
 
 /* ── Responsive ── */
+@media (max-width: 992px) {
+  .mpo-grid { grid-template-columns: repeat(3, 1fr); gap: 14px; }
+}
+
 @media (max-width: 768px) {
   .mpo-stats { gap: 10px; }
   .mpo-stat { padding: 12px 16px; min-width: 72px; }
   .mpo-stat-num { font-size: 22px; }
-  .mpo-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
-  .mpo-card-image { padding: 12px; }
-  .mpo-card-info { padding: 12px; gap: 6px; }
-  .mpo-card-name { font-size: 13px; }
-  .mpo-card-price { font-size: 15px; }
+  .mpo-grid { grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .mpo-card-image { padding: 10px; }
+  .mpo-card-info { padding: 10px; gap: 5px; }
+  .mpo-card-name { font-size: 12px; }
+  .mpo-card-price { font-size: 14px; }
+  .mpo-release-badge { font-size: 11px; padding: 5px 8px; }
+  .mpo-card-meta { font-size: 11px; }
+  .mpo-btn-cart { font-size: 12px; padding: 8px; }
+  .mpo-btn-remove { font-size: 12px; padding: 7px; }
 }
 
 @media (max-width: 480px) {
-  .mpo-grid { grid-template-columns: 1fr; }
+  .mpo-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .mpo-card-image { padding: 6px; }
+  .mpo-card-info { padding: 8px; gap: 4px; }
+  .mpo-card-name { font-size: 11px; -webkit-line-clamp: 2; }
+  .mpo-card-price { font-size: 12px; }
+  .mpo-status-badge { font-size: 9px; padding: 3px 7px; top: 6px; right: 6px; }
+  .mpo-release-badge { display: none; } /* hide on very small screens to save space */
+  .mpo-card-meta { display: none; }
   .mpo-tabs { gap: 2px; }
-  .mpo-tab { padding: 8px 12px; font-size: 13px; }
+  .mpo-tab { padding: 8px 10px; font-size: 12px; }
 }
