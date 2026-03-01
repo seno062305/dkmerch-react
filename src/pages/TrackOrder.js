@@ -16,55 +16,148 @@ const formatTimeAgo = (timestamp) => {
   return `${Math.floor(diff / 60)}m ago`;
 };
 
-// ─── REFUND REASONS ───────────────────────────────────────────────────────────
-const REFUND_REASONS = [
-  { value: 'damaged',     label: '📦 Item arrived damaged',           desc: 'Product was broken or damaged during delivery' },
-  { value: 'wrong_item',  label: '❌ Wrong item received',             desc: 'Received a different product than ordered' },
-  { value: 'missing',     label: '🔍 Missing items',                   desc: 'Some items in the order were missing' },
-  { value: 'not_as_desc', label: '📋 Not as described',               desc: 'Item does not match the product description' },
-  { value: 'defective',   label: '⚠️ Defective / Not working',        desc: 'Product has a defect or does not function properly' },
-  { value: 'others',      label: '💬 Others',                         desc: 'Please describe your reason below' },
-];
+// ─── REFUND WINDOW HELPER ─────────────────────────────────────────────────────
+// Returns { canRefund, hoursLeft, expired }
+const getRefundWindow = (order) => {
+  const deliveredAt = order.deliveryConfirmedAt;
+  if (!deliveredAt) return { canRefund: false, hoursLeft: 0, expired: false };
+
+  const deliveredMs  = new Date(deliveredAt).getTime();
+  const deadlineMs   = deliveredMs + 24 * 60 * 60 * 1000; // +24 hours
+  const nowMs        = Date.now();
+  const msLeft       = deadlineMs - nowMs;
+
+  if (msLeft <= 0) return { canRefund: false, hoursLeft: 0, expired: true };
+
+  const hoursLeft  = Math.floor(msLeft / (1000 * 60 * 60));
+  const minsLeft   = Math.floor((msLeft % (1000 * 60 * 60)) / (1000 * 60));
+  return { canRefund: true, hoursLeft, minsLeft, expired: false };
+};
 
 // ─── REFUND MODAL ─────────────────────────────────────────────────────────────
 const RefundModal = ({ order, onClose, onSuccess }) => {
-  const [selectedReason, setSelectedReason] = useState('');
-  const [comment, setComment]               = useState('');
-  const [submitting, setSubmitting]         = useState(false);
-  const [error, setError]                   = useState('');
-  const requestRefund = useMutation(api.orders.requestRefund);
+  const [photo, setPhoto]                     = useState(null);
+  const [photoPreview, setPhotoPreview]       = useState(null);
+  const [refundMethod, setRefundMethod]       = useState('');
+  const [accountName, setAccountName]         = useState('');
+  const [accountNumber, setAccountNumber]     = useState('');
+  const [comment, setComment]                 = useState('');
+  const [submitting, setSubmitting]           = useState(false);
+  const [uploading, setUploading]             = useState(false);
+  const [error, setError]                     = useState('');
+  const fileInputRef                          = useRef(null);
+
+  const generateUploadUrl = useMutation(api.orders.generateRefundUploadUrl);
+  const requestRefund     = useMutation(api.orders.requestRefund);
+
+  const refundAmount = (order.finalTotal ?? order.total ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2 });
+  const { canRefund, hoursLeft, minsLeft, expired } = getRefundWindow(order);
 
   useEffect(() => {
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = ''; };
   }, []);
 
+  const handlePhotoChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { setError('Please upload an image file (JPG, PNG, etc.)'); return; }
+    if (file.size > 5 * 1024 * 1024) { setError('Image must be less than 5MB.'); return; }
+    setError('');
+    setPhoto(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  };
+
+  const removePhoto = () => {
+    setPhoto(null);
+    setPhotoPreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   const handleSubmit = async () => {
-    if (!selectedReason) { setError('Please select a reason for your refund request.'); return; }
-    if (selectedReason === 'others' && !comment.trim()) {
-      setError('Please describe your reason in the comment box.');
+    // Re-check window before submitting
+    const { canRefund: stillValid } = getRefundWindow(order);
+    if (!stillValid) { setError('Refund window has expired. Refunds are only allowed within 24 hours of delivery.'); return; }
+    if (!photo)                    { setError('Please upload a photo of the damaged item.'); return; }
+    if (!refundMethod)             { setError('Please choose your preferred refund method (GCash or Maya).'); return; }
+    if (!accountName.trim())       { setError('Please enter your account name.'); return; }
+    if (!accountNumber.trim())     { setError('Please enter your account number.'); return; }
+    if (!/^\d{10,11}$/.test(accountNumber.replace(/\s/g, ''))) {
+      setError('Please enter a valid 10 or 11-digit mobile number.');
       return;
     }
+
     setError('');
     setSubmitting(true);
+    setUploading(true);
+
     try {
-      const result = await requestRefund({
-        orderId:       order.orderId,
-        refundReason:  selectedReason,
-        refundComment: comment.trim(),
+      const uploadUrl = await generateUploadUrl();
+      const uploadRes = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': photo.type },
+        body: photo,
       });
-      if (result?.success) {
-        onSuccess();
-      } else {
-        setError(result?.error || 'Failed to submit refund request. Please try again.');
-      }
+      if (!uploadRes.ok) throw new Error('Photo upload failed.');
+      const { storageId } = await uploadRes.json();
+      setUploading(false);
+
+      const result = await requestRefund({
+        orderId:             order.orderId,
+        refundPhotoId:       storageId,
+        refundMethod,
+        refundAccountName:   accountName.trim(),
+        refundAccountNumber: accountNumber.replace(/\s/g, ''),
+        refundComment:       comment.trim(),
+      });
+
+      if (result?.success) { onSuccess(); }
+      else { setError(result?.error || 'Failed to submit. Please try again.'); }
     } catch (err) {
-      console.error('Refund error:', err);
+      console.error('Refund submit error:', err);
       setError('Something went wrong. Please try again.');
     } finally {
       setSubmitting(false);
+      setUploading(false);
     }
   };
+
+  // ── Expired window UI ──
+  if (expired || !canRefund) {
+    return (
+      <div className="refund-modal-overlay" onClick={onClose}>
+        <div className="refund-modal" onClick={e => e.stopPropagation()}>
+          <button className="refund-modal-close" onClick={onClose}><i className="fas fa-times"></i></button>
+          <div className="refund-modal-header">
+            <div className="refund-modal-icon" style={{ background: '#fee2e2' }}>
+              <i className="fas fa-clock" style={{ color: '#dc2626' }}></i>
+            </div>
+            <div>
+              <h3>Refund Window Expired</h3>
+              <p>Order #{order.orderId?.slice(-8)}</p>
+            </div>
+          </div>
+          <div className="refund-modal-body">
+            <div className="refund-expired-notice">
+              <i className="fas fa-exclamation-circle"></i>
+              <div>
+                <strong>The 24-hour refund window has passed.</strong>
+                <p>Refund requests are only accepted within <strong>24 hours</strong> of delivery confirmation. Unfortunately, this order is no longer eligible for a refund.</p>
+                <p style={{ marginTop: 8, color: '#6b7280', fontSize: 13 }}>
+                  Delivered: {order.deliveryConfirmedAt
+                    ? new Date(order.deliveryConfirmedAt).toLocaleString('en-PH')
+                    : 'N/A'}
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="refund-modal-footer">
+            <button className="refund-cancel-btn" onClick={onClose}>Close</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="refund-modal-overlay" onClick={onClose}>
@@ -72,50 +165,95 @@ const RefundModal = ({ order, onClose, onSuccess }) => {
         <button className="refund-modal-close" onClick={onClose}><i className="fas fa-times"></i></button>
 
         <div className="refund-modal-header">
-          <div className="refund-modal-icon"><i className="fas fa-undo-alt"></i></div>
+          <div className="refund-modal-icon"><i className="fas fa-box-open"></i></div>
           <div>
             <h3>Request a Refund</h3>
-            <p>Order #{order.orderId?.slice(-8) || 'N/A'} · ₱{order.total?.toLocaleString()}</p>
+            <p>Order #{order.orderId?.slice(-8)} · <strong>₱{refundAmount}</strong> will be refunded</p>
           </div>
         </div>
 
-        <div className="refund-modal-body">
-          <p className="refund-modal-label">Why are you requesting a refund?</p>
+        {/* ── Refund window countdown ── */}
+        <div className="refund-window-timer">
+          <i className="fas fa-hourglass-half"></i>
+          <span>
+            Refund window closes in <strong>{hoursLeft}h {minsLeft}m</strong> — requests must be submitted within 24 hours of delivery.
+          </span>
+        </div>
 
-          <div className="refund-reasons-list">
-            {REFUND_REASONS.map(r => (
-              <button
-                key={r.value}
-                className={`refund-reason-btn ${selectedReason === r.value ? 'selected' : ''}`}
-                onClick={() => { setSelectedReason(r.value); setError(''); }}
-              >
-                <div className="refund-reason-check">
-                  {selectedReason === r.value
-                    ? <i className="fas fa-check-circle"></i>
-                    : <i className="far fa-circle"></i>}
-                </div>
-                <div className="refund-reason-text">
-                  <span className="refund-reason-label">{r.label}</span>
-                  <span className="refund-reason-desc">{r.desc}</span>
-                </div>
-              </button>
-            ))}
+        <div className="refund-modal-body">
+
+          <div className="refund-reason-fixed">
+            <div className="refund-reason-fixed-icon"><i className="fas fa-box"></i></div>
+            <div>
+              <span className="refund-reason-fixed-label">📦 Item arrived damaged</span>
+              <span className="refund-reason-fixed-desc">Only damaged item refunds are accepted. Please provide photo proof below.</span>
+            </div>
           </div>
 
-          <div className={`refund-comment-wrap ${selectedReason === 'others' ? 'required' : ''}`}>
+          <div className="refund-field-group">
             <label className="refund-modal-label">
-              {selectedReason === 'others' ? 'Describe your reason *' : 'Additional comments (optional)'}
+              <i className="fas fa-camera"></i> Photo Proof of Damage <span className="refund-required">*</span>
             </label>
-            <textarea
-              className="refund-comment-box"
-              placeholder={selectedReason === 'others'
-                ? 'Please explain why you want a refund...'
-                : 'Add any details that may help us process your request...'}
-              value={comment}
-              onChange={e => setComment(e.target.value)}
-              rows={3}
-              maxLength={500}
-            />
+            {!photoPreview ? (
+              <div className="refund-photo-upload-area" onClick={() => fileInputRef.current?.click()}>
+                <i className="fas fa-cloud-upload-alt"></i>
+                <p>Click to upload a photo</p>
+                <small>JPG, PNG, WEBP · Max 5MB</small>
+                <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePhotoChange} />
+              </div>
+            ) : (
+              <div className="refund-photo-preview-wrap">
+                <img src={photoPreview} alt="Damage proof" className="refund-photo-preview" />
+                <button className="refund-photo-remove" onClick={removePhoto} type="button">
+                  <i className="fas fa-trash-alt"></i> Remove
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="refund-field-group">
+            <label className="refund-modal-label">
+              <i className="fas fa-wallet"></i> Refund Method <span className="refund-required">*</span>
+            </label>
+            <div className="refund-method-row">
+              <button type="button" className={`refund-method-btn ${refundMethod === 'gcash' ? 'selected' : ''}`}
+                onClick={() => { setRefundMethod('gcash'); setError(''); }}>
+                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/52/GCash_logo.svg/200px-GCash_logo.svg.png" alt="GCash" className="refund-method-logo" />
+                <span>GCash</span>
+                {refundMethod === 'gcash' && <i className="fas fa-check-circle refund-method-check"></i>}
+              </button>
+              <button type="button" className={`refund-method-btn ${refundMethod === 'maya' ? 'selected' : ''}`}
+                onClick={() => { setRefundMethod('maya'); setError(''); }}>
+                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/2/24/Maya_logo.svg/200px-Maya_logo.svg.png" alt="Maya" className="refund-method-logo" />
+                <span>Maya</span>
+                {refundMethod === 'maya' && <i className="fas fa-check-circle refund-method-check"></i>}
+              </button>
+            </div>
+          </div>
+
+          {refundMethod && (
+            <div className="refund-field-group refund-account-fields">
+              <label className="refund-modal-label">
+                <i className="fas fa-id-card"></i> {refundMethod === 'gcash' ? 'GCash' : 'Maya'} Account Details <span className="refund-required">*</span>
+              </label>
+              <input type="text" className="refund-input"
+                placeholder="Account Name (e.g. Juan Dela Cruz)"
+                value={accountName} onChange={e => { setAccountName(e.target.value); setError(''); }} maxLength={60} />
+              <input type="tel" className="refund-input"
+                placeholder="Mobile Number (e.g. 09123456789)"
+                value={accountNumber} onChange={e => { setAccountNumber(e.target.value); setError(''); }} maxLength={13} />
+              <div className="refund-account-note">
+                <i className="fas fa-info-circle"></i>
+                Refund of <strong>₱{refundAmount}</strong> will be sent to this {refundMethod === 'gcash' ? 'GCash' : 'Maya'} number.
+              </div>
+            </div>
+          )}
+
+          <div className="refund-field-group">
+            <label className="refund-modal-label">Additional Details <span style={{ color: '#9ca3af', fontWeight: 400 }}>(optional)</span></label>
+            <textarea className="refund-comment-box"
+              placeholder="Describe the damage in more detail..."
+              value={comment} onChange={e => setComment(e.target.value)} rows={2} maxLength={500} />
             <span className="refund-comment-count">{comment.length}/500</span>
           </div>
 
@@ -127,14 +265,18 @@ const RefundModal = ({ order, onClose, onSuccess }) => {
 
           <div className="refund-modal-note">
             <i className="fas fa-info-circle"></i>
-            <span>Refund requests are reviewed within 1-3 business days. We may contact you for additional information.</span>
+            <span>Refund requests are reviewed within 1-3 business days. Make sure your account details are correct.</span>
           </div>
+
         </div>
 
         <div className="refund-modal-footer">
           <button className="refund-cancel-btn" onClick={onClose} disabled={submitting}>Cancel</button>
-          <button className="refund-submit-btn" onClick={handleSubmit} disabled={submitting || !selectedReason}>
-            {submitting
+          <button className="refund-submit-btn" onClick={handleSubmit}
+            disabled={submitting || !photo || !refundMethod || !accountName || !accountNumber}>
+            {uploading
+              ? <><i className="fas fa-spinner fa-spin"></i> Uploading photo...</>
+              : submitting
               ? <><i className="fas fa-spinner fa-spin"></i> Submitting...</>
               : <><i className="fas fa-paper-plane"></i> Submit Refund Request</>}
           </button>
@@ -174,20 +316,9 @@ const RiderMap = ({ orderId, riderName }) => {
   const [leafletLoaded, setLeafletLoaded] = useState(!!window.L);
   const [, forceUpdate] = useState(0);
 
-  // ✅ FIX: useQuery is already reactive/real-time via Convex websocket.
-  // No manual polling needed — Convex pushes updates automatically.
-  // forceUpdate interval is only for refreshing "X seconds ago" timestamps.
-  const locationData = useQuery(
-    api.riders.getRiderLocation,
-    orderId ? { orderId } : 'skip'
-  );
+  const locationData = useQuery(api.riders.getRiderLocation, orderId ? { orderId } : 'skip');
+  const isStale = locationData ? Date.now() - locationData.updatedAt > 30000 : true;
 
-  // ✅ FIX: Stale threshold reduced to 30s (was 60s) to match 5s GPS send interval
-  const isStale = locationData
-    ? Date.now() - locationData.updatedAt > 30000
-    : true;
-
-  // ✅ FIX: Refresh "X seconds ago" display every 5s (matches GPS send interval)
   useEffect(() => {
     const interval = setInterval(() => forceUpdate(n => n + 1), 5000);
     return () => clearInterval(interval);
@@ -203,8 +334,7 @@ const RiderMap = ({ orderId, riderName }) => {
     if (window.L) { setLeafletLoaded(true); return; }
     if (!document.getElementById('leaflet-css')) {
       const link = document.createElement('link');
-      link.id   = 'leaflet-css';
-      link.rel  = 'stylesheet';
+      link.id = 'leaflet-css'; link.rel = 'stylesheet';
       link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
       document.head.appendChild(link);
     }
@@ -214,9 +344,9 @@ const RiderMap = ({ orderId, riderName }) => {
       existingScript.addEventListener('load', () => setLeafletLoaded(true));
       return;
     }
-    const script   = document.createElement('script');
-    script.id      = 'leaflet-js';
-    script.src     = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    const script = document.createElement('script');
+    script.id = 'leaflet-js';
+    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
     script.onload  = () => setLeafletLoaded(true);
     script.onerror = () => setMapError('Failed to load map library.');
     document.head.appendChild(script);
@@ -225,23 +355,17 @@ const RiderMap = ({ orderId, riderName }) => {
   const applyLocation = useCallback((data) => {
     if (!data?.lat || !data?.lng) return;
     if (!mapInstanceRef.current || !markerRef.current || !window.L) return;
-
-    const L      = window.L;
-    const map    = mapInstanceRef.current;
+    const L = window.L;
+    const map = mapInstanceRef.current;
     const marker = markerRef.current;
     const { lat, lng, accuracy, updatedAt, riderName: rName, isTracking } = data;
-
     try { marker.setLatLng([lat, lng]); } catch {}
-
     marker.getPopup()?.setContent(
       `<div class="rider-map-popup">
         <strong>🛵 ${rName || riderName || 'Your Rider'}</strong><br>
-        <small>${isTracking
-          ? `📍 Updated ${formatTimeAgo(updatedAt)}`
-          : '⏹ Stopped sharing location'}</small>
+        <small>${isTracking ? `📍 Updated ${formatTimeAgo(updatedAt)}` : '⏹ Stopped sharing location'}</small>
       </div>`
     );
-
     if (accuracyCircleRef.current) {
       try { map.removeLayer(accuracyCircleRef.current); } catch {}
       accuracyCircleRef.current = null;
@@ -249,69 +373,41 @@ const RiderMap = ({ orderId, riderName }) => {
     if (accuracy && accuracy < 2000) {
       try {
         accuracyCircleRef.current = L.circle([lat, lng], {
-          radius: accuracy, color: '#fc1268', fillColor: '#fc1268',
-          fillOpacity: 0.1, weight: 1.5, dashArray: '4 4',
+          radius: accuracy, color: '#fc1268', fillColor: '#fc1268', fillOpacity: 0.1, weight: 1.5, dashArray: '4 4',
         }).addTo(map);
       } catch {}
     }
-
-    const prev  = lastLocRef.current;
-    const moved = !prev
-      || Math.abs(prev.lat - lat) > 0.00001
-      || Math.abs(prev.lng - lng) > 0.00001;
-
+    const prev = lastLocRef.current;
+    const moved = !prev || Math.abs(prev.lat - lat) > 0.00001 || Math.abs(prev.lng - lng) > 0.00001;
     if (moved) {
       lastLocRef.current = { lat, lng };
-      // ✅ FIX: Use panTo instead of flyTo for smooth marker movement
-      // flyTo resets zoom level which is jarring; panTo just smoothly moves
-      try {
-        map.panTo([lat, lng], { animate: true, duration: 0.8, easeLinearity: 0.5 });
-      } catch {}
+      try { map.panTo([lat, lng], { animate: true, duration: 0.8, easeLinearity: 0.5 }); } catch {}
     }
   }, [riderName]);
 
   useEffect(() => {
     if (!leafletLoaded || mapInstanceRef.current || !mapRef.current) return;
-
     try {
       const L = window.L;
       const map = L.map(mapRef.current, {
-        zoomControl: true, attributionControl: true,
-        tap: false, scrollWheelZoom: true, doubleClickZoom: true,
+        zoomControl: true, attributionControl: true, tap: false, scrollWheelZoom: true, doubleClickZoom: true,
       }).setView([14.5995, 120.9842], 15);
-
       map.zoomControl.setPosition('bottomright');
-
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        maxZoom: 19,
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors', maxZoom: 19,
       }).addTo(map);
-
       const riderIcon = L.divIcon({
         className: 'rider-map-icon',
-        html: `<div class="rider-map-marker">
-          <div class="rider-map-marker-inner"><i class="fas fa-motorcycle"></i></div>
-          <div class="rider-map-pulse"></div>
-        </div>`,
+        html: `<div class="rider-map-marker"><div class="rider-map-marker-inner"><i class="fas fa-motorcycle"></i></div><div class="rider-map-pulse"></div></div>`,
         iconSize: [48, 48], iconAnchor: [24, 48], popupAnchor: [0, -50],
       });
-
-      const marker = L.marker([14.5995, 120.9842], { icon: riderIcon })
-        .addTo(map)
-        .bindPopup(`<div class="rider-map-popup">
-          <strong>🛵 ${riderName || 'Your Rider'}</strong><br>
-          <small>Waiting for location...</small>
-        </div>`);
-
+      const marker = L.marker([14.5995, 120.9842], { icon: riderIcon }).addTo(map)
+        .bindPopup(`<div class="rider-map-popup"><strong>🛵 ${riderName || 'Your Rider'}</strong><br><small>Waiting for location...</small></div>`);
       mapInstanceRef.current = map;
-      markerRef.current      = marker;
+      markerRef.current = marker;
       setMapReady(true);
       setTimeout(() => { try { map.invalidateSize(); } catch {} }, 300);
-
-      if (pendingLocRef.current) {
-        applyLocation(pendingLocRef.current);
-        pendingLocRef.current = null;
-      }
+      if (pendingLocRef.current) { applyLocation(pendingLocRef.current); pendingLocRef.current = null; }
     } catch (err) {
       console.error('Leaflet init error:', err);
       setMapError('Failed to initialize map.');
@@ -319,16 +415,9 @@ const RiderMap = ({ orderId, riderName }) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leafletLoaded]);
 
-  // ✅ FIX: This effect fires automatically every time locationData changes
-  // because Convex useQuery is a real-time subscription (WebSocket).
-  // When the rider sends a new location (every 5s), Convex pushes the update
-  // here instantly — no manual polling needed on the customer side.
   useEffect(() => {
     if (!locationData?.lat || !locationData?.lng) return;
-    if (!mapReady || !mapInstanceRef.current) {
-      pendingLocRef.current = locationData;
-      return;
-    }
+    if (!mapReady || !mapInstanceRef.current) { pendingLocRef.current = locationData; return; }
     applyLocation(locationData);
   }, [locationData, mapReady, applyLocation]);
 
@@ -336,20 +425,13 @@ const RiderMap = ({ orderId, riderName }) => {
     return () => {
       if (mapInstanceRef.current) {
         try { mapInstanceRef.current.remove(); } catch {}
-        mapInstanceRef.current    = null;
-        markerRef.current         = null;
-        accuracyCircleRef.current = null;
-        pendingLocRef.current     = null;
-        lastLocRef.current        = null;
+        mapInstanceRef.current = null; markerRef.current = null;
+        accuracyCircleRef.current = null; pendingLocRef.current = null; lastLocRef.current = null;
       }
     };
   }, []);
 
-  const statusClass = !locationData          ? 'status-waiting'
-    : !locationData.isTracking               ? 'status-stopped'
-    : isStale                                ? 'status-stale'
-    : 'status-live';
-
+  const statusClass = !locationData ? 'status-waiting' : !locationData.isTracking ? 'status-stopped' : isStale ? 'status-stale' : 'status-live';
   const statusContent = !locationData
     ? <><span className="map-status-dot dot-waiting"></span> Waiting for rider to share location…</>
     : !locationData.isTracking
@@ -358,15 +440,11 @@ const RiderMap = ({ orderId, riderName }) => {
     ? <><span className="map-status-dot dot-stale"></span> Location may be outdated · last: {formatTimeAgo(locationData.updatedAt)}</>
     : <><span className="map-status-dot dot-live"></span> <strong>Live</strong> · Updated {formatTimeAgo(locationData.updatedAt)}</>;
 
-  if (mapError) {
-    return (
-      <div className="rider-map-error">
-        <i className="fas fa-map-marked-alt"></i>
-        <p>{mapError}</p>
-        <small>Try refreshing the page.</small>
-      </div>
-    );
-  }
+  if (mapError) return (
+    <div className="rider-map-error">
+      <i className="fas fa-map-marked-alt"></i><p>{mapError}</p><small>Try refreshing the page.</small>
+    </div>
+  );
 
   return (
     <div className="rider-map-wrapper">
@@ -374,14 +452,8 @@ const RiderMap = ({ orderId, riderName }) => {
       <div ref={mapRef} className="rider-map-container" />
       {locationData?.isTracking && (
         <div className="rider-map-accuracy">
-          {locationData.accuracy && (
-            <span><i className="fas fa-crosshairs"></i> ±{Math.round(locationData.accuracy)}m</span>
-          )}
-          {locationData.speed > 0 && (
-            <span style={{ marginLeft: 10 }}>
-              <i className="fas fa-tachometer-alt"></i> {Math.round((locationData.speed || 0) * 3.6)} km/h
-            </span>
-          )}
+          {locationData.accuracy && <span><i className="fas fa-crosshairs"></i> ±{Math.round(locationData.accuracy)}m</span>}
+          {locationData.speed > 0 && <span style={{ marginLeft: 10 }}><i className="fas fa-tachometer-alt"></i> {Math.round((locationData.speed || 0) * 3.6)} km/h</span>}
         </div>
       )}
       {!locationData && (
@@ -406,11 +478,9 @@ const TrackOrder = () => {
 
   const [filter, setFilter]                       = useState('active');
   const [selectedOrderId, setSelectedOrderId]     = useState(null);
-
   const [trackingEmail, setTrackingEmail]         = useState('');
   const [searchEmail, setSearchEmail]             = useState('');
   const [showTrackedOrders, setShowTrackedOrders] = useState(false);
-
   const [lightboxData, setLightboxData]           = useState(null);
   const [removeConfirm, setRemoveConfirm]         = useState(null);
   const [refundOrder, setRefundOrder]             = useState(null);
@@ -424,48 +494,28 @@ const TrackOrder = () => {
   const regularProducts  = useProducts() || [];
   const preOrderProducts = usePreOrderProducts() || [];
   const products         = [...regularProducts, ...preOrderProducts];
-
   const allAvailableOrders = [...orders, ...emailOrders];
-
-  const selectedOrder = selectedOrderId
-    ? allAvailableOrders.find(o => o._id === selectedOrderId) || null
-    : null;
-
+  const selectedOrder = selectedOrderId ? allAvailableOrders.find(o => o._id === selectedOrderId) || null : null;
   const urlParamProcessedRef = useRef(false);
 
   useEffect(() => {
     if (urlParamProcessedRef.current) return;
     if (!orderIdParam) return;
-
     const found = [...orders, ...emailOrders].find(o => o.orderId === orderIdParam);
-    if (found) {
-      urlParamProcessedRef.current = true;
-      setSelectedOrderId(found._id);
-    }
+    if (found) { urlParamProcessedRef.current = true; setSelectedOrderId(found._id); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderIdParam, orders, emailOrders]);
 
-  const handleCloseModal = useCallback(() => {
-    setSelectedOrderId(null);
-  }, []);
-
-  const handleOpenModal = useCallback((order) => {
-    setSelectedOrderId(order._id);
-  }, []);
-
-  const getProductById = useCallback(
-    (id) => products.find(p => p._id === id || p.id === id),
-    [products]
-  );
+  const handleCloseModal = useCallback(() => setSelectedOrderId(null), []);
+  const handleOpenModal  = useCallback((order) => setSelectedOrderId(order._id), []);
+  const getProductById   = useCallback((id) => products.find(p => p._id === id || p.id === id), [products]);
 
   const getStatusClass = (status) => {
     const map = {
-      'Processing': 'status-processing', 'Confirmed': 'status-confirmed',
-      'Shipped': 'status-shipped', 'Out for Delivery': 'status-delivery',
-      'out_for_delivery': 'status-delivery', 'Delivered': 'status-delivered',
-      'Cancelled': 'status-cancelled', 'pending': 'status-processing',
-      'confirmed': 'status-confirmed', 'shipped': 'status-shipped',
-      'completed': 'status-delivered', 'cancelled': 'status-cancelled',
+      'Processing': 'status-processing', 'Confirmed': 'status-confirmed', 'Shipped': 'status-shipped',
+      'Out for Delivery': 'status-delivery', 'out_for_delivery': 'status-delivery', 'Delivered': 'status-delivered',
+      'Cancelled': 'status-cancelled', 'pending': 'status-processing', 'confirmed': 'status-confirmed',
+      'shipped': 'status-shipped', 'completed': 'status-delivered', 'cancelled': 'status-cancelled',
       'Pending Payment': 'status-pending-payment',
     };
     return map[status] || 'status-processing';
@@ -475,99 +525,39 @@ const TrackOrder = () => {
     const s = order.orderStatus || order.status || 'pending';
     const labels = {
       pending: 'Processing', confirmed: 'Confirmed', shipped: 'Shipped',
-      out_for_delivery: 'Out for Delivery', completed: 'Delivered',
-      cancelled: 'Cancelled', Processing: 'Processing', Confirmed: 'Confirmed',
-      Shipped: 'Shipped', 'Out for Delivery': 'Out for Delivery',
-      Delivered: 'Delivered', Cancelled: 'Cancelled',
+      out_for_delivery: 'Out for Delivery', completed: 'Delivered', cancelled: 'Cancelled',
+      Processing: 'Processing', Confirmed: 'Confirmed', Shipped: 'Shipped',
+      'Out for Delivery': 'Out for Delivery', Delivered: 'Delivered', Cancelled: 'Cancelled',
       'Pending Payment': 'Pending Payment',
     };
     return labels[s] || s;
   };
 
-  const isPendingPayment = (order) =>
-    order.status === 'Pending Payment' && order.paymentStatus !== 'paid';
-
-  const isDelivered = (order) => {
-    const s = (order.orderStatus || order.status || '').toLowerCase();
-    return s === 'delivered' || s === 'completed';
-  };
-
-  const isCancelledOrder = (order) => {
-    const s = (order.orderStatus || order.status || '').toLowerCase();
-    return s === 'cancelled';
-  };
-
+  const isPendingPayment  = (order) => order.status === 'Pending Payment' && order.paymentStatus !== 'paid';
+  const isDelivered       = (order) => { const s = (order.orderStatus || order.status || '').toLowerCase(); return s === 'delivered' || s === 'completed'; };
+  const isCancelledOrder  = (order) => { const s = (order.orderStatus || order.status || '').toLowerCase(); return s === 'cancelled'; };
   const isOutForDeliveryStatus = (order) => {
-    const checkStr = (val) => {
-      if (!val) return false;
-      const s = val.toLowerCase().replace(/[\s_-]+/g, '_');
-      return s === 'out_for_delivery';
-    };
+    const checkStr = (val) => { if (!val) return false; const s = val.toLowerCase().replace(/[\s_-]+/g, '_'); return s === 'out_for_delivery'; };
     return checkStr(order.orderStatus) || checkStr(order.status);
   };
 
   const getTimelineSteps = (order) => {
     const status = (order.orderStatus || order.status || 'pending').toLowerCase().replace(/\s+/g, '_');
-    const fmt = (ts) => ts
-      ? new Date(ts).toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-      : null;
-
-    const placedAt         = fmt(order._creationTime);
-    const paidAt           = fmt(order.paidAt);
-    const confirmedAt      = fmt(order.confirmedAt);
-    const shippedAt        = fmt(order.shippedAt);
-    const outForDeliveryAt = fmt(order.outForDeliveryAt);
-    const deliveredAt      = fmt(order.deliveryConfirmedAt);
-
-    if (status === 'cancelled') {
-      return [
-        { label: 'Order Placed', icon: 'fa-shopping-cart', completed: true, time: placedAt },
-        { label: 'Payment',      icon: 'fa-credit-card',   completed: !!order.paidAt, time: paidAt },
-        { label: 'Cancelled',    icon: 'fa-times-circle',  completed: true, isCancelled: true, cancelReason: order.cancelReason, time: null },
-      ];
-    }
-
+    const fmt = (ts) => ts ? new Date(ts).toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : null;
+    const placedAt = fmt(order._creationTime), paidAt = fmt(order.paidAt), confirmedAt = fmt(order.confirmedAt);
+    const shippedAt = fmt(order.shippedAt), outForDeliveryAt = fmt(order.outForDeliveryAt), deliveredAt = fmt(order.deliveryConfirmedAt);
+    if (status === 'cancelled') return [
+      { label: 'Order Placed', icon: 'fa-shopping-cart', completed: true, time: placedAt },
+      { label: 'Payment',      icon: 'fa-credit-card',   completed: !!order.paidAt, time: paidAt },
+      { label: 'Cancelled',    icon: 'fa-times-circle',  completed: true, isCancelled: true, cancelReason: order.cancelReason, time: null },
+    ];
     return [
-      {
-        label: 'Order Placed', icon: 'fa-shopping-cart', completed: true, time: placedAt,
-        desc: 'Your order has been placed successfully.',
-      },
-      {
-        label: 'Payment Confirmed', icon: 'fa-credit-card',
-        completed: order.paymentStatus === 'paid', time: paidAt,
-        desc: order.paymentStatus === 'paid' ? 'Payment received via PayMongo.' : 'Waiting for payment confirmation.',
-      },
-      {
-        label: 'Order Confirmed', icon: 'fa-check-circle',
-        completed: ['confirmed','shipped','out_for_delivery','delivered','completed'].includes(status),
-        time: confirmedAt,
-        desc: ['confirmed','shipped','out_for_delivery','delivered','completed'].includes(status)
-          ? 'Admin has confirmed and is preparing your order.'
-          : 'Waiting for admin to confirm your order.',
-      },
-      {
-        label: 'Rider Assigned', icon: 'fa-motorcycle',
-        completed: ['shipped','out_for_delivery','delivered','completed'].includes(status),
-        time: shippedAt,
-        desc: order.riderInfo
-          ? `${order.riderInfo.name} (${order.riderInfo.plate}) will deliver your order.`
-          : ['shipped','out_for_delivery','delivered','completed'].includes(status)
-            ? 'A rider has been assigned to your order.' : 'Waiting for rider assignment.',
-      },
-      {
-        label: 'Out for Delivery', icon: 'fa-shipping-fast',
-        completed: ['out_for_delivery','delivered','completed'].includes(status),
-        time: outForDeliveryAt,
-        desc: ['out_for_delivery','delivered','completed'].includes(status)
-          ? 'Your rider is on the way!' : 'Waiting for rider to pick up your order.',
-      },
-      {
-        label: 'Delivered', icon: 'fa-check-double',
-        completed: ['delivered','completed'].includes(status),
-        time: deliveredAt,
-        desc: ['delivered','completed'].includes(status)
-          ? 'Your order has been delivered successfully!' : 'Waiting for delivery confirmation.',
-      },
+      { label: 'Order Placed',      icon: 'fa-shopping-cart',  completed: true, time: placedAt, desc: 'Your order has been placed successfully.' },
+      { label: 'Payment Confirmed', icon: 'fa-credit-card',    completed: order.paymentStatus === 'paid', time: paidAt, desc: order.paymentStatus === 'paid' ? 'Payment received via PayMongo.' : 'Waiting for payment confirmation.' },
+      { label: 'Order Confirmed',   icon: 'fa-check-circle',   completed: ['confirmed','shipped','out_for_delivery','delivered','completed'].includes(status), time: confirmedAt, desc: ['confirmed','shipped','out_for_delivery','delivered','completed'].includes(status) ? 'Admin has confirmed and is preparing your order.' : 'Waiting for admin to confirm your order.' },
+      { label: 'Rider Assigned',    icon: 'fa-motorcycle',     completed: ['shipped','out_for_delivery','delivered','completed'].includes(status), time: shippedAt, desc: order.riderInfo ? `${order.riderInfo.name} (${order.riderInfo.plate}) will deliver your order.` : ['shipped','out_for_delivery','delivered','completed'].includes(status) ? 'A rider has been assigned to your order.' : 'Waiting for rider assignment.' },
+      { label: 'Out for Delivery',  icon: 'fa-shipping-fast',  completed: ['out_for_delivery','delivered','completed'].includes(status), time: outForDeliveryAt, desc: ['out_for_delivery','delivered','completed'].includes(status) ? 'Your rider is on the way!' : 'Waiting for rider to pick up your order.' },
+      { label: 'Delivered',         icon: 'fa-check-double',   completed: ['delivered','completed'].includes(status), time: deliveredAt, desc: ['delivered','completed'].includes(status) ? 'Your order has been delivered successfully!' : 'Waiting for delivery confirmation.' },
     ];
   };
 
@@ -582,16 +572,13 @@ const TrackOrder = () => {
   const closeLightbox = () => setLightboxData(null);
   const lightboxNext  = () => setLightboxData(prev => ({ ...prev, index: (prev.index + 1) % prev.images.length }));
   const lightboxPrev  = () => setLightboxData(prev => ({ ...prev, index: (prev.index - 1 + prev.images.length) % prev.images.length }));
-
-  const sortByNewest = (arr) =>
-    [...arr].sort((a, b) => (b._creationTime || 0) - (a._creationTime || 0));
+  const sortByNewest  = (arr) => [...arr].sort((a, b) => (b._creationTime || 0) - (a._creationTime || 0));
 
   const visibleOrders   = sortByNewest(orders.filter(o => !hiddenOrders.includes(o._id)));
   const activeOrders    = visibleOrders.filter(o => !isDelivered(o) && !isCancelledOrder(o));
   const deliveredOrders = visibleOrders.filter(o => isDelivered(o));
   const cancelledOrders = visibleOrders.filter(o => isCancelledOrder(o));
-
-  const filteredOrders = visibleOrders.filter(o => {
+  const filteredOrders  = visibleOrders.filter(o => {
     if (filter === 'active')    return !isDelivered(o) && !isCancelledOrder(o);
     if (filter === 'delivered') return isDelivered(o);
     if (filter === 'cancelled') return isCancelledOrder(o);
@@ -642,11 +629,13 @@ const TrackOrder = () => {
     const releaseDate  = getPreOrderReleaseDate(order);
     const needsPayment = isPendingPayment(order);
 
+    // ── Refund window check ──
+    const { canRefund, hoursLeft, expired } = getRefundWindow(order);
+
     const itemImages = (order.items || []).map(item => {
       const product = getProductById(item.id);
       return { src: item.image || product?.image || null, name: item.name || product?.name || 'Item' };
     }).filter(i => i.src);
-
     const hasImages = itemImages.length > 0;
 
     const scrollTo = (idx) => {
@@ -696,12 +685,8 @@ const TrackOrder = () => {
                       <button key={idx} className={`order-img-dot ${idx === activeImgIdx ? 'active' : ''}`} onClick={() => scrollTo(idx)} />
                     ))}
                   </div>
-                  <button className="order-img-arrow order-img-arrow-left" onClick={() => scrollTo((activeImgIdx - 1 + itemImages.length) % itemImages.length)}>
-                    <i className="fas fa-chevron-left"></i>
-                  </button>
-                  <button className="order-img-arrow order-img-arrow-right" onClick={() => scrollTo((activeImgIdx + 1) % itemImages.length)}>
-                    <i className="fas fa-chevron-right"></i>
-                  </button>
+                  <button className="order-img-arrow order-img-arrow-left" onClick={() => scrollTo((activeImgIdx - 1 + itemImages.length) % itemImages.length)}><i className="fas fa-chevron-left"></i></button>
+                  <button className="order-img-arrow order-img-arrow-right" onClick={() => scrollTo((activeImgIdx + 1) % itemImages.length)}><i className="fas fa-chevron-right"></i></button>
                 </>
               )}
             </>
@@ -724,8 +709,20 @@ const TrackOrder = () => {
           )}
 
           {delivered && order.refundStatus && (
-            <div style={{ marginBottom: 6 }}>
-              <RefundBadge status={order.refundStatus} />
+            <div style={{ marginBottom: 6 }}><RefundBadge status={order.refundStatus} /></div>
+          )}
+
+          {/* ── Show refund window countdown on card ── */}
+          {delivered && !order.refundStatus && canRefund && (
+            <div className="order-card-refund-timer">
+              <i className="fas fa-hourglass-half"></i>
+              <span>Refund window: <strong>{hoursLeft}h left</strong></span>
+            </div>
+          )}
+          {delivered && !order.refundStatus && expired && (
+            <div className="order-card-refund-expired">
+              <i className="fas fa-clock"></i>
+              <span>Refund window expired</span>
             </div>
           )}
 
@@ -759,9 +756,17 @@ const TrackOrder = () => {
             </button>
           )}
 
-          {delivered && !order.refundStatus && (
+          {/* Refund button — only within 24h window and no existing refund */}
+          {delivered && !order.refundStatus && canRefund && (
             <button className="btn order-refund-btn" onClick={() => setRefundOrder(order)}>
               <i className="fas fa-undo-alt"></i> Request Refund
+            </button>
+          )}
+
+          {/* Re-request if rejected AND still within window */}
+          {delivered && order.refundStatus === 'rejected' && canRefund && (
+            <button className="btn order-refund-btn order-refund-retry-btn" onClick={() => setRefundOrder(order)}>
+              <i className="fas fa-redo"></i> Request Again
             </button>
           )}
 
@@ -781,7 +786,7 @@ const TrackOrder = () => {
     const hasMultiple = images.length > 1;
     useEffect(() => {
       const onKey = (e) => {
-        if (e.key === 'Escape')                    closeLightbox();
+        if (e.key === 'Escape') closeLightbox();
         if (e.key === 'ArrowRight' && hasMultiple) lightboxNext();
         if (e.key === 'ArrowLeft'  && hasMultiple) lightboxPrev();
       };
@@ -791,17 +796,9 @@ const TrackOrder = () => {
     return (
       <div className="order-lightbox" onClick={closeLightbox}>
         <button className="lightbox-close" onClick={closeLightbox}><i className="fas fa-times"></i></button>
-        {hasMultiple && (
-          <button className="lightbox-arrow lightbox-arrow-left" onClick={e => { e.stopPropagation(); lightboxPrev(); }}>
-            <i className="fas fa-chevron-left"></i>
-          </button>
-        )}
+        {hasMultiple && <button className="lightbox-arrow lightbox-arrow-left" onClick={e => { e.stopPropagation(); lightboxPrev(); }}><i className="fas fa-chevron-left"></i></button>}
         <img src={images[index]} alt={`Item ${index + 1}`} onClick={e => e.stopPropagation()} />
-        {hasMultiple && (
-          <button className="lightbox-arrow lightbox-arrow-right" onClick={e => { e.stopPropagation(); lightboxNext(); }}>
-            <i className="fas fa-chevron-right"></i>
-          </button>
-        )}
+        {hasMultiple && <button className="lightbox-arrow lightbox-arrow-right" onClick={e => { e.stopPropagation(); lightboxNext(); }}><i className="fas fa-chevron-right"></i></button>}
         {hasMultiple && (
           <div className="lightbox-dots">
             {images.map((_, i) => (
@@ -827,14 +824,12 @@ const TrackOrder = () => {
         </div>
         <div className="container">
           <section className="track-order-page">
-
             {refundSuccess && (
               <div className="refund-success-toast">
                 <i className="fas fa-check-circle"></i>
                 Refund request submitted! We'll review it within 1-3 business days.
               </div>
             )}
-
             <div className="orders-tab-bar">
               {FILTERS.map(f => (
                 <button key={f.key} className={`orders-tab-btn ${filter === f.key ? 'active' : ''}`} onClick={() => setFilter(f.key)}>
@@ -848,9 +843,7 @@ const TrackOrder = () => {
               <i className={`fas ${activeTab?.icon}`}></i>
               <span>
                 <strong>{activeTab?.label}</strong> — {activeTab?.desc}
-                {filteredOrders.length > 0 && (
-                  <span className="tab-context-count"> · {filteredOrders.length} order{filteredOrders.length !== 1 ? 's' : ''}</span>
-                )}
+                {filteredOrders.length > 0 && <span className="tab-context-count"> · {filteredOrders.length} order{filteredOrders.length !== 1 ? 's' : ''}</span>}
               </span>
             </div>
             {filteredOrders.length === 0 ? (
@@ -893,11 +886,7 @@ const TrackOrder = () => {
         )}
 
         {refundOrder && (
-          <RefundModal
-            order={refundOrder}
-            onClose={() => setRefundOrder(null)}
-            onSuccess={handleRefundSuccess}
-          />
+          <RefundModal order={refundOrder} onClose={() => setRefundOrder(null)} onSuccess={handleRefundSuccess} />
         )}
 
         <Lightbox />
@@ -921,7 +910,6 @@ const TrackOrder = () => {
     );
   }
 
-  // ─── NOT LOGGED IN VIEW ───────────────────────────────────────────────────
   return (
     <main className="trackorder-main">
       <div className="page-header">
@@ -938,15 +926,9 @@ const TrackOrder = () => {
               <form onSubmit={handleFindMyOrders}>
                 <div className="form-group">
                   <label htmlFor="tracking-email">Email Address</label>
-                  <input
-                    type="email"
-                    id="tracking-email"
-                    className="form-control"
+                  <input type="email" id="tracking-email" className="form-control"
                     placeholder="Enter your email address"
-                    value={trackingEmail}
-                    onChange={e => setTrackingEmail(e.target.value)}
-                    required
-                  />
+                    value={trackingEmail} onChange={e => setTrackingEmail(e.target.value)} required />
                   <small>Enter the email you used when placing your order</small>
                 </div>
                 <button type="submit" className="btn btn-primary">
@@ -964,7 +946,6 @@ const TrackOrder = () => {
               </ul>
             </div>
           </div>
-
           {showTrackedOrders && emailOrders.length > 0 && (
             <div className="tracked-orders-section">
               <div className="tracked-orders-header">
@@ -978,7 +959,6 @@ const TrackOrder = () => {
               </div>
             </div>
           )}
-
           {showTrackedOrders && emailOrders.length === 0 && (
             <div className="orders-empty">
               <i className="fas fa-search"></i>
@@ -1002,13 +982,8 @@ const TrackOrder = () => {
           onRequestRefund={(order) => { handleCloseModal(); setRefundOrder(order); }}
         />
       )}
-
       {refundOrder && (
-        <RefundModal
-          order={refundOrder}
-          onClose={() => setRefundOrder(null)}
-          onSuccess={handleRefundSuccess}
-        />
+        <RefundModal order={refundOrder} onClose={() => setRefundOrder(null)} onSuccess={handleRefundSuccess} />
       )}
       <Lightbox />
     </main>
@@ -1016,11 +991,7 @@ const TrackOrder = () => {
 };
 
 // ─── TRACKING MODAL ──────────────────────────────────────────────────────────
-const TrackingModal = ({
-  order, products, onClose,
-  getTimelineSteps, getStatusClass, getDisplayStatus, isOutForDeliveryStatus,
-  onRequestRefund,
-}) => {
+const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusClass, getDisplayStatus, isOutForDeliveryStatus, onRequestRefund }) => {
   const updateOrderOtp    = useUpdateOrderOtp();
   const createPaymentLink = useAction(api.payments.createPaymentLink);
   const [generatingOtp, setGeneratingOtp]         = useState(false);
@@ -1032,6 +1003,10 @@ const TrackingModal = ({
   const needsPayment     = order.status === 'Pending Payment' && order.paymentStatus !== 'paid';
   const delivered        = ['delivered','completed'].includes((order.orderStatus || order.status || '').toLowerCase());
   const timelineSteps    = getTimelineSteps(order);
+  const refundAmount     = (order.finalTotal ?? order.total ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2 });
+
+  // ── Refund window check ──
+  const { canRefund, hoursLeft, minsLeft, expired } = getRefundWindow(order);
 
   useEffect(() => {
     document.body.style.overflow = 'hidden';
@@ -1043,9 +1018,7 @@ const TrackingModal = ({
   }, [order.deliveryOtp]);
 
   useEffect(() => {
-    const handleKey = (e) => {
-      if (e.key === 'Escape') onClose();
-    };
+    const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [onClose]);
@@ -1087,16 +1060,12 @@ const TrackingModal = ({
   return (
     <div className="tracking-modal-overlay" onClick={onClose}>
       <div className="tracking-modal" onClick={e => e.stopPropagation()}>
-        <button className="modal-close-btn" onClick={onClose} type="button">
-          <i className="fas fa-times"></i>
-        </button>
+        <button className="modal-close-btn" onClick={onClose} type="button"><i className="fas fa-times"></i></button>
         <div className="tracking-result">
 
           <div className="result-header">
             <h2>Order #{order.orderId?.slice(-8) || 'N/A'}</h2>
-            <div className={`status-badge ${getStatusClass(order.orderStatus || order.status)}`}>
-              {getDisplayStatus(order)}
-            </div>
+            <div className={`status-badge ${getStatusClass(order.orderStatus || order.status)}`}>{getDisplayStatus(order)}</div>
           </div>
 
           {needsPayment && (
@@ -1107,9 +1076,7 @@ const TrackingModal = ({
                 <p>Your order is reserved but payment was not completed.</p>
               </div>
               <button className="btn btn-continue-payment" onClick={handleContinuePayment} disabled={continuingPayment}>
-                {continuingPayment
-                  ? <><i className="fas fa-spinner fa-spin"></i> Loading...</>
-                  : <><i className="fas fa-credit-card"></i> Complete Payment</>}
+                {continuingPayment ? <><i className="fas fa-spinner fa-spin"></i> Loading...</> : <><i className="fas fa-credit-card"></i> Complete Payment</>}
               </button>
             </div>
           )}
@@ -1120,9 +1087,7 @@ const TrackingModal = ({
               <div className="rider-info-details">
                 <strong>Your Rider: {order.riderInfo.name}</strong>
                 <span>{order.riderInfo.vehicle} • {order.riderInfo.plate}</span>
-                {order.riderInfo.phone && (
-                  <span><i className="fas fa-phone"></i> {order.riderInfo.phone}</span>
-                )}
+                {order.riderInfo.phone && <span><i className="fas fa-phone"></i> {order.riderInfo.phone}</span>}
               </div>
             </div>
           )}
@@ -1137,6 +1102,7 @@ const TrackingModal = ({
             </div>
           )}
 
+          {/* ── REFUND STATUS BANNER ── */}
           {delivered && order.refundStatus && (
             <div className={`refund-status-banner refund-banner-${order.refundStatus}`}>
               <div className="refund-banner-icon">
@@ -1147,12 +1113,12 @@ const TrackingModal = ({
               <div className="refund-banner-text">
                 <strong>
                   {order.refundStatus === 'requested' && 'Refund Request Pending'}
-                  {order.refundStatus === 'approved'  && 'Refund Approved'}
+                  {order.refundStatus === 'approved'  && `Refund Approved — ₱${refundAmount}`}
                   {order.refundStatus === 'rejected'  && 'Refund Request Rejected'}
                 </strong>
                 <p>
-                  {order.refundStatus === 'requested' && `Reason: ${REFUND_REASONS.find(r => r.value === order.refundReason)?.label || order.refundReason}`}
-                  {order.refundStatus === 'approved'  && (order.refundAdminNote || 'Your refund has been approved.')}
+                  {order.refundStatus === 'requested' && (<>Your refund of <strong>₱{refundAmount}</strong> is under review.{order.refundMethod && <> Will be sent to your {order.refundMethod === 'gcash' ? 'GCash' : 'Maya'} ({order.refundAccountNumber}).</>}</>)}
+                  {order.refundStatus === 'approved'  && (order.refundAdminNote || `Your refund of ₱${refundAmount} has been approved and sent.`)}
                   {order.refundStatus === 'rejected'  && (order.refundAdminNote || 'Your refund request was not approved.')}
                 </p>
                 {order.refundComment && order.refundStatus === 'requested' && (
@@ -1162,9 +1128,25 @@ const TrackingModal = ({
             </div>
           )}
 
-          {delivered && !order.refundStatus && (
+          {/* ── Refund window info in modal ── */}
+          {delivered && !order.refundStatus && canRefund && (
+            <div className="refund-window-banner">
+              <i className="fas fa-hourglass-half"></i>
+              <span>You can request a refund within <strong>{hoursLeft}h {minsLeft}m</strong>. Refunds are only accepted within 24 hours of delivery.</span>
+            </div>
+          )}
+          {delivered && !order.refundStatus && expired && (
+            <div className="refund-window-banner refund-window-expired">
+              <i className="fas fa-clock"></i>
+              <span>The 24-hour refund window has passed. This order is no longer eligible for a refund.</span>
+            </div>
+          )}
+
+          {/* Refund button — only within window */}
+          {delivered && (!order.refundStatus || order.refundStatus === 'rejected') && canRefund && (
             <button className="modal-refund-btn" onClick={() => onRequestRefund(order)}>
-              <i className="fas fa-undo-alt"></i> Request Refund
+              <i className="fas fa-undo-alt"></i>
+              {order.refundStatus === 'rejected' ? 'Request Refund Again' : 'Request Refund'}
             </button>
           )}
 
@@ -1175,8 +1157,6 @@ const TrackingModal = ({
                 <span>Real-Time Rider Location</span>
                 <span className="rider-map-live-pill">LIVE</span>
               </div>
-              {/* ✅ RiderMap uses Convex real-time subscription — auto-updates
-                  every time rider sends location (every 5s). No refresh needed. */}
               <RiderMap orderId={order.orderId} riderName={order.riderInfo?.name} />
             </div>
           )}
@@ -1187,10 +1167,7 @@ const TrackingModal = ({
                 <div className="otp-generate-card">
                   <div className="otp-generate-header">
                     <div className="otp-generate-icon"><i className="fas fa-shield-alt"></i></div>
-                    <div>
-                      <strong>Confirm Your Delivery</strong>
-                      <p>Your rider is on the way! Generate your OTP to confirm receipt.</p>
-                    </div>
+                    <div><strong>Confirm Your Delivery</strong><p>Your rider is on the way! Generate your OTP to confirm receipt.</p></div>
                   </div>
                   <div className="otp-generate-steps">
                     <div className="otp-step"><span className="otp-step-num">1</span><span>Tap the button below to generate your unique OTP</span></div>
@@ -1198,27 +1175,18 @@ const TrackingModal = ({
                     <div className="otp-step"><span className="otp-step-num">3</span><span>Rider enters the code to complete the delivery</span></div>
                   </div>
                   <button className={`otp-generate-btn ${generatingOtp ? 'generating' : ''}`} onClick={handleGenerateOtp} disabled={generatingOtp}>
-                    {generatingOtp
-                      ? <><i className="fas fa-spinner fa-spin"></i> Generating OTP...</>
-                      : <><i className="fas fa-key"></i> Generate My OTP</>}
+                    {generatingOtp ? <><i className="fas fa-spinner fa-spin"></i> Generating OTP...</> : <><i className="fas fa-key"></i> Generate My OTP</>}
                   </button>
-                  <p className="otp-generate-warning">
-                    <i className="fas fa-exclamation-triangle"></i> Only generate this when your rider has arrived.
-                  </p>
+                  <p className="otp-generate-warning"><i className="fas fa-exclamation-triangle"></i> Only generate this when your rider has arrived.</p>
                 </div>
               ) : (
                 <div className="otp-display-card">
                   <div className="otp-display-header">
                     <div className="otp-display-icon"><i className="fas fa-shield-alt"></i></div>
-                    <div>
-                      <strong>Your Delivery OTP</strong>
-                      <p>Show this code to your rider when they arrive</p>
-                    </div>
+                    <div><strong>Your Delivery OTP</strong><p>Show this code to your rider when they arrive</p></div>
                   </div>
                   <div className="otp-code-display">
-                    {localOtp.split('').map((digit, i) => (
-                      <span key={i} className="otp-digit">{digit}</span>
-                    ))}
+                    {localOtp.split('').map((digit, i) => <span key={i} className="otp-digit">{digit}</span>)}
                   </div>
                   <div className="otp-display-note">
                     <i className="fas fa-info-circle"></i>
@@ -1237,12 +1205,8 @@ const TrackingModal = ({
                   <div className="timeline-marker"><i className={`fas ${step.icon}`}></i></div>
                   <div className="timeline-content">
                     <h4>{step.label}</h4>
-                    {step.time && step.completed && (
-                      <span className="timeline-timestamp"><i className="fas fa-clock"></i> {step.time}</span>
-                    )}
-                    <p className={step.completed ? 'timeline-desc-done' : 'timeline-desc-pending'}>
-                      {step.desc || (step.completed ? 'Completed' : 'Pending')}
-                    </p>
+                    {step.time && step.completed && <span className="timeline-timestamp"><i className="fas fa-clock"></i> {step.time}</span>}
+                    <p className={step.completed ? 'timeline-desc-done' : 'timeline-desc-pending'}>{step.desc || (step.completed ? 'Completed' : 'Pending')}</p>
                     {step.isCancelled && step.cancelReason && (
                       <div className="timeline-cancel-reason">
                         <div className="timeline-cancel-reason-label"><i className="fas fa-comment-alt"></i> Reason:</div>
@@ -1258,9 +1222,9 @@ const TrackingModal = ({
           <div className="order-items-timeline">
             <h3>Order Items</h3>
             {order.items?.map((item, index) => {
-              const product     = getProductById(item.id);
-              const qty         = item.quantity || item.qty || 1;
-              const isPreOrder  = item.isPreOrder || product?.isPreOrder;
+              const product = getProductById(item.id);
+              const qty = item.quantity || item.qty || 1;
+              const isPreOrder = item.isPreOrder || product?.isPreOrder;
               const releaseDate = item.releaseDate || product?.releaseDate;
               return (
                 <div key={index} className="order-item-timeline">

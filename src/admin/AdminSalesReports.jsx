@@ -24,7 +24,6 @@ const getLastNMonths = (nowMs, n = 6) => {
 const getDailyBuckets = (nowMs, mode) => {
   const buckets = [];
   if (mode === 'today') {
-    // Hourly buckets 0-23
     const now = new Date(nowMs);
     for (let h = 0; h <= now.getHours(); h++) {
       buckets.push({
@@ -34,7 +33,6 @@ const getDailyBuckets = (nowMs, mode) => {
       });
     }
   } else if (mode === 'last_week') {
-    // Last 7 days
     for (let i = 6; i >= 0; i--) {
       const d = new Date(nowMs);
       d.setDate(d.getDate() - i);
@@ -43,13 +41,11 @@ const getDailyBuckets = (nowMs, mode) => {
       buckets.push({ label: `${MONTHS_SHORT[d.getMonth()]} ${d.getDate()}`, start, end });
     }
   } else if (mode === 'last_month') {
-    // Last 30 days
     for (let i = 29; i >= 0; i--) {
       const d = new Date(nowMs);
       d.setDate(d.getDate() - i);
       const start = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
       const end   = start + 86399999;
-      // Show label every 5 days
       const show = i % 5 === 0 || i === 0;
       buckets.push({ label: show ? `${MONTHS_SHORT[d.getMonth()]} ${d.getDate()}` : '', start, end });
     }
@@ -64,12 +60,10 @@ const ChartTooltip = ({ visible, x, y, lines, chartWidth = 600 }) => {
   const TIP_W = 140;
   const TIP_H = lines.length * 20 + 16;
 
-  // Clamp tooltip so it never overflows left/right
   let tx = x - TIP_W / 2;
   if (tx < 4) tx = 4;
   if (tx + TIP_W > chartWidth - 4) tx = chartWidth - TIP_W - 4;
 
-  // Prefer above the dot; flip below if too close to top
   let ty = y - TIP_H - 12;
   if (ty < 4) ty = y + 12;
 
@@ -81,7 +75,6 @@ const ChartTooltip = ({ visible, x, y, lines, chartWidth = 600 }) => {
         fill="rgba(17,24,39,0.92)"
         style={{ filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.28))' }}
       />
-      {/* Arrow */}
       <polygon
         points={`${x},${ty > y ? ty - 6 : ty + TIP_H + 6} ${x - 5},${ty > y ? ty : ty + TIP_H} ${x + 5},${ty > y ? ty : ty + TIP_H}`}
         fill="rgba(17,24,39,0.92)"
@@ -131,7 +124,6 @@ const AdminSalesReports = () => {
 
   const nowMs = liveNowMs;
 
-  // ✅ Default: January 1, 2026 → today
   const defaultEnd   = toDateStr(nowMs);
   const defaultStart = '2026-01-01';
 
@@ -142,11 +134,9 @@ const AdminSalesReports = () => {
   const effectiveEnd   = endDate   || defaultEnd;
   const maxDate        = toDateStr(nowMs);
 
-  // ✅ Chart-level filter state (independent for each chart)
   const [salesFilter,  setSalesFilter]  = useState('last_week');
   const [volumeFilter, setVolumeFilter] = useState('last_week');
 
-  // ✅ Tooltip state
   const [salesTooltip,  setSalesTooltip]  = useState({ visible: false, x: 0, y: 0, lines: [] });
   const [volumeTooltip, setVolumeTooltip] = useState({ visible: false, x: 0, y: 0, lines: [] });
 
@@ -169,14 +159,18 @@ const AdminSalesReports = () => {
   }, [allOrders, effectiveStart, effectiveEnd]);
 
   const summary = useMemo(() => {
-    const paidOrders      = filtered.filter(isPaid);
-    const completedOrders = filtered.filter(isCompleted);
-    const totalRevenue    = paidOrders.reduce((s, o) => s + (o.finalTotal ?? o.total ?? 0), 0);
+    const paidOrders       = filtered.filter(isPaid);
+    const completedOrders  = filtered.filter(isCompleted);
+    // Total Revenue = all paid orders
+    const totalRevenue     = paidOrders.reduce((s, o) => s + (o.finalTotal ?? o.total ?? 0), 0);
+    // Avg Order Value = revenue from completed orders ÷ completed order count (most accurate)
+    const completedRevenue = completedOrders.reduce((s, o) => s + (o.finalTotal ?? o.total ?? 0), 0);
+    const avgOrderValue    = completedOrders.length ? completedRevenue / completedOrders.length : 0;
     return {
       totalRevenue,
       totalOrders:     filtered.length,
       completedOrders: completedOrders.length,
-      avgOrderValue:   paidOrders.length ? totalRevenue / paidOrders.length : 0,
+      avgOrderValue,
     };
   }, [filtered]);
 
@@ -197,7 +191,6 @@ const AdminSalesReports = () => {
         }
       });
     }
-    // Fallback: monthly (shouldn't reach with current filters)
     const months = getLastNMonths(nowMs, 2);
     return months.map(({ label, year, month }) => {
       const matching = allOrders.filter(o => {
@@ -265,7 +258,6 @@ const AdminSalesReports = () => {
     </>
   );
 
-  // ─── Point / Bar position calculators ────────────────────────────────────
   const getLinePoints = (data) => {
     const n = data.length;
     if (n === 0) return [];
@@ -280,7 +272,6 @@ const AdminSalesReports = () => {
 
   const getBarProps = (data, i) => {
     const n = data.length;
-    // Dynamic bar width based on count
     const totalW = PLOT_W;
     const gap    = n > 20 ? 1 : n > 10 ? 2 : 4;
     const barW   = Math.max(2, (totalW / n) - gap);
@@ -414,7 +405,6 @@ const AdminSalesReports = () => {
               <ChartY max={maxVal(salesData)} steps={4} isRevenue />
               <GridLines />
 
-              {/* Line path */}
               {linePoints.length > 1 && (
                 <polyline
                   points={linePoints.map(p => `${p.x},${p.y}`).join(' ')}
@@ -423,10 +413,8 @@ const AdminSalesReports = () => {
                 />
               )}
 
-              {/* Dots + X labels + invisible hit targets */}
               {linePoints.map((pt, i) => (
                 <g key={i}>
-                  {/* Larger invisible hit area */}
                   <circle
                     cx={pt.x} cy={pt.y} r="14"
                     fill="transparent"
@@ -437,14 +425,12 @@ const AdminSalesReports = () => {
                     })}
                     onMouseLeave={() => setSalesTooltip({ visible: false })}
                   />
-                  {/* Visible dot */}
                   <circle
                     cx={pt.x} cy={pt.y} r="5"
                     fill={salesTooltip.visible && salesTooltip.x === pt.x ? '#fff' : '#ec4899'}
                     stroke="#ec4899" strokeWidth="2.5"
                     style={{ pointerEvents: 'none' }}
                   />
-                  {/* X-axis label — show conditionally for many points */}
                   {(salesData.length <= 10 || i % Math.ceil(salesData.length / 8) === 0 || i === salesData.length - 1) && (
                     <text x={pt.x} y={CHART_H - 5} className="x-axis-label" textAnchor="middle" style={{ pointerEvents: 'none' }}>
                       {pt.label}
@@ -453,7 +439,6 @@ const AdminSalesReports = () => {
                 </g>
               ))}
 
-              {/* Tooltip rendered last so it's on top */}
               <ChartTooltip {...salesTooltip} chartWidth={CHART_W} />
             </svg>
           </div>
@@ -503,7 +488,6 @@ const AdminSalesReports = () => {
                       })}
                       onMouseLeave={() => setVolumeTooltip({ visible: false })}
                     />
-                    {/* X label — conditional */}
                     {item.label && (volumeData.length <= 10 || i % Math.ceil(volumeData.length / 8) === 0 || i === volumeData.length - 1) && (
                       <text
                         x={x + barW / 2} y={CHART_H - 5}

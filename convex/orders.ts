@@ -247,54 +247,153 @@ export const updatePaymentSource = mutation({
 
 // ─── REFUND MUTATIONS ─────────────────────────────────────────────────────────
 
-// ✅ Customer requests a refund
+// ✅ Step 1: Generate upload URL for damage photo
+export const generateRefundUploadUrl = mutation({
+  args: {},
+  handler: async ({ storage }) => {
+    return await storage.generateUploadUrl();
+  },
+});
+
+// ✅ Step 2: Get public URL of uploaded damage photo
+export const getRefundPhotoUrl = query({
+  args: { storageId: v.string() },
+  handler: async ({ storage }, { storageId }) => {
+    return await storage.getUrl(storageId);
+  },
+});
+
+// ✅ Step 3: Customer submits refund request
 export const requestRefund = mutation({
   args: {
-    orderId:       v.string(),
-    refundReason:  v.string(),
-    refundComment: v.optional(v.string()),
+    orderId:             v.string(),
+    refundPhotoId:       v.string(),
+    refundMethod:        v.union(v.literal('gcash'), v.literal('maya')),
+    refundAccountName:   v.string(),
+    refundAccountNumber: v.string(),
+    refundComment:       v.optional(v.string()),
   },
-  handler: async ({ db }, { orderId, refundReason, refundComment }) => {
+  handler: async ({ db }, args) => {
     const order = await db.query("orders")
-      .withIndex("by_orderId", q => q.eq("orderId", orderId))
+      .withIndex("by_orderId", q => q.eq("orderId", args.orderId))
       .first();
-    if (!order) return { success: false, error: 'Order not found' };
 
-    // Only allow refund on delivered orders that don't already have a refund request
+    if (!order) return { success: false, error: 'Order not found.' };
+
     const status = (order.orderStatus || order.status || '').toLowerCase();
     const isDelivered = status === 'delivered' || status === 'completed';
-    if (!isDelivered) return { success: false, error: 'Order is not delivered' };
-    if (order.refundStatus) return { success: false, error: 'Refund already requested' };
+    if (!isDelivered) return { success: false, error: 'Order is not yet delivered.' };
+
+    const now = new Date().toISOString();
+
+    const newEntry = {
+      requestedAt:         now,
+      refundPhotoId:       args.refundPhotoId,
+      refundMethod:        args.refundMethod,
+      refundAccountName:   args.refundAccountName,
+      refundAccountNumber: args.refundAccountNumber,
+      refundComment:       args.refundComment || '',
+      status:              'requested',
+      resolvedAt:          null,  // stored in history only — allowed as any
+      adminNote:           null,  // stored in history only — allowed as any
+    };
+
+    const existingHistory = (order as any).refundHistory || [];
 
     await db.patch(order._id, {
-      refundStatus:      'requested',
-      refundReason,
-      refundComment:     refundComment || '',
-      refundRequestedAt: new Date().toISOString(),
+      // ✅ Use undefined instead of null for optional string/number fields
+      refundStatus:          'requested',
+      refundReason:          'damaged',
+      refundPhotoId:         args.refundPhotoId,
+      refundMethod:          args.refundMethod,
+      refundAccountName:     args.refundAccountName,
+      refundAccountNumber:   args.refundAccountNumber,
+      refundComment:         args.refundComment || '',
+      refundRequestedAt:     now,
+      refundAdminNote:       undefined,
+      refundResolvedAt:      undefined,
+      refundPaidAt:          undefined,
+      refundAmount:          undefined,
+      refundHistory: [...existingHistory, newEntry],
     });
 
     return { success: true };
   },
 });
 
-// ✅ Admin approves or rejects a refund
+// ✅ Step 4: Admin approves or rejects a refund
+// - If approved: refundAmount auto-computed from finalTotal, email sent to customer
+// - If rejected: email sent to customer with admin note
 export const resolveRefund = mutation({
   args: {
-    orderId:        v.string(),
-    refundStatus:   v.string(), // 'approved' | 'rejected'
+    orderId:         v.string(),
+    refundStatus:    v.union(v.literal('approved'), v.literal('rejected')),
     refundAdminNote: v.optional(v.string()),
   },
-  handler: async ({ db }, { orderId, refundStatus, refundAdminNote }) => {
+  handler: async ({ db, scheduler }, { orderId, refundStatus, refundAdminNote }) => {
     const order = await db.query("orders")
       .withIndex("by_orderId", q => q.eq("orderId", orderId))
       .first();
     if (!order) return { success: false };
 
-    await db.patch(order._id, {
-      refundStatus,
-      refundAdminNote: refundAdminNote || '',
-      refundResolvedAt: new Date().toISOString(),
+    const now = new Date().toISOString();
+
+    // Auto-compute refund amount from order final total
+    const refundAmount = (order as any).finalTotal ?? (order as any).total ?? 0;
+
+    // Update the latest history entry
+    const history = ((order as any).refundHistory || []).map((entry: any, idx: number, arr: any[]) => {
+      if (idx === arr.length - 1 && entry.status === 'requested') {
+        return {
+          ...entry,
+          status:       refundStatus,
+          resolvedAt:   now,
+          adminNote:    refundAdminNote || '',
+          refundAmount,
+        };
+      }
+      return entry;
     });
+
+    const patchData: any = {
+      refundStatus,
+      refundAdminNote:  refundAdminNote || '',
+      refundResolvedAt: now,
+      refundAmount,
+      refundHistory:    history,
+    };
+
+    if (refundStatus === 'approved') {
+      patchData.refundPaidAt = now;
+    }
+
+    await db.patch(order._id, patchData);
+
+    // ── Send email notification to customer ──────────────────────────────────
+    const customerEmail = (order as any).email;
+    const customerName  = (order as any).customerName || 'Customer';
+
+    if (customerEmail) {
+      if (refundStatus === 'approved') {
+        await scheduler.runAfter(0, internal.sendEmail.sendRefundApprovedEmail, {
+          to:                  customerEmail,
+          customerName,
+          orderId,
+          refundAmount,
+          refundMethod:        (order as any).refundMethod || 'gcash',
+          refundAccountName:   (order as any).refundAccountName || '',
+          refundAccountNumber: (order as any).refundAccountNumber || '',
+          adminNote:           refundAdminNote,
+        });
+      } else {
+        await scheduler.runAfter(0, internal.sendEmail.sendRefundRejectedEmail, {
+          to:           customerEmail,
+          customerName,
+          orderId,
+          adminNote:    refundAdminNote,
+        });
+      }
+    }
 
     return { success: true };
   },

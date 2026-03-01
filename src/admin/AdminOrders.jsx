@@ -16,14 +16,9 @@ const getPaymentMethodLabel = (order) => {
   return { label: order.paymentMethod || '—', icon: 'fa-money-bill', color: '#9ca3af' };
 };
 
-// ── Refund reason labels (must match TrackOrder.js) ───────────────
-const REFUND_REASON_LABELS = {
-  damaged:     '📦 Item arrived damaged',
-  wrong_item:  '❌ Wrong item received',
-  missing:     '🔍 Missing items',
-  not_as_desc: '📋 Not as described',
-  defective:   '⚠️ Defective / Not working',
-  others:      '💬 Others',
+const REFUND_METHOD_LABELS = {
+  gcash: { label: 'GCash', color: '#007fff', icon: 'fa-mobile-alt' },
+  maya:  { label: 'Maya',  color: '#00b4aa', icon: 'fa-wallet'     },
 };
 
 const AdminOrders = () => {
@@ -40,8 +35,6 @@ const AdminOrders = () => {
   const resolveRefundMutation     = useMutation(api.orders.resolveRefund);
 
   const validOrders = orders.filter(o => o.orderId && o.items?.length > 0);
-
-  // ✅ Count pending refund requests
   const refundCount = validOrders.filter(o => o.refundStatus === 'requested').length;
 
   const tabCounts = {
@@ -56,7 +49,6 @@ const AdminOrders = () => {
       if (activeTab === 'paid') {
         matchesTab = order.paymentStatus === 'paid' && (!order.orderStatus || order.orderStatus === 'pending');
       } else if (activeTab === 'refund') {
-        // ✅ Refund tab — show all orders with any refundStatus
         matchesTab = !!order.refundStatus;
       } else if (activeTab !== 'all') {
         matchesTab = order.orderStatus === activeTab;
@@ -71,21 +63,12 @@ const AdminOrders = () => {
       let matchesDate = true;
       if (startDate || endDate) {
         const orderDate = new Date(order._creationTime || order.createdAt || 0);
-        if (startDate) {
-          const start = new Date(startDate);
-          start.setHours(0, 0, 0, 0);
-          if (orderDate < start) matchesDate = false;
-        }
-        if (endDate) {
-          const end = new Date(endDate);
-          end.setHours(23, 59, 59, 999);
-          if (orderDate > end) matchesDate = false;
-        }
+        if (startDate) { const start = new Date(startDate); start.setHours(0,0,0,0); if (orderDate < start) matchesDate = false; }
+        if (endDate)   { const end = new Date(endDate); end.setHours(23,59,59,999); if (orderDate > end) matchesDate = false; }
       }
 
       return matchesTab && matchesSearch && matchesDate;
     }).sort((a, b) => {
-      // ✅ On refund tab, sort by refundRequestedAt (newest first)
       if (activeTab === 'refund') {
         const aTime = a.refundRequestedAt ? new Date(a.refundRequestedAt).getTime() : 0;
         const bTime = b.refundRequestedAt ? new Date(b.refundRequestedAt).getTime() : 0;
@@ -121,17 +104,9 @@ const AdminOrders = () => {
 
   const handleUpdateStatus = async (orderId, newOrderStatus) => {
     try {
-      await updateOrderStatusMutation({
-        orderId,
-        status:      mapStatusToTrackingStatus(newOrderStatus),
-        orderStatus: newOrderStatus,
-      });
+      await updateOrderStatusMutation({ orderId, status: mapStatusToTrackingStatus(newOrderStatus), orderStatus: newOrderStatus });
       if (selectedOrder?.orderId === orderId) {
-        setSelectedOrder(prev => ({
-          ...prev,
-          orderStatus: newOrderStatus,
-          status:      mapStatusToTrackingStatus(newOrderStatus),
-        }));
+        setSelectedOrder(prev => ({ ...prev, orderStatus: newOrderStatus, status: mapStatusToTrackingStatus(newOrderStatus) }));
       }
     } catch (err) {
       console.error('Failed to update status:', err);
@@ -148,19 +123,9 @@ const AdminOrders = () => {
 
   const handleCancelWithReason = async (orderId, reason) => {
     try {
-      await updateOrderFieldsMutation({
-        orderId,
-        cancelReason: reason,
-        orderStatus:  'cancelled',
-        status:       'Cancelled',
-      });
+      await updateOrderFieldsMutation({ orderId, cancelReason: reason, orderStatus: 'cancelled', status: 'Cancelled' });
       if (selectedOrder?.orderId === orderId) {
-        setSelectedOrder(prev => ({
-          ...prev,
-          orderStatus:  'cancelled',
-          status:       'Cancelled',
-          cancelReason: reason,
-        }));
+        setSelectedOrder(prev => ({ ...prev, orderStatus: 'cancelled', status: 'Cancelled', cancelReason: reason }));
       }
     } catch (err) {
       console.error('Failed to cancel order:', err);
@@ -168,16 +133,15 @@ const AdminOrders = () => {
     }
   };
 
-  // ✅ Handle refund resolve (approve / reject)
   const handleResolveRefund = async (orderId, refundStatus, adminNote) => {
     try {
       await resolveRefundMutation({ orderId, refundStatus, refundAdminNote: adminNote });
       if (selectedOrder?.orderId === orderId) {
+        const refundAmount = selectedOrder.finalTotal ?? selectedOrder.total ?? 0;
         setSelectedOrder(prev => ({
-          ...prev,
-          refundStatus,
-          refundAdminNote:  adminNote,
-          refundResolvedAt: new Date().toISOString(),
+          ...prev, refundStatus, refundAdminNote: adminNote,
+          refundResolvedAt: new Date().toISOString(), refundAmount,
+          ...(refundStatus === 'approved' ? { refundPaidAt: new Date().toISOString() } : {}),
         }));
       }
     } catch (err) {
@@ -200,24 +164,20 @@ const AdminOrders = () => {
           { key: 'confirmed',        icon: 'fa-check-circle',  label: 'Confirmed' },
           { key: 'out_for_delivery', icon: 'fa-shipping-fast', label: 'Out for Delivery' },
           { key: 'completed',        icon: 'fa-check-double',  label: 'Completed' },
-          // ✅ Refund tab — shows badge if there are pending refunds
           { key: 'refund',           icon: 'fa-undo-alt',      label: 'Refunds', count: tabCounts.refund },
         ].map(t => (
-          <button
-            key={t.key}
+          <button key={t.key}
             className={`tab-btn ${activeTab === t.key ? 'active' : ''} ${t.key === 'refund' ? 'tab-btn-refund' : ''}`}
             onClick={() => setActiveTab(t.key)}
           >
             <i className={`fas ${t.icon}`}></i>
             {t.key === 'refund'
               ? <>Refunds {t.count > 0 && <span className="tab-refund-badge">{t.count}</span>}</>
-              : t.label
-            }
+              : t.label}
           </button>
         ))}
       </div>
 
-      {/* ── Flow info ── */}
       <div className="admin-flow-info">
         <i className="fas fa-info-circle"></i>
         <span>
@@ -228,7 +188,6 @@ const AdminOrders = () => {
         </span>
       </div>
 
-      {/* ✅ Refund info banner when on refund tab */}
       {activeTab === 'refund' && refundCount > 0 && (
         <div className="admin-refund-info-banner">
           <i className="fas fa-exclamation-circle"></i>
@@ -241,31 +200,23 @@ const AdminOrders = () => {
       {/* ── Filters ── */}
       <div className="orders-filters">
         <div className="filter-group">
-          <input
-            type="text"
-            className="search-input"
+          <input type="text" className="search-input"
             placeholder="Search by Order ID, Customer Name, or Email..."
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-          />
+            value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
         </div>
         <div className="date-filter-group">
           <div className="date-filter-inputs">
             <div className="date-filter-item">
               <label htmlFor="orderStart"><i className="fas fa-calendar"></i></label>
-              <input type="date" id="orderStart" value={startDate} max={endDate || today}
-                onChange={e => setStartDate(e.target.value)} />
+              <input type="date" id="orderStart" value={startDate} max={endDate || today} onChange={e => setStartDate(e.target.value)} />
             </div>
             <span className="date-filter-sep">to</span>
             <div className="date-filter-item">
               <label htmlFor="orderEnd"><i className="fas fa-calendar"></i></label>
-              <input type="date" id="orderEnd" value={endDate} min={startDate} max={today}
-                onChange={e => setEndDate(e.target.value)} />
+              <input type="date" id="orderEnd" value={endDate} min={startDate} max={today} onChange={e => setEndDate(e.target.value)} />
             </div>
             {(startDate || endDate) && (
-              <button className="date-filter-clear" onClick={clearDateFilter}>
-                <i className="fas fa-times"></i> Clear
-              </button>
+              <button className="date-filter-clear" onClick={clearDateFilter}><i className="fas fa-times"></i> Clear</button>
             )}
           </div>
         </div>
@@ -283,18 +234,10 @@ const AdminOrders = () => {
             <table className="orders-table">
               <thead>
                 <tr>
-                  <th>ORDER ID</th>
-                  <th>CUSTOMER</th>
-                  <th>ITEMS</th>
-                  <th>TOTAL</th>
-                  <th>PAYMENT</th>
-                  <th>METHOD</th>
-                  <th>STATUS</th>
-                  {/* ✅ Extra column on refund tab */}
+                  <th>ORDER ID</th><th>CUSTOMER</th><th>ITEMS</th><th>TOTAL</th>
+                  <th>PAYMENT</th><th>METHOD</th><th>STATUS</th>
                   {activeTab === 'refund' && <th>REFUND</th>}
-                  <th>RIDER</th>
-                  <th>DATE</th>
-                  <th>ACTIONS</th>
+                  <th>RIDER</th><th>DATE</th><th>ACTIONS</th>
                 </tr>
               </thead>
               <tbody>
@@ -333,38 +276,20 @@ const AdminOrders = () => {
                           {getStatusLabel(order.orderStatus)}
                         </span>
                       </td>
-                      {/* ✅ Refund status column */}
                       {activeTab === 'refund' && (
                         <td>
-                          {order.refundStatus === 'requested' && (
-                            <span className="refund-table-badge refund-table-pending">
-                              <i className="fas fa-clock"></i> Pending
-                            </span>
-                          )}
-                          {order.refundStatus === 'approved' && (
-                            <span className="refund-table-badge refund-table-approved">
-                              <i className="fas fa-check-circle"></i> Approved
-                            </span>
-                          )}
-                          {order.refundStatus === 'rejected' && (
-                            <span className="refund-table-badge refund-table-rejected">
-                              <i className="fas fa-times-circle"></i> Rejected
-                            </span>
-                          )}
+                          {order.refundStatus === 'requested' && <span className="refund-table-badge refund-table-pending"><i className="fas fa-clock"></i> Pending</span>}
+                          {order.refundStatus === 'approved'  && <span className="refund-table-badge refund-table-approved"><i className="fas fa-check-circle"></i> Approved</span>}
+                          {order.refundStatus === 'rejected'  && <span className="refund-table-badge refund-table-rejected"><i className="fas fa-times-circle"></i> Rejected</span>}
                         </td>
                       )}
                       <td>
-                        {order.riderInfo ? (
-                          <div style={{ fontSize: '12px' }}>
-                            <strong>{order.riderInfo.name}</strong>
-                            <div style={{ color: '#888' }}>{order.riderInfo.plate}</div>
-                          </div>
-                        ) : <span style={{ color: '#ccc', fontSize: '12px' }}>-</span>}
+                        {order.riderInfo
+                          ? <div style={{ fontSize: '12px' }}><strong>{order.riderInfo.name}</strong><div style={{ color: '#888' }}>{order.riderInfo.plate}</div></div>
+                          : <span style={{ color: '#ccc', fontSize: '12px' }}>-</span>}
                       </td>
                       <td style={{ whiteSpace: 'nowrap', fontSize: '13px' }}>
-                        {order._creationTime
-                          ? new Date(order._creationTime).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })
-                          : 'N/A'}
+                        {order._creationTime ? new Date(order._creationTime).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}
                       </td>
                       <td>
                         <button className="view-btn" onClick={() => setSelectedOrder(order)}>
@@ -397,19 +322,77 @@ const AdminOrders = () => {
 };
 
 /* ══════════════════════════════════════
+   REJECT CONFIRMATION DIALOG
+══════════════════════════════════════ */
+const RejectConfirmDialog = ({ order, adminNote, onConfirm, onCancel }) => {
+  const refundAmount = order.refundAmount ?? order.finalTotal ?? order.total ?? 0;
+  return (
+    <div className="reject-confirm-overlay" onClick={onCancel}>
+      <div className="reject-confirm-dialog" onClick={e => e.stopPropagation()}>
+        <div className="reject-confirm-icon">
+          <i className="fas fa-exclamation-triangle"></i>
+        </div>
+        <h3>Reject Refund Request?</h3>
+        <p>
+          Are you sure you want to <strong>reject</strong> the refund request for Order{' '}
+          <strong>#{order.orderId?.slice(-8)}</strong>?
+        </p>
+        <div className="reject-confirm-details">
+          <div className="reject-confirm-row">
+            <span>Customer</span>
+            <strong>{order.customerName || 'N/A'}</strong>
+          </div>
+          <div className="reject-confirm-row">
+            <span>Refund Amount</span>
+            <strong>₱{refundAmount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</strong>
+          </div>
+          {adminNote && (
+            <div className="reject-confirm-row">
+              <span>Your Note</span>
+              <strong style={{ fontStyle: 'italic' }}>"{adminNote}"</strong>
+            </div>
+          )}
+        </div>
+        <p className="reject-confirm-warning">
+          <i className="fas fa-info-circle"></i>
+          The customer will be notified via email that their refund was rejected.
+          {adminNote ? ' Your note will be included.' : ' Consider adding a note explaining why.'}
+        </p>
+        <div className="reject-confirm-actions">
+          <button className="reject-confirm-cancel-btn" onClick={onCancel}>
+            <i className="fas fa-arrow-left"></i> Go Back
+          </button>
+          <button className="reject-confirm-proceed-btn" onClick={onConfirm}>
+            <i className="fas fa-times-circle"></i> Yes, Reject Refund
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ══════════════════════════════════════
    ORDER MODAL
 ══════════════════════════════════════ */
 const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDelete, onResolveRefund, getStatusColor, getStatusLabel }) => {
-  const [showCancelModal,  setShowCancelModal]  = useState(false);
-  const [proofExpanded,    setProofExpanded]    = useState(false);
-  const [refundAdminNote,  setRefundAdminNote]  = useState('');
-  const [resolvingRefund,  setResolvingRefund]  = useState(false);
+  const [showCancelModal,     setShowCancelModal]     = useState(false);
+  const [proofExpanded,       setProofExpanded]       = useState(false);
+  const [photoExpanded2,      setPhotoExpanded2]      = useState(false);
+  const [refundAdminNote,     setRefundAdminNote]     = useState('');
+  const [resolvingRefund,     setResolvingRefund]     = useState(false);
+  const [showRejectConfirm,   setShowRejectConfirm]   = useState(false); // ← NEW
+
+  const refundPhotoUrl = useQuery(
+    api.orders.getRefundPhotoUrl,
+    order.refundPhotoId ? { storageId: order.refundPhotoId } : 'skip'
+  );
 
   const subtotal      = order.subtotal  || 0;
   const shippingFee   = order.shippingFee || 0;
   const originalTotal = order.total || (subtotal + shippingFee);
   const discount      = order.discountAmount || 0;
   const finalTotal    = order.finalTotal ?? (originalTotal - discount);
+  const refundAmount  = order.refundAmount ?? finalTotal;
 
   const currentStatus  = order.orderStatus || 'pending';
   const paymentStatus  = order.paymentStatus || 'pending';
@@ -430,7 +413,13 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
       await onResolveRefund(order.orderId, status, refundAdminNote.trim());
     } finally {
       setResolvingRefund(false);
+      setShowRejectConfirm(false);
     }
+  };
+
+  // ── Reject flow: show confirm dialog first ──
+  const handleRejectClick = () => {
+    setShowRejectConfirm(true);
   };
 
   return (
@@ -442,21 +431,14 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
           <div>
             <h2>Order #{order.orderId?.slice(-8) || 'N/A'}</h2>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
-              <span className="status-badge" style={{ backgroundColor: getStatusColor(order.orderStatus) }}>
-                {getStatusLabel(order.orderStatus)}
-              </span>
-              <span className={`payment-badge ${isPaid ? 'paid' : 'pending'}`}>
-                {isPaid ? 'Paid' : 'Payment Pending'}
-              </span>
+              <span className="status-badge" style={{ backgroundColor: getStatusColor(order.orderStatus) }}>{getStatusLabel(order.orderStatus)}</span>
+              <span className={`payment-badge ${isPaid ? 'paid' : 'pending'}`}>{isPaid ? 'Paid' : 'Payment Pending'}</span>
               <span className="method-badge-pill" style={{ color: pm.color, borderColor: pm.color + '44' }}>
                 <i className={`fas ${pm.icon}`}></i> {pm.label}
               </span>
               {hasPromo && (
-                <span className="promo-admin-pill">
-                  <i className="fas fa-tag"></i> {order.promoCode}
-                </span>
+                <span className="promo-admin-pill"><i className="fas fa-tag"></i> {order.promoCode}</span>
               )}
-              {/* ✅ Refund status pill in header */}
               {hasRefund && (
                 <span className={`refund-header-pill refund-header-${order.refundStatus}`}>
                   <i className={`fas ${order.refundStatus === 'requested' ? 'fa-clock' : order.refundStatus === 'approved' ? 'fa-check-circle' : 'fa-times-circle'}`}></i>
@@ -526,9 +508,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
               <h3><i className="fas fa-shield-alt"></i> Proof of Delivery</h3>
               <div className="pod-card">
                 <div className={`pod-otp-row ${otpVerified ? 'verified' : 'unverified'}`}>
-                  <div className="pod-otp-icon">
-                    <i className={`fas ${otpVerified ? 'fa-check-circle' : 'fa-times-circle'}`}></i>
-                  </div>
+                  <div className="pod-otp-icon"><i className={`fas ${otpVerified ? 'fa-check-circle' : 'fa-times-circle'}`}></i></div>
                   <div className="pod-otp-text">
                     <strong>OTP Verification</strong>
                     <span>{otpVerified ? 'Customer OTP verified by rider' : 'OTP not yet verified'}</span>
@@ -564,18 +544,33 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
             </div>
           )}
 
-          {/* ✅ REFUND REQUEST SECTION */}
+          {/* ══ REFUND REQUEST SECTION ══ */}
           {hasRefund && (
             <div className="modal-section">
               <h3><i className="fas fa-undo-alt"></i> Refund Request</h3>
               <div className={`admin-refund-card admin-refund-${order.refundStatus}`}>
 
-                {/* Refund details */}
                 <div className="admin-refund-details">
                   <div className="admin-refund-row">
                     <span>Reason</span>
-                    <strong>{REFUND_REASON_LABELS[order.refundReason] || order.refundReason || '—'}</strong>
+                    <strong>📦 Item arrived damaged</strong>
                   </div>
+                  <div className="admin-refund-row admin-refund-amount-row">
+                    <span>Refund Amount</span>
+                    <strong className="admin-refund-amount-value">
+                      ₱{refundAmount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                    </strong>
+                  </div>
+                  {order.refundMethod && (
+                    <div className="admin-refund-row">
+                      <span>Refund to</span>
+                      <strong className="admin-refund-method-cell">
+                        <i className={`fas ${REFUND_METHOD_LABELS[order.refundMethod]?.icon}`} style={{ color: REFUND_METHOD_LABELS[order.refundMethod]?.color }}></i>
+                        <span style={{ color: REFUND_METHOD_LABELS[order.refundMethod]?.color }}>{REFUND_METHOD_LABELS[order.refundMethod]?.label}</span>
+                        {' · '}{order.refundAccountName}{order.refundAccountNumber ? ` (${order.refundAccountNumber})` : ''}
+                      </strong>
+                    </div>
+                  )}
                   {order.refundComment && (
                     <div className="admin-refund-row">
                       <span>Customer note</span>
@@ -584,11 +579,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                   )}
                   <div className="admin-refund-row">
                     <span>Requested at</span>
-                    <strong>
-                      {order.refundRequestedAt
-                        ? new Date(order.refundRequestedAt).toLocaleString('en-PH')
-                        : '—'}
-                    </strong>
+                    <strong>{order.refundRequestedAt ? new Date(order.refundRequestedAt).toLocaleString('en-PH') : '—'}</strong>
                   </div>
                   {order.refundStatus !== 'requested' && order.refundResolvedAt && (
                     <div className="admin-refund-row">
@@ -604,24 +595,65 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                   )}
                 </div>
 
-                {/* ✅ Action area — only shown when status is 'requested' */}
+                {/* Damage Photo */}
+                {order.refundPhotoId && (
+                  <div className="admin-refund-photo-section">
+                    <div className="admin-refund-photo-header" onClick={() => setPhotoExpanded2(!photoExpanded2)}>
+                      <div className="admin-refund-photo-label">
+                        <i className="fas fa-camera"></i><strong>Damage Photo (Proof)</strong>
+                      </div>
+                      <button className="pod-toggle-btn" type="button">
+                        <i className={`fas ${photoExpanded2 ? 'fa-chevron-up' : 'fa-chevron-down'}`}></i>
+                        {photoExpanded2 ? 'Hide' : 'View'} Photo
+                      </button>
+                    </div>
+                    {photoExpanded2 && (
+                      <div className="admin-refund-photo-wrap">
+                        {refundPhotoUrl ? (
+                          <>
+                            <img src={refundPhotoUrl} alt="Damage proof" className="admin-refund-photo" />
+                            <a href={refundPhotoUrl} download={`damage-proof-${order.orderId?.slice(-8)}.jpg`} className="pod-download-btn">
+                              <i className="fas fa-download"></i> Download Photo
+                            </a>
+                          </>
+                        ) : (
+                          <div className="admin-refund-photo-loading"><i className="fas fa-spinner fa-spin"></i> Loading photo…</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Action area — only for 'requested' */}
                 {order.refundStatus === 'requested' && (
                   <div className="admin-refund-action">
+                    <div className="admin-refund-confirm-notice">
+                      <i className="fas fa-info-circle"></i>
+                      <span>
+                        Approving will refund <strong>₱{refundAmount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</strong> to customer's{' '}
+                        {REFUND_METHOD_LABELS[order.refundMethod]?.label || 'account'}
+                        {order.refundAccountNumber ? ` (${order.refundAccountNumber})` : ''}.
+                        {' '}Make sure you've already sent the money before approving.
+                      </span>
+                    </div>
+
                     <label className="admin-refund-note-label">
-                      <i className="fas fa-comment-alt"></i> Response note to customer <span style={{ color: '#9ca3af', fontWeight: 400 }}>(optional)</span>
+                      <i className="fas fa-comment-alt"></i> Response note to customer
+                      <span style={{ color: '#9ca3af', fontWeight: 400, marginLeft: 4 }}>(optional)</span>
                     </label>
                     <textarea
                       className="admin-refund-note-input"
-                      placeholder="e.g. We've verified the issue and will process your refund within 3-5 business days..."
+                      placeholder="e.g. We've verified the damage and processed your refund. Check your GCash within 1-3 business days."
                       value={refundAdminNote}
                       onChange={e => setRefundAdminNote(e.target.value)}
-                      rows={2}
-                      maxLength={300}
+                      rows={2} maxLength={300}
                     />
+
                     <div className="admin-refund-action-btns">
+                      {/* ── Reject now shows confirmation dialog first ── */}
                       <button
                         className="admin-refund-reject-btn"
-                        onClick={() => handleRefundResolve('rejected')}
+                        onClick={handleRejectClick}
                         disabled={resolvingRefund}
                       >
                         {resolvingRefund ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-times-circle"></i>}
@@ -633,17 +665,17 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                         disabled={resolvingRefund}
                       >
                         {resolvingRefund ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-check-circle"></i>}
-                        Approve Refund
+                        Approve & Mark Paid
                       </button>
                     </div>
                   </div>
                 )}
 
-                {/* Status resolved banner */}
+                {/* Resolved banners */}
                 {order.refundStatus === 'approved' && (
                   <div className="admin-refund-resolved approved">
                     <i className="fas fa-check-circle"></i>
-                    <span>Refund has been <strong>approved</strong>.</span>
+                    <span>Refund of <strong>₱{refundAmount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</strong> has been <strong>approved and paid</strong>.</span>
                   </div>
                 )}
                 {order.refundStatus === 'rejected' && (
@@ -652,7 +684,6 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                     <span>Refund request was <strong>rejected</strong>.</span>
                   </div>
                 )}
-
               </div>
             </div>
           )}
@@ -665,15 +696,11 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
               <div className="info-item"><label>Date</label><span>{order._creationTime ? new Date(order._creationTime).toLocaleString('en-PH') : 'N/A'}</span></div>
               <div className="info-item">
                 <label>Payment Method</label>
-                <span className="method-display" style={{ color: pm.color }}>
-                  <i className={`fas ${pm.icon}`}></i> {pm.label}
-                </span>
+                <span className="method-display" style={{ color: pm.color }}><i className={`fas ${pm.icon}`}></i> {pm.label}</span>
               </div>
               <div className="info-item">
                 <label>Payment Status</label>
-                <span className={`payment-badge ${isPaid ? 'paid' : 'pending'}`}>
-                  {isPaid ? 'Paid' : 'Pending'}
-                </span>
+                <span className={`payment-badge ${isPaid ? 'paid' : 'pending'}`}>{isPaid ? 'Paid' : 'Pending'}</span>
               </div>
             </div>
           </div>
@@ -684,31 +711,16 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
               <h3><i className="fas fa-tag"></i> Promo / Discount Applied</h3>
               <div className="promo-admin-card">
                 <div className="promo-admin-top">
-                  <div className="promo-admin-badge">
-                    <i className="fas fa-ticket-alt"></i>
-                    <span>{order.promoCode}</span>
-                  </div>
+                  <div className="promo-admin-badge"><i className="fas fa-ticket-alt"></i><span>{order.promoCode}</span></div>
                   {order.promoName && <span className="promo-admin-group">{order.promoName}</span>}
                 </div>
                 <div className="promo-admin-details">
                   {order.discountPercent > 0 && (
-                    <div className="promo-admin-row">
-                      <span>Discount Rate</span>
-                      <strong>{order.discountPercent}% off</strong>
-                    </div>
+                    <div className="promo-admin-row"><span>Discount Rate</span><strong>{order.discountPercent}% off</strong></div>
                   )}
-                  <div className="promo-admin-row discount">
-                    <span>Amount Saved by Customer</span>
-                    <strong>−₱{discount.toLocaleString('en-PH')}</strong>
-                  </div>
-                  <div className="promo-admin-row">
-                    <span>Original Total (before discount)</span>
-                    <strong>₱{originalTotal.toLocaleString('en-PH')}</strong>
-                  </div>
-                  <div className="promo-admin-row final">
-                    <span>Final Amount Charged (PayMongo)</span>
-                    <strong>₱{finalTotal.toLocaleString('en-PH')}</strong>
-                  </div>
+                  <div className="promo-admin-row discount"><span>Amount Saved by Customer</span><strong>−₱{discount.toLocaleString('en-PH')}</strong></div>
+                  <div className="promo-admin-row"><span>Original Total (before discount)</span><strong>₱{originalTotal.toLocaleString('en-PH')}</strong></div>
+                  <div className="promo-admin-row final"><span>Final Amount Charged (PayMongo)</span><strong>₱{finalTotal.toLocaleString('en-PH')}</strong></div>
                 </div>
               </div>
             </div>
@@ -778,10 +790,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
             {isRiderManaged && (
               <div className="rider-managed-notice">
                 <i className="fas fa-motorcycle"></i>
-                <div>
-                  <strong>Handled by rider</strong>
-                  <p>Rider updates status automatically via OTP + photo confirmation.</p>
-                </div>
+                <div><strong>Handled by rider</strong><p>Rider updates status automatically via OTP + photo confirmation.</p></div>
               </div>
             )}
             {!isDone && !isRiderManaged && (
@@ -797,15 +806,12 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                     {currentStatus === 'confirmed' && <span className="current-indicator">Current</span>}
                   </button>
                   {!isPaid && <div className="block-reason"><i className="fas fa-lock"></i> Awaiting payment first</div>}
-                  {isPaid && currentStatus === 'confirmed' && (
-                    <div className="block-reason" style={{ color: '#17a2b8' }}><i className="fas fa-check"></i> Already confirmed</div>
-                  )}
+                  {isPaid && currentStatus === 'confirmed' && <div className="block-reason" style={{ color: '#17a2b8' }}><i className="fas fa-check"></i> Already confirmed</div>}
                 </div>
                 {canCancel && (
                   <div className="status-btn-wrapper">
                     <button className="status-btn cancelled" onClick={() => setShowCancelModal(true)}>
-                      <i className="fas fa-times-circle"></i>
-                      <span>Cancel Order</span>
+                      <i className="fas fa-times-circle"></i><span>Cancel Order</span>
                     </button>
                   </div>
                 )}
@@ -817,8 +823,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
             <div className="modal-section">
               <h3><i className="fas fa-ban"></i> Cancellation Reason</h3>
               <div className="cancel-reason-display">
-                <i className="fas fa-quote-left"></i>
-                <p>{order.cancelReason}</p>
+                <i className="fas fa-quote-left"></i><p>{order.cancelReason}</p>
               </div>
             </div>
           )}
@@ -836,6 +841,16 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
           order={order}
           onConfirm={reason => { onCancelWithReason(order.orderId, reason); setShowCancelModal(false); }}
           onClose={() => setShowCancelModal(false)}
+        />
+      )}
+
+      {/* ── Reject confirmation dialog ── */}
+      {showRejectConfirm && (
+        <RejectConfirmDialog
+          order={order}
+          adminNote={refundAdminNote}
+          onConfirm={() => handleRefundResolve('rejected')}
+          onCancel={() => setShowRejectConfirm(false)}
         />
       )}
     </div>
@@ -881,10 +896,8 @@ const CancelReasonModal = ({ order, onConfirm, onClose }) => {
               <label>Specify your reason <span className="required">*</span></label>
               <textarea className="cancel-custom-input"
                 placeholder="Type the cancellation reason here..."
-                value={customReason}
-                onChange={e => { setCustomReason(e.target.value); setError(''); }}
-                rows={3} maxLength={300} autoFocus
-              />
+                value={customReason} onChange={e => { setCustomReason(e.target.value); setError(''); }}
+                rows={3} maxLength={300} autoFocus />
               <div className="char-count">{customReason.length}/300</div>
             </div>
           )}
