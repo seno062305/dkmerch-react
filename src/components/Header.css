@@ -347,8 +347,15 @@ header {
 
 body.search-open { overflow: hidden; }
 
-/* Mobile Overlay */
-.mobile-overlay { display: none; }
+/* Mobile Overlay — hidden by default */
+.mobile-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  animation: fadeIn 0.3s ease;
+}
 
 /* ═══════════ RESPONSIVE ═══════════ */
 @media (max-width: 1024px) {
@@ -361,22 +368,23 @@ body.search-open { overflow: hidden; }
 @media (max-width: 768px) {
   .main-header .container { padding: 0 1rem; flex-wrap: nowrap; }
 
-  /* Sidebar — partial width, NOT fullscreen */
+  /* ✅ Sidebar — fixed width panel, slides in from left, overlays content */
   .main-nav {
     position: fixed;
     top: 0;
-    left: -100%;
-    right: auto;
-    width: 260px;          /* ← fixed width panel */
+    left: -280px;          /* ✅ hidden offscreen to the left */
+    width: 260px;          /* ✅ fixed width — NOT fullscreen */
     height: 100vh;
     background: white;
     box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
     transition: left 0.3s ease;
-    z-index: 1001;
+    z-index: 1001;         /* ✅ above overlay (1000) but below search (2000) */
     overflow-y: auto;
     padding: 2rem 0;
+    justify-content: flex-start;
   }
 
+  /* ✅ Slide in when active */
   .main-nav.active { left: 0; }
 
   .main-nav ul {
@@ -399,15 +407,8 @@ body.search-open { overflow: hidden; }
 
   .mobile-menu-toggle { display: flex; order: 10; }
 
-  /* Dark overlay behind sidebar (partial, not full) */
-  .mobile-overlay {
-    display: block;
-    position: fixed;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
-    z-index: 1000;
-    animation: fadeIn 0.3s ease;
-  }
+  /* ✅ Dark overlay — shows when sidebar is open */
+  .mobile-overlay { display: block; }
 
   .header-actions { gap: 0.5rem; }
   .header-action-item { padding: 0.25rem; }
@@ -418,7 +419,7 @@ body.search-open { overflow: hidden; }
   .account-btn span { display: none; }
   .dropdown-arrow { display: none; }
 
-  /* Account dropdown — bottom sheet */
+  /* Account dropdown — bottom sheet on mobile */
   .account-dropdown-menu {
     position: fixed;
     top: auto; bottom: 0;
@@ -434,13 +435,9 @@ body.search-open { overflow: hidden; }
     to { transform: translateY(0); }
   }
 
-  /* ── Logo fix: image only on mobile, hide text ── */
-  .logo img {
-    height: 38px;
-    border-radius: 8px;
-  }
-
-  .logo-text { display: none; }   /* hide "DKMerch / K-Pop Paradise" text on mobile */
+  /* Logo — image only on mobile */
+  .logo img { height: 38px; border-radius: 8px; }
+  .logo-text { display: none; }
 
   .search-container { width: 95%; padding: 0 1rem; }
   .search-bar-expanded { padding: 0.75rem 1rem; }
@@ -453,12 +450,7 @@ body.search-open { overflow: hidden; }
   .header-action-item i { font-size: 1.2rem; }
 }
 
-/* ─────────────────────────────────────────────────────────────────
-   IDAGDAG LANG SA DULO NG IYONG EXISTING Header.css
-   Huwag palitan ang buong file — i-paste mo lang ito sa ibaba.
-───────────────────────────────────────────────────────────────── */
-
-/* ── Pre-Order dot indicator sa account button (sa tabi ng pangalan) ── */
+/* ── Pre-Order dot indicator ── */
 .preorder-dot-indicator {
   display: inline-block;
   width: 9px;
@@ -495,13 +487,8 @@ body.search-open { overflow: hidden; }
 }
 
 .preorder-dropdown-item i.fa-clock { width: 20px; text-align: center; font-size: 1.1rem; color: #7c3aed; }
+.preorder-dropdown-item:hover { background: #f8f9fa; color: #9c27b0; }
 
-.preorder-dropdown-item:hover {
-  background: #f8f9fa;
-  color: #9c27b0;
-}
-
-/* Kapag may available na pre-order — highlight ang item */
 .preorder-dropdown-item.has-available {
   background: linear-gradient(135deg, #fff0f9, #f5f0ff);
   border-left: 3px solid #fc1268;
@@ -511,7 +498,7 @@ body.search-open { overflow: hidden; }
   background: linear-gradient(135deg, #ffe4f1, #ede0ff);
 }
 
-/* ── "Available!" badge sa loob ng dropdown item ── */
+/* ── "Available!" badge ── */
 .preorder-available-badge {
   margin-left: auto;
   display: inline-flex;
@@ -528,14 +515,9 @@ body.search-open { overflow: hidden; }
   white-space: nowrap;
 }
 
-.preorder-available-badge i {
-  font-size: 7px;
-  color: #fc1268;
-}
+.preorder-available-badge i { font-size: 7px; color: #fc1268; }
 
 @keyframes availablePulse {
   0%, 100% { background: rgba(252, 18, 104, 0.08); }
   50%       { background: rgba(252, 18, 104, 0.18); }
 }
-
-
