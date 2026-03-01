@@ -86,6 +86,9 @@ header {
 
 .main-nav a:hover::after { width: 100%; }
 
+/* ✅ Mobile nav header — hidden on desktop */
+.mobile-nav-header { display: none; }
+
 /* Header Actions */
 .header-actions {
   display: flex;
@@ -234,10 +237,6 @@ header {
   transition: all 0.3s ease;
 }
 
-.mobile-menu-toggle.active span:nth-child(1) { transform: rotate(45deg) translate(5px, 5px); }
-.mobile-menu-toggle.active span:nth-child(2) { opacity: 0; }
-.mobile-menu-toggle.active span:nth-child(3) { transform: rotate(-45deg) translate(7px, -6px); }
-
 /* Search Overlay */
 .search-overlay {
   position: fixed;
@@ -347,7 +346,7 @@ header {
 
 body.search-open { overflow: hidden; }
 
-/* Mobile Overlay — hidden by default */
+/* Mobile Overlay */
 .mobile-overlay {
   display: none;
   position: fixed;
@@ -368,24 +367,87 @@ body.search-open { overflow: hidden; }
 @media (max-width: 768px) {
   .main-header .container { padding: 0 1rem; flex-wrap: nowrap; }
 
-  /* ✅ Sidebar — fixed width panel, slides in from left, overlays content */
+  /* Sidebar — fixed width panel, slides in from left */
   .main-nav {
     position: fixed;
     top: 0;
-    left: -280px;          /* ✅ hidden offscreen to the left */
-    width: 260px;          /* ✅ fixed width — NOT fullscreen */
+    left: -280px;
+    width: 260px;
     height: 100vh;
     background: white;
     box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
     transition: left 0.3s ease;
-    z-index: 1001;         /* ✅ above overlay (1000) but below search (2000) */
+    z-index: 1001;
     overflow-y: auto;
-    padding: 2rem 0;
+    padding: 0;
+    flex-direction: column;
     justify-content: flex-start;
   }
 
-  /* ✅ Slide in when active */
   .main-nav.active { left: 0; }
+
+  /* ✅ Mobile nav header — DKMerch logo sa kaliwa, X sa kanan */
+  .mobile-nav-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1rem 0.75rem;
+    border-bottom: 1px solid #f0f0f0;
+  }
+
+  /* ✅ Logo group inside sidebar */
+  .mobile-nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .mobile-nav-logo-img {
+    height: 36px;
+    width: auto;
+    border-radius: 6px;
+  }
+
+  .mobile-nav-logo-text {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .mobile-nav-brand-name {
+    font-size: 1rem;
+    font-weight: 800;
+    color: #9c27b0;
+    line-height: 1;
+  }
+
+  .mobile-nav-brand-tagline {
+    font-size: 0.65rem;
+    color: #62306b;
+    font-weight: 500;
+    margin-top: 2px;
+  }
+
+  /* ✅ X close button */
+  .mobile-nav-close {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: #f3f4f6;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    color: #6b7280;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+  }
+
+  .mobile-nav-close:hover {
+    background: #9c27b0;
+    color: white;
+  }
 
   .main-nav ul {
     flex-direction: column;
@@ -405,9 +467,10 @@ body.search-open { overflow: hidden; }
 
   .main-nav a::after { display: none; }
 
+  /* Burger — visible on mobile */
   .mobile-menu-toggle { display: flex; order: 10; }
 
-  /* ✅ Dark overlay — shows when sidebar is open */
+  /* Dark overlay */
   .mobile-overlay { display: block; }
 
   .header-actions { gap: 0.5rem; }
@@ -419,7 +482,7 @@ body.search-open { overflow: hidden; }
   .account-btn span { display: none; }
   .dropdown-arrow { display: none; }
 
-  /* Account dropdown — bottom sheet on mobile */
+  /* Account dropdown — bottom sheet */
   .account-dropdown-menu {
     position: fixed;
     top: auto; bottom: 0;

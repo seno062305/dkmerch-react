@@ -29,6 +29,15 @@
 .admin-logo-container {
   padding: 28px 20px 20px 20px;
   border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* ✅ Group logo + tagline together */
+.admin-logo-info {
+  display: flex;
+  flex-direction: column;
 }
 
 .admin-logo {
@@ -51,6 +60,11 @@
   color: #999;
   margin-top: 4px;
   font-weight: 400;
+}
+
+/* ✅ X close button — hidden on desktop, visible on mobile */
+.admin-sidebar-close {
+  display: none;
 }
 
 /* Navigation */
@@ -223,7 +237,7 @@
 
   .admin-sidebar {
     transform: translateX(-100%);
-    width: 260px;        /* ← fixed width, NOT 100% */
+    width: 260px;
     z-index: 1000;
   }
 
@@ -251,12 +265,32 @@
     position: relative;
     z-index: 10;
   }
+
+  /* ✅ X close button — show on mobile, beside DKMerch logo */
+  .admin-sidebar-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: #f3f4f6;
+    border: none;
+    cursor: pointer;
+    color: #6b7280;
+    font-size: 15px;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .admin-sidebar-close:hover {
+    background: #fc1268;
+    color: white;
+  }
 }
 
 @media (max-width: 576px) {
-  .admin-sidebar { width: 240px; }   /* ← still NOT fullscreen */
+  .admin-sidebar { width: 240px; }
   .admin-content { padding: 68px 14px 14px 14px; }
 }
-
-/* REMOVED the @media (max-width: 400px) { width: 100% } rule
-   that was causing fullscreen sidebar */

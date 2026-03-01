@@ -39,14 +39,16 @@ const AdminSidebar = ({ onLinkClick, onClose }) => {
 
   return (
     <>
+      {/* ✅ Logo row — DKMerch on left, X button on right (mobile only) */}
       <div className="admin-logo-container">
-        <div className="admin-logo">
-          <i className="fas fa-store"></i>
-          <span>DKMerch</span>
+        <div className="admin-logo-info">
+          <div className="admin-logo">
+            <i className="fas fa-store"></i>
+            <span>DKMerch</span>
+          </div>
+          <div className="admin-tagline">Admin Dashboard</div>
         </div>
-        <div className="admin-tagline">Admin Dashboard</div>
 
-        {/* ✅ X close button — visible on mobile only */}
         {onClose && (
           <button
             className="admin-sidebar-close"

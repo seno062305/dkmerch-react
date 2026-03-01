@@ -21,7 +21,6 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
   const allProductsRaw = useQuery(api.products.getAllProducts);
   const allProducts = React.useMemo(() => allProductsRaw || [], [allProductsRaw]);
 
-  // ✅ NEW: Check kung may available na pre-order si user (para sa badge)
   const hasAvailable = useQuery(
     api.preOrderRequests.hasAvailablePreOrder,
     isAuthenticated && user?._id ? { userId: user._id } : 'skip'
@@ -186,6 +185,20 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
           </Link>
 
           <nav className={`main-nav ${showMobileMenu ? 'active' : ''}`}>
+            {/* ✅ Sidebar header — DKMerch logo sa kaliwa, X button sa kanan */}
+            <div className="mobile-nav-header">
+              <div className="mobile-nav-brand">
+                <img src="/images/dklogo.jpg" alt="DKMerch Logo" className="mobile-nav-logo-img" />
+                <div className="mobile-nav-logo-text">
+                  <span className="mobile-nav-brand-name">DKMerch</span>
+                  <span className="mobile-nav-brand-tagline">K-Pop Paradise</span>
+                </div>
+              </div>
+              <button className="mobile-nav-close" onClick={closeMobileMenu} aria-label="Close menu">
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+
             <ul>
               <li><a href="/" onClick={handleHomeClick}>Home</a></li>
               <li><Link to="/collections" onClick={closeMobileMenu}>Collections</Link></li>
@@ -215,7 +228,6 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
                 <button className="account-btn" onClick={() => setShowAccountDropdown(!showAccountDropdown)}>
                   <i className="fas fa-user-circle"></i>
                   <span>{user?.name || 'Account'}</span>
-                  {/* ✅ NEW: Dot indicator kapag may available na pre-order */}
                   {hasAvailable && <span className="preorder-dot-indicator" title="You have items ready to add to cart!"></span>}
                   <i className={`fas fa-chevron-down dropdown-arrow ${showAccountDropdown ? 'rotate' : ''}`}></i>
                 </button>
@@ -229,7 +241,6 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
                       </div>
                     </div>
 
-                    {/* ✅ NEW: My Pre-Orders link — above Settings */}
                     <Link
                       to="/my-preorders"
                       className={`dropdown-item preorder-dropdown-item ${hasAvailable ? 'has-available' : ''}`}
@@ -270,9 +281,12 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
               </button>
             )}
 
-            <button className={`mobile-menu-toggle ${showMobileMenu ? 'active' : ''}`} onClick={() => setShowMobileMenu(!showMobileMenu)}>
-              <span></span><span></span><span></span>
-            </button>
+            {/* ✅ Burger — naka-hide kapag bukas na ang sidebar */}
+            {!showMobileMenu && (
+              <button className="mobile-menu-toggle" onClick={() => setShowMobileMenu(true)} aria-label="Open menu">
+                <span></span><span></span><span></span>
+              </button>
+            )}
           </div>
         </div>
       </div>
