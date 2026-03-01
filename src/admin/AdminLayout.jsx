@@ -66,21 +66,27 @@ const AdminLayout = () => {
 
   return (
     <div className="admin-layout">
-      <button
-        className="mobile-menu-toggle"
-        onClick={toggleMobileMenu}
-        aria-label="Toggle menu"
-      >
-        <i className={`fas ${mobileMenuOpen ? 'fa-times' : 'fa-bars'}`}></i>
-      </button>
 
+      {/* ✅ Burger button — naka-hide kapag bukas na ang sidebar */}
+      {!mobileMenuOpen && (
+        <button
+          className="mobile-menu-toggle"
+          onClick={toggleMobileMenu}
+          aria-label="Open menu"
+        >
+          <i className="fas fa-bars"></i>
+        </button>
+      )}
+
+      {/* Mobile Overlay */}
       <div
         className={`mobile-overlay ${mobileMenuOpen ? 'active' : ''}`}
         onClick={closeMobileMenu}
       ></div>
 
+      {/* Sidebar — AdminSidebar handles the X button internally */}
       <div className={`admin-sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
-        <AdminSidebar onLinkClick={closeMobileMenu} />
+        <AdminSidebar onLinkClick={closeMobileMenu} onClose={closeMobileMenu} />
       </div>
 
       <main className="admin-content">

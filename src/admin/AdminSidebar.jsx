@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 
-const AdminSidebar = ({ onLinkClick }) => {
+const AdminSidebar = ({ onLinkClick, onClose }) => {
   const { logout } = useAuth();
   const navigate = useNavigate();
 
@@ -16,7 +16,7 @@ const AdminSidebar = ({ onLinkClick }) => {
     o.orderStatus === 'pending' || o.orderStatus === 'confirmed'
   ).length;
 
-  // ✅ Refund badge — orders with refundStatus === 'requested'
+  // Refund badge — orders with refundStatus === 'requested'
   const refundCount = validOrders.filter(o => o.refundStatus === 'requested').length;
 
   // Riders badge — pending applications + pending pickup requests
@@ -45,6 +45,17 @@ const AdminSidebar = ({ onLinkClick }) => {
           <span>DKMerch</span>
         </div>
         <div className="admin-tagline">Admin Dashboard</div>
+
+        {/* ✅ X close button — visible on mobile only */}
+        {onClose && (
+          <button
+            className="admin-sidebar-close"
+            onClick={onClose}
+            aria-label="Close menu"
+          >
+            <i className="fas fa-times"></i>
+          </button>
+        )}
       </div>
 
       <nav>
@@ -66,11 +77,9 @@ const AdminSidebar = ({ onLinkClick }) => {
         <NavLink to="/admin/orders" className="admin-nav-link" onClick={handleNavClick}>
           <i className="fas fa-shopping-bag"></i>
           <span>Orders</span>
-          {/* Orders badge — pending/confirmed orders */}
           {newOrderCount > 0 && (
             <span className="order-badge">{newOrderCount}</span>
           )}
-          {/* ✅ Refund badge — stacked below orders badge if there are pending refunds */}
           {refundCount > 0 && (
             <span className="refund-sidebar-badge" title={`${refundCount} refund request${refundCount > 1 ? 's' : ''}`}>
               <i className="fas fa-undo-alt"></i> {refundCount}
