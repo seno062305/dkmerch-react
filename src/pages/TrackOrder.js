@@ -17,13 +17,12 @@ const formatTimeAgo = (timestamp) => {
 };
 
 // ─── REFUND WINDOW HELPER ─────────────────────────────────────────────────────
-// Returns { canRefund, hoursLeft, expired }
 const getRefundWindow = (order) => {
   const deliveredAt = order.deliveryConfirmedAt;
   if (!deliveredAt) return { canRefund: false, hoursLeft: 0, expired: false };
 
   const deliveredMs  = new Date(deliveredAt).getTime();
-  const deadlineMs   = deliveredMs + 24 * 60 * 60 * 1000; // +24 hours
+  const deadlineMs   = deliveredMs + 24 * 60 * 60 * 1000;
   const nowMs        = Date.now();
   const msLeft       = deadlineMs - nowMs;
 
@@ -75,7 +74,6 @@ const RefundModal = ({ order, onClose, onSuccess }) => {
   };
 
   const handleSubmit = async () => {
-    // Re-check window before submitting
     const { canRefund: stillValid } = getRefundWindow(order);
     if (!stillValid) { setError('Refund window has expired. Refunds are only allowed within 24 hours of delivery.'); return; }
     if (!photo)                    { setError('Please upload a photo of the damaged item.'); return; }
@@ -122,7 +120,6 @@ const RefundModal = ({ order, onClose, onSuccess }) => {
     }
   };
 
-  // ── Expired window UI ──
   if (expired || !canRefund) {
     return (
       <div className="refund-modal-overlay" onClick={onClose}>
@@ -172,7 +169,6 @@ const RefundModal = ({ order, onClose, onSuccess }) => {
           </div>
         </div>
 
-        {/* ── Refund window countdown ── */}
         <div className="refund-window-timer">
           <i className="fas fa-hourglass-half"></i>
           <span>
@@ -616,7 +612,9 @@ const TrackOrder = () => {
     setTimeout(() => setRefundSuccess(false), 4000);
   };
 
-  const OrderCard = ({ order, onViewDetails }) => {
+  // ─── ORDER CARD ────────────────────────────────────────────────────────────
+  // isGuest = true means the user is NOT logged in (viewing via email search)
+  const OrderCard = ({ order, onViewDetails, isGuest = false }) => {
     const scrollRef = useRef(null);
     const [activeImgIdx, setActiveImgIdx]           = useState(0);
     const [continuingPayment, setContinuingPayment] = useState(false);
@@ -629,7 +627,6 @@ const TrackOrder = () => {
     const releaseDate  = getPreOrderReleaseDate(order);
     const needsPayment = isPendingPayment(order);
 
-    // ── Refund window check ──
     const { canRefund, hoursLeft, expired } = getRefundWindow(order);
 
     const itemImages = (order.items || []).map(item => {
@@ -712,14 +709,14 @@ const TrackOrder = () => {
             <div style={{ marginBottom: 6 }}><RefundBadge status={order.refundStatus} /></div>
           )}
 
-          {/* ── Show refund window countdown on card ── */}
-          {delivered && !order.refundStatus && canRefund && (
+          {/* Refund window countdown — only for logged-in users */}
+          {!isGuest && delivered && !order.refundStatus && canRefund && (
             <div className="order-card-refund-timer">
               <i className="fas fa-hourglass-half"></i>
               <span>Refund window: <strong>{hoursLeft}h left</strong></span>
             </div>
           )}
-          {delivered && !order.refundStatus && expired && (
+          {!isGuest && delivered && !order.refundStatus && expired && (
             <div className="order-card-refund-expired">
               <i className="fas fa-clock"></i>
               <span>Refund window expired</span>
@@ -741,7 +738,8 @@ const TrackOrder = () => {
             <span className="order-card-price">₱{order.total?.toLocaleString()}</span>
           </div>
 
-          {needsPayment ? (
+          {/* Continue Payment — logged-in users only */}
+          {!isGuest && needsPayment ? (
             <>
               <button className="btn btn-continue-payment" onClick={handleContinuePayment} disabled={continuingPayment}>
                 {continuingPayment ? <><i className="fas fa-spinner fa-spin"></i> Loading...</> : <><i className="fas fa-credit-card"></i> Continue Payment</>}
@@ -756,24 +754,35 @@ const TrackOrder = () => {
             </button>
           )}
 
-          {/* Refund button — only within 24h window and no existing refund */}
-          {delivered && !order.refundStatus && canRefund && (
+          {/* Refund button — logged-in users only, within 24h window */}
+          {!isGuest && delivered && !order.refundStatus && canRefund && (
             <button className="btn order-refund-btn" onClick={() => setRefundOrder(order)}>
               <i className="fas fa-undo-alt"></i> Request Refund
             </button>
           )}
 
-          {/* Re-request if rejected AND still within window */}
-          {delivered && order.refundStatus === 'rejected' && canRefund && (
+          {/* Re-request if rejected AND still within window — logged-in only */}
+          {!isGuest && delivered && order.refundStatus === 'rejected' && canRefund && (
             <button className="btn order-refund-btn order-refund-retry-btn" onClick={() => setRefundOrder(order)}>
               <i className="fas fa-redo"></i> Request Again
             </button>
           )}
 
-          {delivered && (
+          {/* Remove — logged-in users only */}
+          {!isGuest && delivered && (
             <button className="btn order-remove-btn" onClick={() => setRemoveConfirm(order._id)}>
               <i className="fas fa-trash-alt"></i> Remove
             </button>
+          )}
+
+          {/* Guest login prompt — shown for guest users on delivered orders with refund window */}
+          {isGuest && delivered && !order.refundStatus && canRefund && (
+            <div className="guest-login-prompt">
+              <i className="fas fa-lock"></i>
+              <span>
+                <a href="/login" onClick={e => { e.preventDefault(); navigate('/'); }}>Log in</a> to request a refund
+              </span>
+            </div>
           )}
         </div>
       </div>
@@ -812,6 +821,7 @@ const TrackOrder = () => {
     );
   };
 
+  // ─── AUTHENTICATED VIEW ────────────────────────────────────────────────────
   if (isAuthenticated && user) {
     const activeTab = FILTERS.find(f => f.key === filter);
     return (
@@ -864,7 +874,7 @@ const TrackOrder = () => {
             ) : (
               <div className="orders-grid">
                 {filteredOrders.map(order => (
-                  <OrderCard key={order._id} order={order} onViewDetails={handleOpenModal} />
+                  <OrderCard key={order._id} order={order} onViewDetails={handleOpenModal} isGuest={false} />
                 ))}
               </div>
             )}
@@ -882,6 +892,7 @@ const TrackOrder = () => {
             getDisplayStatus={getDisplayStatus}
             isOutForDeliveryStatus={isOutForDeliveryStatus}
             onRequestRefund={(order) => { handleCloseModal(); setRefundOrder(order); }}
+            isGuest={false}
           />
         )}
 
@@ -910,6 +921,7 @@ const TrackOrder = () => {
     );
   }
 
+  // ─── GUEST / NOT LOGGED IN VIEW ────────────────────────────────────────────
   return (
     <main className="trackorder-main">
       <div className="page-header">
@@ -946,19 +958,30 @@ const TrackOrder = () => {
               </ul>
             </div>
           </div>
+
           {showTrackedOrders && emailOrders.length > 0 && (
             <div className="tracked-orders-section">
               <div className="tracked-orders-header">
                 <h2>Your Orders</h2>
                 <p>Found {emailOrders.length} order{emailOrders.length > 1 ? 's' : ''} for {searchEmail}</p>
+                {/* Login nudge for guests */}
+                <div className="guest-login-notice">
+                  <i className="fas fa-info-circle"></i>
+                  <span>
+                    You're viewing in guest mode — order timeline only.{' '}
+                    <a href="/login" onClick={e => { e.preventDefault(); navigate('/'); }}>Log in</a>{' '}
+                    to manage payments, request refunds, and more.
+                  </span>
+                </div>
               </div>
               <div className="orders-grid">
                 {sortByNewest(emailOrders).map(order => (
-                  <OrderCard key={order._id} order={order} onViewDetails={handleOpenModal} />
+                  <OrderCard key={order._id} order={order} onViewDetails={handleOpenModal} isGuest={true} />
                 ))}
               </div>
             </div>
           )}
+
           {showTrackedOrders && emailOrders.length === 0 && (
             <div className="orders-empty">
               <i className="fas fa-search"></i>
@@ -979,19 +1002,18 @@ const TrackOrder = () => {
           getStatusClass={getStatusClass}
           getDisplayStatus={getDisplayStatus}
           isOutForDeliveryStatus={isOutForDeliveryStatus}
-          onRequestRefund={(order) => { handleCloseModal(); setRefundOrder(order); }}
+          onRequestRefund={null}
+          isGuest={true}
         />
       )}
-      {refundOrder && (
-        <RefundModal order={refundOrder} onClose={() => setRefundOrder(null)} onSuccess={handleRefundSuccess} />
-      )}
+
       <Lightbox />
     </main>
   );
 };
 
 // ─── TRACKING MODAL ──────────────────────────────────────────────────────────
-const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusClass, getDisplayStatus, isOutForDeliveryStatus, onRequestRefund }) => {
+const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusClass, getDisplayStatus, isOutForDeliveryStatus, onRequestRefund, isGuest = false }) => {
   const updateOrderOtp    = useUpdateOrderOtp();
   const createPaymentLink = useAction(api.payments.createPaymentLink);
   const [generatingOtp, setGeneratingOtp]         = useState(false);
@@ -1005,7 +1027,6 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
   const timelineSteps    = getTimelineSteps(order);
   const refundAmount     = (order.finalTotal ?? order.total ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2 });
 
-  // ── Refund window check ──
   const { canRefund, hoursLeft, minsLeft, expired } = getRefundWindow(order);
 
   useEffect(() => {
@@ -1068,7 +1089,20 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
             <div className={`status-badge ${getStatusClass(order.orderStatus || order.status)}`}>{getDisplayStatus(order)}</div>
           </div>
 
-          {needsPayment && (
+          {/* Guest notice inside modal */}
+          {isGuest && (
+            <div className="guest-modal-notice">
+              <i className="fas fa-lock"></i>
+              <span>
+                Viewing as guest — timeline only.{' '}
+                <a href="/login" onClick={e => { e.preventDefault(); onClose(); }}>Log in</a>{' '}
+                to access all features.
+              </span>
+            </div>
+          )}
+
+          {/* Pending payment banner — logged-in only */}
+          {!isGuest && needsPayment && (
             <div className="pending-payment-banner">
               <div className="pending-payment-icon"><i className="fas fa-exclamation-circle"></i></div>
               <div className="pending-payment-text">
@@ -1081,6 +1115,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
             </div>
           )}
 
+          {/* Rider info — always visible */}
           {order.riderInfo && !isCancelled && (
             <div className="rider-info-banner">
               <div className="rider-info-icon"><i className="fas fa-motorcycle"></i></div>
@@ -1092,6 +1127,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
             </div>
           )}
 
+          {/* Cancelled banner — always visible */}
           {isCancelled && (
             <div className="cancelled-banner">
               <div className="cancelled-banner-icon"><i className="fas fa-ban"></i></div>
@@ -1102,7 +1138,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
             </div>
           )}
 
-          {/* ── REFUND STATUS BANNER ── */}
+          {/* Refund status banner — always visible (info only) */}
           {delivered && order.refundStatus && (
             <div className={`refund-status-banner refund-banner-${order.refundStatus}`}>
               <div className="refund-banner-icon">
@@ -1128,28 +1164,28 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
             </div>
           )}
 
-          {/* ── Refund window info in modal ── */}
-          {delivered && !order.refundStatus && canRefund && (
+          {/* Refund window banner + action button — logged-in only */}
+          {!isGuest && delivered && !order.refundStatus && canRefund && (
             <div className="refund-window-banner">
               <i className="fas fa-hourglass-half"></i>
               <span>You can request a refund within <strong>{hoursLeft}h {minsLeft}m</strong>. Refunds are only accepted within 24 hours of delivery.</span>
             </div>
           )}
-          {delivered && !order.refundStatus && expired && (
+          {!isGuest && delivered && !order.refundStatus && expired && (
             <div className="refund-window-banner refund-window-expired">
               <i className="fas fa-clock"></i>
               <span>The 24-hour refund window has passed. This order is no longer eligible for a refund.</span>
             </div>
           )}
 
-          {/* Refund button — only within window */}
-          {delivered && (!order.refundStatus || order.refundStatus === 'rejected') && canRefund && (
+          {!isGuest && delivered && (!order.refundStatus || order.refundStatus === 'rejected') && canRefund && (
             <button className="modal-refund-btn" onClick={() => onRequestRefund(order)}>
               <i className="fas fa-undo-alt"></i>
               {order.refundStatus === 'rejected' ? 'Request Refund Again' : 'Request Refund'}
             </button>
           )}
 
+          {/* Live map — always visible (informational) */}
           {isOutForDelivery && (
             <div className="rider-map-section">
               <div className="rider-map-section-title">
@@ -1161,7 +1197,8 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
             </div>
           )}
 
-          {isOutForDelivery && (
+          {/* OTP section — logged-in only */}
+          {!isGuest && isOutForDelivery && (
             <div className="customer-otp-section">
               {!localOtp ? (
                 <div className="otp-generate-card">
@@ -1197,6 +1234,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
             </div>
           )}
 
+          {/* Order timeline — always visible */}
           <div className="tracking-timeline">
             <h3>Order Timeline</h3>
             <div className="timeline">
@@ -1219,6 +1257,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
             </div>
           </div>
 
+          {/* Order items — always visible */}
           <div className="order-items-timeline">
             <h3>Order Items</h3>
             {order.items?.map((item, index) => {
