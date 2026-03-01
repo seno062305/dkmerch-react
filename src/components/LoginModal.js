@@ -74,7 +74,6 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
     return () => clearTimeout(t);
   }, [passwordCooldown]);
 
-  // ✅ Reset forgot password fields when switching to forgot view
   useEffect(() => {
     if (view === "forgot") {
       setForgotEmail("");
@@ -89,7 +88,6 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
     }
   }, [view]);
 
-  // ✅ Rider password validation: must start with @rider, 7-10 chars total
   const isRiderPwValid = (pw) =>
     pw.startsWith("@rider") && pw.length >= 7 && pw.length <= 10;
 
@@ -111,7 +109,6 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
   const showNewPwReqs = (newPwFocused || newPassword) && !isNewPwValid();
   const newPasswordsMatch = confirmNewPassword && newPassword === confirmNewPassword;
 
-  // ── Dynamic accent colors ──
   const accentColor      = isRiderMode ? "#7c3aed" : "#ec4899";
   const accentGradient   = isRiderMode ? "linear-gradient(135deg, #7c3aed, #a855f7)" : "linear-gradient(135deg, #ec4899, #f472b6)";
   const accentShadow     = isRiderMode ? "rgba(124,58,237,0.3)" : "rgba(236,72,153,0.3)";
@@ -154,7 +151,6 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
     </div>
   );
 
-  // ── Rider Password Requirements component ──
   const RiderPwRequirements = ({ pw }) => (
     <div className="password-requirements" style={{ borderColor: "#ede9fe", background: "#f5f3ff" }}>
       <div className="requirements-title" style={{ color: "#5b21b6" }}>Rider password rules:</div>
@@ -183,7 +179,7 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
     </div>
   );
 
-  // ── LOGIN HANDLER ──
+  // ── LOGIN HANDLER — FIXED: pass role to onLoginSuccess instead of navigating directly ──
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -191,10 +187,16 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
     try {
       const mode = isRiderMode ? "rider" : "user";
       const result = await login(formData.email, formData.password, mode);
-      if (!result.success) { setError(result.message); return; }
-      if (result.role === "admin") { onClose(); navigate("/admin", { replace: true }); return; }
-      if (result.role === "rider") { onClose(); navigate("/rider", { replace: true }); return; }
-      if (onLoginSuccess) { onLoginSuccess(); } else { onClose(); }
+      if (!result.success) {
+        setError(result.message);
+        return;
+      }
+      // ✅ FIXED: Always call onLoginSuccess(role) — let App.js handle the navigation
+      if (onLoginSuccess) {
+        onLoginSuccess(result.role);
+      } else {
+        onClose();
+      }
     } catch (err) {
       setError("Login failed. Please try again.");
     } finally {
@@ -239,7 +241,6 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
     setSendingCode(true);
     setCodeMsg("");
     try {
-      // ✅ Pass accountType — "rider" or "customer" — so email subject/body is correct
       const result = await sendPasswordResetCode({
         to: forgotEmail,
         code,
@@ -278,7 +279,6 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
 
     setResetLoading(true);
     try {
-      // ✅ Pass accountType so backend updates correct table (riders vs users)
       const result = await resetPasswordByEmail({
         email: forgotEmail,
         newPassword: newPassword,
@@ -313,9 +313,6 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
           </svg>
         </button>
 
-        {/* ══════════════════════════════════════
-            FORGOT PASSWORD VIEW
-        ══════════════════════════════════════ */}
         {view === "forgot" ? (
           <>
             <div className="login-modal-header">
@@ -324,7 +321,6 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
                   <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
                 </svg>
               </div>
-              {/* ✅ Title changes based on mode */}
               <h2 style={{ background: accentGradient, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
                 {isRiderMode ? "🛵 Rider Password Reset" : "Reset Password"}
               </h2>
@@ -333,7 +329,6 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
                   ? "Reset your DKMerch Rider account password"
                   : "Enter your email to get a verification code"}
               </p>
-              {/* ✅ Show Rider Portal badge if rider mode */}
               {isRiderMode && (
                 <div className="rider-mode-badge" style={{ background: accentGradient }}>
                   🛵 Rider Portal
@@ -380,7 +375,6 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
                       required
                     />
                   </div>
-                  {/* ✅ Send Code button — purple for rider, pink for customer */}
                   <button
                     type="button"
                     className="send-code-btn"
@@ -423,7 +417,6 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
                   </button>
                 </div>
 
-                {/* ✅ Show rider rules OR regular strength meter */}
                 {isRiderMode ? (
                   (newPwFocused || newPassword) && !isNewPwValid() && (
                     <RiderPwRequirements pw={newPassword} />
@@ -487,7 +480,6 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
                 </div>
               )}
 
-              {/* ✅ Submit button — purple for rider */}
               <button
                 type="submit"
                 className="login-submit-btn"
@@ -529,9 +521,6 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
           </>
 
         ) : (
-          /* ══════════════════════════════════════
-              LOGIN VIEW
-          ══════════════════════════════════════ */
           <>
             <button
               className={`rider-toggle-btn ${isRiderMode ? 'rider-mode-active' : ''}`}

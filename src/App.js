@@ -38,27 +38,36 @@ import OrderSuccess from './pages/OrderSuccess';
 import './App.css';
 
 // ─── STARTUP REDIRECT ─────────────────────────────────────────────────────────
-// Runs once on app open. If user already has a session, redirect to their
-// dashboard — but ONLY if they opened the app at root "/".
+// Runs once after auth is ready. If logged in and on wrong page, redirect.
 const StartupRedirect = () => {
   const { isAuthenticated, role, isReady } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const [hasRedirected, setHasRedirected] = useState(false);
 
   useEffect(() => {
-    if (!isReady || !isAuthenticated || !role) return;
+    // Only run once, after auth is restored
+    if (!isReady || hasRedirected) return;
+    setHasRedirected(true);
 
-    const isRoot = location.pathname === '/' || location.pathname === '';
-    if (!isRoot) return;
+    if (!isAuthenticated || !role) return;
+
+    const path = location.pathname;
 
     if (role === 'admin') {
-      navigate('/admin', { replace: true });
+      // Admin should always be in /admin — redirect if not
+      if (!path.startsWith('/admin')) {
+        navigate('/admin', { replace: true });
+      }
     } else if (role === 'rider') {
-      navigate('/rider', { replace: true });
+      // Rider should always be in /rider — redirect if not
+      if (!path.startsWith('/rider')) {
+        navigate('/rider', { replace: true });
+      }
     }
-    // Customers stay on home
+    // Customers stay wherever they are
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReady]); // Only run once after auth is ready
+  }, [isReady]);
 
   return null;
 };
@@ -71,7 +80,6 @@ const RiderRoute = ({ children }) => {
   const [showLoginModal, setShowLoginModal] = useState(false);
 
   useEffect(() => {
-    // Wait until auth is restored from localStorage before deciding
     if (!isReady) return;
     if (!isAuthenticated) {
       sessionStorage.setItem('redirectAfterLogin', location.pathname + location.search);
@@ -79,7 +87,7 @@ const RiderRoute = ({ children }) => {
     }
   }, [isReady, isAuthenticated, location]);
 
-  // Still restoring session — show nothing, no flash
+  // Still restoring — show nothing
   if (!isReady) return null;
 
   if (!isAuthenticated) {
@@ -96,7 +104,7 @@ const RiderRoute = ({ children }) => {
               setShowLoginModal(false);
               const redirect = sessionStorage.getItem('redirectAfterLogin') || '/rider';
               sessionStorage.removeItem('redirectAfterLogin');
-              navigate(redirect);
+              navigate(redirect, { replace: true });
             }}
           />
         )}
@@ -116,7 +124,6 @@ const ProtectedRoute = ({ children }) => {
   const [showLoginModal, setShowLoginModal] = useState(false);
 
   useEffect(() => {
-    // Wait until auth is restored from localStorage before deciding
     if (!isReady) return;
     if (!isAuthenticated) {
       sessionStorage.setItem('redirectAfterLogin', location.pathname + location.search);
@@ -124,7 +131,7 @@ const ProtectedRoute = ({ children }) => {
     }
   }, [isReady, isAuthenticated, location]);
 
-  // Still restoring session — show nothing, no flash
+  // Still restoring — show nothing
   if (!isReady) return null;
 
   if (!isAuthenticated) {
@@ -140,7 +147,7 @@ const ProtectedRoute = ({ children }) => {
               setShowLoginModal(false);
               const redirect = sessionStorage.getItem('redirectAfterLogin') || '/';
               sessionStorage.removeItem('redirectAfterLogin');
-              navigate(redirect);
+              navigate(redirect, { replace: true });
             }}
           />
         )}
@@ -155,7 +162,6 @@ const ProtectedRoute = ({ children }) => {
 function AppContent() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { isReady } = useAuth();
 
   const cartItems      = useCart();
   const cartCount      = useCartCount();
@@ -185,11 +191,10 @@ function AppContent() {
     const redirect = sessionStorage.getItem('redirectAfterLogin');
     if (redirect) {
       sessionStorage.removeItem('redirectAfterLogin');
-      navigate(redirect);
+      navigate(redirect, { replace: true });
       return;
     }
 
-    // No saved redirect — go to role dashboard
     if (loginRole === 'admin') {
       navigate('/admin', { replace: true });
     } else if (loginRole === 'rider') {
@@ -205,7 +210,7 @@ function AppContent() {
 
   return (
     <div className="App">
-      {/* Role-based redirect on app open if already logged in */}
+      {/* Role-based redirect on app open */}
       <StartupRedirect />
 
       {!hideHeaderFooter && (
