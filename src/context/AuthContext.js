@@ -180,10 +180,12 @@ export const AuthProvider = ({ children }) => {
     setIsAuthenticated(false);
   };
 
-  if (!isReady) return null;
+  // Don't return null anymore — render children immediately
+  // isReady = false just means "still restoring session"
+  // Routes that need auth will wait for isReady before showing login modal
 
   return (
-    <AuthContext.Provider value={{ user, role, isAuthenticated, login, register, logout, updateUser }}>
+    <AuthContext.Provider value={{ user, role, isAuthenticated, isReady, login, register, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

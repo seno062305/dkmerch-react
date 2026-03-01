@@ -38,21 +38,17 @@ import OrderSuccess from './pages/OrderSuccess';
 import './App.css';
 
 // ─── STARTUP REDIRECT ─────────────────────────────────────────────────────────
-// Runs once on app open. If user already has a session (localStorage),
-// redirect to their dashboard — but ONLY if they're on the root/home page.
-// This prevents force-redirecting if they deep-linked to a specific page.
+// Runs once on app open. If user already has a session, redirect to their
+// dashboard — but ONLY if they opened the app at root "/".
 const StartupRedirect = () => {
-  const { isAuthenticated, role } = useAuth();
+  const { isAuthenticated, role, isReady } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!isAuthenticated || !role) return;
+    if (!isReady || !isAuthenticated || !role) return;
 
-    const path = location.pathname;
-    const isRoot = path === '/' || path === '';
-
-    // Only redirect if they opened the app at root "/"
+    const isRoot = location.pathname === '/' || location.pathname === '';
     if (!isRoot) return;
 
     if (role === 'admin') {
@@ -60,26 +56,31 @@ const StartupRedirect = () => {
     } else if (role === 'rider') {
       navigate('/rider', { replace: true });
     }
-    // Customers stay on home — no redirect needed
+    // Customers stay on home
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Empty deps = only runs once on mount (app open)
+  }, [isReady]); // Only run once after auth is ready
 
   return null;
 };
 
 // ─── RIDER ROUTE ──────────────────────────────────────────────────────────────
 const RiderRoute = ({ children }) => {
-  const { isAuthenticated, role } = useAuth();
+  const { isAuthenticated, role, isReady } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [showLoginModal, setShowLoginModal] = useState(false);
 
   useEffect(() => {
+    // Wait until auth is restored from localStorage before deciding
+    if (!isReady) return;
     if (!isAuthenticated) {
       sessionStorage.setItem('redirectAfterLogin', location.pathname + location.search);
       setShowLoginModal(true);
     }
-  }, [isAuthenticated, location]);
+  }, [isReady, isAuthenticated, location]);
+
+  // Still restoring session — show nothing, no flash
+  if (!isReady) return null;
 
   if (!isAuthenticated) {
     return (
@@ -91,7 +92,7 @@ const RiderRoute = ({ children }) => {
               setShowLoginModal(false);
               navigate('/');
             }}
-            onLoginSuccess={() => {
+            onLoginSuccess={(loginRole) => {
               setShowLoginModal(false);
               const redirect = sessionStorage.getItem('redirectAfterLogin') || '/rider';
               sessionStorage.removeItem('redirectAfterLogin');
@@ -109,17 +110,22 @@ const RiderRoute = ({ children }) => {
 
 // ─── PROTECTED ROUTE ──────────────────────────────────────────────────────────
 const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isReady } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [showLoginModal, setShowLoginModal] = useState(false);
 
   useEffect(() => {
+    // Wait until auth is restored from localStorage before deciding
+    if (!isReady) return;
     if (!isAuthenticated) {
       sessionStorage.setItem('redirectAfterLogin', location.pathname + location.search);
       setShowLoginModal(true);
     }
-  }, [isAuthenticated, location]);
+  }, [isReady, isAuthenticated, location]);
+
+  // Still restoring session — show nothing, no flash
+  if (!isReady) return null;
 
   if (!isAuthenticated) {
     return (
@@ -130,7 +136,7 @@ const ProtectedRoute = ({ children }) => {
               setShowLoginModal(false);
               navigate('/');
             }}
-            onLoginSuccess={() => {
+            onLoginSuccess={(loginRole) => {
               setShowLoginModal(false);
               const redirect = sessionStorage.getItem('redirectAfterLogin') || '/';
               sessionStorage.removeItem('redirectAfterLogin');
@@ -149,7 +155,7 @@ const ProtectedRoute = ({ children }) => {
 function AppContent() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { role, isAuthenticated } = useAuth();
+  const { isReady } = useAuth();
 
   const cartItems      = useCart();
   const cartCount      = useCartCount();
