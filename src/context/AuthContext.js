@@ -5,7 +5,7 @@ import { api } from "../../convex/_generated/api";
 
 const AuthContext = createContext(null);
 
-const SESSION_KEY = "riderSessionId"; // sessionStorage key for rider session only
+const SESSION_KEY = "riderSessionId";
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser]                       = useState(null);
@@ -25,44 +25,37 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const storedUser = JSON.parse(localStorage.getItem("authUser") || "null");
     if (storedUser) {
-      setUser(storedUser);
-      setRole(storedUser.role);
-      setIsAuthenticated(true);
-
       if (storedUser.role === "rider") {
         const savedSession = sessionStorage.getItem(SESSION_KEY);
         if (!savedSession) {
+          // Rider session expired (tab was closed) — clear auth
           localStorage.removeItem("authUser");
-          setUser(null);
-          setRole(null);
-          setIsAuthenticated(false);
-        } else {
-          setUser({ ...storedUser, sessionId: savedSession });
+          setIsReady(true);
+          return;
         }
+        // Restore rider with session
+        const userWithSession = { ...storedUser, sessionId: savedSession };
+        setUser(userWithSession);
+        setRole("rider");
+        setIsAuthenticated(true);
+      } else {
+        // Admin or customer — restore normally, no sessionStorage needed
+        setUser(storedUser);
+        setRole(storedUser.role);
+        setIsAuthenticated(true);
       }
     }
     setIsReady(true);
   }, []);
 
-  // ─────────────────────────────────────────────────────────────────
-  // ✅ login() accepts an optional `mode` param:
-  //    mode = "user"  → only tries users table (customers + admin)
-  //    mode = "rider" → only tries riderApplications table
-  //    mode = undefined → legacy behavior (tries user first, then rider)
-  //
-  // LoginModal passes mode="user" for customer login
-  // and mode="rider" for rider login — fully separated.
-  // ─────────────────────────────────────────────────────────────────
   const login = async (identifier, password, mode) => {
     try {
-
       // ══════════════════════════════════════════
-      // RIDER LOGIN — only when mode === "rider"
+      // RIDER LOGIN
       // ══════════════════════════════════════════
       if (mode === "rider") {
         const riderResult = await loginRiderMutation({ email: identifier, password });
 
-        // riderExists = false means the email is not in riderApplications at all
         if (!riderResult.riderExists) {
           return {
             success: false,
@@ -70,15 +63,13 @@ export const AuthProvider = ({ children }) => {
           };
         }
 
-        // riderExists = true but login failed (wrong pw, pending, rejected, suspended)
         if (!riderResult.success) {
           return { success: false, message: riderResult.message };
         }
 
-        // ✅ Rider login success
         const sessionRider = {
-          _id: riderResult.rider._id,
-          id:  riderResult.rider._id,
+          _id:   riderResult.rider._id,
+          id:    riderResult.rider._id,
           name:  riderResult.rider.name,
           email: riderResult.rider.email,
           role:  "rider",
@@ -95,7 +86,7 @@ export const AuthProvider = ({ children }) => {
       }
 
       // ══════════════════════════════════════════
-      // USER / ADMIN LOGIN — only when mode === "user" (or undefined for legacy)
+      // USER / ADMIN LOGIN
       // ══════════════════════════════════════════
       if (mode === "user" || !mode) {
         const result = await loginUserMutation({ identifier, password });
@@ -117,8 +108,6 @@ export const AuthProvider = ({ children }) => {
           return { success: true, role: sessionUser.role };
         }
 
-        // ✅ mode === "user" → do NOT fall through to rider login
-        // Show the error from users table only
         if (mode === "user") {
           return {
             success: false,
@@ -126,7 +115,7 @@ export const AuthProvider = ({ children }) => {
           };
         }
 
-        // Legacy (no mode): still try rider as fallback
+        // Legacy fallback to rider
         const riderResult = await loginRiderMutation({ email: identifier, password });
 
         if (riderResult.riderExists) {

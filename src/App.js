@@ -37,7 +37,37 @@ import OrderSuccess from './pages/OrderSuccess';
 
 import './App.css';
 
-// ✅ FIXED RiderRoute — saves full URL (including ?tab=available) before showing login modal
+// ─── STARTUP REDIRECT ─────────────────────────────────────────────────────────
+// Runs once on app open. If user already has a session (localStorage),
+// redirect to their dashboard — but ONLY if they're on the root/home page.
+// This prevents force-redirecting if they deep-linked to a specific page.
+const StartupRedirect = () => {
+  const { isAuthenticated, role } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!isAuthenticated || !role) return;
+
+    const path = location.pathname;
+    const isRoot = path === '/' || path === '';
+
+    // Only redirect if they opened the app at root "/"
+    if (!isRoot) return;
+
+    if (role === 'admin') {
+      navigate('/admin', { replace: true });
+    } else if (role === 'rider') {
+      navigate('/rider', { replace: true });
+    }
+    // Customers stay on home — no redirect needed
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps = only runs once on mount (app open)
+
+  return null;
+};
+
+// ─── RIDER ROUTE ──────────────────────────────────────────────────────────────
 const RiderRoute = ({ children }) => {
   const { isAuthenticated, role } = useAuth();
   const location = useLocation();
@@ -46,7 +76,6 @@ const RiderRoute = ({ children }) => {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      // ✅ Save the full path + query string (e.g. /rider?tab=available)
       sessionStorage.setItem('redirectAfterLogin', location.pathname + location.search);
       setShowLoginModal(true);
     }
@@ -74,14 +103,11 @@ const RiderRoute = ({ children }) => {
     );
   }
 
-  // ✅ Logged in but wrong role — redirect home
   if (role !== 'rider') return <Navigate to="/" replace />;
-
   return children;
 };
 
-// ✅ ProtectedRoute — kapag hindi naka-login, ipakita ang login modal
-//    at i-redirect pabalik sa intended page after login
+// ─── PROTECTED ROUTE ──────────────────────────────────────────────────────────
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated } = useAuth();
   const location = useLocation();
@@ -119,60 +145,63 @@ const ProtectedRoute = ({ children }) => {
   return children;
 };
 
+// ─── APP CONTENT ──────────────────────────────────────────────────────────────
 function AppContent() {
   const location = useLocation();
   const navigate = useNavigate();
   const { role, isAuthenticated } = useAuth();
 
-  const cartItems       = useCart();
-  const cartCount       = useCartCount();
-  const removeFromCart  = useRemoveFromCart();
+  const cartItems      = useCart();
+  const cartCount      = useCartCount();
+  const removeFromCart = useRemoveFromCart();
+  const wishlistCount  = useWishlistCount();
 
-  const wishlistItems   = useWishlist();
-  const wishlistCount   = useWishlistCount();
-
-  const [showLoginModal, setShowLoginModal]     = useState(false);
+  const [showLoginModal, setShowLoginModal]               = useState(false);
   const [loginDefaultRiderMode, setLoginDefaultRiderMode] = useState(false);
-  const [showCartModal, setShowCartModal]       = useState(false);
-  const [showProductModal, setShowProductModal] = useState(false);
-  const [currentProduct, setCurrentProduct]     = useState(null);
+  const [showCartModal, setShowCartModal]                 = useState(false);
+  const [showProductModal, setShowProductModal]           = useState(false);
+  const [currentProduct, setCurrentProduct]               = useState(null);
 
   useEffect(() => {
     const handleOpenLogin = (e) => {
-      if (e?.detail?.riderMode) {
-        setLoginDefaultRiderMode(true);
-      } else {
-        setLoginDefaultRiderMode(false);
-      }
+      setLoginDefaultRiderMode(!!e?.detail?.riderMode);
       setShowLoginModal(true);
     };
     window.addEventListener('openLoginModal', handleOpenLogin);
     return () => window.removeEventListener('openLoginModal', handleOpenLogin);
   }, []);
 
-  // ✅ After login via header modal, redirect if there's a saved URL
-  const handleLoginSuccess = () => {
+  // After login via header modal — redirect based on role or saved URL
+  const handleLoginSuccess = (loginRole) => {
     setShowLoginModal(false);
     setLoginDefaultRiderMode(false);
+
     const redirect = sessionStorage.getItem('redirectAfterLogin');
     if (redirect) {
       sessionStorage.removeItem('redirectAfterLogin');
       navigate(redirect);
+      return;
     }
+
+    // No saved redirect — go to role dashboard
+    if (loginRole === 'admin') {
+      navigate('/admin', { replace: true });
+    } else if (loginRole === 'rider') {
+      navigate('/rider', { replace: true });
+    }
+    // Customers stay on current page
   };
 
-  const isAdminRoute = location.pathname.startsWith('/admin');
-  const isRiderRoute = location.pathname.startsWith('/rider');
-  const isPromoRoute = location.pathname.startsWith('/promo');
+  const isAdminRoute     = location.pathname.startsWith('/admin');
+  const isRiderRoute     = location.pathname.startsWith('/rider');
+  const isPromoRoute     = location.pathname.startsWith('/promo');
   const hideHeaderFooter = isAdminRoute || isRiderRoute || isPromoRoute;
-
-  const handleOpenProductModal = (product) => {
-    setCurrentProduct(product);
-    setShowProductModal(true);
-  };
 
   return (
     <div className="App">
+      {/* Role-based redirect on app open if already logged in */}
+      <StartupRedirect />
+
       {!hideHeaderFooter && (
         <Header
           cartCount={cartCount}
@@ -182,8 +211,8 @@ function AppContent() {
       )}
 
       <Routes>
-        <Route path="/" element={<Home onProductClick={handleOpenProductModal} />} />
-        <Route path="/collections" element={<Collections onProductClick={handleOpenProductModal} />} />
+        <Route path="/" element={<Home onProductClick={(p) => { setCurrentProduct(p); setShowProductModal(true); }} />} />
+        <Route path="/collections" element={<Collections onProductClick={(p) => { setCurrentProduct(p); setShowProductModal(true); }} />} />
         <Route path="/preorder" element={<PreOrder />} />
         <Route path="/track-order" element={<TrackOrder />} />
         <Route path="/help" element={<Help />} />
@@ -194,14 +223,12 @@ function AppContent() {
         <Route path="/order-success" element={<OrderSuccess />} />
         <Route path="/promo/:code" element={<PromoRedirect />} />
 
-        {/* ✅ Protected — shows login modal if not logged in, redirects back after */}
         <Route path="/my-preorders" element={
           <ProtectedRoute>
             <MyPreOrders />
           </ProtectedRoute>
         } />
 
-        {/* ✅ FIXED — RiderRoute now preserves ?tab=available after login */}
         <Route path="/rider" element={
           <RiderRoute>
             <RiderDashboard />
