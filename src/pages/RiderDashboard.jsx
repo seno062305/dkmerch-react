@@ -1113,7 +1113,15 @@ const RiderDashboard = () => {
                       {isExpanded && (
                         <div className="rider-expanded-body">
                           <div className="rider-info-row"><i className="fas fa-map-marker-alt"></i><span><strong>Address:</strong> {order.shippingAddress || order.address || 'N/A'}</span></div>
-                          <div className="rider-info-row"><i className="fas fa-phone"></i><span><strong>Phone:</strong> {order.phone || 'N/A'}</span></div>
+                          <div className="rider-info-row">
+  <i className="fas fa-phone"></i>
+  <span><strong>Phone:</strong> {order.phone || 'N/A'}</span>
+  {order.phone && (
+    <a href={`tel:${order.phone}`} className="rider-call-btn">
+      <i className="fas fa-phone-alt"></i> Call
+    </a>
+  )}
+</div>
                           <div className="rider-info-row"><i className="fas fa-box"></i><span><strong>Items:</strong> {order.items?.length || 0} item(s)</span></div>
                           <div className="rider-info-row"><i className="fas fa-calendar"></i><span><strong>Date:</strong> {new Date(order._creationTime).toLocaleDateString('en-PH')}</span></div>
                           {order.confirmedAt && <div className="rider-info-row"><i className="fas fa-check-circle"></i><span><strong>Confirmed:</strong> {new Date(order.confirmedAt).toLocaleString('en-PH')}</span></div>}
@@ -1221,7 +1229,15 @@ const RiderDashboard = () => {
                             <div className="rider-expanded-section-title"><i className="fas fa-user"></i> Customer Info</div>
                             <div className="rider-info-row"><i className="fas fa-user-circle"></i><span><strong>Name:</strong> {customerName}</span></div>
                             <div className="rider-info-row"><i className="fas fa-map-marker-alt"></i><span><strong>Address:</strong> {addr || 'N/A'}</span></div>
-                            {phone && <div className="rider-info-row"><i className="fas fa-phone"></i><span><strong>Phone:</strong> {phone}</span></div>}
+                            {phone && (
+  <div className="rider-info-row">
+    <i className="fas fa-phone"></i>
+    <span><strong>Phone:</strong> {phone}</span>
+    <a href={`tel:${phone}`} className="rider-call-btn">
+      <i className="fas fa-phone-alt"></i> Call
+    </a>
+  </div>
+)}
                             <div className="customer-map-section-title"><i className="fas fa-map-marked-alt"></i> Customer Location</div>
                             <CustomerMap
                               orderId={delivery.orderId}
