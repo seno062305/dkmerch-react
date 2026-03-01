@@ -38,38 +38,57 @@ import OrderSuccess from './pages/OrderSuccess';
 import './App.css';
 
 // ─── STARTUP REDIRECT ─────────────────────────────────────────────────────────
-// Runs once after auth is ready. If logged in and on wrong page, redirect.
-const StartupRedirect = () => {
+// Blocks rendering until auth is ready, then redirects based on role
+const StartupRedirect = ({ children }) => {
   const { isAuthenticated, role, isReady } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const [hasRedirected, setHasRedirected] = useState(false);
+  const [redirectDone, setRedirectDone] = useState(false);
 
   useEffect(() => {
-    // Only run once, after auth is restored
-    if (!isReady || hasRedirected) return;
-    setHasRedirected(true);
+    if (!isReady) return;
 
-    if (!isAuthenticated || !role) return;
-
-    const path = location.pathname;
-
-    if (role === 'admin') {
-      // Admin should always be in /admin — redirect if not
-      if (!path.startsWith('/admin')) {
+    if (isAuthenticated && role) {
+      const path = location.pathname;
+      if (role === 'admin' && !path.startsWith('/admin')) {
         navigate('/admin', { replace: true });
-      }
-    } else if (role === 'rider') {
-      // Rider should always be in /rider — redirect if not
-      if (!path.startsWith('/rider')) {
+      } else if (role === 'rider' && !path.startsWith('/rider')) {
         navigate('/rider', { replace: true });
       }
     }
-    // Customers stay wherever they are
+
+    setRedirectDone(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReady]);
 
-  return null;
+  // ✅ Show loading screen until auth restored + redirect done
+  // Prevents Home from flashing behind admin/rider dashboard
+  if (!isReady || !redirectDone) {
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        background: '#fff',
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{
+            width: 48,
+            height: 48,
+            border: '4px solid #f3f4f6',
+            borderTop: '4px solid #ec4899',
+            borderRadius: '50%',
+            animation: 'spin 0.8s linear infinite',
+            margin: '0 auto 12px',
+          }} />
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      </div>
+    );
+  }
+
+  return children;
 };
 
 // ─── RIDER ROUTE ──────────────────────────────────────────────────────────────
@@ -87,7 +106,6 @@ const RiderRoute = ({ children }) => {
     }
   }, [isReady, isAuthenticated, location]);
 
-  // Still restoring — show nothing
   if (!isReady) return null;
 
   if (!isAuthenticated) {
@@ -131,7 +149,6 @@ const ProtectedRoute = ({ children }) => {
     }
   }, [isReady, isAuthenticated, location]);
 
-  // Still restoring — show nothing
   if (!isReady) return null;
 
   if (!isAuthenticated) {
@@ -183,7 +200,6 @@ function AppContent() {
     return () => window.removeEventListener('openLoginModal', handleOpenLogin);
   }, []);
 
-  // After login via header modal — redirect based on role or saved URL
   const handleLoginSuccess = (loginRole) => {
     setShowLoginModal(false);
     setLoginDefaultRiderMode(false);
@@ -200,7 +216,6 @@ function AppContent() {
     } else if (loginRole === 'rider') {
       navigate('/rider', { replace: true });
     }
-    // Customers stay on current page
   };
 
   const isAdminRoute     = location.pathname.startsWith('/admin');
@@ -209,87 +224,87 @@ function AppContent() {
   const hideHeaderFooter = isAdminRoute || isRiderRoute || isPromoRoute;
 
   return (
-    <div className="App">
-      {/* Role-based redirect on app open */}
-      <StartupRedirect />
+    // ✅ StartupRedirect wraps everything — nothing renders until auth is ready
+    <StartupRedirect>
+      <div className="App">
+        {!hideHeaderFooter && (
+          <Header
+            cartCount={cartCount}
+            wishlistCount={wishlistCount}
+            onCartClick={() => setShowCartModal(true)}
+          />
+        )}
 
-      {!hideHeaderFooter && (
-        <Header
-          cartCount={cartCount}
-          wishlistCount={wishlistCount}
-          onCartClick={() => setShowCartModal(true)}
-        />
-      )}
+        <Routes>
+          <Route path="/" element={<Home onProductClick={(p) => { setCurrentProduct(p); setShowProductModal(true); }} />} />
+          <Route path="/collections" element={<Collections onProductClick={(p) => { setCurrentProduct(p); setShowProductModal(true); }} />} />
+          <Route path="/preorder" element={<PreOrder />} />
+          <Route path="/track-order" element={<TrackOrder />} />
+          <Route path="/help" element={<Help />} />
+          <Route path="/wishlist" element={<WishlistPage />} />
+          <Route path="/checkout" element={<Checkout />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/my-orders" element={<Navigate to="/track-order" replace />} />
+          <Route path="/order-success" element={<OrderSuccess />} />
+          <Route path="/promo/:code" element={<PromoRedirect />} />
 
-      <Routes>
-        <Route path="/" element={<Home onProductClick={(p) => { setCurrentProduct(p); setShowProductModal(true); }} />} />
-        <Route path="/collections" element={<Collections onProductClick={(p) => { setCurrentProduct(p); setShowProductModal(true); }} />} />
-        <Route path="/preorder" element={<PreOrder />} />
-        <Route path="/track-order" element={<TrackOrder />} />
-        <Route path="/help" element={<Help />} />
-        <Route path="/wishlist" element={<WishlistPage />} />
-        <Route path="/checkout" element={<Checkout />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="/my-orders" element={<Navigate to="/track-order" replace />} />
-        <Route path="/order-success" element={<OrderSuccess />} />
-        <Route path="/promo/:code" element={<PromoRedirect />} />
+          <Route path="/my-preorders" element={
+            <ProtectedRoute>
+              <MyPreOrders />
+            </ProtectedRoute>
+          } />
 
-        <Route path="/my-preorders" element={
-          <ProtectedRoute>
-            <MyPreOrders />
-          </ProtectedRoute>
-        } />
+          <Route path="/rider" element={
+            <RiderRoute>
+              <RiderDashboard />
+            </RiderRoute>
+          } />
 
-        <Route path="/rider" element={
-          <RiderRoute>
-            <RiderDashboard />
-          </RiderRoute>
-        } />
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route index element={<AdminDashboard />} />
+            <Route path="products" element={<AdminProducts />} />
+            <Route path="inventory" element={<AdminInventory />} />
+            <Route path="orders" element={<AdminOrders />} />
+            <Route path="promos" element={<AdminPromos />} />
+            <Route path="sales-reports" element={<AdminSalesReports />} />
+            <Route path="users" element={<AdminUsers />} />
+            <Route path="riders" element={<AdminRiders />} />
+          </Route>
+        </Routes>
 
-        <Route path="/admin" element={<AdminLayout />}>
-          <Route index element={<AdminDashboard />} />
-          <Route path="products" element={<AdminProducts />} />
-          <Route path="inventory" element={<AdminInventory />} />
-          <Route path="orders" element={<AdminOrders />} />
-          <Route path="promos" element={<AdminPromos />} />
-          <Route path="sales-reports" element={<AdminSalesReports />} />
-          <Route path="users" element={<AdminUsers />} />
-          <Route path="riders" element={<AdminRiders />} />
-        </Route>
-      </Routes>
+        {!hideHeaderFooter && <Footer />}
 
-      {!hideHeaderFooter && <Footer />}
+        {showLoginModal && (
+          <LoginModal
+            onClose={() => {
+              setShowLoginModal(false);
+              setLoginDefaultRiderMode(false);
+            }}
+            onLoginSuccess={handleLoginSuccess}
+            defaultRiderMode={loginDefaultRiderMode}
+          />
+        )}
 
-      {showLoginModal && (
-        <LoginModal
-          onClose={() => {
-            setShowLoginModal(false);
-            setLoginDefaultRiderMode(false);
-          }}
-          onLoginSuccess={handleLoginSuccess}
-          defaultRiderMode={loginDefaultRiderMode}
-        />
-      )}
+        {showCartModal && (
+          <CartModal
+            cart={cartItems}
+            onClose={() => setShowCartModal(false)}
+            onRemoveFromCart={removeFromCart}
+          />
+        )}
 
-      {showCartModal && (
-        <CartModal
-          cart={cartItems}
-          onClose={() => setShowCartModal(false)}
-          onRemoveFromCart={removeFromCart}
-        />
-      )}
-
-      {showProductModal && currentProduct && (
-        <ProductModal
-          product={currentProduct}
-          onClose={() => setShowProductModal(false)}
-          onRequireLogin={() => {
-            setShowProductModal(false);
-            setShowLoginModal(true);
-          }}
-        />
-      )}
-    </div>
+        {showProductModal && currentProduct && (
+          <ProductModal
+            product={currentProduct}
+            onClose={() => setShowProductModal(false)}
+            onRequireLogin={() => {
+              setShowProductModal(false);
+              setShowLoginModal(true);
+            }}
+          />
+        )}
+      </div>
+    </StartupRedirect>
   );
 }
 

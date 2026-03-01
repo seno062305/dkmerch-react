@@ -5,8 +5,6 @@ import { api } from "../../convex/_generated/api";
 
 const AuthContext = createContext(null);
 
-const SESSION_KEY = "riderSessionId";
-
 export const AuthProvider = ({ children }) => {
   const [user, setUser]                       = useState(null);
   const [role, setRole]                       = useState(null);
@@ -25,25 +23,10 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const storedUser = JSON.parse(localStorage.getItem("authUser") || "null");
     if (storedUser) {
-      if (storedUser.role === "rider") {
-        const savedSession = sessionStorage.getItem(SESSION_KEY);
-        if (!savedSession) {
-          // Rider session expired (tab was closed) — clear auth
-          localStorage.removeItem("authUser");
-          setIsReady(true);
-          return;
-        }
-        // Restore rider with session
-        const userWithSession = { ...storedUser, sessionId: savedSession };
-        setUser(userWithSession);
-        setRole("rider");
-        setIsAuthenticated(true);
-      } else {
-        // Admin or customer — restore normally, no sessionStorage needed
-        setUser(storedUser);
-        setRole(storedUser.role);
-        setIsAuthenticated(true);
-      }
+      // ✅ All roles — restore from localStorage directly, no sessionStorage needed
+      setUser(storedUser);
+      setRole(storedUser.role);
+      setIsAuthenticated(true);
     }
     setIsReady(true);
   }, []);
@@ -68,18 +51,17 @@ export const AuthProvider = ({ children }) => {
         }
 
         const sessionRider = {
-          _id:   riderResult.rider._id,
-          id:    riderResult.rider._id,
-          name:  riderResult.rider.name,
-          email: riderResult.rider.email,
-          role:  "rider",
+          _id:       riderResult.rider._id,
+          id:        riderResult.rider._id,
+          name:      riderResult.rider.name,
+          email:     riderResult.rider.email,
+          role:      "rider",
+          sessionId: riderResult.sessionId,
         };
 
+        // ✅ Store everything in localStorage so it persists after app close
         localStorage.setItem("authUser", JSON.stringify(sessionRider));
-        sessionStorage.setItem(SESSION_KEY, riderResult.sessionId);
-
-        const userWithSession = { ...sessionRider, sessionId: riderResult.sessionId };
-        setUser(userWithSession);
+        setUser(sessionRider);
         setRole("rider");
         setIsAuthenticated(true);
         return { success: true, role: "rider" };
@@ -121,16 +103,15 @@ export const AuthProvider = ({ children }) => {
         if (riderResult.riderExists) {
           if (riderResult.success && riderResult.rider) {
             const sessionRider = {
-              _id:   riderResult.rider._id,
-              id:    riderResult.rider._id,
-              name:  riderResult.rider.name,
-              email: riderResult.rider.email,
-              role:  "rider",
+              _id:       riderResult.rider._id,
+              id:        riderResult.rider._id,
+              name:      riderResult.rider.name,
+              email:     riderResult.rider.email,
+              role:      "rider",
+              sessionId: riderResult.sessionId,
             };
             localStorage.setItem("authUser", JSON.stringify(sessionRider));
-            sessionStorage.setItem(SESSION_KEY, riderResult.sessionId);
-            const userWithSession = { ...sessionRider, sessionId: riderResult.sessionId };
-            setUser(userWithSession);
+            setUser(sessionRider);
             setRole("rider");
             setIsAuthenticated(true);
             return { success: true, role: "rider" };
@@ -166,7 +147,6 @@ export const AuthProvider = ({ children }) => {
     setUser(prev => {
       const updated = { ...prev, ...updatedFields };
       const toStore = { ...updated };
-      delete toStore.sessionId;
       localStorage.setItem("authUser", JSON.stringify(toStore));
       return updated;
     });
@@ -174,15 +154,10 @@ export const AuthProvider = ({ children }) => {
 
   const logout = () => {
     localStorage.removeItem("authUser");
-    sessionStorage.removeItem(SESSION_KEY);
     setUser(null);
     setRole(null);
     setIsAuthenticated(false);
   };
-
-  // Don't return null anymore — render children immediately
-  // isReady = false just means "still restoring session"
-  // Routes that need auth will wait for isReady before showing login modal
 
   return (
     <AuthContext.Provider value={{ user, role, isAuthenticated, isReady, login, register, logout, updateUser }}>
