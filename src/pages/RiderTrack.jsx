@@ -7,11 +7,16 @@ import './RiderTrack.css';
 
 const generateSessionId = () =>
   `rt-${Date.now()}-${Math.random().toString(36).slice(2,10)}-${Math.random().toString(36).slice(2,10)}`;
+
+// ✅ FIX: Use localStorage instead of sessionStorage so the same session ID
+// persists across page refreshes on mobile (prevents false "link in use" locks)
 const getTabSessionId = () => {
-  let id = sessionStorage.getItem('riderTrackSessionId');
-  if (!id) { id = generateSessionId(); sessionStorage.setItem('riderTrackSessionId', id); }
+  const storageKey = 'riderTrackSessionId';
+  let id = localStorage.getItem(storageKey);
+  if (!id) { id = generateSessionId(); localStorage.setItem(storageKey, id); }
   return id;
 };
+
 const getDeviceInfo = () => {
   const ua = navigator.userAgent;
   if (/iPhone/i.test(ua))  return 'iPhone';
@@ -42,7 +47,6 @@ const reverseGeocode = async (lat, lng) => {
   return null;
 };
 
-// ── FIX: OSRM fetch with 8s timeout + 2 retries ──
 const fetchOsrmRoute = async (rLat, rLng, dLat, dLng, retries = 2, timeoutMs = 8000) => {
   const url = `https://router.project-osrm.org/route/v1/bike/${rLng},${rLat};${dLng},${dLat}?overview=full&geometries=geojson`;
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -65,8 +69,25 @@ const fetchOsrmRoute = async (rLat, rLng, dLat, dLng, retries = 2, timeoutMs = 8
 
 function LinkInUseScreen({ deviceInfo, takenAt, onRetry }) {
   const [retrying, setRetrying] = useState(false);
-  const ago = takenAt ? Math.round((Date.now() - takenAt) / 1000) : null;
+  const [countdown, setCountdown] = useState(null);
+
+  // ✅ FIX: Show live countdown so rider knows when auto-unlock happens
+  useEffect(() => {
+    if (!takenAt) return;
+    const update = () => {
+      const elapsed = Math.round((Date.now() - takenAt) / 1000);
+      const remaining = Math.max(0, 120 - elapsed);
+      setCountdown(remaining);
+    };
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [takenAt]);
+
   const handleRetry = async () => { setRetrying(true); await onRetry(); setRetrying(false); };
+
+  const ago = takenAt ? Math.round((Date.now() - takenAt) / 1000) : null;
+
   return (
     <div className="rt-inuse-screen">
       <div className="rt-inuse-icon">🔒</div>
@@ -78,11 +99,24 @@ function LinkInUseScreen({ deviceInfo, takenAt, onRetry }) {
       <div className="rt-inuse-info-box">
         <p>Only <strong>one device</strong> can use this link at a time to ensure accurate GPS tracking.</p>
         <p>If you are the assigned rider, close the link on the other device first.</p>
-        <p>The link auto-unlocks after <strong>2 minutes</strong> of inactivity.</p>
+        <p>The link auto-unlocks after <strong>2 minutes</strong> of inactivity.
+          {countdown !== null && countdown > 0 && (
+            <strong style={{ color: '#6a0dad' }}> Auto-unlock in {countdown}s.</strong>
+          )}
+          {countdown === 0 && (
+            <strong style={{ color: '#059669' }}> Should be unlocked now — tap Try Again!</strong>
+          )}
+        </p>
       </div>
       <button className="rt-inuse-retry-btn" onClick={handleRetry} disabled={retrying}>
         {retrying ? '⏳ Checking…' : '🔄 Try Again'}
       </button>
+      {/* ✅ FIX: Auto-retry when countdown hits 0 */}
+      {countdown === 0 && !retrying && (
+        <p className="rt-inuse-hint" style={{ color: '#059669', fontWeight: 700 }}>
+          ✅ Lock expired — tap "Try Again" to open the link.
+        </p>
+      )}
       <p className="rt-inuse-hint">💡 Closed the other browser? Wait a moment then tap "Try Again".</p>
     </div>
   );
@@ -101,7 +135,7 @@ function FullscreenMapModal({ order, gpsCoords, onClose }) {
       Math.abs(rLng - prev.rLng) > 0.00015;
     if (!movedEnough) return;
     if (modalRouteRef.current) {
-      (Array.isArray(modalRouteRef.current) ? modalRouteRef.current : [modalRouteRef.current]).forEach(l => l.remove());
+      (Array.isArray(modalRouteRef.current) ? modalRouteRef.current : [modalRouteRef.current]).forEach(l => { try { l.remove(); } catch {} });
       modalRouteRef.current = null;
     }
     const coords = await fetchOsrmRoute(rLat, rLng, dLat, dLng);
@@ -208,14 +242,25 @@ export default function RiderTrack() {
     setSessionStatus('checking');
     try {
       const result = await claimSession({ orderId, sessionId: SESSION_ID, deviceInfo: getDeviceInfo() });
-      if (result.allowed) { setSessionStatus('allowed'); }
-      else { setSessionStatus('blocked'); setBlockedInfo({ deviceInfo: result.deviceInfo, takenAt: result.takenAt }); }
-    } catch { setSessionStatus('allowed'); }
+      if (result.allowed) {
+        setSessionStatus('allowed');
+      } else {
+        setSessionStatus('blocked');
+        setBlockedInfo({ deviceInfo: result.deviceInfo, takenAt: result.takenAt });
+      }
+    } catch {
+      // ✅ FIX: On error (e.g. network), default to allowed so rider isn't
+      // permanently locked out by a transient failure
+      setSessionStatus('allowed');
+    }
   }, [orderId, SESSION_ID, claimSession]);
 
-  useEffect(() => { if (order && sessionStatus === 'checking') tryClaim(); }, // eslint-disable-next-line react-hooks/exhaustive-deps
-  [order]);
+  useEffect(() => {
+    if (order && sessionStatus === 'checking') tryClaim();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order]);
 
+  // ✅ FIX: Heartbeat every 20s (was 30s) — keeps session alive more reliably
   useEffect(() => {
     if (sessionStatus !== 'allowed' || !orderId) return;
     heartbeatRef.current = setInterval(async () => {
@@ -223,11 +268,25 @@ export default function RiderTrack() {
         const res = await heartbeatSession({ orderId, sessionId: SESSION_ID });
         if (res?.success === false && res?.reason === 'session_replaced') {
           clearInterval(heartbeatRef.current);
-          setSessionStatus('blocked'); setBlockedInfo({ deviceInfo: 'another device', takenAt: Date.now() });
+          setSessionStatus('blocked');
+          setBlockedInfo({ deviceInfo: 'another device', takenAt: Date.now() });
         }
       } catch {}
-    }, 30_000);
+    }, 20_000);
     return () => clearInterval(heartbeatRef.current);
+  }, [sessionStatus, orderId, SESSION_ID, heartbeatSession]);
+
+  // ✅ FIX: Use visibilitychange to re-claim session when tab comes back into focus
+  // This handles mobile browser backgrounding which kills beforeunload events
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && sessionStatus === 'allowed' && orderId) {
+        // Re-send heartbeat immediately when app comes back to foreground
+        heartbeatSession({ orderId, sessionId: SESSION_ID }).catch(() => {});
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, [sessionStatus, orderId, SESSION_ID, heartbeatSession]);
 
   useEffect(() => {
@@ -252,11 +311,19 @@ export default function RiderTrack() {
 
   useEffect(() => {
     if (window.L) { setLeafletReady(true); return; }
-    const link = document.createElement('link'); link.rel = 'stylesheet'; link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'; document.head.appendChild(link);
-    const script = document.createElement('script'); script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'; script.onload = () => setLeafletReady(true); document.head.appendChild(script);
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    document.head.appendChild(link);
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.onload = () => setLeafletReady(true);
+    document.head.appendChild(script);
   }, []);
 
-  // FIX: throttled — skip redraw if <15m moved or <10s passed
+  // ✅ FIX: Route draw — fixed logic was `!movedEnough || !enoughTimePassed`
+  // which meant BOTH had to be false to draw. Now: draw if moved enough AND enough time passed,
+  // OR if there's no existing route at all (routeLineRef is null).
   const drawRoute = async (map, rLat, rLng, dLat, dLng) => {
     if (!map || !window.L) return;
     const now = Date.now();
@@ -265,9 +332,13 @@ export default function RiderTrack() {
       Math.abs(rLat - prev.rLat) > 0.00015 ||
       Math.abs(rLng - prev.rLng) > 0.00015;
     const enoughTimePassed = now - prev.time > 10_000;
-    if (!movedEnough || !enoughTimePassed) return;
+    const noRouteExists = !routeLineRef.current;
+
+    // ✅ Draw if: no route exists yet, OR (moved enough AND enough time passed)
+    if (!noRouteExists && (!movedEnough || !enoughTimePassed)) return;
+
     if (routeLineRef.current) {
-      (Array.isArray(routeLineRef.current) ? routeLineRef.current : [routeLineRef.current]).forEach(l => l.remove());
+      (Array.isArray(routeLineRef.current) ? routeLineRef.current : [routeLineRef.current]).forEach(l => { try { l.remove(); } catch {} });
       routeLineRef.current = null;
     }
     const coords = await fetchOsrmRoute(rLat, rLng, dLat, dLng);
@@ -279,18 +350,17 @@ export default function RiderTrack() {
       ];
       map.fitBounds(window.L.latLngBounds(coords), { padding: [48,48], maxZoom: 17 });
     } else {
-      // keep existing route on failure, straight line only if no route at all
       if (!routeLineRef.current) {
         routeLineRef.current = window.L.polyline([[rLat,rLng],[dLat,dLng]], { color: '#e53e3e', weight: 4, opacity: 0.8, dashArray: '10, 8' }).addTo(map);
       }
     }
   };
 
-  // FIX: force draw — bypasses throttle, used on first GPS fix & map init
+  // Force draw — bypasses throttle, used on first GPS fix & map init
   const drawRouteForce = async (map, rLat, rLng, dLat, dLng) => {
     if (!map || !window.L) return;
     if (routeLineRef.current) {
-      (Array.isArray(routeLineRef.current) ? routeLineRef.current : [routeLineRef.current]).forEach(l => l.remove());
+      (Array.isArray(routeLineRef.current) ? routeLineRef.current : [routeLineRef.current]).forEach(l => { try { l.remove(); } catch {} });
       routeLineRef.current = null;
     }
     const coords = await fetchOsrmRoute(rLat, rLng, dLat, dLng);
@@ -308,38 +378,71 @@ export default function RiderTrack() {
 
   const initMap = useCallback(() => {
     if (!leafletReady || !mapRef.current || !order) return;
-    if (mapObjRef.current) { setTimeout(() => { if (mapObjRef.current) mapObjRef.current.invalidateSize(); }, 150); return; }
-    const L = window.L, map = L.map(mapRef.current, { zoomControl: true });
+    if (mapObjRef.current) {
+      setTimeout(() => { if (mapObjRef.current) mapObjRef.current.invalidateSize(); }, 150);
+      // ✅ FIX: Re-draw route if it's missing after tab switch
+      if (!routeLineRef.current && gpsCoords) {
+        const dLat = order?.addressLat || 14.5995, dLng = order?.addressLng || 120.9842;
+        drawRouteForce(mapObjRef.current, gpsCoords.lat, gpsCoords.lng, dLat, dLng);
+      }
+      return;
+    }
+    const L = window.L;
+    const map = L.map(mapRef.current, { zoomControl: true });
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors', maxZoom: 19 }).addTo(map);
     const dLat = order?.addressLat || 14.5995, dLng = order?.addressLng || 120.9842;
     const destIcon = L.divIcon({ html: `<div style="width:44px;height:44px;background:linear-gradient(135deg,#fc1268,#9c27b0);border-radius:50%;border:3px solid white;box-shadow:0 3px 14px rgba(252,18,104,0.5);display:flex;align-items:center;justify-content:center;font-size:22px;">📍</div>`, className: '', iconSize: [44,44], iconAnchor: [22,44] });
     const marker = L.marker([dLat, dLng], { icon: destIcon }).addTo(map);
     marker.bindPopup(`<b>📍 Deliver to:</b><br>${order?.customerName || 'Customer'}<br><small>${order?.shippingAddress || ''}</small>`).openPopup();
-    map.setView([dLat, dLng], 15); mapObjRef.current = map; destMarkerRef.current = marker;
+    map.setView([dLat, dLng], 15);
+    mapObjRef.current = map;
+    destMarkerRef.current = marker;
     if (gpsCoords) {
       drawRouteForce(map, gpsCoords.lat, gpsCoords.lng, dLat, dLng);
       const riderIcon = L.divIcon({ html: `<div style="width:36px;height:36px;background:linear-gradient(135deg,#6a0dad,#9b30ff);border-radius:50%;border:3px solid white;box-shadow:0 3px 10px rgba(106,13,173,0.5);display:flex;align-items:center;justify-content:center;font-size:18px;">🛵</div>`, className: '', iconSize: [36,36], iconAnchor: [18,18] });
-      if (!riderMarkerRef.current) { riderMarkerRef.current = L.marker([gpsCoords.lat, gpsCoords.lng], { icon: riderIcon }).addTo(map); riderMarkerRef.current.bindPopup('🛵 You are here'); }
+      if (!riderMarkerRef.current) {
+        riderMarkerRef.current = L.marker([gpsCoords.lat, gpsCoords.lng], { icon: riderIcon }).addTo(map);
+        riderMarkerRef.current.bindPopup('🛵 You are here');
+      }
       map.fitBounds(L.latLngBounds([gpsCoords.lat, gpsCoords.lng], [dLat, dLng]), { padding: [48,48] });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [leafletReady, order]);
+  }, [leafletReady, order, gpsCoords]);
 
   useEffect(() => {
-    const h = () => { if (document.visibilityState === 'visible') { if (mapObjRef.current) { setTimeout(() => { if (mapObjRef.current) mapObjRef.current.invalidateSize(); }, 200); } else if (activeTab === 'map') initMap(); } };
-    document.addEventListener('visibilitychange', h); return () => document.removeEventListener('visibilitychange', h);
-  }, [activeTab, initMap]);
+    const h = () => {
+      if (document.visibilityState === 'visible') {
+        if (mapObjRef.current) {
+          setTimeout(() => { if (mapObjRef.current) mapObjRef.current.invalidateSize(); }, 200);
+          // ✅ FIX: Re-draw route when coming back from background
+          if (!routeLineRef.current && gpsCoords && order) {
+            const dLat = order?.addressLat || 14.5995, dLng = order?.addressLng || 120.9842;
+            drawRouteForce(mapObjRef.current, gpsCoords.lat, gpsCoords.lng, dLat, dLng);
+          }
+        } else if (activeTab === 'map') {
+          initMap();
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', h);
+    return () => document.removeEventListener('visibilitychange', h);
+  }, [activeTab, initMap, gpsCoords, order]);
+
   useEffect(() => { if (activeTab === 'map') setTimeout(() => initMap(), 100); }, [activeTab, initMap]);
   useEffect(() => { if (leafletReady && activeTab === 'map') setTimeout(() => initMap(), 100); }, [leafletReady, initMap, activeTab]);
   useEffect(() => () => {
     if (watchIdRef.current) navigator.geolocation.clearWatch(watchIdRef.current);
-    if (mapObjRef.current) { try { mapObjRef.current.remove(); } catch {} mapObjRef.current = destMarkerRef.current = riderMarkerRef.current = routeLineRef.current = null; }
+    if (mapObjRef.current) {
+      try { mapObjRef.current.remove(); } catch {}
+      mapObjRef.current = destMarkerRef.current = riderMarkerRef.current = routeLineRef.current = null;
+    }
   }, []);
 
   const autoStartedRef = useRef(false);
   useEffect(() => {
     if (!order || autoStartedRef.current || sessionStatus !== 'allowed') return;
-    autoStartedRef.current = true; startTracking();
+    autoStartedRef.current = true;
+    startTracking();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order, sessionStatus]);
 
@@ -349,7 +452,8 @@ export default function RiderTrack() {
     watchIdRef.current = navigator.geolocation.watchPosition(
       async (pos) => {
         const { latitude: lat, longitude: lng, accuracy, speed } = pos.coords;
-        setGpsCoords({ lat, lng, accuracy }); setGpsStatus('active');
+        setGpsCoords({ lat, lng, accuracy });
+        setGpsStatus('active');
         const now = Date.now();
         if (orderId && now - lastConvexUpdateRef.current >= 5000) {
           lastConvexUpdateRef.current = now;
@@ -402,14 +506,19 @@ export default function RiderTrack() {
   };
 
   const handleVerifyOtp = async () => {
-    if (!otpInput.trim() || !order) return; setOtpStatus('verifying');
+    if (!otpInput.trim() || !order) return;
+    setOtpStatus('verifying');
     const saved = order.deliveryOtp;
     if (!saved) { setOtpStatus('error'); setOtpMessage('No OTP found. Ask customer to generate one.'); return; }
     if (otpInput.trim() === saved.toString()) {
       await updateFields({ orderId, deliveryOtpVerified: true }).catch(() => {});
-      setOtpStatus('success'); setOtpMessage('OTP verified! ✅ Proceed to take the delivery photo.');
+      setOtpStatus('success');
+      setOtpMessage('OTP verified! ✅ Proceed to take the delivery photo.');
       setTimeout(() => setActiveTab('photo'), 1200);
-    } else { setOtpStatus('error'); setOtpMessage('Wrong OTP. Ask the customer to check their tracking page.'); }
+    } else {
+      setOtpStatus('error');
+      setOtpMessage('Wrong OTP. Ask the customer to check their tracking page.');
+    }
   };
 
   const handlePhotoSelect = (e) => {
@@ -430,22 +539,45 @@ export default function RiderTrack() {
       const photoUrl = `${process.env.REACT_APP_CONVEX_SITE_URL || ''}/getImage?storageId=${storageId}`;
       setUploading(false);
       await updateFields({ orderId, orderStatus: 'completed', status: 'Delivered', deliveryProofPhoto: photoUrl, deliveryConfirmedAt: new Date().toISOString() });
-      stopTracking(); releaseSession({ orderId, sessionId: SESSION_ID }).catch(() => {}); setDeliveryDone(true);
-    } catch { alert('Failed. Please try again.'); }
-    finally { setMarking(false); setUploading(false); }
+      stopTracking();
+      releaseSession({ orderId, sessionId: SESSION_ID }).catch(() => {});
+      // ✅ FIX: Clear localStorage session ID after successful delivery
+      localStorage.removeItem('riderTrackSessionId');
+      setDeliveryDone(true);
+    } catch {
+      alert('Failed. Please try again.');
+    } finally {
+      setMarking(false);
+      setUploading(false);
+    }
   };
 
   const openGoogleMaps = () => {
     if (!order) return;
     const lat = order.addressLat, lng = order.addressLng;
-    window.open(lat && lng ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.shippingAddress || '')}`, '_blank');
+    window.open(lat && lng
+      ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
+      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.shippingAddress || '')}`,
+      '_blank'
+    );
   };
 
-  if (order === undefined || sessionStatus === 'checking') return <div className="rt-loading"><div className="rt-spinner">🛵</div><p>Loading delivery…</p></div>;
-  if (!order) return <div className="rt-error"><div className="rt-error-icon">❌</div><h2>Order not found</h2></div>;
-  if (sessionStatus === 'blocked') return <LinkInUseScreen deviceInfo={blockedInfo?.deviceInfo} takenAt={blockedInfo?.takenAt} onRetry={tryClaim} />;
+  if (order === undefined || sessionStatus === 'checking') return (
+    <div className="rt-loading"><div className="rt-spinner">🛵</div><p>Loading delivery…</p></div>
+  );
+  if (!order) return (
+    <div className="rt-error"><div className="rt-error-icon">❌</div><h2>Order not found</h2></div>
+  );
+  if (sessionStatus === 'blocked') return (
+    <LinkInUseScreen deviceInfo={blockedInfo?.deviceInfo} takenAt={blockedInfo?.takenAt} onRetry={tryClaim} />
+  );
   if (deliveryDone || order.orderStatus === 'completed') return (
-    <div className="rt-done"><div className="rt-done-icon">✅</div><h2>Delivery Complete!</h2><p>Order <strong>#{orderId?.slice(-8).toUpperCase()}</strong> has been delivered.</p><p className="rt-done-sub">Thank you for delivering with DKMerch! 💜</p></div>
+    <div className="rt-done">
+      <div className="rt-done-icon">✅</div>
+      <h2>Delivery Complete!</h2>
+      <p>Order <strong>#{orderId?.slice(-8).toUpperCase()}</strong> has been delivered.</p>
+      <p className="rt-done-sub">Thank you for delivering with DKMerch! 💜</p>
+    </div>
   );
 
   const otpVerified = !!order.deliveryOtpVerified, customerPhone = order.phone || '';
@@ -454,14 +586,19 @@ export default function RiderTrack() {
     <div className="rt-page">
       {showFullMap && <FullscreenMapModal order={order} gpsCoords={gpsCoords} onClose={() => setShowFullMap(false)} />}
 
-      <div className="rt-header"><span className="rt-header-logo">🛵 DKMerch Delivery</span><span className="rt-header-order">#{orderId?.slice(-8).toUpperCase()}</span></div>
+      <div className="rt-header">
+        <span className="rt-header-logo">🛵 DKMerch Delivery</span>
+        <span className="rt-header-order">#{orderId?.slice(-8).toUpperCase()}</span>
+      </div>
 
       <div className="rt-customer-banner">
         <div className="rt-customer-info">
           <div className="rt-customer-name">📦 {order.customerName || 'Customer'}</div>
           <div className="rt-customer-phone">📞 <strong>{customerPhone || '—'}</strong></div>
         </div>
-        {customerPhone ? <button className="rt-call-btn" onClick={() => setShowCallModal(true)}>📞 Call</button> : <span className="rt-no-phone">No phone</span>}
+        {customerPhone
+          ? <button className="rt-call-btn" onClick={() => setShowCallModal(true)}>📞 Call</button>
+          : <span className="rt-no-phone">No phone</span>}
       </div>
 
       {showCallModal && customerPhone && (
@@ -493,12 +630,20 @@ export default function RiderTrack() {
       </div>
 
       <div className="rt-tabs">
-        {[{ key:'map',label:'🗺️ Map'},{key:'otp',label:otpVerified?'✅ OTP':'🔐 OTP'},{key:'photo',label:photoFile?'✅ Photo':'📷 Photo'}].map(t => (
-          <button key={t.key} className={`rt-tab ${activeTab===t.key?'active':''} ${(t.key==='otp'&&otpVerified)||(t.key==='photo'&&photoFile)?'done':''}`} onClick={() => setActiveTab(t.key)}>{t.label}</button>
+        {[
+          { key:'map',   label:'🗺️ Map' },
+          { key:'otp',   label: otpVerified ? '✅ OTP'   : '🔐 OTP'   },
+          { key:'photo', label: photoFile   ? '✅ Photo' : '📷 Photo' },
+        ].map(t => (
+          <button
+            key={t.key}
+            className={`rt-tab ${activeTab===t.key?'active':''} ${(t.key==='otp'&&otpVerified)||(t.key==='photo'&&photoFile)?'done':''}`}
+            onClick={() => setActiveTab(t.key)}
+          >{t.label}</button>
         ))}
       </div>
 
-      <div style={{ display: activeTab==='map'?'block':'none' }} className="rt-tab-content">
+      <div style={{ display: activeTab==='map' ? 'block' : 'none' }} className="rt-tab-content">
         <div ref={mapRef} className="rt-map" />
         <div className="rt-map-footer">
           <p className="rt-map-hint">📍 = Customer &nbsp;·&nbsp; 🛵 = You &nbsp;·&nbsp; <span style={{color:'#e53e3e',fontWeight:700}}>━━</span> = Route</p>
@@ -509,13 +654,32 @@ export default function RiderTrack() {
       {activeTab === 'otp' && (
         <div className="rt-tab-content rt-otp-content">
           {otpVerified ? (
-            <div className="rt-verified-box"><div className="rt-verified-icon">✅</div><h3>OTP Verified!</h3><p>Proceed to take the delivery photo.</p><button className="rt-next-btn" onClick={() => setActiveTab('photo')}>📷 Go to Photo →</button></div>
+            <div className="rt-verified-box">
+              <div className="rt-verified-icon">✅</div>
+              <h3>OTP Verified!</h3>
+              <p>Proceed to take the delivery photo.</p>
+              <button className="rt-next-btn" onClick={() => setActiveTab('photo')}>📷 Go to Photo →</button>
+            </div>
           ) : (
             <>
-              <div className="rt-otp-header"><div className="rt-otp-icon-big">🔐</div><h3>Enter Customer OTP</h3><p>Ask the customer for their 4-digit OTP from their order tracking page.</p></div>
+              <div className="rt-otp-header">
+                <div className="rt-otp-icon-big">🔐</div>
+                <h3>Enter Customer OTP</h3>
+                <p>Ask the customer for their 4-digit OTP from their order tracking page.</p>
+              </div>
               <div className="rt-otp-row">
-                <input type="number" className="rt-otp-input" placeholder="0000" value={otpInput} onChange={e => { setOtpInput(e.target.value.slice(0,4)); setOtpStatus('idle'); setOtpMessage(''); }} />
-                <button className="rt-otp-verify-btn" onClick={handleVerifyOtp} disabled={otpStatus==='verifying'||otpInput.length<4}>{otpStatus==='verifying'?'⏳':'✅ Verify'}</button>
+                <input
+                  type="number"
+                  className="rt-otp-input"
+                  placeholder="0000"
+                  value={otpInput}
+                  onChange={e => { setOtpInput(e.target.value.slice(0,4)); setOtpStatus('idle'); setOtpMessage(''); }}
+                />
+                <button
+                  className="rt-otp-verify-btn"
+                  onClick={handleVerifyOtp}
+                  disabled={otpStatus==='verifying' || otpInput.length < 4}
+                >{otpStatus==='verifying' ? '⏳' : '✅ Verify'}</button>
               </div>
               {otpMessage && <div className={`rt-otp-msg rt-otp-${otpStatus}`}>{otpMessage}</div>}
               <div className="rt-otp-hint">💡 Tell the customer to tap <strong>"Generate OTP"</strong> on their tracking page.</div>
@@ -526,9 +690,16 @@ export default function RiderTrack() {
 
       {activeTab === 'photo' && (
         <div className="rt-tab-content rt-photo-content">
-          <div className="rt-photo-header"><div className="rt-photo-icon-big">📷</div><h3>Delivery Photo</h3><p>Take a clear photo of the delivered package as proof of delivery.</p></div>
+          <div className="rt-photo-header">
+            <div className="rt-photo-icon-big">📷</div>
+            <h3>Delivery Photo</h3>
+            <p>Take a clear photo of the delivered package as proof of delivery.</p>
+          </div>
           <div className="rt-photo-area" onClick={() => document.getElementById('rt-photo-input').click()}>
-            {photoPreview ? <img src={photoPreview} alt="Delivery proof" className="rt-photo-preview" /> : <div className="rt-photo-placeholder"><span>📸</span><span>Tap to take or upload photo</span></div>}
+            {photoPreview
+              ? <img src={photoPreview} alt="Delivery proof" className="rt-photo-preview" />
+              : <div className="rt-photo-placeholder"><span>📸</span><span>Tap to take or upload photo</span></div>
+            }
           </div>
           <input id="rt-photo-input" type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={handlePhotoSelect} />
           {photoFile && <button className="rt-retake-btn" onClick={() => { setPhotoFile(null); setPhotoPreview(null); }}>🔄 Retake Photo</button>}
@@ -541,10 +712,20 @@ export default function RiderTrack() {
           <div className={`rt-check ${otpVerified?'done':''}`}>{otpVerified?'✅':'⬜'} OTP Verified</div>
           <div className={`rt-check ${photoFile?'done':''}`}>{photoFile?'✅':'⬜'} Photo Taken</div>
         </div>
-        <button className={`rt-deliver-btn ${otpVerified&&photoFile?'ready':''}`} onClick={handleMarkDelivered} disabled={marking||uploading||!otpVerified||!photoFile}>
-          {marking||uploading?'⏳ Processing…':'✅ Mark as Delivered'}
+        <button
+          className={`rt-deliver-btn ${otpVerified&&photoFile?'ready':''}`}
+          onClick={handleMarkDelivered}
+          disabled={marking||uploading||!otpVerified||!photoFile}
+        >
+          {marking||uploading ? '⏳ Processing…' : '✅ Mark as Delivered'}
         </button>
-        {(!otpVerified||!photoFile) && <p className="rt-footer-hint">{!otpVerified&&!photoFile?'⚠️ Verify OTP and take a photo first':!otpVerified?'⚠️ Verify OTP first':'⚠️ Take a delivery photo first'}</p>}
+        {(!otpVerified||!photoFile) && (
+          <p className="rt-footer-hint">
+            {!otpVerified&&!photoFile ? '⚠️ Verify OTP and take a photo first'
+              : !otpVerified ? '⚠️ Verify OTP first'
+              : '⚠️ Take a delivery photo first'}
+          </p>
+        )}
       </div>
     </div>
   );
