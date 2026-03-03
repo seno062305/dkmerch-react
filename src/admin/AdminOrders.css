@@ -2335,3 +2335,19 @@
 .tab-refund-badge {
   display: none; /* replaced by .tab-count-badge--refund */
 }
+
+/* ── MOBILE: CENTERED POPUP MODAL (not bottom sheet) ── */
+@media (max-width: 768px) {
+  .order-modal-overlay {
+    padding: 16px !important;
+    align-items: center !important;
+  }
+
+  .order-modal {
+    border-radius: 16px !important;
+    max-height: 85vh !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    overflow-y: auto !important;
+  }
+}
