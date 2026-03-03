@@ -209,17 +209,33 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
 
           <div className="header-actions">
             <button className="header-action-item" onClick={() => setShowSearch(true)}>
-              <i className="fas fa-search"></i><span>Search</span>
+              <span className="icon-wrapper">
+                <i className="fas fa-search"></i>
+              </span>
+              <span>Search</span>
             </button>
 
             <Link to="/wishlist" className="header-action-item favorites-btn">
-              <i className="fas fa-star"></i><span>Favorites</span>
-              {isAuthenticated && wishlistCount > 0 && <span className="wishlist-count">{wishlistCount}</span>}
+              <span className="icon-wrapper">
+                <i className="fas fa-star"></i>
+                {isAuthenticated && wishlistCount > 0 && (
+                  <span className="wishlist-count">{wishlistCount}</span>
+                )}
+              </span>
+              <span>Favorites</span>
             </Link>
 
-            <button className="header-action-item" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onCartClick(); }}>
-              <i className="fas fa-shopping-cart"></i><span>Cart</span>
-              {isAuthenticated && cartCount > 0 && <span className="cart-count">{cartCount}</span>}
+            <button
+              className="header-action-item"
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onCartClick(); }}
+            >
+              <span className="icon-wrapper">
+                <i className="fas fa-shopping-cart"></i>
+                {isAuthenticated && cartCount > 0 && (
+                  <span className="cart-count">{cartCount}</span>
+                )}
+              </span>
+              <span>Cart</span>
             </button>
 
             {isAuthenticated ? (
@@ -266,7 +282,10 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
               </div>
             ) : (
               <button className="header-action-item" onClick={handleLoginClick}>
-                <i className="fas fa-user"></i><span>Login</span>
+                <span className="icon-wrapper">
+                  <i className="fas fa-user"></i>
+                </span>
+                <span>Login</span>
               </button>
             )}
 

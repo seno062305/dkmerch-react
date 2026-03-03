@@ -77,7 +77,7 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) 
           );
           markerRef.current.openPopup();
           mapInstanceRef.current.flyTo([lat, lng], 17, { animate: true, duration: 0.8 });
-          onSelectSuggestion({ address: addr, lat, lng });
+          onSelectSuggestion({ address: addr, lat, lng, city: '', zipCode: '' });
         }
         setStatusText('Pin your exact location — drag the marker to adjust');
       } else {
@@ -103,7 +103,6 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) 
         scrollWheelZoom: false,
       }).setView([startLat, startLng], startZoom);
 
-      // ✅ OSM normal map — no satellite
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         maxZoom: 19,
@@ -130,7 +129,7 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) 
 
       if (savedCoords) {
         marker.openPopup();
-        onSelectSuggestion({ address: value || '', lat: startLat, lng: startLng });
+        onSelectSuggestion({ address: value || '', lat: startLat, lng: startLng, city: '', zipCode: '' });
         setStatusText('📍 Showing your last saved location — drag the pin to adjust');
       }
 
@@ -140,13 +139,15 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) 
         setStatusText('Getting address for this location…');
         try {
           const res  = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`,
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`,
             { headers: { 'Accept-Language': 'en' } }
           );
           const data = await res.json();
-          const addr = data.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+          const addr    = data.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+          const city    = data.address?.city || data.address?.town || data.address?.municipality || data.address?.suburb || '';
+          const zipCode = data.address?.postcode || '';
           onChange(addr);
-          onSelectSuggestion({ address: addr, lat, lng });
+          onSelectSuggestion({ address: addr, lat, lng, city, zipCode });
           marker.getPopup()?.setContent(
             `<div style="font-size:12px;max-width:200px"><strong>📍 Delivery Address</strong><br><small>${addr}</small></div>`
           );
@@ -204,6 +205,8 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) 
         lat:     parseFloat(d.lat),
         lng:     parseFloat(d.lon),
         address: d.display_name,
+        city:    d.address?.city || d.address?.town || d.address?.municipality || d.address?.suburb || '',
+        zipCode: d.address?.postcode || '',
       })));
       setShowSuggestions(true);
     } catch { setSuggestions([]); }
@@ -231,7 +234,7 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) 
         );
         markerRef.current.openPopup();
         mapInstanceRef.current.flyTo([s.lat, s.lng], 17, { animate: true, duration: 0.8 });
-        onSelectSuggestion({ address: s.address, lat: s.lat, lng: s.lng });
+        onSelectSuggestion({ address: s.address, lat: s.lat, lng: s.lng, city: s.city, zipCode: s.zipCode });
         setStatusText('Pin your exact location — drag the marker to adjust');
       } else {
         pendingGeocode.current = s.address;
@@ -332,7 +335,7 @@ const Checkout = () => {
   const [loading, setLoading]                   = useState(false);
   const [isEditingContact, setIsEditingContact] = useState(false);
   const [isEditingAddress, setIsEditingAddress] = useState(false);
-  const [errors, setErrors]                     = useState({ phone: '', zipCode: '' });
+  const [errors, setErrors]                     = useState({ phone: '' });
   const cartPromo = location.state?.appliedPromo || null;
 
   const [formData, setFormData] = useState({ fullName: '', email: '', phone: '', address: '', city: '', zipCode: '', notes: '' });
@@ -361,7 +364,7 @@ const Checkout = () => {
     setSavedContact({ fullName: init.fullName, email: init.email, phone: init.phone });
     setSavedAddress({ address: init.address, city: init.city, zipCode: init.zipCode });
     setIsEditingContact(!init.fullName || !init.email || !init.phone);
-    setIsEditingAddress(!init.address  || !init.city  || !init.zipCode);
+    setIsEditingAddress(!init.address);
     if (profile?.addressLat && profile?.addressLng) {
       const coords = { lat: profile.addressLat, lng: profile.addressLng };
       setSavedCoords(coords);
@@ -376,12 +379,12 @@ const Checkout = () => {
     }
   }, [cartItems.length, products.length]);
 
-  const getProductById   = (id) => products.find(p => p._id?.toString() === id?.toString() || p.id === id);
-  const getQty           = (item) => item.qty ?? item.quantity ?? 1;
-  const getTotalPcs      = () => cartItems.reduce((sum, item) => sum + getQty(item), 0);
+  const getProductById    = (id) => products.find(p => p._id?.toString() === id?.toString() || p.id === id);
+  const getQty            = (item) => item.qty ?? item.quantity ?? 1;
+  const getTotalPcs       = () => cartItems.reduce((sum, item) => sum + getQty(item), 0);
   const getEffectivePrice = (item, product) => {
     if (item.finalPrice !== undefined && item.finalPrice !== null) return item.finalPrice;
-    if (item.price !== undefined && item.price !== null) return item.price;
+    if (item.price     !== undefined && item.price     !== null) return item.price;
     return product?.price ?? 0;
   };
   const calculateSubtotal = () =>
@@ -410,12 +413,6 @@ const Checkout = () => {
     if (cleaned.length === 11 && !cleaned.startsWith('09')) return 'Phone number must start with 09';
     return '';
   };
-  const validateZipCode = (zipCode) => {
-    const cleaned = zipCode.replace(/\s/g, '');
-    if (!/^\d*$/.test(cleaned)) return 'Zip code must contain only numbers';
-    if (cleaned.length > 0 && cleaned.length !== 4) return 'Zip code must be exactly 4 digits';
-    return '';
-  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -425,27 +422,27 @@ const Checkout = () => {
       setErrors(prev => ({ ...prev, phone: validatePhone(cleaned) }));
       return;
     }
-    if (name === 'zipCode') {
-      const cleaned = value.replace(/\D/g, '').slice(0, 4);
-      setFormData(prev => ({ ...prev, [name]: cleaned }));
-      setErrors(prev => ({ ...prev, zipCode: validateZipCode(cleaned) }));
-      return;
-    }
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleAddressChange  = (val) => setFormData(prev => ({ ...prev, address: val }));
-  const handleAddressSelect  = ({ address, lat, lng }) => {
-    setFormData(prev => ({ ...prev, address }));
+  const handleAddressChange = (val) => setFormData(prev => ({ ...prev, address: val }));
+
+  const handleAddressSelect = ({ address, lat, lng, city, zipCode }) => {
+    setFormData(prev => ({
+      ...prev,
+      address,
+      city:    city    || prev.city,
+      zipCode: zipCode || prev.zipCode,
+    }));
     setAddressCoords({ lat, lng });
   };
 
   const isContactComplete = () =>
     savedContact.fullName.trim() && savedContact.email.trim() &&
     savedContact.phone.trim() && !validatePhone(savedContact.phone);
-  const isAddressComplete = () =>
-    savedAddress.address.trim() && savedAddress.city.trim() &&
-    savedAddress.zipCode.trim() && !validateZipCode(savedAddress.zipCode);
+
+  const isAddressComplete = () => savedAddress.address.trim();
+
   const isFormReady = () =>
     isContactComplete() && isAddressComplete() && !isEditingContact && !isEditingAddress;
 
@@ -468,9 +465,6 @@ const Checkout = () => {
 
   const handleSaveAddress = async () => {
     if (!formData.address.trim()) { showNotification('Please enter your street address', 'error'); return; }
-    if (!formData.city.trim())    { showNotification('Please enter your city', 'error'); return; }
-    const zipErr = validateZipCode(formData.zipCode);
-    if (zipErr) { setErrors(prev => ({ ...prev, zipCode: zipErr })); return; }
     setSavedAddress({ address: formData.address, city: formData.city, zipCode: formData.zipCode });
     setIsEditingAddress(false);
     try {
@@ -530,6 +524,12 @@ const Checkout = () => {
         return total + (product?.price ?? 0) * getQty(item);
       }, 0);
       const promoItem = cartItems.find(i => i.promoCode);
+
+      const addressParts = [savedAddress.address];
+      if (savedAddress.city)    addressParts.push(savedAddress.city);
+      if (savedAddress.zipCode) addressParts.push(savedAddress.zipCode);
+      const shippingAddressStr = addressParts.join(', ');
+
       await createOrder({
         orderId,
         email:           savedContact.email,
@@ -547,7 +547,7 @@ const Checkout = () => {
         }),
         status:          'Pending Payment',
         orderStatus:     'pending',
-        shippingAddress: `${savedAddress.address}, ${savedAddress.city} ${savedAddress.zipCode}`,
+        shippingAddress: shippingAddressStr,
         ...(addressCoords ? { addressLat: addressCoords.lat, addressLng: addressCoords.lng } : {}),
         paymentMethod:   'paymongo',
         notes:           formData.notes || '',
@@ -650,6 +650,7 @@ const Checkout = () => {
           <div className="checkout-grid">
             <div className="checkout-details">
 
+              {/* ── Contact Information ── */}
               <div className="checkout-section">
                 <div className="section-header">
                   <h2>
@@ -681,6 +682,7 @@ const Checkout = () => {
                 )}
               </div>
 
+              {/* ── Shipping Address ── */}
               <div className="checkout-section">
                 <div className="section-header">
                   <h2>
@@ -694,10 +696,11 @@ const Checkout = () => {
                 </div>
                 {!isEditingAddress ? (
                   <div className="info-display-grid">
-                    <div className="info-display-item info-display-full"><span className="info-label"><i className="fas fa-map-marker-alt"></i> Street Address</span><span className="info-value">{savedAddress.address || <span className="info-missing">Not set — click Edit</span>}</span></div>
-                    <div className="info-display-item"><span className="info-label"><i className="fas fa-city"></i> City</span><span className="info-value">{savedAddress.city || <span className="info-missing">Not set</span>}</span></div>
-                    <div className="info-display-item"><span className="info-label"><i className="fas fa-map-pin"></i> Zip Code</span><span className="info-value">{savedAddress.zipCode || <span className="info-missing">Not set</span>}</span></div>
-                    {savedCoords && (
+                    <div className="info-display-item info-display-full">
+                      <span className="info-label"><i className="fas fa-map-marker-alt"></i> Street Address</span>
+                      <span className="info-value">{savedAddress.address || <span className="info-missing">Not set — click Edit</span>}</span>
+                    </div>
+                    {addressCoords && (
                       <div className="info-display-item info-display-full" style={{ background: '#f0fdf4', borderColor: '#86efac' }}>
                         <span className="info-label" style={{ color: '#16a34a' }}><i className="fas fa-map-marker-alt"></i> Map Pin</span>
                         <span className="info-value" style={{ fontSize: '13px', color: '#166534' }}>
@@ -718,17 +721,11 @@ const Checkout = () => {
                         savedCoords={savedCoords}
                       />
                     </div>
-                    <div className="form-group"><label>City</label><input type="text" name="city" value={formData.city} onChange={handleChange} placeholder="Manila" /></div>
-                    <div className="form-group">
-                      <label>Zip Code</label>
-                      <input type="text" name="zipCode" value={formData.zipCode} onChange={handleChange} placeholder="1000" maxLength="4" className={errors.zipCode ? 'input-error' : ''} />
-                      {errors.zipCode && <span className="error-message"><i className="fas fa-exclamation-circle"></i> {errors.zipCode}</span>}
-                      {!errors.zipCode && formData.zipCode?.length === 4 && <span className="success-message"><i className="fas fa-check-circle"></i> Valid zip code</span>}
-                    </div>
                   </div>
                 )}
               </div>
 
+              {/* ── Promo Applied ── */}
               {totalDiscount > 0 && (
                 <div className="checkout-section">
                   <h2>Promo Applied</h2>
@@ -748,6 +745,7 @@ const Checkout = () => {
                 </div>
               )}
 
+              {/* ── Payment ── */}
               <div className="checkout-section">
                 <h2>Payment</h2>
                 <div className="payment-info-notice">
@@ -766,12 +764,14 @@ const Checkout = () => {
                 </div>
               </div>
 
+              {/* ── Order Notes ── */}
               <div className="checkout-section">
                 <h2>Order Notes <span className="notes-optional">(Optional)</span></h2>
                 <textarea name="notes" value={formData.notes} onChange={handleChange} placeholder="Any special instructions for your order..." rows="4"></textarea>
               </div>
             </div>
 
+            {/* ── Order Summary ── */}
             <div className="order-summary">
               <div className="summary-card">
                 <h2>Order Summary</h2>

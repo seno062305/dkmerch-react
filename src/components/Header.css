@@ -86,7 +86,7 @@ header {
 
 .main-nav a:hover::after { width: 100%; }
 
-/* ✅ Mobile nav header — hidden on desktop */
+/* Mobile nav header — hidden on desktop */
 .mobile-nav-header { display: none; }
 
 /* Header Actions */
@@ -121,13 +121,24 @@ header {
 .favorites-btn:hover { color: #a86800 !important; }
 .favorites-btn:hover i { transform: scale(1.2) rotate(-5deg); color: #f5a623; }
 
+/* ✅ Icon wrapper — anchors badge to the icon itself */
+.icon-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+}
+
 .cart-count, .wishlist-count {
   position: absolute;
-  top: -5px; right: -5px;
+  top: -6px;
+  right: -8px;
   background: #f5a623;
   color: white;
   font-size: 0.65rem;
-  font-weight: 600;
+  font-weight: 700;
   min-width: 18px;
   height: 18px;
   border-radius: 50%;
@@ -136,6 +147,8 @@ header {
   justify-content: center;
   padding: 0 4px;
   border: 2px solid white;
+  z-index: 1;
+  line-height: 1;
 }
 
 .cart-count { background: #9c27b0; }
@@ -386,7 +399,7 @@ body.search-open { overflow: hidden; }
 
   .main-nav.active { left: 0; }
 
-  /* ✅ Mobile nav header — DKMerch logo sa kaliwa, X sa kanan */
+  /* Mobile nav header */
   .mobile-nav-header {
     display: flex;
     align-items: center;
@@ -395,7 +408,6 @@ body.search-open { overflow: hidden; }
     border-bottom: 1px solid #f0f0f0;
   }
 
-  /* ✅ Logo group inside sidebar */
   .mobile-nav-brand {
     display: flex;
     align-items: center;
@@ -427,7 +439,6 @@ body.search-open { overflow: hidden; }
     margin-top: 2px;
   }
 
-  /* ✅ X close button */
   .mobile-nav-close {
     width: 34px;
     height: 34px;
@@ -473,10 +484,32 @@ body.search-open { overflow: hidden; }
   /* Dark overlay */
   .mobile-overlay { display: block; }
 
-  .header-actions { gap: 0.5rem; }
-  .header-action-item { padding: 0.25rem; }
-  .header-action-item span { display: none; }
+  .header-actions { gap: 0.75rem; }
+
+  /* ✅ Hide text labels on mobile, keep icon + badge visible */
+  .header-action-item {
+    padding: 0.4rem;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .header-action-item > span:not(.icon-wrapper) { display: none; }
   .header-action-item i { font-size: 1.35rem; }
+
+  /* ✅ Ensure icon-wrapper has enough room for badge overflow */
+  .icon-wrapper {
+    width: 1.8rem;
+    height: 1.8rem;
+    overflow: visible;
+  }
+
+  .cart-count, .wishlist-count {
+    top: -7px;
+    right: -9px;
+    font-size: 0.6rem;
+    min-width: 17px;
+    height: 17px;
+  }
 
   .account-btn { padding: 0.25rem; flex-direction: column; gap: 0; }
   .account-btn span { display: none; }
@@ -511,6 +544,7 @@ body.search-open { overflow: hidden; }
 @media (max-width: 480px) {
   .header-actions { gap: 0.3rem; }
   .header-action-item i { font-size: 1.2rem; }
+  .icon-wrapper { width: 1.6rem; height: 1.6rem; }
 }
 
 /* ── Pre-Order dot indicator ── */
