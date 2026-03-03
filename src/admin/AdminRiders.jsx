@@ -126,8 +126,8 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
   const circleRef          = useRef(null);
   const routeLineRef       = useRef(null);
   const destMarkerRef      = useRef(null);
-  const routeAbortRef      = useRef(null);   // FIX: abort controller for OSRM
-  const routeTimerRef      = useRef(null);   // FIX: debounce timer
+  const routeAbortRef      = useRef(null);
+  const routeTimerRef      = useRef(null);
 
   const [leafletReady, setLeafletReady] = useState(!!window.L);
   const [lastUpdate,   setLastUpdate]   = useState(null);
@@ -216,14 +216,12 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
     }
   };
 
-  // ── Helper: draw OSRM road route (with abort + debounce) ──
+  // ── Helper: draw OSRM road route ──
   const drawRoute = (lat, lng, destLat, destLng, dashed = false) => {
-    // FIX: Cancel any in-flight OSRM request
     if (routeAbortRef.current) {
       routeAbortRef.current.abort();
       routeAbortRef.current = null;
     }
-    // FIX: Debounce — don't fire on every tiny location tick
     if (routeTimerRef.current) clearTimeout(routeTimerRef.current);
 
     routeTimerRef.current = setTimeout(async () => {
@@ -242,7 +240,6 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
         return;
       }
 
-      // FIX: New AbortController per request
       const controller = new AbortController();
       routeAbortRef.current = controller;
 
@@ -251,7 +248,6 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
         const res  = await fetch(url, { signal: controller.signal });
         const data = await res.json();
 
-        // FIX: Check if map still alive + request not aborted
         if (!mapObjRef.current || controller.signal.aborted) return;
 
         if (data.code === 'Ok' && data.routes?.[0]?.geometry?.coordinates) {
@@ -264,7 +260,6 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
           throw new Error('OSRM no route');
         }
       } catch (err) {
-        // FIX: Don't draw fallback if aborted (user closed modal / new request fired)
         if (err?.name === 'AbortError') return;
         if (!mapObjRef.current) return;
         try {
@@ -279,7 +274,7 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
       } finally {
         if (routeAbortRef.current === controller) routeAbortRef.current = null;
       }
-    }, 600); // 600ms debounce
+    }, 600);
   };
 
   // ── React to every Convex location update ──
@@ -290,7 +285,6 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
     const destLat = order?.addressLat;
     const destLng = order?.addressLng;
 
-    // CASE 1: Rider is LIVE
     if (isLive && hasLoc) {
       const { lat, lng, accuracy, updatedAt } = location;
 
@@ -329,7 +323,6 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
       return;
     }
 
-    // CASE 2: Rider OFFLINE but has last known location
     if (!isLive && hasLastKnown) {
       const { lastKnownLat, lastKnownLng, lastKnownAt, lastKnownAddress } = location;
 
@@ -381,7 +374,6 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
 
   // ── Cleanup on unmount ──
   useEffect(() => () => {
-    // FIX: abort any pending OSRM fetch on close
     if (routeAbortRef.current) { routeAbortRef.current.abort(); routeAbortRef.current = null; }
     if (routeTimerRef.current) { clearTimeout(routeTimerRef.current); routeTimerRef.current = null; }
     if (lastKnownMarkerRef.current) { try { lastKnownMarkerRef.current.remove(); } catch {} lastKnownMarkerRef.current = null; }
@@ -400,7 +392,6 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
     : null;
   const lastKnownAddr = location?.lastKnownAddress;
 
-  // ── FIX: Separate overlay class for map vs fullscreen ──
   const overlayClass = isFullscreen
     ? 'ar-modal-overlay ar-map-overlay ar-overlay--full'
     : 'ar-modal-overlay ar-map-overlay';
@@ -409,9 +400,16 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
     <div className={overlayClass} onClick={onClose}>
       <div
         className={`ar-map-modal ${isFullscreen ? 'ar-map-modal--full' : ''}`}
+        style={isFullscreen ? {
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100dvh',
+          maxHeight: '100dvh',
+        } : {}}
         onClick={e => e.stopPropagation()}
       >
-        <div className="ar-map-header">
+        {/* ── HEADER ── */}
+        <div className="ar-map-header" style={{ flexShrink: 0 }}>
           <div className="ar-map-title-row">
             <span className="ar-map-title">📍 Live Rider Location</span>
             <span className="ar-map-order-id">#{orderId?.slice(-8).toUpperCase()}</span>
@@ -433,10 +431,16 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
           </div>
         </div>
 
-        <div ref={mapRef} className="ar-map-container" />
+        {/* ── MAP — fills all remaining space ── */}
+        <div
+          ref={mapRef}
+          className="ar-map-container"
+          style={isFullscreen ? { flex: '1 1 auto', height: 'auto', minHeight: 0 } : {}}
+        />
 
+        {/* ── STATUS BARS ── */}
         {!location && (
-          <div className="ar-map-waiting-overlay">
+          <div className="ar-map-waiting-overlay" style={{ flexShrink: 0 }}>
             <span className="ar-gps-live-dot" style={{ background: '#f59e0b' }} />
             <span>Waiting for rider to open their link and share GPS…</span>
           </div>
@@ -454,7 +458,7 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
         )}
 
         {isLive && hasLoc && (
-          <div className="ar-map-info-bar">
+          <div className="ar-map-info-bar" style={{ flexShrink: 0 }}>
             <span>🛵 {order.riderInfo?.name || 'Rider'}</span>
             <span>📍 {location.lat.toFixed(5)}, {location.lng.toFixed(5)}</span>
             {location.speed > 0 && <span>🚀 {(location.speed * 3.6).toFixed(1)} km/h</span>}
@@ -462,7 +466,7 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
           </div>
         )}
 
-        <div className="ar-map-link-row">
+        <div className="ar-map-link-row" style={{ flexShrink: 0 }}>
           <code className="ar-map-link-code">{getRiderLink(orderId)}</code>
           <button className="ar-map-copy-btn" onClick={() => navigator.clipboard.writeText(getRiderLink(orderId))}>
             📋 Copy
