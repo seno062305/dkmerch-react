@@ -84,7 +84,9 @@ export default defineSchema({
     email: v.string(),
     customerName: v.optional(v.string()),
     phone: v.optional(v.string()),
+    riderLinkSessions:   v.optional(v.any()), 
     items: v.array(
+      
       v.object({
         id: v.string(),
         name: v.string(),

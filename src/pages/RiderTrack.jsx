@@ -8,8 +8,7 @@ import './RiderTrack.css';
 const generateSessionId = () =>
   `rt-${Date.now()}-${Math.random().toString(36).slice(2,10)}-${Math.random().toString(36).slice(2,10)}`;
 
-// ✅ FIX 1: Use sessionStorage — auto-clears when browser tab is closed.
-// localStorage was keeping stale session IDs alive, causing false "Link In Use" locks.
+// Use sessionStorage — clears when tab is closed
 const getTabSessionId = () => {
   const storageKey = 'riderTrackSessionId';
   let id = sessionStorage.getItem(storageKey);
@@ -67,54 +66,27 @@ const fetchOsrmRoute = async (rLat, rLng, dLat, dLng, retries = 2, timeoutMs = 8
   return null;
 };
 
-function LinkInUseScreen({ deviceInfo, takenAt, onRetry }) {
+// ── Too Many Sessions screen ──
+function TooManySessionsScreen({ activeCount, onRetry }) {
   const [retrying, setRetrying] = useState(false);
-  const [countdown, setCountdown] = useState(null);
-
-  useEffect(() => {
-    if (!takenAt) return;
-    const update = () => {
-      const elapsed = Math.round((Date.now() - takenAt) / 1000);
-      const remaining = Math.max(0, 120 - elapsed);
-      setCountdown(remaining);
-    };
-    update();
-    const interval = setInterval(update, 1000);
-    return () => clearInterval(interval);
-  }, [takenAt]);
-
   const handleRetry = async () => { setRetrying(true); await onRetry(); setRetrying(false); };
-  const ago = takenAt ? Math.round((Date.now() - takenAt) / 1000) : null;
 
   return (
     <div className="rt-inuse-screen">
-      <div className="rt-inuse-icon">🔒</div>
-      <h2 className="rt-inuse-title">Link Already In Use</h2>
+      <div className="rt-inuse-icon">⚠️</div>
+      <h2 className="rt-inuse-title">Too Many Devices Open</h2>
       <p className="rt-inuse-desc">
-        This delivery link is currently open on <strong>{deviceInfo || 'another device'}</strong>
-        {ago !== null && ago < 120 ? ` (${ago}s ago)` : ''}.
+        This delivery link is currently open on <strong>{activeCount} other device{activeCount !== 1 ? 's' : ''}</strong>.
       </p>
       <div className="rt-inuse-info-box">
-        <p>Only <strong>one device</strong> can use this link at a time to ensure accurate GPS tracking.</p>
-        <p>If you are the assigned rider, close the link on the other device first.</p>
-        <p>The link auto-unlocks after <strong>2 minutes</strong> of inactivity.
-          {countdown !== null && countdown > 0 && (
-            <strong style={{ color: '#6a0dad' }}> Auto-unlock in {countdown}s.</strong>
-          )}
-          {countdown === 0 && (
-            <strong style={{ color: '#059669' }}> Should be unlocked now — tap Try Again!</strong>
-          )}
-        </p>
+        <p>The link allows up to <strong>5 simultaneous devices</strong>.</p>
+        <p>Please close this link on the other devices first, then try again.</p>
+        <p>Inactive devices are automatically removed after <strong>2 minutes</strong>.</p>
       </div>
       <button className="rt-inuse-retry-btn" onClick={handleRetry} disabled={retrying}>
         {retrying ? '⏳ Checking…' : '🔄 Try Again'}
       </button>
-      {countdown === 0 && !retrying && (
-        <p className="rt-inuse-hint" style={{ color: '#059669', fontWeight: 700 }}>
-          ✅ Lock expired — tap "Try Again" to open the link.
-        </p>
-      )}
-      <p className="rt-inuse-hint">💡 Closed the other browser? Wait a moment then tap "Try Again".</p>
+      <p className="rt-inuse-hint">💡 Closed the other browsers? Wait a moment then tap "Try Again".</p>
     </div>
   );
 }
@@ -209,9 +181,10 @@ export default function RiderTrack() {
 
   const [sessionStatus, setSessionStatus] = useState('checking');
   const [blockedInfo,   setBlockedInfo]   = useState(null);
-  const heartbeatRef  = useRef(null);
-  const [gpsStatus,   setGpsStatus]   = useState('idle');
-  const [gpsCoords,   setGpsCoords]   = useState(null);
+  const heartbeatRef = useRef(null);
+
+  const [gpsStatus,  setGpsStatus]  = useState('idle');
+  const [gpsCoords,  setGpsCoords]  = useState(null);
   const watchIdRef          = useRef(null);
   const lastConvexUpdateRef = useRef(0);
   const lastGeocodedRef     = useRef({ lat: null, lng: null, address: null });
@@ -221,6 +194,7 @@ export default function RiderTrack() {
   const mapRef              = useRef(null);
   const mapObjRef           = useRef(null);
   const destMarkerRef       = useRef(null);
+
   const [leafletReady,  setLeafletReady]  = useState(!!window.L);
   const [showFullMap,   setShowFullMap]   = useState(false);
   const [activeTab,     setActiveTab]     = useState('map');
@@ -234,6 +208,7 @@ export default function RiderTrack() {
   const [marking,       setMarking]       = useState(false);
   const [deliveryDone,  setDeliveryDone]  = useState(false);
 
+  // ── Claim / re-claim session ──
   const tryClaim = useCallback(async () => {
     if (!orderId) return;
     setSessionStatus('checking');
@@ -243,9 +218,10 @@ export default function RiderTrack() {
         setSessionStatus('allowed');
       } else {
         setSessionStatus('blocked');
-        setBlockedInfo({ deviceInfo: result.deviceInfo, takenAt: result.takenAt });
+        setBlockedInfo({ activeCount: result.activeCount ?? 5 });
       }
     } catch {
+      // On network error → allow (fail open, better UX than false lock)
       setSessionStatus('allowed');
     }
   }, [orderId, SESSION_ID, claimSession]);
@@ -255,37 +231,48 @@ export default function RiderTrack() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order]);
 
-  // Heartbeat every 20s
+  // ── Heartbeat every 30s ──
+  // If session expired (idle > 2min), re-claim automatically — no lock screen shown
   useEffect(() => {
     if (sessionStatus !== 'allowed' || !orderId) return;
     heartbeatRef.current = setInterval(async () => {
       try {
         const res = await heartbeatSession({ orderId, sessionId: SESSION_ID });
-        if (res?.success === false && res?.reason === 'session_replaced') {
-          clearInterval(heartbeatRef.current);
-          setSessionStatus('blocked');
-          setBlockedInfo({ deviceInfo: 'another device', takenAt: Date.now() });
+        if (res?.success === false && res?.reason === 'session_expired') {
+          // Silently re-claim — rider just came back from background
+          const reclaim = await claimSession({ orderId, sessionId: SESSION_ID, deviceInfo: getDeviceInfo() });
+          if (!reclaim.allowed) {
+            // Only block if truly too many OTHER devices (5+)
+            setSessionStatus('blocked');
+            setBlockedInfo({ activeCount: reclaim.activeCount ?? 5 });
+          }
         }
       } catch {}
-    }, 20_000);
+    }, 30_000);
     return () => clearInterval(heartbeatRef.current);
-  }, [sessionStatus, orderId, SESSION_ID, heartbeatSession]);
+  }, [sessionStatus, orderId, SESSION_ID, heartbeatSession, claimSession]);
 
-  // ✅ FIX 2: visibilitychange — release on hidden, heartbeat on visible
+  // ── visibilitychange: heartbeat on resume (NO release on hide) ──
+  // Removed the release-on-hide that was causing false locks
   useEffect(() => {
-    const handleVisibility = () => {
-      if (document.visibilityState === 'hidden' && orderId && SESSION_ID) {
-        // Release session when tab/app goes to background so next open isn't blocked
-        releaseSession({ orderId, sessionId: SESSION_ID }).catch(() => {});
-      }
-      if (document.visibilityState === 'visible' && sessionStatus === 'allowed' && orderId) {
-        heartbeatSession({ orderId, sessionId: SESSION_ID }).catch(() => {});
+    const handleVisibility = async () => {
+      if (document.visibilityState === 'visible' && orderId) {
+        // Re-claim silently when rider comes back — this refreshes the heartbeat
+        try {
+          const res = await claimSession({ orderId, sessionId: SESSION_ID, deviceInfo: getDeviceInfo() });
+          if (res.allowed) {
+            setSessionStatus('allowed');
+          }
+          // If blocked (5+ others), don't change status — rider is already in
+          // We only show block screen on initial load
+        } catch {}
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, [sessionStatus, orderId, SESSION_ID, heartbeatSession, releaseSession]);
+  }, [orderId, SESSION_ID, claimSession]);
 
+  // ── Release ONLY on actual tab close (beforeunload) ──
   useEffect(() => {
     const release = () => {
       if (orderId && SESSION_ID) {
@@ -294,7 +281,7 @@ export default function RiderTrack() {
           updateLocation({
             orderId,
             riderEmail: order?.riderInfo?.email || 'rider@dkmerch.com',
-            riderName: order?.riderInfo?.name || 'Rider',
+            riderName:  order?.riderInfo?.name  || 'Rider',
             lat: 0, lng: 0, accuracy: 0, speed: 0,
             isTracking: false, sessionId: SESSION_ID,
           }).catch(() => {});
@@ -302,10 +289,13 @@ export default function RiderTrack() {
       }
     };
     window.addEventListener('beforeunload', release);
-    return () => { window.removeEventListener('beforeunload', release); release(); };
+    // Note: intentionally NOT releasing on component unmount here
+    // because unmount also fires on navigation/background
+    return () => window.removeEventListener('beforeunload', release);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderId, SESSION_ID, gpsCoords, order]);
 
+  // ── Load Leaflet ──
   useEffect(() => {
     if (window.L) { setLeafletReady(true); return; }
     const link = document.createElement('link');
@@ -366,8 +356,6 @@ export default function RiderTrack() {
     }
   };
 
-  // ✅ FIX 3: destroyMap helper — fully removes Leaflet instance and clears all refs
-  // Called before reinitializing map to prevent "container already initialized" error
   const destroyMap = useCallback(() => {
     if (routeLineRef.current) {
       (Array.isArray(routeLineRef.current) ? routeLineRef.current : [routeLineRef.current])
@@ -385,37 +373,22 @@ export default function RiderTrack() {
 
   const initMap = useCallback(() => {
     if (!leafletReady || !mapRef.current || !order) return;
-
-    // ✅ FIX 3: If map container already has a Leaflet instance but mapObjRef is stale
-    // (happens after back navigation), destroy and reinit
     if (mapObjRef.current) {
-      // Check if the DOM node still matches — if not, destroy first
       try {
         mapObjRef.current.invalidateSize();
-        // Map is alive — just redraw route if missing
         if (!routeLineRef.current && gpsCoords) {
           const dLat = order?.addressLat || 14.5995, dLng = order?.addressLng || 120.9842;
           drawRouteForce(mapObjRef.current, gpsCoords.lat, gpsCoords.lng, dLat, dLng);
         }
         return;
       } catch {
-        // Map instance is broken — destroy and recreate
         destroyMap();
       }
     }
-
-    // ✅ FIX 3: Check if the container was already initialized by a previous Leaflet instance
-    // Leaflet adds _leaflet_id to the container — if present, force remove it
     if (mapRef.current._leaflet_id) {
-      try {
-        // Create a temporary map instance just to call remove()
-        const L = window.L;
-        const tempMap = L.map(mapRef.current);
-        tempMap.remove();
-      } catch {}
+      try { const L = window.L; const t = L.map(mapRef.current); t.remove(); } catch {}
       delete mapRef.current._leaflet_id;
     }
-
     const L = window.L;
     const map = L.map(mapRef.current, { zoomControl: true });
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors', maxZoom: 19 }).addTo(map);
@@ -439,36 +412,27 @@ export default function RiderTrack() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leafletReady, order, gpsCoords, destroyMap]);
 
-  // ✅ FIX 3: On tab switch TO map, always destroy and reinit to avoid stale container
   useEffect(() => {
     if (activeTab === 'map') {
-      // Small delay to let DOM render first
-      setTimeout(() => {
-        destroyMap();
-        initMap();
-      }, 100);
+      setTimeout(() => { destroyMap(); initMap(); }, 100);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   useEffect(() => {
     const h = () => {
-      if (document.visibilityState === 'visible') {
-        if (activeTab === 'map') {
-          setTimeout(() => {
-            destroyMap();
-            initMap();
-          }, 200);
-        }
+      if (document.visibilityState === 'visible' && activeTab === 'map') {
+        setTimeout(() => { destroyMap(); initMap(); }, 200);
       }
     };
     document.addEventListener('visibilitychange', h);
     return () => document.removeEventListener('visibilitychange', h);
   }, [activeTab, initMap, destroyMap]);
 
-  useEffect(() => { if (leafletReady && activeTab === 'map') setTimeout(() => initMap(), 100); }, [leafletReady, initMap, activeTab]);
+  useEffect(() => {
+    if (leafletReady && activeTab === 'map') setTimeout(() => initMap(), 100);
+  }, [leafletReady, initMap, activeTab]);
 
-  // Cleanup on unmount
   useEffect(() => () => {
     if (watchIdRef.current) navigator.geolocation.clearWatch(watchIdRef.current);
     destroyMap();
@@ -503,7 +467,7 @@ export default function RiderTrack() {
           updateLocation({
             orderId,
             riderEmail: order?.riderInfo?.email || 'rider@dkmerch.com',
-            riderName: order?.riderInfo?.name || order?.riderInfo?.fullName || 'Rider',
+            riderName:  order?.riderInfo?.name  || order?.riderInfo?.fullName || 'Rider',
             lat, lng, accuracy, speed: speed || 0,
             isTracking: true, sessionId: SESSION_ID,
             lastKnownAddress: lastAddr || undefined,
@@ -534,7 +498,7 @@ export default function RiderTrack() {
     if (orderId) updateLocation({
       orderId,
       riderEmail: order?.riderInfo?.email || 'rider@dkmerch.com',
-      riderName: order?.riderInfo?.name || 'Rider',
+      riderName:  order?.riderInfo?.name  || 'Rider',
       lat: 0, lng: 0, accuracy: 0, speed: 0,
       isTracking: false, sessionId: SESSION_ID,
     }).catch(() => {});
@@ -597,6 +561,7 @@ export default function RiderTrack() {
     );
   };
 
+  // ── Render guards ──
   if (order === undefined || sessionStatus === 'checking') return (
     <div className="rt-loading"><div className="rt-spinner">🛵</div><p>Loading delivery…</p></div>
   );
@@ -604,7 +569,7 @@ export default function RiderTrack() {
     <div className="rt-error"><div className="rt-error-icon">❌</div><h2>Order not found</h2></div>
   );
   if (sessionStatus === 'blocked') return (
-    <LinkInUseScreen deviceInfo={blockedInfo?.deviceInfo} takenAt={blockedInfo?.takenAt} onRetry={tryClaim} />
+    <TooManySessionsScreen activeCount={blockedInfo?.activeCount ?? 5} onRetry={tryClaim} />
   );
   if (deliveryDone || order.orderStatus === 'completed') return (
     <div className="rt-done">

@@ -227,7 +227,7 @@ export const setRiderKickedAt = mutation({
   },
 });
 
-// ── updateRiderLocation — now also saves lastKnownLat/Lng/address/At ──
+// ── updateRiderLocation ──
 export const updateRiderLocation = mutation({
   args: {
     orderId: v.string(),
@@ -240,7 +240,6 @@ export const updateRiderLocation = mutation({
     speed: v.optional(v.number()),
     isTracking: v.boolean(),
     sessionId: v.optional(v.string()),
-    // ── NEW: reverse-geocoded street address from the rider's device ──
     lastKnownAddress: v.optional(v.string()),
   },
   handler: async ({ db }, args) => {
@@ -250,8 +249,6 @@ export const updateRiderLocation = mutation({
       .first();
 
     const now = Date.now();
-
-    // Always update lastKnownLat/Lng/At if we have a real position (lat != 0)
     const isRealPosition = args.lat !== 0 && args.lng !== 0;
 
     const patch: any = {
@@ -276,9 +273,9 @@ export const updateRiderLocation = mutation({
       await db.patch(existing._id, patch);
     } else {
       await db.insert("riderLocations", {
-        orderId:          args.orderId,
-        riderEmail:       args.riderEmail,
-        riderName:        args.riderName,
+        orderId:    args.orderId,
+        riderEmail: args.riderEmail,
+        riderName:  args.riderName,
         ...patch,
       });
     }
@@ -297,7 +294,6 @@ export const getRiderLocation = query({
   },
 });
 
-// ── NEW: Get last known locations of ALL riders (for AdminRiders map) ──
 export const getAllRiderLastLocations = query({
   handler: async ({ db }) => {
     return await db.query("riderLocations").collect();
@@ -323,7 +319,16 @@ export const stopRiderTracking = mutation({
   },
 });
 
-// ── Rider Link Session (with admin notification) ──
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// RIDER LINK SESSION
+//
+// NEW LOGIC: Lock only after 5 unique active sessions.
+// A session is "active" if it heartbeated within 2 minutes.
+// This prevents false locks from tab switches / minimizing.
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+const MAX_CONCURRENT_SESSIONS = 5;
+const SESSION_TIMEOUT_MS      = 2 * 60 * 1000; // 2 minutes
 
 export const claimRiderLinkSession = mutation({
   args: {
@@ -339,51 +344,66 @@ export const claimRiderLinkSession = mutation({
 
     if (!order) return { allowed: false, reason: "order_not_found" };
 
-    const existing   = order.riderLinkSessionId;
-    const existingAt = order.riderLinkSessionAt ?? 0;
-    const now        = Date.now();
-    const TWO_MINUTES = 2 * 60 * 1000;
+    const now            = Date.now();
+    const sessions: Record<string, { at: number; deviceInfo: string }> =
+      (order.riderLinkSessions as any) ?? {};
 
-    const isNewClaim    = !existing;
-    const isSameSession = existing === sessionId;
-    const isExpired     = (now - existingAt) > TWO_MINUTES;
-    const isReopening   = !isSameSession && (isNewClaim || isExpired);
+    // ── 1. Prune expired sessions (inactive > 2 min) ──
+    const activeSessions: Record<string, { at: number; deviceInfo: string }> = {};
+    for (const [sid, data] of Object.entries(sessions)) {
+      if (now - data.at < SESSION_TIMEOUT_MS) {
+        activeSessions[sid] = data;
+      }
+    }
 
-    if (isSameSession || isNewClaim || isExpired) {
-      await db.patch(order._id, {
-        riderLinkSessionId:  sessionId,
-        riderLinkSessionAt:  now,
-        riderLinkDeviceInfo: deviceInfo ?? "Unknown device",
-      });
+    // ── 2. If this session already exists → just refresh its heartbeat ──
+    const isReturning = !!activeSessions[sessionId];
 
-      // ── Notify admin ──
-      const riderName   = order.riderInfo?.name || "Rider";
-      const shortId     = orderId.slice(-8).toUpperCase();
-      const device      = deviceInfo ?? "Unknown device";
-      const notifType   = isReopening ? "rider_link_reopened" : "rider_link_opened";
-      const message     = isReopening
-        ? `🔄 ${riderName} re-opened the delivery link on ${device} (Order #${shortId})`
-        : `🛵 ${riderName} opened the delivery link on ${device} (Order #${shortId})`;
+    // ── 3. Count unique OTHER sessions ──
+    const otherSessions = Object.entries(activeSessions).filter(([sid]) => sid !== sessionId);
+
+    // ── 4. Lock only when >= MAX_CONCURRENT_SESSIONS others are active ──
+    if (!isReturning && otherSessions.length >= MAX_CONCURRENT_SESSIONS) {
+      return {
+        allowed:        false,
+        reason:         "too_many_sessions",
+        activeCount:    otherSessions.length,
+        sessionDetails: otherSessions.map(([, d]) => d.deviceInfo),
+      };
+    }
+
+    // ── 5. Register / refresh this session ──
+    activeSessions[sessionId] = {
+      at:         now,
+      deviceInfo: deviceInfo ?? "Unknown device",
+    };
+
+    await db.patch(order._id, {
+      riderLinkSessions:   activeSessions,
+      riderLinkSessionAt:  now,            // keep for legacy compat
+      riderLinkDeviceInfo: deviceInfo ?? "Unknown device",
+    });
+
+    // ── 6. Admin notification ──
+    const isNew = !isReturning;
+    if (isNew) {
+      const riderName = order.riderInfo?.name || "Rider";
+      const shortId   = orderId.slice(-8).toUpperCase();
+      const device    = deviceInfo ?? "Unknown device";
+      const totalNow  = Object.keys(activeSessions).length;
 
       await db.insert("riderNotifications", {
-        type:         notifType,
+        type:         "rider_link_opened",
         orderId,
         customerName: order.customerName ?? "Customer",
         total:        order.finalTotal   ?? order.total ?? 0,
-        message,
+        message:      `🛵 ${riderName} opened delivery link on ${device} (Order #${shortId}) · ${totalNow} active session${totalNow > 1 ? 's' : ''}`,
         createdAt:    new Date().toISOString(),
         read:         false,
       });
-
-      return { allowed: true };
     }
 
-    return {
-      allowed:    false,
-      reason:     "already_in_use",
-      takenAt:    existingAt,
-      deviceInfo: order.riderLinkDeviceInfo ?? "another device",
-    };
+    return { allowed: true };
   },
 });
 
@@ -395,11 +415,25 @@ export const heartbeatRiderLinkSession = mutation({
       .withIndex("by_orderId", q => q.eq("orderId", orderId))
       .first();
     if (!order) return { success: false };
-    if (order.riderLinkSessionId === sessionId) {
-      await db.patch(order._id, { riderLinkSessionAt: Date.now() });
-      return { success: true };
+
+    const now      = Date.now();
+    const sessions: Record<string, { at: number; deviceInfo: string }> =
+      (order.riderLinkSessions as any) ?? {};
+
+    // Only heartbeat if this session is registered
+    if (!sessions[sessionId]) {
+      // Session was pruned (inactive too long) — let frontend re-claim
+      return { success: false, reason: "session_expired" };
     }
-    return { success: false, reason: "session_replaced" };
+
+    sessions[sessionId] = { ...sessions[sessionId], at: now };
+
+    await db.patch(order._id, {
+      riderLinkSessions:  sessions,
+      riderLinkSessionAt: now,
+    });
+
+    return { success: true };
   },
 });
 
@@ -411,13 +445,13 @@ export const releaseRiderLinkSession = mutation({
       .withIndex("by_orderId", q => q.eq("orderId", orderId))
       .first();
     if (!order) return { success: false };
-    if (order.riderLinkSessionId === sessionId) {
-      await db.patch(order._id, {
-        riderLinkSessionId:  undefined,
-        riderLinkSessionAt:  undefined,
-        riderLinkDeviceInfo: undefined,
-      });
-    }
+
+    const sessions: Record<string, { at: number; deviceInfo: string }> =
+      (order.riderLinkSessions as any) ?? {};
+
+    delete sessions[sessionId];
+
+    await db.patch(order._id, { riderLinkSessions: sessions });
     return { success: true };
   },
 });
