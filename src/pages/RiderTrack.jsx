@@ -115,23 +115,49 @@ export default function RiderTrack() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leafletReady, order]);
 
-  // Draw red route polyline between rider and destination
-  const drawRoute = (map, rLat, rLng, dLat, dLng) => {
+  // Draw REAL road route using OSRM (free, no API key needed)
+  const drawRoute = async (map, rLat, rLng, dLat, dLng) => {
     if (!map || !window.L) return;
+    // Remove old route
     if (routeLineRef.current) {
-      routeLineRef.current.remove();
+      if (Array.isArray(routeLineRef.current)) {
+        routeLineRef.current.forEach(l => l.remove());
+      } else {
+        routeLineRef.current.remove();
+      }
       routeLineRef.current = null;
     }
-    routeLineRef.current = window.L.polyline(
-      [[rLat, rLng], [dLat, dLng]],
-      {
-        color: '#e53e3e',
-        weight: 4,
-        opacity: 0.85,
-        dashArray: '10, 8',
-        lineJoin: 'round',
+    try {
+      // OSRM public API — motorcycle profile via bike (closest to motorcycle routing)
+      const url = `https://router.project-osrm.org/route/v1/bike/${rLng},${rLat};${dLng},${dLat}?overview=full&geometries=geojson`;
+      const res  = await fetch(url);
+      const data = await res.json();
+      if (data.code === 'Ok' && data.routes?.[0]?.geometry?.coordinates) {
+        // OSRM returns [lng, lat] — Leaflet needs [lat, lng]
+        const coords = data.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+        // Draw outline (white) + main route (red) for better visibility
+        const outline = window.L.polyline(coords, {
+          color: 'white', weight: 7, opacity: 0.6, lineJoin: 'round', lineCap: 'round',
+        }).addTo(map);
+        const line = window.L.polyline(coords, {
+          color: '#e53e3e', weight: 4.5, opacity: 0.92, lineJoin: 'round', lineCap: 'round',
+        }).addTo(map);
+        routeLineRef.current = [outline, line];
+        // Fit route in view
+        const bounds = window.L.latLngBounds(coords);
+        map.fitBounds(bounds, { padding: [48, 48], maxZoom: 17 });
+      } else {
+        // Fallback: straight dashed line if OSRM fails
+        routeLineRef.current = window.L.polyline([[rLat, rLng], [dLat, dLng]], {
+          color: '#e53e3e', weight: 4, opacity: 0.8, dashArray: '10, 8',
+        }).addTo(map);
       }
-    ).addTo(map);
+    } catch {
+      // Fallback if fetch fails
+      routeLineRef.current = window.L.polyline([[rLat, rLng], [dLat, dLng]], {
+        color: '#e53e3e', weight: 4, opacity: 0.8, dashArray: '10, 8',
+      }).addTo(map);
+    }
   };
 
   // ── Handle visibility change (tab switch / window focus) ──

@@ -138,19 +138,38 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
       }).addTo(mapObjRef.current);
     }
 
-    // Red dashed route line from rider → destination
+    // Real road route using OSRM
     const destLat = order?.addressLat;
     const destLng = order?.addressLng;
-    if (routeLineRef.current) { routeLineRef.current.remove(); routeLineRef.current = null; }
+    if (routeLineRef.current) {
+      if (Array.isArray(routeLineRef.current)) { routeLineRef.current.forEach(l => l.remove()); }
+      else { routeLineRef.current.remove(); }
+      routeLineRef.current = null;
+    }
     if (destLat && destLng) {
-      routeLineRef.current = L.polyline(
-        [[lat, lng], [destLat, destLng]],
-        { color: '#e53e3e', weight: 4, opacity: 0.85, dashArray: '10, 8', lineJoin: 'round' }
-      ).addTo(mapObjRef.current);
-
-      // Fit both in view
-      const bounds = L.latLngBounds([lat, lng], [destLat, destLng]);
-      mapObjRef.current.fitBounds(bounds, { padding: [48, 48], maxZoom: 17 });
+      const drawOSRM = async () => {
+        try {
+          const url = `https://router.project-osrm.org/route/v1/bike/${lng},${lat};${destLng},${destLat}?overview=full&geometries=geojson`;
+          const res  = await fetch(url);
+          const data = await res.json();
+          if (!mapObjRef.current) return;
+          if (data.code === 'Ok' && data.routes?.[0]?.geometry?.coordinates) {
+            const coords = data.routes[0].geometry.coordinates.map(([lo, la]) => [la, lo]);
+            const outline = L.polyline(coords, { color: 'white', weight: 7, opacity: 0.6, lineJoin: 'round', lineCap: 'round' }).addTo(mapObjRef.current);
+            const line    = L.polyline(coords, { color: '#e53e3e', weight: 4.5, opacity: 0.92, lineJoin: 'round', lineCap: 'round' }).addTo(mapObjRef.current);
+            routeLineRef.current = [outline, line];
+            mapObjRef.current.fitBounds(L.latLngBounds(coords), { padding: [48, 48], maxZoom: 17 });
+          } else {
+            routeLineRef.current = L.polyline([[lat, lng], [destLat, destLng]], { color: '#e53e3e', weight: 4, opacity: 0.8, dashArray: '10, 8' }).addTo(mapObjRef.current);
+            mapObjRef.current.fitBounds(L.latLngBounds([lat, lng], [destLat, destLng]), { padding: [48, 48], maxZoom: 17 });
+          }
+        } catch {
+          if (!mapObjRef.current) return;
+          routeLineRef.current = L.polyline([[lat, lng], [destLat, destLng]], { color: '#e53e3e', weight: 4, opacity: 0.8, dashArray: '10, 8' }).addTo(mapObjRef.current);
+          mapObjRef.current.fitBounds(L.latLngBounds([lat, lng], [destLat, destLng]), { padding: [48, 48], maxZoom: 17 });
+        }
+      };
+      drawOSRM();
     } else {
       mapObjRef.current.flyTo([lat, lng], Math.max(mapObjRef.current.getZoom(), 16), { animate: true, duration: 1 });
     }
