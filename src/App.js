@@ -49,11 +49,12 @@ const StartupRedirect = ({ children }) => {
     if (isAuthenticated && role) {
       const path = location.pathname;
 
-      // ✅ FIX: Never redirect away from rider-track, promo, or order-success pages
+      // ✅ Never redirect away from these pages even if admin is logged in
       const isExempt =
         path.startsWith('/rider-track') ||
         path.startsWith('/promo') ||
-        path.startsWith('/order-success');
+        path.startsWith('/order-success') ||
+        path.startsWith('/track-order');  // ✅ FIX: allow QR scan redirect for admin users
 
       if (role === 'admin' && !path.startsWith('/admin') && !isExempt) {
         navigate('/admin', { replace: true });
