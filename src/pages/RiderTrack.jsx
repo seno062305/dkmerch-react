@@ -8,7 +8,6 @@ import './RiderTrack.css';
 const generateSessionId = () =>
   `rt-${Date.now()}-${Math.random().toString(36).slice(2,10)}-${Math.random().toString(36).slice(2,10)}`;
 
-// Use sessionStorage — clears when tab is closed
 const getTabSessionId = () => {
   const storageKey = 'riderTrackSessionId';
   let id = sessionStorage.getItem(storageKey);
@@ -24,6 +23,19 @@ const getDeviceInfo = () => {
   if (/Windows/i.test(ua)) return 'Windows PC';
   if (/Mac/i.test(ua))     return 'Mac';
   return 'another device';
+};
+
+const getLoggedInRider = () => {
+  try {
+    const raw = localStorage.getItem('riderUser') || localStorage.getItem('rider') || localStorage.getItem('user');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const email = parsed?.email || parsed?.rider?.email || null;
+      const name  = parsed?.name  || parsed?.fullName || parsed?.rider?.name || parsed?.rider?.fullName || null;
+      if (email) return { email, name };
+    }
+  } catch {}
+  return null;
 };
 
 const reverseGeocode = async (lat, lng) => {
@@ -46,7 +58,7 @@ const reverseGeocode = async (lat, lng) => {
   return null;
 };
 
-const fetchOsrmRoute = async (rLat, rLng, dLat, dLng, retries = 2, timeoutMs = 8000) => {
+const fetchOsrmRoute = async (rLat, rLng, dLat, dLng, retries = 3, timeoutMs = 10000) => {
   const url = `https://router.project-osrm.org/route/v1/bike/${rLng},${rLat};${dLng},${dLat}?overview=full&geometries=geojson`;
   for (let attempt = 0; attempt <= retries; attempt++) {
     const controller = new AbortController();
@@ -60,17 +72,18 @@ const fetchOsrmRoute = async (rLat, rLng, dLat, dLng, retries = 2, timeoutMs = 8
       }
     } catch {
       clearTimeout(timer);
-      if (attempt < retries) await new Promise(r => setTimeout(r, 1500));
+      if (attempt < retries) await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
     }
   }
   return null;
 };
 
-// ── Too Many Sessions screen ──
+/* ══════════════════════════════════════
+   TOO MANY SESSIONS SCREEN
+══════════════════════════════════════ */
 function TooManySessionsScreen({ activeCount, onRetry }) {
   const [retrying, setRetrying] = useState(false);
   const handleRetry = async () => { setRetrying(true); await onRetry(); setRetrying(false); };
-
   return (
     <div className="rt-inuse-screen">
       <div className="rt-inuse-icon">⚠️</div>
@@ -91,20 +104,26 @@ function TooManySessionsScreen({ activeCount, onRetry }) {
   );
 }
 
+/* ══════════════════════════════════════
+   FULLSCREEN MAP MODAL
+══════════════════════════════════════ */
 function FullscreenMapModal({ order, gpsCoords, onClose }) {
-  const modalMapRef = useRef(null), modalMapObjRef = useRef(null),
-        modalRouteRef = useRef(null), modalRiderRef = useRef(null);
+  const modalMapRef     = useRef(null);
+  const modalMapObjRef  = useRef(null);
+  const modalRouteRef   = useRef(null);
+  const modalRiderRef   = useRef(null);
   const modalLastRouteRef = useRef({ rLat: null, rLng: null });
 
-  const drawModalRoute = async (map, rLat, rLng, dLat, dLng) => {
+  const drawModalRoute = useCallback(async (map, rLat, rLng, dLat, dLng) => {
     if (!map || !window.L) return;
     const prev = modalLastRouteRef.current;
     const movedEnough = !prev.rLat ||
       Math.abs(rLat - prev.rLat) > 0.00015 ||
       Math.abs(rLng - prev.rLng) > 0.00015;
-    if (!movedEnough) return;
+    if (!movedEnough && modalRouteRef.current) return;
     if (modalRouteRef.current) {
-      (Array.isArray(modalRouteRef.current) ? modalRouteRef.current : [modalRouteRef.current]).forEach(l => { try { l.remove(); } catch {} });
+      (Array.isArray(modalRouteRef.current) ? modalRouteRef.current : [modalRouteRef.current])
+        .forEach(l => { try { l.remove(); } catch {} });
       modalRouteRef.current = null;
     }
     const coords = await fetchOsrmRoute(rLat, rLng, dLat, dLng);
@@ -116,36 +135,61 @@ function FullscreenMapModal({ order, gpsCoords, onClose }) {
       ];
       map.fitBounds(window.L.latLngBounds(coords), { padding: [60, 60], maxZoom: 17 });
     } else {
-      if (!modalRouteRef.current) {
-        modalRouteRef.current = window.L.polyline([[rLat, rLng], [dLat, dLng]], { color: '#e53e3e', weight: 4, opacity: 0.8, dashArray: '10, 8' }).addTo(map);
-      }
+      modalRouteRef.current = window.L.polyline(
+        [[rLat, rLng], [dLat, dLng]],
+        { color: '#e53e3e', weight: 4, opacity: 0.8, dashArray: '10, 8' }
+      ).addTo(map);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (!window.L || !modalMapRef.current) return;
     const L = window.L;
+
+    // Clean up any stale leaflet instance on this DOM node
+    if (modalMapRef.current._leaflet_id) {
+      try { const t = L.map(modalMapRef.current); t.remove(); } catch {}
+      delete modalMapRef.current._leaflet_id;
+    }
+
     const map = L.map(modalMapRef.current, { zoomControl: true });
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors', maxZoom: 19 }).addTo(map);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors', maxZoom: 19
+    }).addTo(map);
+
     const dLat = order?.addressLat || 14.5995, dLng = order?.addressLng || 120.9842;
-    const destIcon = L.divIcon({ html: `<div style="width:44px;height:44px;background:linear-gradient(135deg,#fc1268,#9c27b0);border-radius:50%;border:3px solid white;box-shadow:0 3px 14px rgba(252,18,104,0.5);display:flex;align-items:center;justify-content:center;font-size:22px;">📍</div>`, className: '', iconSize: [44,44], iconAnchor: [22,44] });
-    L.marker([dLat, dLng], { icon: destIcon }).addTo(map).bindPopup(`<b>📍 Deliver to:</b><br>${order?.customerName || 'Customer'}<br><small>${order?.shippingAddress || ''}</small>`);
+    const destIcon = L.divIcon({
+      html: `<div style="width:44px;height:44px;background:linear-gradient(135deg,#fc1268,#9c27b0);border-radius:50%;border:3px solid white;box-shadow:0 3px 14px rgba(252,18,104,0.5);display:flex;align-items:center;justify-content:center;font-size:22px;">📍</div>`,
+      className: '', iconSize: [44,44], iconAnchor: [22,44]
+    });
+    L.marker([dLat, dLng], { icon: destIcon }).addTo(map)
+      .bindPopup(`<b>📍 Deliver to:</b><br>${order?.customerName || 'Customer'}<br><small>${order?.shippingAddress || ''}</small>`);
+
     if (gpsCoords) {
-      const riderIcon = L.divIcon({ html: `<div style="width:36px;height:36px;background:linear-gradient(135deg,#6a0dad,#9b30ff);border-radius:50%;border:3px solid white;box-shadow:0 3px 10px rgba(106,13,173,0.5);display:flex;align-items:center;justify-content:center;font-size:18px;">🛵</div>`, className: '', iconSize: [36,36], iconAnchor: [18,18] });
+      const riderIcon = L.divIcon({
+        html: `<div style="width:36px;height:36px;background:linear-gradient(135deg,#6a0dad,#9b30ff);border-radius:50%;border:3px solid white;box-shadow:0 3px 10px rgba(106,13,173,0.5);display:flex;align-items:center;justify-content:center;font-size:18px;">🛵</div>`,
+        className: '', iconSize: [36,36], iconAnchor: [18,18]
+      });
       modalRiderRef.current = L.marker([gpsCoords.lat, gpsCoords.lng], { icon: riderIcon }).addTo(map);
       map.fitBounds(L.latLngBounds([gpsCoords.lat, gpsCoords.lng], [dLat, dLng]), { padding: [60,60] });
-    } else { map.setView([dLat, dLng], 15); }
+      drawModalRoute(map, gpsCoords.lat, gpsCoords.lng, dLat, dLng);
+    } else {
+      map.setView([dLat, dLng], 15);
+    }
+
     modalMapObjRef.current = map;
-    setTimeout(() => map.invalidateSize(), 150);
-    if (gpsCoords) drawModalRoute(map, gpsCoords.lat, gpsCoords.lng, dLat, dLng);
-    return () => { try { map.remove(); } catch {} };
+    setTimeout(() => { try { map.invalidateSize(); } catch {} }, 150);
+
+    return () => { try { map.remove(); } catch {} modalMapObjRef.current = null; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (!modalMapObjRef.current || !gpsCoords || !window.L) return;
     const dLat = order?.addressLat || 14.5995, dLng = order?.addressLng || 120.9842;
-    if (modalRiderRef.current) modalRiderRef.current.setLatLng([gpsCoords.lat, gpsCoords.lng]);
+    if (modalRiderRef.current) {
+      modalRiderRef.current.setLatLng([gpsCoords.lat, gpsCoords.lng]);
+    }
     drawModalRoute(modalMapObjRef.current, gpsCoords.lat, gpsCoords.lng, dLat, dLng);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gpsCoords]);
@@ -167,9 +211,13 @@ function FullscreenMapModal({ order, gpsCoords, onClose }) {
   );
 }
 
+/* ══════════════════════════════════════
+   MAIN COMPONENT
+══════════════════════════════════════ */
 export default function RiderTrack() {
   const { orderId } = useParams();
   const SESSION_ID  = useRef(getTabSessionId()).current;
+  const loggedInRider = useRef(getLoggedInRider()).current;
 
   const order             = useQuery(api.orders.getOrderById, orderId ? { orderId } : 'skip');
   const updateFields      = useMutation(api.orders.updateOrderFields);
@@ -179,22 +227,31 @@ export default function RiderTrack() {
   const heartbeatSession  = useMutation(api.riders.heartbeatRiderLinkSession);
   const releaseSession    = useMutation(api.riders.releaseRiderLinkSession);
 
+  // ── Session state ──
   const [sessionStatus, setSessionStatus] = useState('checking');
   const [blockedInfo,   setBlockedInfo]   = useState(null);
-  const heartbeatRef = useRef(null);
+  const heartbeatRef    = useRef(null);
+  const sessionLostRef  = useRef(false); // prevent double-release
 
+  // ── GPS state ──
   const [gpsStatus,  setGpsStatus]  = useState('idle');
   const [gpsCoords,  setGpsCoords]  = useState(null);
+  const gpsCoordsRef        = useRef(null);
   const watchIdRef          = useRef(null);
   const lastConvexUpdateRef = useRef(0);
   const lastGeocodedRef     = useRef({ lat: null, lng: null, address: null });
-  const lastRouteDrawRef    = useRef({ time: 0, rLat: null, rLng: null });
-  const riderMarkerRef      = useRef(null);
-  const routeLineRef        = useRef(null);
-  const mapRef              = useRef(null);
-  const mapObjRef           = useRef(null);
-  const destMarkerRef       = useRef(null);
+  const gpsRetryRef         = useRef(null);  // retry timer for GPS errors
 
+  // ── Map refs ──
+  const lastRouteDrawRef = useRef({ time: 0, rLat: null, rLng: null });
+  const riderMarkerRef   = useRef(null);
+  const routeLineRef     = useRef(null);
+  const mapRef           = useRef(null);
+  const mapObjRef        = useRef(null);
+  const destMarkerRef    = useRef(null);
+  const mapInitializedRef = useRef(false); // guard against double init
+
+  // ── UI state ──
   const [leafletReady,  setLeafletReady]  = useState(!!window.L);
   const [showFullMap,   setShowFullMap]   = useState(false);
   const [activeTab,     setActiveTab]     = useState('map');
@@ -208,7 +265,21 @@ export default function RiderTrack() {
   const [marking,       setMarking]       = useState(false);
   const [deliveryDone,  setDeliveryDone]  = useState(false);
 
-  // ── Claim / re-claim session ──
+  // Keep gpsCoordsRef in sync with state
+  useEffect(() => { gpsCoordsRef.current = gpsCoords; }, [gpsCoords]);
+
+  // ── Rider identity helpers ──
+  const getRiderEmail = useCallback(() =>
+    loggedInRider?.email || order?.riderInfo?.email || 'rider@dkmerch.com',
+  [loggedInRider, order]);
+
+  const getRiderName = useCallback(() =>
+    loggedInRider?.name || order?.riderInfo?.name || order?.riderInfo?.fullName || 'Rider',
+  [loggedInRider, order]);
+
+  /* ─────────────────────────────────────────
+     SESSION: claim / heartbeat / release
+  ───────────────────────────────────────── */
   const tryClaim = useCallback(async () => {
     if (!orderId) return;
     setSessionStatus('checking');
@@ -216,55 +287,55 @@ export default function RiderTrack() {
       const result = await claimSession({ orderId, sessionId: SESSION_ID, deviceInfo: getDeviceInfo() });
       if (result.allowed) {
         setSessionStatus('allowed');
+        sessionLostRef.current = false;
       } else {
         setSessionStatus('blocked');
         setBlockedInfo({ activeCount: result.activeCount ?? 5 });
       }
     } catch {
-      // On network error → allow (fail open, better UX than false lock)
+      // Network error → optimistically allow so rider isn't stuck
       setSessionStatus('allowed');
+      sessionLostRef.current = false;
     }
   }, [orderId, SESSION_ID, claimSession]);
 
+  // Initial claim once order loads
   useEffect(() => {
     if (order && sessionStatus === 'checking') tryClaim();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order]);
 
-  // ── Heartbeat every 30s ──
-  // If session expired (idle > 2min), re-claim automatically — no lock screen shown
+  // Heartbeat every 25 s (slightly under server's 30 s expiry)
   useEffect(() => {
     if (sessionStatus !== 'allowed' || !orderId) return;
     heartbeatRef.current = setInterval(async () => {
       try {
         const res = await heartbeatSession({ orderId, sessionId: SESSION_ID });
         if (res?.success === false && res?.reason === 'session_expired') {
-          // Silently re-claim — rider just came back from background
+          // Session expired server-side → re-claim transparently
           const reclaim = await claimSession({ orderId, sessionId: SESSION_ID, deviceInfo: getDeviceInfo() });
           if (!reclaim.allowed) {
-            // Only block if truly too many OTHER devices (5+)
             setSessionStatus('blocked');
             setBlockedInfo({ activeCount: reclaim.activeCount ?? 5 });
           }
         }
-      } catch {}
-    }, 30_000);
+      } catch {
+        // Silently ignore transient network errors in heartbeat
+      }
+    }, 25_000);
     return () => clearInterval(heartbeatRef.current);
   }, [sessionStatus, orderId, SESSION_ID, heartbeatSession, claimSession]);
 
-  // ── visibilitychange: heartbeat on resume (NO release on hide) ──
-  // Removed the release-on-hide that was causing false locks
+  // Re-claim when tab becomes visible again
   useEffect(() => {
     const handleVisibility = async () => {
       if (document.visibilityState === 'visible' && orderId) {
-        // Re-claim silently when rider comes back — this refreshes the heartbeat
         try {
           const res = await claimSession({ orderId, sessionId: SESSION_ID, deviceInfo: getDeviceInfo() });
           if (res.allowed) {
             setSessionStatus('allowed');
+            sessionLostRef.current = false;
           }
-          // If blocked (5+ others), don't change status — rider is already in
-          // We only show block screen on initial load
         } catch {}
       }
     };
@@ -272,16 +343,19 @@ export default function RiderTrack() {
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, [orderId, SESSION_ID, claimSession]);
 
-  // ── Release ONLY on actual tab close (beforeunload) ──
+  // Release session + stop GPS on page unload
   useEffect(() => {
     const release = () => {
+      if (sessionLostRef.current) return;
+      sessionLostRef.current = true;
       if (orderId && SESSION_ID) {
         releaseSession({ orderId, sessionId: SESSION_ID }).catch(() => {});
-        if (gpsCoords && order) {
+        const coords = gpsCoordsRef.current;
+        if (coords) {
           updateLocation({
             orderId,
-            riderEmail: order?.riderInfo?.email || 'rider@dkmerch.com',
-            riderName:  order?.riderInfo?.name  || 'Rider',
+            riderEmail: getRiderEmail(),
+            riderName:  getRiderName(),
             lat: 0, lng: 0, accuracy: 0, speed: 0,
             isTracking: false, sessionId: SESSION_ID,
           }).catch(() => {});
@@ -289,13 +363,13 @@ export default function RiderTrack() {
       }
     };
     window.addEventListener('beforeunload', release);
-    // Note: intentionally NOT releasing on component unmount here
-    // because unmount also fires on navigation/background
     return () => window.removeEventListener('beforeunload', release);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orderId, SESSION_ID, gpsCoords, order]);
+  }, [orderId, SESSION_ID]);
 
-  // ── Load Leaflet ──
+  /* ─────────────────────────────────────────
+     LEAFLET: load CSS + JS once
+  ───────────────────────────────────────── */
   useEffect(() => {
     if (window.L) { setLeafletReady(true); return; }
     const link = document.createElement('link');
@@ -308,20 +382,27 @@ export default function RiderTrack() {
     document.head.appendChild(script);
   }, []);
 
-  const drawRoute = async (map, rLat, rLng, dLat, dLng) => {
-    if (!map || !window.L) return;
-    const now = Date.now();
-    const prev = lastRouteDrawRef.current;
-    const movedEnough = !prev.rLat ||
-      Math.abs(rLat - prev.rLat) > 0.00015 ||
-      Math.abs(rLng - prev.rLng) > 0.00015;
-    const enoughTimePassed = now - prev.time > 10_000;
-    const noRouteExists = !routeLineRef.current;
-    if (!noRouteExists && (!movedEnough || !enoughTimePassed)) return;
+  /* ─────────────────────────────────────────
+     ROUTE helpers
+  ───────────────────────────────────────── */
+  const clearRouteLines = useCallback(() => {
     if (routeLineRef.current) {
-      (Array.isArray(routeLineRef.current) ? routeLineRef.current : [routeLineRef.current]).forEach(l => { try { l.remove(); } catch {} });
+      (Array.isArray(routeLineRef.current) ? routeLineRef.current : [routeLineRef.current])
+        .forEach(l => { try { l.remove(); } catch {} });
       routeLineRef.current = null;
     }
+  }, []);
+
+  // Throttled route draw (skip if barely moved or too soon)
+  const drawRoute = useCallback(async (map, rLat, rLng, dLat, dLng) => {
+    if (!map || !window.L) return;
+    const now  = Date.now();
+    const prev = lastRouteDrawRef.current;
+    const movedEnough    = !prev.rLat || Math.abs(rLat - prev.rLat) > 0.00015 || Math.abs(rLng - prev.rLng) > 0.00015;
+    const enoughTime     = now - prev.time > 10_000;
+    const noRouteExists  = !routeLineRef.current;
+    if (!noRouteExists && (!movedEnough || !enoughTime)) return;
+    clearRouteLines();
     const coords = await fetchOsrmRoute(rLat, rLng, dLat, dLng);
     if (coords) {
       lastRouteDrawRef.current = { time: now, rLat, rLng };
@@ -330,19 +411,18 @@ export default function RiderTrack() {
         window.L.polyline(coords, { color: '#e53e3e', weight: 4.5, opacity: 0.92, lineJoin: 'round', lineCap: 'round' }).addTo(map),
       ];
       map.fitBounds(window.L.latLngBounds(coords), { padding: [48,48], maxZoom: 17 });
-    } else {
-      if (!routeLineRef.current) {
-        routeLineRef.current = window.L.polyline([[rLat,rLng],[dLat,dLng]], { color: '#e53e3e', weight: 4, opacity: 0.8, dashArray: '10, 8' }).addTo(map);
-      }
+    } else if (!routeLineRef.current) {
+      routeLineRef.current = window.L.polyline(
+        [[rLat,rLng],[dLat,dLng]],
+        { color: '#e53e3e', weight: 4, opacity: 0.8, dashArray: '10, 8' }
+      ).addTo(map);
     }
-  };
+  }, [clearRouteLines]);
 
-  const drawRouteForce = async (map, rLat, rLng, dLat, dLng) => {
+  // Force route draw regardless of throttle (tab switch, init, etc.)
+  const drawRouteForce = useCallback(async (map, rLat, rLng, dLat, dLng) => {
     if (!map || !window.L) return;
-    if (routeLineRef.current) {
-      (Array.isArray(routeLineRef.current) ? routeLineRef.current : [routeLineRef.current]).forEach(l => { try { l.remove(); } catch {} });
-      routeLineRef.current = null;
-    }
+    clearRouteLines();
     const coords = await fetchOsrmRoute(rLat, rLng, dLat, dLng);
     if (coords) {
       lastRouteDrawRef.current = { time: Date.now(), rLat, rLng };
@@ -352,92 +432,119 @@ export default function RiderTrack() {
       ];
       map.fitBounds(window.L.latLngBounds(coords), { padding: [48,48], maxZoom: 17 });
     } else {
-      routeLineRef.current = window.L.polyline([[rLat,rLng],[dLat,dLng]], { color: '#e53e3e', weight: 4, opacity: 0.8, dashArray: '10, 8' }).addTo(map);
+      routeLineRef.current = window.L.polyline(
+        [[rLat,rLng],[dLat,dLng]],
+        { color: '#e53e3e', weight: 4, opacity: 0.8, dashArray: '10, 8' }
+      ).addTo(map);
     }
-  };
+  }, [clearRouteLines]);
 
   const destroyMap = useCallback(() => {
-    if (routeLineRef.current) {
-      (Array.isArray(routeLineRef.current) ? routeLineRef.current : [routeLineRef.current])
-        .forEach(l => { try { l.remove(); } catch {} });
-      routeLineRef.current = null;
-    }
-    if (mapObjRef.current) {
-      try { mapObjRef.current.remove(); } catch {}
-      mapObjRef.current = null;
-    }
-    destMarkerRef.current  = null;
-    riderMarkerRef.current = null;
-    lastRouteDrawRef.current = { time: 0, rLat: null, rLng: null };
-  }, []);
+    clearRouteLines();
+    if (mapObjRef.current) { try { mapObjRef.current.remove(); } catch {} mapObjRef.current = null; }
+    destMarkerRef.current   = null;
+    riderMarkerRef.current  = null;
+    mapInitializedRef.current = false;
+    lastRouteDrawRef.current  = { time: 0, rLat: null, rLng: null };
+  }, [clearRouteLines]);
 
+  /* ─────────────────────────────────────────
+     MAP init — only runs once, then reuses
+  ───────────────────────────────────────── */
   const initMap = useCallback(() => {
     if (!leafletReady || !mapRef.current || !order) return;
-    if (mapObjRef.current) {
+
+    // Map already alive → just refresh size + re-draw route
+    if (mapObjRef.current && mapInitializedRef.current) {
       try {
         mapObjRef.current.invalidateSize();
-        if (!routeLineRef.current && gpsCoords) {
-          const dLat = order?.addressLat || 14.5995, dLng = order?.addressLng || 120.9842;
-          drawRouteForce(mapObjRef.current, gpsCoords.lat, gpsCoords.lng, dLat, dLng);
+        const coords = gpsCoordsRef.current;
+        const dLat = order?.addressLat || 14.5995, dLng = order?.addressLng || 120.9842;
+        if (coords) {
+          if (riderMarkerRef.current) riderMarkerRef.current.setLatLng([coords.lat, coords.lng]);
+          drawRouteForce(mapObjRef.current, coords.lat, coords.lng, dLat, dLng);
+          mapObjRef.current.fitBounds(
+            window.L.latLngBounds([coords.lat, coords.lng], [dLat, dLng]),
+            { padding: [48,48], maxZoom: 17 }
+          );
         }
         return;
       } catch {
         destroyMap();
       }
     }
+
+    // Clean up stale Leaflet instance on the DOM node
     if (mapRef.current._leaflet_id) {
-      try { const L = window.L; const t = L.map(mapRef.current); t.remove(); } catch {}
+      try { const t = window.L.map(mapRef.current); t.remove(); } catch {}
       delete mapRef.current._leaflet_id;
     }
+
     const L = window.L;
     const map = L.map(mapRef.current, { zoomControl: true });
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors', maxZoom: 19 }).addTo(map);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors', maxZoom: 19
+    }).addTo(map);
+
     const dLat = order?.addressLat || 14.5995, dLng = order?.addressLng || 120.9842;
-    const destIcon = L.divIcon({ html: `<div style="width:44px;height:44px;background:linear-gradient(135deg,#fc1268,#9c27b0);border-radius:50%;border:3px solid white;box-shadow:0 3px 14px rgba(252,18,104,0.5);display:flex;align-items:center;justify-content:center;font-size:22px;">📍</div>`, className: '', iconSize: [44,44], iconAnchor: [22,44] });
+    const destIcon = L.divIcon({
+      html: `<div style="width:44px;height:44px;background:linear-gradient(135deg,#fc1268,#9c27b0);border-radius:50%;border:3px solid white;box-shadow:0 3px 14px rgba(252,18,104,0.5);display:flex;align-items:center;justify-content:center;font-size:22px;">📍</div>`,
+      className: '', iconSize: [44,44], iconAnchor: [22,44]
+    });
     const marker = L.marker([dLat, dLng], { icon: destIcon }).addTo(map);
     marker.bindPopup(`<b>📍 Deliver to:</b><br>${order?.customerName || 'Customer'}<br><small>${order?.shippingAddress || ''}</small>`).openPopup();
     map.setView([dLat, dLng], 15);
-    mapObjRef.current = map;
+    mapObjRef.current     = map;
     destMarkerRef.current = marker;
-    if (gpsCoords) {
-      drawRouteForce(map, gpsCoords.lat, gpsCoords.lng, dLat, dLng);
-      const riderIcon = L.divIcon({ html: `<div style="width:36px;height:36px;background:linear-gradient(135deg,#6a0dad,#9b30ff);border-radius:50%;border:3px solid white;box-shadow:0 3px 10px rgba(106,13,173,0.5);display:flex;align-items:center;justify-content:center;font-size:18px;">🛵</div>`, className: '', iconSize: [36,36], iconAnchor: [18,18] });
-      if (!riderMarkerRef.current) {
-        riderMarkerRef.current = L.marker([gpsCoords.lat, gpsCoords.lng], { icon: riderIcon }).addTo(map);
-        riderMarkerRef.current.bindPopup('🛵 You are here');
-      }
-      map.fitBounds(L.latLngBounds([gpsCoords.lat, gpsCoords.lng], [dLat, dLng]), { padding: [48,48] });
+    mapInitializedRef.current = true;
+
+    const coords = gpsCoordsRef.current;
+    if (coords) {
+      const riderIcon = L.divIcon({
+        html: `<div style="width:36px;height:36px;background:linear-gradient(135deg,#6a0dad,#9b30ff);border-radius:50%;border:3px solid white;box-shadow:0 3px 10px rgba(106,13,173,0.5);display:flex;align-items:center;justify-content:center;font-size:18px;">🛵</div>`,
+        className: '', iconSize: [36,36], iconAnchor: [18,18]
+      });
+      riderMarkerRef.current = L.marker([coords.lat, coords.lng], { icon: riderIcon }).addTo(map);
+      riderMarkerRef.current.bindPopup('🛵 You are here');
+      map.fitBounds(L.latLngBounds([coords.lat, coords.lng], [dLat, dLng]), { padding: [48,48] });
+      drawRouteForce(map, coords.lat, coords.lng, dLat, dLng);
     }
     setTimeout(() => { try { map.invalidateSize(); } catch {} }, 150);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [leafletReady, order, gpsCoords, destroyMap]);
+  }, [leafletReady, order, destroyMap, drawRouteForce]);
 
+  // Tab switch → map tab: just invalidate + re-draw (map DOM stays alive via display:none)
   useEffect(() => {
-    if (activeTab === 'map') {
-      setTimeout(() => { destroyMap(); initMap(); }, 100);
-    }
+    if (activeTab === 'map') setTimeout(() => initMap(), 100);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
+  // Re-init when coming back from background
   useEffect(() => {
     const h = () => {
       if (document.visibilityState === 'visible' && activeTab === 'map') {
-        setTimeout(() => { destroyMap(); initMap(); }, 200);
+        setTimeout(() => initMap(), 200);
       }
     };
     document.addEventListener('visibilitychange', h);
     return () => document.removeEventListener('visibilitychange', h);
-  }, [activeTab, initMap, destroyMap]);
+  }, [activeTab, initMap]);
 
+  // Init once Leaflet is ready
   useEffect(() => {
     if (leafletReady && activeTab === 'map') setTimeout(() => initMap(), 100);
   }, [leafletReady, initMap, activeTab]);
 
+  // Cleanup on unmount
   useEffect(() => () => {
     if (watchIdRef.current) navigator.geolocation.clearWatch(watchIdRef.current);
+    if (gpsRetryRef.current) clearTimeout(gpsRetryRef.current);
     destroyMap();
   }, [destroyMap]);
 
+  /* ─────────────────────────────────────────
+     GPS tracking — auto-start
+  ───────────────────────────────────────── */
   const autoStartedRef = useRef(false);
   useEffect(() => {
     if (!order || autoStartedRef.current || sessionStatus !== 'allowed') return;
@@ -446,14 +553,22 @@ export default function RiderTrack() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order, sessionStatus]);
 
-  const startTracking = () => {
+  const startTracking = useCallback(() => {
     if (!navigator.geolocation) { setGpsStatus('error'); return; }
+    // Clear any existing watch before starting a new one
+    if (watchIdRef.current) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+    if (gpsRetryRef.current) { clearTimeout(gpsRetryRef.current); gpsRetryRef.current = null; }
     setGpsStatus('starting');
+
     watchIdRef.current = navigator.geolocation.watchPosition(
       async (pos) => {
         const { latitude: lat, longitude: lng, accuracy, speed } = pos.coords;
         setGpsCoords({ lat, lng, accuracy });
         setGpsStatus('active');
+
         const now = Date.now();
         if (orderId && now - lastConvexUpdateRef.current >= 5000) {
           lastConvexUpdateRef.current = now;
@@ -466,17 +581,22 @@ export default function RiderTrack() {
           }
           updateLocation({
             orderId,
-            riderEmail: order?.riderInfo?.email || 'rider@dkmerch.com',
-            riderName:  order?.riderInfo?.name  || order?.riderInfo?.fullName || 'Rider',
+            riderEmail: getRiderEmail(),
+            riderName:  getRiderName(),
             lat, lng, accuracy, speed: speed || 0,
             isTracking: true, sessionId: SESSION_ID,
             lastKnownAddress: lastAddr || undefined,
           }).catch(() => {});
         }
+
+        // Update map marker + route
         if (mapObjRef.current && window.L) {
           const L = window.L;
           const dLat = order?.addressLat || 14.5995, dLng = order?.addressLng || 120.9842;
-          const riderIcon = L.divIcon({ html: `<div style="width:36px;height:36px;background:linear-gradient(135deg,#6a0dad,#9b30ff);border-radius:50%;border:3px solid white;box-shadow:0 3px 10px rgba(106,13,173,0.5);display:flex;align-items:center;justify-content:center;font-size:18px;">🛵</div>`, className: '', iconSize: [36,36], iconAnchor: [18,18] });
+          const riderIcon = L.divIcon({
+            html: `<div style="width:36px;height:36px;background:linear-gradient(135deg,#6a0dad,#9b30ff);border-radius:50%;border:3px solid white;box-shadow:0 3px 10px rgba(106,13,173,0.5);display:flex;align-items:center;justify-content:center;font-size:18px;">🛵</div>`,
+            className: '', iconSize: [36,36], iconAnchor: [18,18]
+          });
           if (!riderMarkerRef.current) {
             riderMarkerRef.current = L.marker([lat, lng], { icon: riderIcon }).addTo(mapObjRef.current);
             riderMarkerRef.current.bindPopup('🛵 You are here');
@@ -485,26 +605,41 @@ export default function RiderTrack() {
             riderMarkerRef.current.setLatLng([lat, lng]);
             drawRoute(mapObjRef.current, lat, lng, dLat, dLng);
           }
-          mapObjRef.current.fitBounds(L.latLngBounds([lat, lng], [dLat, dLng]), { padding: [48,48], maxZoom: 17 });
+          mapObjRef.current.fitBounds(
+            L.latLngBounds([lat, lng], [dLat, dLng]),
+            { padding: [48,48], maxZoom: 17 }
+          );
         }
       },
-      () => setGpsStatus('error'),
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+      (err) => {
+        console.warn('GPS error:', err.code, err.message);
+        setGpsStatus('error');
+        // Auto-retry after 8 s for transient errors (timeout / position unavailable)
+        if (err.code !== 1) { // code 1 = PERMISSION_DENIED, no point retrying
+          gpsRetryRef.current = setTimeout(() => startTracking(), 8000);
+        }
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
     );
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderId, order, SESSION_ID, getRiderEmail, getRiderName, updateLocation, drawRoute, drawRouteForce]);
 
-  const stopTracking = () => {
+  const stopTracking = useCallback(() => {
     if (watchIdRef.current) { navigator.geolocation.clearWatch(watchIdRef.current); watchIdRef.current = null; }
+    if (gpsRetryRef.current) { clearTimeout(gpsRetryRef.current); gpsRetryRef.current = null; }
     if (orderId) updateLocation({
       orderId,
-      riderEmail: order?.riderInfo?.email || 'rider@dkmerch.com',
-      riderName:  order?.riderInfo?.name  || 'Rider',
+      riderEmail: getRiderEmail(),
+      riderName:  getRiderName(),
       lat: 0, lng: 0, accuracy: 0, speed: 0,
       isTracking: false, sessionId: SESSION_ID,
     }).catch(() => {});
     setGpsStatus('idle');
-  };
+  }, [orderId, SESSION_ID, getRiderEmail, getRiderName, updateLocation]);
 
+  /* ─────────────────────────────────────────
+     OTP + Photo + Mark Delivered
+  ───────────────────────────────────────── */
   const handleVerifyOtp = async () => {
     if (!otpInput.trim() || !order) return;
     setOtpStatus('verifying');
@@ -523,7 +658,9 @@ export default function RiderTrack() {
 
   const handlePhotoSelect = (e) => {
     const file = e.target.files[0]; if (!file) return; setPhotoFile(file);
-    const reader = new FileReader(); reader.onload = (ev) => setPhotoPreview(ev.target.result); reader.readAsDataURL(file);
+    const reader = new FileReader();
+    reader.onload = (ev) => setPhotoPreview(ev.target.result);
+    reader.readAsDataURL(file);
   };
 
   const handleMarkDelivered = async () => {
@@ -538,7 +675,13 @@ export default function RiderTrack() {
       const { storageId } = await res.json();
       const photoUrl = `${process.env.REACT_APP_CONVEX_SITE_URL || ''}/getImage?storageId=${storageId}`;
       setUploading(false);
-      await updateFields({ orderId, orderStatus: 'completed', status: 'Delivered', deliveryProofPhoto: photoUrl, deliveryConfirmedAt: new Date().toISOString() });
+      await updateFields({
+        orderId,
+        orderStatus: 'completed',
+        status: 'Delivered',
+        deliveryProofPhoto: photoUrl,
+        deliveryConfirmedAt: new Date().toISOString()
+      });
       stopTracking();
       releaseSession({ orderId, sessionId: SESSION_ID }).catch(() => {});
       sessionStorage.removeItem('riderTrackSessionId');
@@ -554,14 +697,17 @@ export default function RiderTrack() {
   const openGoogleMaps = () => {
     if (!order) return;
     const lat = order.addressLat, lng = order.addressLng;
-    window.open(lat && lng
-      ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
-      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.shippingAddress || '')}`,
+    window.open(
+      lat && lng
+        ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
+        : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.shippingAddress || '')}`,
       '_blank'
     );
   };
 
-  // ── Render guards ──
+  /* ─────────────────────────────────────────
+     RENDER guards
+  ───────────────────────────────────────── */
   if (order === undefined || sessionStatus === 'checking') return (
     <div className="rt-loading"><div className="rt-spinner">🛵</div><p>Loading delivery…</p></div>
   );
@@ -580,11 +726,17 @@ export default function RiderTrack() {
     </div>
   );
 
-  const otpVerified = !!order.deliveryOtpVerified, customerPhone = order.phone || '';
+  const otpVerified = !!order.deliveryOtpVerified;
+  const customerPhone = order.phone || '';
 
+  /* ─────────────────────────────────────────
+     RENDER
+  ───────────────────────────────────────── */
   return (
     <div className="rt-page">
-      {showFullMap && <FullscreenMapModal order={order} gpsCoords={gpsCoords} onClose={() => setShowFullMap(false)} />}
+      {showFullMap && (
+        <FullscreenMapModal order={order} gpsCoords={gpsCoords} onClose={() => setShowFullMap(false)} />
+      )}
 
       <div className="rt-header">
         <span className="rt-header-logo">🛵 DKMerch Delivery</span>
@@ -609,7 +761,9 @@ export default function RiderTrack() {
             <div className="rt-call-modal-name">{order.customerName || 'Customer'}</div>
             <div className="rt-call-modal-number">{customerPhone}</div>
             <div className="rt-call-modal-actions">
-              <a href={`tel:${customerPhone}`} className="rt-call-confirm-btn" onClick={() => setShowCallModal(false)}>📞 Call {customerPhone}</a>
+              <a href={`tel:${customerPhone}`} className="rt-call-confirm-btn" onClick={() => setShowCallModal(false)}>
+                📞 Call {customerPhone}
+              </a>
               <button className="rt-call-cancel-btn" onClick={() => setShowCallModal(false)}>✕ Cancel</button>
             </div>
           </div>
@@ -625,8 +779,18 @@ export default function RiderTrack() {
       <div className={`rt-gps-bar rt-gps-${gpsStatus}`}>
         {gpsStatus === 'idle'     && <span>📡 Starting GPS…</span>}
         {gpsStatus === 'starting' && <><span className="rt-live-dot rt-dot-yellow" /><span>⏳ Getting your location…</span></>}
-        {gpsStatus === 'active'   && <><span className="rt-live-dot" /><span>Live GPS Active — admin &amp; customer can see you{gpsCoords ? ` · ±${Math.round(gpsCoords.accuracy||0)}m` : ''}</span></>}
-        {gpsStatus === 'error'    && <><span>⚠️ GPS unavailable — </span><button className="rt-gps-btn rt-gps-start" onClick={startTracking}>↺ Retry</button></>}
+        {gpsStatus === 'active'   && (
+          <>
+            <span className="rt-live-dot" />
+            <span>Live GPS Active — admin &amp; customer can see you{gpsCoords ? ` · ±${Math.round(gpsCoords.accuracy||0)}m` : ''}</span>
+          </>
+        )}
+        {gpsStatus === 'error' && (
+          <>
+            <span>⚠️ GPS unavailable — </span>
+            <button className="rt-gps-btn rt-gps-start" onClick={startTracking}>↺ Retry GPS</button>
+          </>
+        )}
       </div>
 
       <div className="rt-tabs">
@@ -643,10 +807,14 @@ export default function RiderTrack() {
         ))}
       </div>
 
+      {/* Map tab: kept in DOM via display:none so route + markers survive tab switches */}
       <div style={{ display: activeTab==='map' ? 'block' : 'none' }} className="rt-tab-content">
         <div ref={mapRef} className="rt-map" />
         <div className="rt-map-footer">
-          <p className="rt-map-hint">📍 = Customer &nbsp;·&nbsp; 🛵 = You &nbsp;·&nbsp; <span style={{color:'#e53e3e',fontWeight:700}}>━━</span> = Route</p>
+          <p className="rt-map-hint">
+            📍 = Customer &nbsp;·&nbsp; 🛵 = You &nbsp;·&nbsp;
+            <span style={{color:'#e53e3e',fontWeight:700}}>━━</span> = Route
+          </p>
           <button className="rt-fullmap-btn" onClick={() => setShowFullMap(true)}>⛶ Full Map</button>
         </div>
       </div>
@@ -682,7 +850,9 @@ export default function RiderTrack() {
                 >{otpStatus==='verifying' ? '⏳' : '✅ Verify'}</button>
               </div>
               {otpMessage && <div className={`rt-otp-msg rt-otp-${otpStatus}`}>{otpMessage}</div>}
-              <div className="rt-otp-hint">💡 Tell the customer to tap <strong>"Generate OTP"</strong> on their tracking page.</div>
+              <div className="rt-otp-hint">
+                💡 Tell the customer to tap <strong>"Generate OTP"</strong> on their tracking page.
+              </div>
             </>
           )}
         </div>
@@ -701,8 +871,19 @@ export default function RiderTrack() {
               : <div className="rt-photo-placeholder"><span>📸</span><span>Tap to take or upload photo</span></div>
             }
           </div>
-          <input id="rt-photo-input" type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={handlePhotoSelect} />
-          {photoFile && <button className="rt-retake-btn" onClick={() => { setPhotoFile(null); setPhotoPreview(null); }}>🔄 Retake Photo</button>}
+          <input
+            id="rt-photo-input"
+            type="file"
+            accept="image/*"
+            capture="environment"
+            style={{display:'none'}}
+            onChange={handlePhotoSelect}
+          />
+          {photoFile && (
+            <button className="rt-retake-btn" onClick={() => { setPhotoFile(null); setPhotoPreview(null); }}>
+              🔄 Retake Photo
+            </button>
+          )}
         </div>
       )}
 
