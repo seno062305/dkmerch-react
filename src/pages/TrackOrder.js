@@ -402,7 +402,7 @@ const TrackOrder = () => {
 
   const [filter,             setFilter]             = useState('active');
   const [selectedOrderId,    setSelectedOrderId]    = useState(null);
-  const [qrOrder,            setQrOrder]            = useState(null); // ← for QR scan guest view
+  const [qrOrder,            setQrOrder]            = useState(null);
   const [trackingEmail,      setTrackingEmail]      = useState('');
   const [searchEmail,        setSearchEmail]        = useState('');
   const [showTrackedOrders,  setShowTrackedOrders]  = useState(false);
@@ -422,32 +422,29 @@ const TrackOrder = () => {
   const allAvailableOrders = [...orders, ...emailOrders];
   const selectedOrder = selectedOrderId ? allAvailableOrders.find(o => o._id === selectedOrderId) || null : null;
 
-  // ── Direct lookup via QR scan (works for guests) ──
+  // ── Direct lookup via QR scan (works for guests, always fetch if orderIdParam exists) ──
   const directOrder = useQuery(
     api.orders.getOrderById,
-    orderIdParam && !selectedOrderId ? { orderId: orderIdParam } : 'skip'
+    orderIdParam ? { orderId: orderIdParam } : 'skip'
   );
 
-  const urlParamProcessedRef = useRef(false);
-
+  // ✅ FIX: Simplified QR redirect — no ref needed, runs whenever directOrder or orders load
   useEffect(() => {
-    if (urlParamProcessedRef.current) return;
     if (!orderIdParam) return;
+    if (selectedOrderId || qrOrder) return; // already handled
 
-    // First try to find in own orders (authenticated)
+    // First check if it's in the user's own orders
     const found = [...orders, ...emailOrders].find(o => o.orderId === orderIdParam);
     if (found) {
-      urlParamProcessedRef.current = true;
       setSelectedOrderId(found._id);
       return;
     }
 
-    // Fallback: use directOrder from Convex (works for anyone scanning QR)
-    if (directOrder !== undefined) {
-      urlParamProcessedRef.current = true;
-      if (directOrder) setQrOrder(directOrder);
+    // Fallback: use directOrder from Convex (works for QR scan guests)
+    if (directOrder) {
+      setQrOrder(directOrder);
     }
-  }, [orderIdParam, orders, emailOrders, directOrder]);
+  }, [orderIdParam, orders, emailOrders, directOrder, selectedOrderId, qrOrder]);
 
   const handleCloseModal = useCallback(() => setSelectedOrderId(null), []);
   const handleOpenModal  = useCallback((order) => setSelectedOrderId(order._id), []);
