@@ -18,6 +18,7 @@ export default function RiderTrack() {
   const [gpsCoords,  setGpsCoords]  = useState(null);
   const [isTracking, setIsTracking] = useState(false);
   const watchIdRef                  = useRef(null);
+  const lastConvexUpdateRef         = useRef(0);  // throttle Convex updates to every 5s
   const riderMarkerRef              = useRef(null);
   const routeLineRef                = useRef(null);
 
@@ -227,7 +228,10 @@ export default function RiderTrack() {
         setGpsStatus('active');
         setIsTracking(true);
 
-        if (orderId) {
+        // Throttle Convex updates to every 5 seconds max
+        const now = Date.now();
+        if (orderId && now - lastConvexUpdateRef.current >= 5000) {
+          lastConvexUpdateRef.current = now;
           updateLocation({
             orderId,
             riderEmail: order?.riderInfo?.email || 'rider@dkmerch.com',
@@ -264,7 +268,7 @@ export default function RiderTrack() {
         }
       },
       () => setGpsStatus('error'),
-      { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
     );
   };
 
@@ -450,10 +454,25 @@ export default function RiderTrack() {
       {/* Tab: Map — always rendered but hidden when not active (prevents destroy) */}
       <div style={{ display: activeTab === 'map' ? 'block' : 'none' }} className="rt-tab-content">
         <div ref={mapRef} className="rt-map" />
-        <p className="rt-map-hint">
-          📍 = Customer &nbsp;·&nbsp; 🛵 = You &nbsp;·&nbsp;
-          <span style={{ color: '#e53e3e', fontWeight: 700 }}>━━</span> = Route
-        </p>
+        <div className="rt-map-footer">
+          <p className="rt-map-hint">
+            📍 = Customer &nbsp;·&nbsp; 🛵 = You &nbsp;·&nbsp;
+            <span style={{ color: '#e53e3e', fontWeight: 700 }}>━━</span> = Route
+          </p>
+          <button className="rt-fullmap-btn" onClick={() => {
+            const lat  = gpsCoords?.lat  || order?.addressLat  || 14.5995;
+            const lng  = gpsCoords?.lng  || order?.addressLng  || 120.9842;
+            const dLat = order?.addressLat || 14.5995;
+            const dLng = order?.addressLng || 120.9842;
+            // Open Google Maps with directions from rider to destination
+            window.open(
+              `https://www.google.com/maps/dir/?api=1&origin=${lat},${lng}&destination=${dLat},${dLng}&travelmode=driving`,
+              '_blank'
+            );
+          }}>
+            🗺️ View Full Map
+          </button>
+        </div>
       </div>
 
       {/* Tab: OTP */}
