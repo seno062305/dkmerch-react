@@ -8,12 +8,12 @@ import './RiderTrack.css';
 const generateSessionId = () =>
   `rt-${Date.now()}-${Math.random().toString(36).slice(2,10)}-${Math.random().toString(36).slice(2,10)}`;
 
-// ✅ FIX: Use localStorage instead of sessionStorage so the same session ID
-// persists across page refreshes on mobile (prevents false "link in use" locks)
+// ✅ FIX 1: Use sessionStorage — auto-clears when browser tab is closed.
+// localStorage was keeping stale session IDs alive, causing false "Link In Use" locks.
 const getTabSessionId = () => {
   const storageKey = 'riderTrackSessionId';
-  let id = localStorage.getItem(storageKey);
-  if (!id) { id = generateSessionId(); localStorage.setItem(storageKey, id); }
+  let id = sessionStorage.getItem(storageKey);
+  if (!id) { id = generateSessionId(); sessionStorage.setItem(storageKey, id); }
   return id;
 };
 
@@ -71,7 +71,6 @@ function LinkInUseScreen({ deviceInfo, takenAt, onRetry }) {
   const [retrying, setRetrying] = useState(false);
   const [countdown, setCountdown] = useState(null);
 
-  // ✅ FIX: Show live countdown so rider knows when auto-unlock happens
   useEffect(() => {
     if (!takenAt) return;
     const update = () => {
@@ -85,7 +84,6 @@ function LinkInUseScreen({ deviceInfo, takenAt, onRetry }) {
   }, [takenAt]);
 
   const handleRetry = async () => { setRetrying(true); await onRetry(); setRetrying(false); };
-
   const ago = takenAt ? Math.round((Date.now() - takenAt) / 1000) : null;
 
   return (
@@ -111,7 +109,6 @@ function LinkInUseScreen({ deviceInfo, takenAt, onRetry }) {
       <button className="rt-inuse-retry-btn" onClick={handleRetry} disabled={retrying}>
         {retrying ? '⏳ Checking…' : '🔄 Try Again'}
       </button>
-      {/* ✅ FIX: Auto-retry when countdown hits 0 */}
       {countdown === 0 && !retrying && (
         <p className="rt-inuse-hint" style={{ color: '#059669', fontWeight: 700 }}>
           ✅ Lock expired — tap "Try Again" to open the link.
@@ -249,8 +246,6 @@ export default function RiderTrack() {
         setBlockedInfo({ deviceInfo: result.deviceInfo, takenAt: result.takenAt });
       }
     } catch {
-      // ✅ FIX: On error (e.g. network), default to allowed so rider isn't
-      // permanently locked out by a transient failure
       setSessionStatus('allowed');
     }
   }, [orderId, SESSION_ID, claimSession]);
@@ -260,7 +255,7 @@ export default function RiderTrack() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order]);
 
-  // ✅ FIX: Heartbeat every 20s (was 30s) — keeps session alive more reliably
+  // Heartbeat every 20s
   useEffect(() => {
     if (sessionStatus !== 'allowed' || !orderId) return;
     heartbeatRef.current = setInterval(async () => {
@@ -276,18 +271,20 @@ export default function RiderTrack() {
     return () => clearInterval(heartbeatRef.current);
   }, [sessionStatus, orderId, SESSION_ID, heartbeatSession]);
 
-  // ✅ FIX: Use visibilitychange to re-claim session when tab comes back into focus
-  // This handles mobile browser backgrounding which kills beforeunload events
+  // ✅ FIX 2: visibilitychange — release on hidden, heartbeat on visible
   useEffect(() => {
     const handleVisibility = () => {
+      if (document.visibilityState === 'hidden' && orderId && SESSION_ID) {
+        // Release session when tab/app goes to background so next open isn't blocked
+        releaseSession({ orderId, sessionId: SESSION_ID }).catch(() => {});
+      }
       if (document.visibilityState === 'visible' && sessionStatus === 'allowed' && orderId) {
-        // Re-send heartbeat immediately when app comes back to foreground
         heartbeatSession({ orderId, sessionId: SESSION_ID }).catch(() => {});
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, [sessionStatus, orderId, SESSION_ID, heartbeatSession]);
+  }, [sessionStatus, orderId, SESSION_ID, heartbeatSession, releaseSession]);
 
   useEffect(() => {
     const release = () => {
@@ -321,9 +318,6 @@ export default function RiderTrack() {
     document.head.appendChild(script);
   }, []);
 
-  // ✅ FIX: Route draw — fixed logic was `!movedEnough || !enoughTimePassed`
-  // which meant BOTH had to be false to draw. Now: draw if moved enough AND enough time passed,
-  // OR if there's no existing route at all (routeLineRef is null).
   const drawRoute = async (map, rLat, rLng, dLat, dLng) => {
     if (!map || !window.L) return;
     const now = Date.now();
@@ -333,10 +327,7 @@ export default function RiderTrack() {
       Math.abs(rLng - prev.rLng) > 0.00015;
     const enoughTimePassed = now - prev.time > 10_000;
     const noRouteExists = !routeLineRef.current;
-
-    // ✅ Draw if: no route exists yet, OR (moved enough AND enough time passed)
     if (!noRouteExists && (!movedEnough || !enoughTimePassed)) return;
-
     if (routeLineRef.current) {
       (Array.isArray(routeLineRef.current) ? routeLineRef.current : [routeLineRef.current]).forEach(l => { try { l.remove(); } catch {} });
       routeLineRef.current = null;
@@ -356,7 +347,6 @@ export default function RiderTrack() {
     }
   };
 
-  // Force draw — bypasses throttle, used on first GPS fix & map init
   const drawRouteForce = async (map, rLat, rLng, dLat, dLng) => {
     if (!map || !window.L) return;
     if (routeLineRef.current) {
@@ -376,17 +366,56 @@ export default function RiderTrack() {
     }
   };
 
+  // ✅ FIX 3: destroyMap helper — fully removes Leaflet instance and clears all refs
+  // Called before reinitializing map to prevent "container already initialized" error
+  const destroyMap = useCallback(() => {
+    if (routeLineRef.current) {
+      (Array.isArray(routeLineRef.current) ? routeLineRef.current : [routeLineRef.current])
+        .forEach(l => { try { l.remove(); } catch {} });
+      routeLineRef.current = null;
+    }
+    if (mapObjRef.current) {
+      try { mapObjRef.current.remove(); } catch {}
+      mapObjRef.current = null;
+    }
+    destMarkerRef.current  = null;
+    riderMarkerRef.current = null;
+    lastRouteDrawRef.current = { time: 0, rLat: null, rLng: null };
+  }, []);
+
   const initMap = useCallback(() => {
     if (!leafletReady || !mapRef.current || !order) return;
+
+    // ✅ FIX 3: If map container already has a Leaflet instance but mapObjRef is stale
+    // (happens after back navigation), destroy and reinit
     if (mapObjRef.current) {
-      setTimeout(() => { if (mapObjRef.current) mapObjRef.current.invalidateSize(); }, 150);
-      // ✅ FIX: Re-draw route if it's missing after tab switch
-      if (!routeLineRef.current && gpsCoords) {
-        const dLat = order?.addressLat || 14.5995, dLng = order?.addressLng || 120.9842;
-        drawRouteForce(mapObjRef.current, gpsCoords.lat, gpsCoords.lng, dLat, dLng);
+      // Check if the DOM node still matches — if not, destroy first
+      try {
+        mapObjRef.current.invalidateSize();
+        // Map is alive — just redraw route if missing
+        if (!routeLineRef.current && gpsCoords) {
+          const dLat = order?.addressLat || 14.5995, dLng = order?.addressLng || 120.9842;
+          drawRouteForce(mapObjRef.current, gpsCoords.lat, gpsCoords.lng, dLat, dLng);
+        }
+        return;
+      } catch {
+        // Map instance is broken — destroy and recreate
+        destroyMap();
       }
-      return;
     }
+
+    // ✅ FIX 3: Check if the container was already initialized by a previous Leaflet instance
+    // Leaflet adds _leaflet_id to the container — if present, force remove it
+    if (mapRef.current._leaflet_id) {
+      try {
+        // Create a temporary map instance just to call remove()
+        const L = window.L;
+        const tempMap = L.map(mapRef.current);
+        tempMap.remove();
+      } catch {}
+      delete mapRef.current._leaflet_id;
+    }
+
     const L = window.L;
     const map = L.map(mapRef.current, { zoomControl: true });
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors', maxZoom: 19 }).addTo(map);
@@ -406,37 +435,44 @@ export default function RiderTrack() {
       }
       map.fitBounds(L.latLngBounds([gpsCoords.lat, gpsCoords.lng], [dLat, dLng]), { padding: [48,48] });
     }
+    setTimeout(() => { try { map.invalidateSize(); } catch {} }, 150);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [leafletReady, order, gpsCoords]);
+  }, [leafletReady, order, gpsCoords, destroyMap]);
+
+  // ✅ FIX 3: On tab switch TO map, always destroy and reinit to avoid stale container
+  useEffect(() => {
+    if (activeTab === 'map') {
+      // Small delay to let DOM render first
+      setTimeout(() => {
+        destroyMap();
+        initMap();
+      }, 100);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   useEffect(() => {
     const h = () => {
       if (document.visibilityState === 'visible') {
-        if (mapObjRef.current) {
-          setTimeout(() => { if (mapObjRef.current) mapObjRef.current.invalidateSize(); }, 200);
-          // ✅ FIX: Re-draw route when coming back from background
-          if (!routeLineRef.current && gpsCoords && order) {
-            const dLat = order?.addressLat || 14.5995, dLng = order?.addressLng || 120.9842;
-            drawRouteForce(mapObjRef.current, gpsCoords.lat, gpsCoords.lng, dLat, dLng);
-          }
-        } else if (activeTab === 'map') {
-          initMap();
+        if (activeTab === 'map') {
+          setTimeout(() => {
+            destroyMap();
+            initMap();
+          }, 200);
         }
       }
     };
     document.addEventListener('visibilitychange', h);
     return () => document.removeEventListener('visibilitychange', h);
-  }, [activeTab, initMap, gpsCoords, order]);
+  }, [activeTab, initMap, destroyMap]);
 
-  useEffect(() => { if (activeTab === 'map') setTimeout(() => initMap(), 100); }, [activeTab, initMap]);
   useEffect(() => { if (leafletReady && activeTab === 'map') setTimeout(() => initMap(), 100); }, [leafletReady, initMap, activeTab]);
+
+  // Cleanup on unmount
   useEffect(() => () => {
     if (watchIdRef.current) navigator.geolocation.clearWatch(watchIdRef.current);
-    if (mapObjRef.current) {
-      try { mapObjRef.current.remove(); } catch {}
-      mapObjRef.current = destMarkerRef.current = riderMarkerRef.current = routeLineRef.current = null;
-    }
-  }, []);
+    destroyMap();
+  }, [destroyMap]);
 
   const autoStartedRef = useRef(false);
   useEffect(() => {
@@ -541,8 +577,7 @@ export default function RiderTrack() {
       await updateFields({ orderId, orderStatus: 'completed', status: 'Delivered', deliveryProofPhoto: photoUrl, deliveryConfirmedAt: new Date().toISOString() });
       stopTracking();
       releaseSession({ orderId, sessionId: SESSION_ID }).catch(() => {});
-      // ✅ FIX: Clear localStorage session ID after successful delivery
-      localStorage.removeItem('riderTrackSessionId');
+      sessionStorage.removeItem('riderTrackSessionId');
       setDeliveryDone(true);
     } catch {
       alert('Failed. Please try again.');
