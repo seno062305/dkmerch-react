@@ -1,465 +1,851 @@
 // src/admin/AdminRiders.jsx
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './AdminRiders.css';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 
-// ── DKMerch Rider ID Card Modal ──
-const RiderIdCardModal = ({ rider, onClose }) => {
-  const cardRef = useRef();
+const SITE_URL = process.env.REACT_APP_SITE_URL || 'https://dkmerchwebsite.vercel.app';
+const getRiderLink    = (orderId) => `${SITE_URL}/rider-track/${orderId}`;
+const getCustomerLink = (orderId) => `${SITE_URL}/track-order?order=${orderId}`;
 
-  const handlePrint = () => {
-    const printContent = cardRef.current.innerHTML;
-    const win = window.open('', '_blank', 'width=500,height=320');
-    win.document.write(`
-      <html><head><title>DKMerch Rider ID</title>
-      <style>
-        body { margin: 0; padding: 20px; font-family: 'Segoe UI', sans-serif; background: #f0f0f0; }
-        .id-card { width: 380px; min-height: 220px; background: linear-gradient(135deg, #6a0dad, #9b30ff);
-          border-radius: 16px; padding: 20px; color: white; box-shadow: 0 8px 32px rgba(106,13,173,0.4); position: relative; overflow: hidden; }
-        .id-card::before { content: ''; position: absolute; top: -40px; right: -40px; width: 160px; height: 160px;
-          background: rgba(255,255,255,0.08); border-radius: 50%; }
-        .id-card::after { content: ''; position: absolute; bottom: -30px; left: -30px; width: 120px; height: 120px;
-          background: rgba(255,255,255,0.06); border-radius: 50%; }
-        .id-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
-        .id-logo { font-size: 22px; }
-        .id-brand { font-size: 18px; font-weight: 800; letter-spacing: 1px; }
-        .id-brand span { font-size: 11px; font-weight: 400; opacity: 0.8; display: block; }
-        .id-body { display: flex; gap: 16px; align-items: flex-start; }
-        .id-photo { width: 70px; height: 70px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.6);
-          object-fit: cover; background: rgba(255,255,255,0.2); flex-shrink: 0; }
-        .id-photo-placeholder { width: 70px; height: 70px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.6);
-          background: rgba(255,255,255,0.2); display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0; }
-        .id-info { flex: 1; }
-        .id-name { font-size: 17px; font-weight: 700; margin-bottom: 4px; }
-        .id-role { font-size: 11px; opacity: 0.8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
-        .id-details { display: flex; flex-direction: column; gap: 3px; }
-        .id-detail { font-size: 11px; opacity: 0.9; }
-        .id-detail strong { opacity: 1; }
-        .id-number { margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.2);
-          display: flex; justify-content: space-between; align-items: center; }
-        .id-number-text { font-size: 15px; font-weight: 800; letter-spacing: 2px; }
-        .id-number-label { font-size: 10px; opacity: 0.7; text-transform: uppercase; }
-        .id-valid { font-size: 10px; opacity: 0.7; text-align: right; }
-      </style></head><body>${printContent}</body></html>
-    `);
-    win.document.close();
-    win.focus();
-    win.print();
-    win.close();
+// ─── STATUS BADGE ─────────────────────────────────────────────
+const StatusBadge = ({ order }) => {
+  const s = (order.orderStatus || order.status || '').toLowerCase();
+  const map = {
+    confirmed:        { label: '✅ Confirmed',        bg: '#059669' },
+    processing:       { label: '⚙️ Processing',       bg: '#6366f1' },
+    shipped:          { label: '📦 Shipped',           bg: '#0ea5e9' },
+    out_for_delivery: { label: '🚚 Out for Delivery', bg: '#f59e0b' },
+    completed:        { label: '✅ Delivered',         bg: '#16a34a' },
+    delivered:        { label: '✅ Delivered',         bg: '#16a34a' },
   };
+  const m = map[s];
+  return m
+    ? <span className="ar-status-badge" style={{ background: m.bg }}>{m.label}</span>
+    : <span className="ar-status-badge" style={{ background: '#6b7280' }}>{order.orderStatus || order.status}</span>;
+};
+
+// ─── LIVE BADGE ───────────────────────────────────────────────
+const LiveBadge = ({ orderId }) => {
+  const loc = useQuery(api.riders.getRiderLocation, { orderId });
+  if (!loc?.isTracking || (Date.now() - loc.updatedAt) >= 60000) return null;
+  return (
+    <span className="ar-live-indicator">
+      <span className="ar-gps-live-dot" style={{ width: 7, height: 7 }} />
+      Live
+    </span>
+  );
+};
+
+// ─── LIVE MAP MODAL ───────────────────────────────────────────
+const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
+  const mapRef    = useRef(null);
+  const mapObjRef = useRef(null);
+  const markerRef = useRef(null);
+  const circleRef = useRef(null);
+  const [leafletReady, setLeafletReady] = useState(!!window.L);
+  const [lastUpdate,   setLastUpdate]   = useState(null);
+  const [isFullscreen, setIsFullscreen] = useState(fullscreen);
+  const location = useQuery(api.riders.getRiderLocation, { orderId });
+
+  useEffect(() => {
+    if (window.L) { setLeafletReady(true); return; }
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    document.head.appendChild(link);
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.onload = () => setLeafletReady(true);
+    document.head.appendChild(script);
+  }, []);
+
+  useEffect(() => {
+    if (!leafletReady || !mapRef.current || mapObjRef.current) return;
+    const L = window.L;
+    const map = L.map(mapRef.current, { zoomControl: true });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors', maxZoom: 19,
+    }).addTo(map);
+    const icon = L.divIcon({
+      html: `<div style="width:40px;height:40px;background:linear-gradient(135deg,#6a0dad,#9b30ff);border-radius:50%;border:3px solid white;box-shadow:0 3px 14px rgba(106,13,173,0.55);display:flex;align-items:center;justify-content:center;font-size:20px;">🛵</div>`,
+      className: '', iconSize: [40, 40], iconAnchor: [20, 20],
+    });
+    map.setView([14.5995, 120.9842], 13);
+    const marker = L.marker([14.5995, 120.9842], { icon }).addTo(map);
+    marker.bindPopup(`<b>🛵 ${order.riderInfo?.name || 'Rider'}</b><br>Loading…`);
+    mapObjRef.current = map;
+    markerRef.current = marker;
+  }, [leafletReady]);
+
+  useEffect(() => {
+    if (mapObjRef.current) setTimeout(() => mapObjRef.current.invalidateSize(), 150);
+  }, [isFullscreen]);
+
+  useEffect(() => {
+    if (!mapObjRef.current || !markerRef.current || !location?.lat) return;
+    const L = window.L;
+    const { lat, lng, accuracy } = location;
+    markerRef.current.setLatLng([lat, lng]);
+    markerRef.current.setPopupContent(
+      `<b>🛵 ${order.riderInfo?.name || 'Rider'}</b><br>📍 ${lat.toFixed(6)}, ${lng.toFixed(6)}<br>${accuracy ? `±${Math.round(accuracy)}m` : ''}<br><small>${new Date(location.updatedAt).toLocaleTimeString()}</small>`
+    );
+    if (circleRef.current) circleRef.current.remove();
+    if (accuracy) {
+      circleRef.current = L.circle([lat, lng], {
+        radius: accuracy, color: '#7c3aed', fillColor: '#7c3aed', fillOpacity: 0.07, weight: 1.5,
+      }).addTo(mapObjRef.current);
+    }
+    mapObjRef.current.flyTo([lat, lng], Math.max(mapObjRef.current.getZoom(), 16), { animate: true, duration: 1 });
+    setLastUpdate(new Date(location.updatedAt));
+  }, [location]);
+
+  useEffect(() => () => {
+    if (mapObjRef.current) {
+      try { mapObjRef.current.remove(); } catch {}
+      mapObjRef.current = null; markerRef.current = null; circleRef.current = null;
+    }
+  }, []);
+
+  const isLive = location?.isTracking && location?.updatedAt && (Date.now() - location.updatedAt) < 60000;
 
   return (
-    <div className="id-card-overlay" onClick={onClose}>
-      <div className="id-card-modal" onClick={(e) => e.stopPropagation()}>
-        <button className="id-card-close" onClick={onClose}>✕</button>
-        <h3 className="id-card-modal-title">🎉 Rider Approved!</h3>
-        <p className="id-card-modal-sub">DKMerch Rider ID has been generated.</p>
-
-        <div ref={cardRef}>
-          <div className="dk-id-card">
-            <div className="dk-id-bg-circle1" />
-            <div className="dk-id-bg-circle2" />
-
-            <div className="dk-id-header">
-              <span className="dk-id-logo">🛵</span>
-              <div>
-                <div className="dk-id-brand">DKMerch</div>
-                <div className="dk-id-brand-sub">Official Delivery Rider</div>
-              </div>
-            </div>
-
-            <div className="dk-id-body">
-              {rider.riderPhoto ? (
-                <img src={rider.riderPhoto} alt="Rider" className="dk-id-photo" />
-              ) : (
-                <div className="dk-id-photo-placeholder">👤</div>
-              )}
-              <div className="dk-id-info">
-                <div className="dk-id-name">{rider.fullName}</div>
-                <div className="dk-id-role">Delivery Rider</div>
-                <div className="dk-id-details">
-                  <div className="dk-id-detail">📞 {rider.phone}</div>
-                  <div className="dk-id-detail">✉️ {rider.email}</div>
-                  <div className="dk-id-detail" style={{ textTransform: 'capitalize' }}>
-                    🛵 {rider.vehicleType || '—'} {rider.plateNumber ? `• ${rider.plateNumber}` : ''}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="dk-id-footer">
-              <div>
-                <div className="dk-id-number">{rider.dkRiderId}</div>
-                <div className="dk-id-number-label">Rider ID</div>
-              </div>
-              <div className="dk-id-valid">
-                Issued: {rider.dkRiderIdGeneratedAt
-                  ? new Date(rider.dkRiderIdGeneratedAt).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })
-                  : new Date().toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })}
-              </div>
-            </div>
+    <div className={`ar-modal-overlay ${isFullscreen ? 'ar-overlay--full' : ''}`} onClick={onClose}>
+      <div className={`ar-map-modal ${isFullscreen ? 'ar-map-modal--full' : ''}`} onClick={e => e.stopPropagation()}>
+        <div className="ar-map-header">
+          <div className="ar-map-title-row">
+            <span className="ar-map-title">📍 Live Rider Location</span>
+            <span className="ar-map-order-id">#{orderId?.slice(-8).toUpperCase()}</span>
+          </div>
+          <div className="ar-map-header-right">
+            {isLive
+              ? <div className="ar-map-live-badge"><span className="ar-gps-live-dot" />Live · {lastUpdate?.toLocaleTimeString()}</div>
+              : location?.updatedAt
+              ? <div className="ar-map-stale-badge">⏸ {new Date(location.updatedAt).toLocaleTimeString()}</div>
+              : <div className="ar-map-waiting-badge">⏳ Waiting…</div>}
+            <button className="ar-map-fullscreen-btn" onClick={() => setIsFullscreen(f => !f)}>
+              {isFullscreen ? '⛶ Exit' : '⛶ Full'}
+            </button>
+            <button className="ar-modal-close ar-modal-close--map" onClick={onClose}>✕</button>
           </div>
         </div>
-
-        <div className="id-card-actions">
-          <button className="id-card-print-btn" onClick={handlePrint}>🖨️ Print ID Card</button>
-          <button className="id-card-done-btn" onClick={onClose}>Done</button>
+        <div ref={mapRef} className="ar-map-container" />
+        {location?.lat && (
+          <div className="ar-map-info-bar">
+            <span>🛵 {order.riderInfo?.name || 'Rider'}</span>
+            <span>📍 {location.lat.toFixed(5)}, {location.lng.toFixed(5)}</span>
+            {location.speed > 0 && <span>🚀 {(location.speed * 3.6).toFixed(1)} km/h</span>}
+          </div>
+        )}
+        <div className="ar-map-link-row">
+          <code className="ar-map-link-code">{getRiderLink(orderId)}</code>
+          <button className="ar-map-copy-btn" onClick={() => navigator.clipboard.writeText(getRiderLink(orderId))}>
+            📋 Copy
+          </button>
         </div>
       </div>
     </div>
   );
 };
 
-// ── Application Details Modal (view photos / IDs) ──
-const ApplicationDetailModal = ({ app, onClose, onApprove, onReject }) => {
-  const [viewImg, setViewImg] = useState(null);
+// ─── SHARE MODAL ──────────────────────────────────────────────
+const ShareModal = ({ order, onClose }) => {
+  const [copiedRider,    setCopiedRider]    = useState(false);
+  const [copiedCustomer, setCopiedCustomer] = useState(false);
+  const [copiedAll,      setCopiedAll]      = useState(false);
+  const riderInfo = order.riderInfo || {};
+  const riderLink = getRiderLink(order.orderId);
+  const custLink  = getCustomerLink(order.orderId);
+  const msg = `📦 DKMerch Order Update\n━━━━━━━━━━━━━━━━━━\nOrder: #${order.orderId?.slice(-8).toUpperCase()}\nStatus: Out for Delivery 🚚\n\n🛵 Rider:\n• ${riderInfo.name || '—'}\n• ${riderInfo.phone || '—'}\n• Plate: ${riderInfo.plate || '—'}\n\n📍 Track: ${custLink}\n━━━━━━━━━━━━━━━━━━\nThank you! 💜`;
+
+  const copy = async (text, setter) => {
+    try { await navigator.clipboard.writeText(text); }
+    catch { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); }
+    setter(true); setTimeout(() => setter(false), 2000);
+  };
 
   return (
-    <div className="id-card-overlay" onClick={onClose}>
-      <div className="app-detail-modal" onClick={(e) => e.stopPropagation()}>
-        <button className="id-card-close" onClick={onClose}>✕</button>
-        <h3 className="app-detail-title">📋 Application Details</h3>
-
-        {/* Basic Info */}
-        <div className="app-detail-section">
-          <div className="app-detail-grid">
-            <div><span className="app-detail-label">Full Name</span><span className="app-detail-value">{app.fullName}</span></div>
-            <div><span className="app-detail-label">Email</span><span className="app-detail-value">{app.email}</span></div>
-            <div><span className="app-detail-label">Phone</span><span className="app-detail-value">{app.phone}</span></div>
-            <div><span className="app-detail-label">Address</span><span className="app-detail-value">{app.address || '—'}</span></div>
-            <div><span className="app-detail-label">Vehicle</span><span className="app-detail-value" style={{ textTransform: 'capitalize' }}>{app.vehicleType || '—'}</span></div>
-            <div><span className="app-detail-label">Plate No.</span><span className="app-detail-value">{app.plateNumber || '—'}</span></div>
-            <div><span className="app-detail-label">License No.</span><span className="app-detail-value">{app.licenseNumber || '—'}</span></div>
-            <div><span className="app-detail-label">Applied</span><span className="app-detail-value">{app.appliedAt ? new Date(app.appliedAt).toLocaleDateString('en-PH') : 'N/A'}</span></div>
+    <div className="ar-modal-overlay" onClick={onClose}>
+      <div className="ar-share-modal" onClick={e => e.stopPropagation()}>
+        <button className="ar-modal-close" onClick={onClose}>✕</button>
+        <h3 className="ar-modal-title">📤 Share Links</h3>
+        <div className="ar-share-link-block ar-share-link-rider">
+          <div className="ar-share-link-header"><span>🛵 Rider Link</span></div>
+          <div className="ar-share-link-row">
+            <div className="ar-share-link-url">{riderLink}</div>
+            <button className="ar-btn ar-btn-primary ar-share-copy-btn" onClick={() => copy(riderLink, setCopiedRider)}>
+              {copiedRider ? '✅' : '📋 Copy'}
+            </button>
           </div>
         </div>
+        <div className="ar-share-link-block ar-share-link-customer">
+          <div className="ar-share-link-header"><span>👤 Customer Link</span></div>
+          <div className="ar-share-link-row">
+            <div className="ar-share-link-url">{custLink}</div>
+            <button className="ar-btn ar-btn-secondary ar-share-copy-btn" onClick={() => copy(custLink, setCopiedCustomer)}>
+              {copiedCustomer ? '✅' : '📋 Copy'}
+            </button>
+          </div>
+        </div>
+        <div className="ar-share-divider">Full message:</div>
+        <div className="ar-share-preview"><pre className="ar-share-text">{msg}</pre></div>
+        <div className="ar-share-actions">
+          <button className="ar-btn ar-btn-primary" onClick={() => copy(msg, setCopiedAll)}>
+            {copiedAll ? '✅ Copied!' : '📋 Copy Message'}
+          </button>
+          <button className="ar-btn ar-btn-ghost" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
-        {/* Photos */}
-        <div className="app-detail-photos-header">📸 Submitted Photos</div>
-        <div className="app-detail-photos">
+// ─── RIDER DETAIL MODAL ───────────────────────────────────────
+const RiderDetailModal = ({ rider, onClose }) => (
+  <div className="ar-modal-overlay" onClick={onClose}>
+    <div className="ar-detail-modal" onClick={e => e.stopPropagation()}>
+      <button className="ar-modal-close" onClick={onClose}>✕</button>
+      <h3 className="ar-modal-title">🛵 Rider Details</h3>
+      <div className="ar-rider-card">
+        {rider.riderPhoto
+          ? <img src={rider.riderPhoto} alt={rider.fullName} className="ar-rider-avatar" />
+          : <div className="ar-rider-avatar-placeholder">👤</div>}
+        <div className="ar-rider-info-grid">
           {[
-            { key: 'riderPhoto', label: '🤳 Selfie / Face Photo' },
-            { key: 'validId1',   label: '🪪 Valid ID #1' },
-            { key: 'validId2',   label: '🪪 Valid ID #2' },
-          ].map(({ key, label }) => (
-            <div key={key} className="app-photo-box">
-              <div className="app-photo-label">{label}</div>
-              {app[key] ? (
-                <img
-                  src={app[key]}
-                  alt={label}
-                  className="app-photo-img"
-                  onClick={() => setViewImg(app[key])}
-                  title="Click to enlarge"
-                />
-              ) : (
-                <div className="app-photo-missing">No photo submitted</div>
-              )}
+            ['Full Name', rider.fullName],
+            ['DK Rider ID', rider.dkRiderId || '—', true],
+            ['Email', rider.email],
+            ['Phone', rider.phone],
+            ['Plate No.', rider.plateNumber || '—'],
+          ].map(([label, value, highlight]) => (
+            <div key={label} className="ar-info-row">
+              <span className="ar-info-label">{label}</span>
+              <span className={`ar-info-value ${highlight ? 'ar-id-badge' : ''}`}>{value}</span>
             </div>
           ))}
         </div>
+      </div>
+      <button className="ar-btn ar-btn-ghost" style={{ width: '100%', marginTop: 12 }} onClick={onClose}>Close</button>
+    </div>
+  </div>
+);
 
-        {/* Actions */}
-        <div className="app-detail-actions">
-          <button className="riders-btn approve" onClick={() => { onClose(); onApprove(app); }}>✅ Approve</button>
-          <button className="riders-btn reject" onClick={() => { onClose(); onReject(app._id, app.fullName); }}>❌ Reject</button>
+// ─── REMOVE CONFIRM ───────────────────────────────────────────
+const RemoveConfirmModal = ({ order, onConfirm, onClose }) => (
+  <div className="ar-modal-overlay" onClick={onClose}>
+    <div className="ar-confirm-modal" onClick={e => e.stopPropagation()}>
+      <button className="ar-modal-close" onClick={onClose}>✕</button>
+      <div className="ar-confirm-icon">🗑️</div>
+      <h3 className="ar-modal-title">Remove Order?</h3>
+      <p className="ar-confirm-desc">
+        Aalisin sa list ang <strong>#{order.orderId?.slice(-8).toUpperCase()}</strong>. Hindi mabubura sa database.
+      </p>
+      <div className="ar-confirm-actions">
+        <button className="ar-btn ar-btn-ghost" onClick={onClose}>Cancel</button>
+        <button className="ar-btn ar-btn-danger" onClick={onConfirm}>Remove</button>
+      </div>
+    </div>
+  </div>
+);
+
+// ─── ACTIVE ORDER CARD ────────────────────────────────────────
+// Defined OUTSIDE AdminRiders to prevent re-mounting on parent re-render.
+// Uses LOCAL state for inputs — this fixes the typing/blocking bug.
+const ActiveOrderCard = ({
+  order,
+  savingRider, savedRider,
+  savingGps,   savedGps,
+  copiedLink, collapsed, notifying, notified,
+  onSaveRider, onSaveGps,
+  onCopyLink, onToggleCollapse, onShareOrder, onOpenMap, onNotifyCustomer,
+}) => {
+  const { orderId } = order;
+
+  // ── LOCAL INPUT STATE (fixes the typing bug) ──
+  const [ri, setRi] = useState({
+    name:  order.riderInfo?.name  || '',
+    phone: order.riderInfo?.phone || '',
+    plate: order.riderInfo?.plate || '',
+  });
+  const [gps,    setGps]    = useState(order.riderGpsLink || '');
+  const [errors, setErrors] = useState({});
+
+  // Sync when riderInfo changes from outside (after save)
+  useEffect(() => {
+    setRi({
+      name:  order.riderInfo?.name  || '',
+      phone: order.riderInfo?.phone || '',
+      plate: order.riderInfo?.plate || '',
+    });
+  }, [order.riderInfo?.name, order.riderInfo?.phone, order.riderInfo?.plate]);
+
+  useEffect(() => {
+    setGps(order.riderGpsLink || '');
+  }, [order.riderGpsLink]);
+
+  const [copiedCust, setCopiedCust] = useState(false);
+  const custLink  = getCustomerLink(orderId);
+  const riderLink = getRiderLink(orderId);
+
+  const copyCust = () => {
+    navigator.clipboard.writeText(custLink).catch(() => {
+      const ta = document.createElement('textarea');
+      ta.value = custLink;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    });
+    setCopiedCust(true);
+    setTimeout(() => setCopiedCust(false), 2000);
+  };
+
+  // ── VALIDATION ──
+  const validate = () => {
+    const e = {};
+    if (!ri.name?.trim())                                   e.name  = 'Name is required';
+    if (!ri.phone?.trim())                                  e.phone = 'Phone is required';
+    else if (!/^09\d{9}$/.test(ri.phone.trim()))            e.phone = 'Must be 11 digits starting with 09';
+    if (!ri.plate?.trim())                                  e.plate = 'Plate number is required';
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const handlePhoneChange = (val) => {
+    // Allow digits only, max 11
+    const digits = val.replace(/\D/g, '').slice(0, 11);
+    setRi(prev => ({ ...prev, phone: digits }));
+    if (errors.phone) setErrors(prev => ({ ...prev, phone: '' }));
+  };
+
+  // Notify is only enabled when rider info is SAVED in DB (not just typed locally)
+  const savedRiderInfo    = order.riderInfo || {};
+  const hasSavedRiderInfo = !!(
+    savedRiderInfo.name?.trim() &&
+    savedRiderInfo.phone?.trim() &&
+    savedRiderInfo.plate?.trim() &&
+    /^09\d{9}$/.test(savedRiderInfo.phone.trim())
+  );
+  const alreadyNotified = (order.orderStatus || '').toLowerCase() === 'out_for_delivery';
+
+  return (
+    <div className={`ar-order-card ${collapsed ? 'ar-card-collapsed' : ''}`}>
+
+      {/* Header */}
+      <div className="ar-order-header">
+        <div className="ar-order-id-block">
+          <span className="ar-order-id">#{orderId?.slice(-8).toUpperCase()}</span>
+          <StatusBadge order={order} />
+          <LiveBadge orderId={orderId} />
+        </div>
+        <div className="ar-header-actions">
+          <button className="ar-share-btn" onClick={() => onShareOrder({ ...order, riderInfo: ri })}>📤</button>
+          <button className="ar-collapse-btn" onClick={() => onToggleCollapse(orderId)}>
+            {collapsed ? '▼' : '▲'}
+          </button>
         </div>
       </div>
 
-      {/* Fullscreen image viewer */}
-      {viewImg && (
-        <div className="img-viewer-overlay" onClick={() => setViewImg(null)}>
-          <img src={viewImg} alt="ID" className="img-viewer-img" />
-          <div className="img-viewer-hint">Tap anywhere to close</div>
+      {/* Collapsed summary */}
+      {collapsed && (
+        <div className="ar-collapsed-summary">
+          <span className="ar-cs-name">{order.customerName || '—'}</span>
+          <span className="ar-cs-sep">·</span>
+          <span className="ar-cs-total">₱{(order.finalTotal ?? order.total ?? 0).toLocaleString()}</span>
+          {ri.name && (
+            <>
+              <span className="ar-cs-sep">·</span>
+              <span className="ar-cs-rider">🛵 {ri.name}</span>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Body */}
+      {!collapsed && (
+        <div className="ar-order-body">
+
+          {/* ── Customer + Rider Info — 2 columns ── */}
+          <div className="ar-two-col">
+            <div className="ar-section">
+              <div className="ar-section-title">👤 Customer</div>
+              <div className="ar-compact-row">
+                <span className="ar-cl">Name</span>
+                <span className="ar-cv">{order.customerName || '—'}</span>
+              </div>
+              <div className="ar-compact-row">
+                <span className="ar-cl">Phone</span>
+                <span className="ar-cv">{order.phone || '—'}</span>
+              </div>
+              <div className="ar-compact-row">
+                <span className="ar-cl">Total</span>
+                <span className="ar-cv ar-total">
+                  ₱{(order.finalTotal ?? order.total ?? 0).toLocaleString()}
+                </span>
+              </div>
+            </div>
+
+            <div className="ar-section">
+              <div className="ar-section-title">🛵 Rider Info</div>
+              <div className="ar-input-compact">
+                <div className="ar-input-field">
+                  <input
+                    type="text"
+                    placeholder="Name *"
+                    value={ri.name}
+                    onChange={e => { setRi(prev => ({ ...prev, name: e.target.value })); if (errors.name) setErrors(prev => ({ ...prev, name: '' })); }}
+                    className={errors.name ? 'ar-input-error' : ''}
+                  />
+                  {errors.name && <span className="ar-field-error">{errors.name}</span>}
+                </div>
+                <div className="ar-input-field">
+                  <input
+                    type="tel"
+                    placeholder="Phone * (09XXXXXXXXX)"
+                    value={ri.phone}
+                    onChange={e => handlePhoneChange(e.target.value)}
+                    maxLength={11}
+                    className={errors.phone ? 'ar-input-error' : ''}
+                  />
+                  {errors.phone
+                    ? <span className="ar-field-error">{errors.phone}</span>
+                    : <span className="ar-field-hint">{ri.phone.length}/11 digits</span>}
+                </div>
+                <div className="ar-input-field">
+                  <input
+                    type="text"
+                    placeholder="Plate Number *"
+                    value={ri.plate}
+                    onChange={e => { setRi(prev => ({ ...prev, plate: e.target.value.toUpperCase() })); if (errors.plate) setErrors(prev => ({ ...prev, plate: '' })); }}
+                    className={errors.plate ? 'ar-input-error' : ''}
+                  />
+                  {errors.plate && <span className="ar-field-error">{errors.plate}</span>}
+                </div>
+              </div>
+              <button
+                className="ar-save-btn ar-save-btn-sm"
+                onClick={() => { if (validate()) onSaveRider(orderId, ri); }}
+                disabled={savingRider}
+              >
+                {savingRider ? '⏳' : savedRider ? '✅ Saved' : '💾 Save Rider'}
+              </button>
+            </div>
+          </div>
+
+          {/* ── Notify Customer — full width ── */}
+          <div className="ar-notify-section">
+            {alreadyNotified ? (
+              <div className="ar-notify-done">
+                <span>✅ Customer notified — Out for Delivery</span>
+              </div>
+            ) : (
+              <>
+                <button
+                  className={`ar-notify-btn ${notified ? 'ar-notify-btn--done' : ''}`}
+                  onClick={() => { if (validate()) onNotifyCustomer(order, ri); }}
+                  disabled={notifying || !hasSavedRiderInfo}
+                  title={!hasSavedRiderInfo ? 'Save rider info first before notifying' : ''}
+                >
+                  {notifying
+                    ? '⏳ Sending…'
+                    : notified
+                    ? '✅ Customer Notified!'
+                    : '🔔 Notify Customer (Out for Delivery)'}
+                </button>
+                {!hasSavedRiderInfo && (
+                  <p className="ar-notify-hint">⚠️ Save rider info first (click 💾 Save Rider) before notifying</p>
+                )}
+              </>
+            )}
+
+            {/* ── OTP Display — shows when customer generates it ── */}
+            {alreadyNotified && (
+              <div className="ar-otp-block">
+                {order.deliveryOtp ? (
+                  <>
+                    <div className="ar-otp-label">
+                      <span className="ar-otp-label-icon">🔐</span>
+                      <span>Customer OTP</span>
+                      <span className="ar-otp-ready-badge">✅ Generated</span>
+                    </div>
+                    <div className="ar-otp-digits">
+                      {String(order.deliveryOtp).split('').map((d, i) => (
+                        <span key={i} className="ar-otp-digit">{d}</span>
+                      ))}
+                    </div>
+                    <p className="ar-otp-sub">
+                      {order.deliveryOtpVerified
+                        ? '✅ OTP verified by rider — package delivered!'
+                        : '⏳ Waiting for rider to verify this OTP from customer'}
+                    </p>
+                  </>
+                ) : (
+                  <div className="ar-otp-waiting">
+                    <span className="ar-otp-wait-dot" />
+                    <span>Waiting for customer to generate OTP…</span>
+                    <small>Customer must tap "Generate OTP" on their tracking page when rider arrives</small>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ── GPS Tracking — full width ── */}
+          <div className="ar-section ar-section-full">
+            <div className="ar-section-title">📍 GPS Tracking</div>
+            <div className="ar-tracking-compact">
+              <div className="ar-tl-row">
+                <span className="ar-tl-badge">🛵</span>
+                <div className="ar-tl-url">{riderLink}</div>
+                <button className="ar-tl-copy" onClick={() => onCopyLink(orderId)}>
+                  {copiedLink ? '✅' : '📋'}
+                </button>
+              </div>
+              <div className="ar-tl-row">
+                <span className="ar-tl-badge">👤</span>
+                <div className="ar-tl-url">{custLink}</div>
+                <button className="ar-tl-copy ar-tl-copy--green" onClick={copyCust}>
+                  {copiedCust ? '✅' : '📋'}
+                </button>
+              </div>
+              <div className="ar-map-btn-row">
+                <button className="ar-track-map-btn" onClick={() => onOpenMap(order, false)}>
+                  🗺️ Live Map
+                </button>
+                <button className="ar-track-map-btn ar-track-map-btn--full" onClick={() => onOpenMap(order, true)}>
+                  ⛶ Full Map
+                </button>
+              </div>
+            </div>
+
+            <details className="ar-gps-fallback">
+              <summary>Manual Google Maps link (optional fallback)</summary>
+              <div style={{ marginTop: 8 }}>
+                <div className="ar-jnt-row">
+                  <input
+                    type="url"
+                    className="ar-jnt-input"
+                    placeholder="Paste Google Maps live link…"
+                    value={gps}
+                    onChange={e => setGps(e.target.value)}
+                  />
+                  <button
+                    className="ar-save-btn ar-jnt-save"
+                    onClick={() => onSaveGps(orderId, gps)}
+                    disabled={savingGps}
+                  >
+                    {savingGps ? '⏳' : savedGps ? '✅' : '💾'}
+                  </button>
+                </div>
+                {order.riderGpsLink && (
+                  <a
+                    href={order.riderGpsLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="ar-gps-open-btn"
+                    style={{ marginTop: 6, display: 'inline-block' }}
+                  >
+                    🗺️ Open Saved Link
+                  </a>
+                )}
+              </div>
+            </details>
+          </div>
+
         </div>
       )}
     </div>
   );
 };
 
-// ── Main Component ──
-const AdminRiders = () => {
-  const [tab, setTab] = useState('applications');
-  const [selectedApp, setSelectedApp] = useState(null);    // for details modal
-  const [approvedRider, setApprovedRider] = useState(null); // for ID card modal
-
-  const allRiders         = useQuery(api.riders.getAllRiders)                ?? [];
-  const allPickupRequests = useQuery(api.pickupRequests.getAllPickupRequests) ?? [];
-  const pendingPickups    = allPickupRequests.filter(p => p.status === 'pending');
-
-  const approveRiderMutation      = useMutation(api.riders.approveRider);
-  const updateRiderStatusMutation = useMutation(api.riders.updateRiderStatus);
-  const deleteRiderMutation       = useMutation(api.riders.deleteRider);
-  const approvePickupMutation     = useMutation(api.pickupRequests.approvePickupRequest);
-  const rejectPickupMutation      = useMutation(api.pickupRequests.rejectPickupRequest);
-
-  const applications   = allRiders.filter(r => r.status === 'pending');
-  const approvedRiders = allRiders.filter(r => r.status === 'approved');
-
-  const handleApproveRider = async (app) => {
-    const confirmed = window.confirm(
-      `Approve "${app.fullName}" as a rider?\n\nEmail: ${app.email}\nVehicle: ${app.vehicleType || 'N/A'}`
-    );
-    if (!confirmed) return;
-
-    try {
-      const result = await approveRiderMutation({ id: app._id });
-      // Show ID card modal with the generated ID
-      setApprovedRider({ ...app, dkRiderId: result.dkRiderId, dkRiderIdGeneratedAt: new Date().toISOString() });
-    } catch (err) {
-      console.error('Failed to approve rider:', err);
-      alert('Failed to approve rider. Please try again.');
-    }
-  };
-
-  const handleRejectRider = async (id, name) => {
-    const confirmed = window.confirm(`Reject and remove the application of "${name}"?\n\nThis cannot be undone.`);
-    if (!confirmed) return;
-    try {
-      await deleteRiderMutation({ id });
-    } catch (err) {
-      console.error('Failed to delete rider:', err);
-    }
-  };
-
-  const handleRevokeRider = async (id, name) => {
-    const confirmed = window.confirm(`Revoke approval for "${name}"?\n\nThey will no longer be able to log in as a rider.`);
-    if (!confirmed) return;
-    try {
-      await updateRiderStatusMutation({ id, status: 'pending' });
-    } catch (err) {
-      console.error('Failed to revoke rider:', err);
-    }
-  };
-
-  const approvePickup = async (requestId, riderName) => {
-    if (!window.confirm(`Approve pickup request for rider "${riderName}"?`)) return;
-    try {
-      await approvePickupMutation({ requestId });
-      alert(`✅ Pickup approved for ${riderName}!`);
-    } catch (err) {
-      console.error('Failed to approve pickup:', err);
-      alert('Failed to approve pickup. Please try again.');
-    }
-  };
-
-  const rejectPickup = async (requestId) => {
-    if (!window.confirm('Reject this pickup request?')) return;
-    try {
-      await rejectPickupMutation({ requestId });
-    } catch (err) {
-      console.error('Failed to reject pickup:', err);
-    }
-  };
-
-  const getPickupStatusColor = (status) => {
-    const map = { pending: '#ffc107', approved: '#28a745', rejected: '#dc3545', out_for_delivery: '#6366f1', completed: '#059669' };
-    return map[status] || '#6c757d';
-  };
-
-  const getPickupStatusLabel = (status) => {
-    const map = { pending: '⏳ Pending', approved: '✅ Approved', rejected: '❌ Rejected', out_for_delivery: '🚚 Out for Delivery', completed: '🎉 Delivered' };
-    return map[status] || status;
-  };
+// ─── COMPLETED ORDER CARD ─────────────────────────────────────
+const CompletedOrderCard = ({ order, onRemove }) => {
+  const riderInfo   = order.riderInfo || {};
+  const deliveredAt = order.deliveryConfirmedAt
+    ? new Date(order.deliveryConfirmedAt).toLocaleString('en-PH', {
+        month: 'short', day: 'numeric', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      })
+    : null;
 
   return (
+    <div className="ar-order-card ar-completed-card">
+      <div className="ar-order-header ar-completed-header">
+        <div className="ar-order-id-block">
+          <span className="ar-order-id">#{order.orderId?.slice(-8).toUpperCase()}</span>
+          <StatusBadge order={order} />
+        </div>
+        <button className="ar-remove-btn" onClick={() => onRemove(order)} title="Remove">🗑️</button>
+      </div>
+      <div className="ar-completed-body">
+        <div className="ar-completed-row">
+          <span className="ar-info-label">Customer</span>
+          <span className="ar-info-value">{order.customerName || '—'}</span>
+        </div>
+        <div className="ar-completed-row">
+          <span className="ar-info-label">Total</span>
+          <span className="ar-info-value ar-total">
+            ₱{(order.finalTotal ?? order.total ?? 0).toLocaleString()}
+          </span>
+        </div>
+        {riderInfo.name && (
+          <div className="ar-completed-row">
+            <span className="ar-info-label">Rider</span>
+            <span className="ar-info-value">
+              🛵 {riderInfo.name}{riderInfo.plate ? ` · ${riderInfo.plate}` : ''}
+            </span>
+          </div>
+        )}
+        {deliveredAt && (
+          <div className="ar-completed-row">
+            <span className="ar-info-label">Delivered</span>
+            <span className="ar-info-value ar-delivered-time">✅ {deliveredAt}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ─── MAIN COMPONENT ───────────────────────────────────────────
+const AdminRiders = () => {
+  const [tab,           setTab]           = useState('delivery');
+  const [shareOrder,    setShareOrder]    = useState(null);
+  const [selectedRider, setSelectedRider] = useState(null);
+  const [removeTarget,  setRemoveTarget]  = useState(null);
+  const [mapOrder,      setMapOrder]      = useState(null);
+  const [mapFullscreen, setMapFullscreen] = useState(false);
+
+  const [collapsed,       setCollapsed]       = useState({});
+  const [hiddenCompleted, setHiddenCompleted] = useState([]);
+  const [savingRider,     setSavingRider]     = useState({});
+  const [savedRider,      setSavedRider]      = useState({});
+  const [savingGps,       setSavingGps]       = useState({});
+  const [savedGps,        setSavedGps]        = useState({});
+  const [copiedLink,      setCopiedLink]      = useState({});
+  const [notifying,       setNotifying]       = useState({});
+  const [notified,        setNotified]        = useState({});
+
+  const allOrders      = useQuery(api.orders.getAllOrders) ?? [];
+  const allRiders      = useQuery(api.riders.getAllRiders) ?? [];
+  const updateFields   = useMutation(api.orders.updateOrderFields);
+  const notifyMutation = useMutation(api.orders.notifyCustomerOutForDelivery);
+
+  const approvedRiders    = allRiders.filter(r => r.status === 'approved');
+  const activeStatuses    = ['confirmed', 'shipped', 'out_for_delivery', 'processing'];
+  const completedStatuses = ['completed', 'delivered'];
+
+  const activeOrders = allOrders
+    .filter(o => activeStatuses.includes((o.orderStatus || o.status || '').toLowerCase()))
+    .sort((a, b) => (b.confirmedAt || b._creationTime || 0) - (a.confirmedAt || a._creationTime || 0));
+
+  const completedOrders = allOrders
+    .filter(o => completedStatuses.includes((o.orderStatus || o.status || '').toLowerCase()))
+    .filter(o => !hiddenCompleted.includes(o._id))
+    .sort((a, b) => (b.deliveryConfirmedAt || b._creationTime || 0) - (a.deliveryConfirmedAt || a._creationTime || 0));
+
+  // ── HANDLERS ──────────────────────────────────────────────────
+
+  const handleSaveRider = async (orderId, ri) => {
+    setSavingRider(p => ({ ...p, [orderId]: true }));
+    try {
+      await updateFields({
+        orderId,
+        riderInfo: { name: ri.name || '', phone: ri.phone || '', plate: ri.plate || '' },
+      });
+      setSavedRider(p => ({ ...p, [orderId]: true }));
+      setTimeout(() => setSavedRider(p => ({ ...p, [orderId]: false })), 2000);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSavingRider(p => ({ ...p, [orderId]: false }));
+    }
+  };
+
+  const handleSaveGps = async (orderId, gpsValue) => {
+    setSavingGps(p => ({ ...p, [orderId]: true }));
+    try {
+      await updateFields({ orderId, riderGpsLink: gpsValue ?? '' });
+      setSavedGps(p => ({ ...p, [orderId]: true }));
+      setTimeout(() => setSavedGps(p => ({ ...p, [orderId]: false })), 2000);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSavingGps(p => ({ ...p, [orderId]: false }));
+    }
+  };
+
+  const handleCopyLink = (orderId) => {
+    const link = getRiderLink(orderId);
+    navigator.clipboard.writeText(link).catch(() => {
+      const ta = document.createElement('textarea');
+      ta.value = link;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    });
+    setCopiedLink(p => ({ ...p, [orderId]: true }));
+    setTimeout(() => setCopiedLink(p => ({ ...p, [orderId]: false })), 2000);
+  };
+
+  const handleNotifyCustomer = async (order, ri) => {
+    const { orderId } = order;
+    if (!ri.name?.trim() || !ri.phone?.trim()) {
+      alert('Please enter rider name and phone first.');
+      return;
+    }
+    if (!order.email) {
+      alert('No customer email on this order.');
+      return;
+    }
+    setNotifying(p => ({ ...p, [orderId]: true }));
+    try {
+      await updateFields({
+        orderId,
+        riderInfo: { name: ri.name, phone: ri.phone, plate: ri.plate || '' },
+      });
+      await notifyMutation({
+        orderId,
+        riderName:     ri.name,
+        riderPhone:    ri.phone,
+        riderPlate:    ri.plate || undefined,
+        customerEmail: order.email,
+      });
+      setNotified(p => ({ ...p, [orderId]: true }));
+      setTimeout(() => setNotified(p => ({ ...p, [orderId]: false })), 4000);
+    } catch (e) {
+      console.error('Notify error:', e);
+      alert('Failed to notify customer. Please try again.');
+    } finally {
+      setNotifying(p => ({ ...p, [orderId]: false }));
+    }
+  };
+
+  const handleToggleCollapse = (orderId) => setCollapsed(p => ({ ...p, [orderId]: !p[orderId] }));
+  const confirmRemove        = ()         => { if (!removeTarget) return; setHiddenCompleted(p => [...p, removeTarget._id]); setRemoveTarget(null); };
+  const openMap              = (order, full = false) => { setMapOrder(order); setMapFullscreen(full); };
+
+  // ── RENDER ────────────────────────────────────────────────────
+  return (
     <div className="admin-riders">
-      <h1 className="admin-riders-title">🛵 Riders Management</h1>
+      <h1 className="admin-riders-title">🚚 Delivery Management</h1>
 
       <div className="riders-tabs">
-        <button className={`riders-tab-btn ${tab === 'applications' ? 'active' : ''}`} onClick={() => setTab('applications')}>
-          Pending Applications
-          {applications.length > 0 && <span className="riders-tab-badge">{applications.length}</span>}
+        <button
+          className={`riders-tab-btn ${tab === 'delivery' ? 'active' : ''}`}
+          onClick={() => setTab('delivery')}
+        >
+          📦 Active {activeOrders.length > 0 && <span className="riders-tab-badge">{activeOrders.length}</span>}
         </button>
-        <button className={`riders-tab-btn ${tab === 'approved' ? 'active' : ''}`} onClick={() => setTab('approved')}>
-          Approved Riders ({approvedRiders.length})
+        <button
+          className={`riders-tab-btn ${tab === 'completed' ? 'active' : ''}`}
+          onClick={() => setTab('completed')}
+        >
+          ✅ Completed {completedOrders.length > 0 && <span className="riders-tab-badge ar-badge-green">{completedOrders.length}</span>}
         </button>
-        <button className={`riders-tab-btn ${tab === 'pickups' ? 'active' : ''}`} onClick={() => setTab('pickups')}>
-          Pickup Requests
-          {pendingPickups.length > 0 && <span className="riders-tab-badge">{pendingPickups.length}</span>}
-        </button>
-        <button className={`riders-tab-btn ${tab === 'all-pickups' ? 'active' : ''}`} onClick={() => setTab('all-pickups')}>
-          All Pickups ({allPickupRequests.length})
+        <button
+          className={`riders-tab-btn ${tab === 'riders' ? 'active' : ''}`}
+          onClick={() => setTab('riders')}
+        >
+          🛵 Riders ({approvedRiders.length})
         </button>
       </div>
 
-      {/* ─── PENDING APPLICATIONS ─── */}
-      {tab === 'applications' && (
-        applications.length === 0 ? (
-          <p className="riders-empty">No pending applications.</p>
-        ) : (
-          <div className="riders-table-wrapper">
-            <table className="riders-table">
-              <thead>
-                <tr><th>Name</th><th>Email</th><th>Phone</th><th>Vehicle</th><th>Date Applied</th><th>Photos</th><th>Actions</th></tr>
-              </thead>
-              <tbody>
-                {applications.map(app => (
-                  <tr key={app._id}>
-                    <td>{app.fullName}</td>
-                    <td>{app.email}</td>
-                    <td>{app.phone}</td>
-                    <td style={{ textTransform: 'capitalize' }}>{app.vehicleType || '—'}</td>
-                    <td>{app.appliedAt ? new Date(app.appliedAt).toLocaleDateString('en-PH') : 'N/A'}</td>
-                    <td>
-                      <div className="riders-photo-indicators">
-                        <span className={`photo-dot ${app.riderPhoto ? 'has-photo' : 'no-photo'}`} title="Selfie">🤳</span>
-                        <span className={`photo-dot ${app.validId1 ? 'has-photo' : 'no-photo'}`} title="ID 1">🪪</span>
-                        <span className={`photo-dot ${app.validId2 ? 'has-photo' : 'no-photo'}`} title="ID 2">🪪</span>
-                      </div>
-                    </td>
-                    <td className="riders-actions">
-                      <button className="riders-btn view" onClick={() => setSelectedApp(app)}>👁 View</button>
-                      <button className="riders-btn approve" onClick={() => handleApproveRider(app)}>✅ Approve</button>
-                      <button className="riders-btn reject" onClick={() => handleRejectRider(app._id, app.fullName)}>❌ Reject</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )
+      {/* ── Active Tab ── */}
+      {tab === 'delivery' && (
+        activeOrders.length === 0
+          ? (
+            <div className="ar-empty">
+              <div className="ar-empty-icon">📭</div>
+              <p>No active deliveries.</p>
+              <span>Confirmed orders appear here.</span>
+            </div>
+          )
+          : (
+            <div className="ar-orders-list">
+              {activeOrders.map(o => (
+                <ActiveOrderCard
+                  key={o._id}
+                  order={o}
+                  savingRider={!!savingRider[o.orderId]}
+                  savedRider={!!savedRider[o.orderId]}
+                  savingGps={!!savingGps[o.orderId]}
+                  savedGps={!!savedGps[o.orderId]}
+                  copiedLink={!!copiedLink[o.orderId]}
+                  collapsed={!!collapsed[o.orderId]}
+                  notifying={!!notifying[o.orderId]}
+                  notified={!!notified[o.orderId]}
+                  onSaveRider={handleSaveRider}
+                  onSaveGps={handleSaveGps}
+                  onCopyLink={handleCopyLink}
+                  onToggleCollapse={handleToggleCollapse}
+                  onShareOrder={setShareOrder}
+                  onOpenMap={openMap}
+                  onNotifyCustomer={handleNotifyCustomer}
+                />
+              ))}
+            </div>
+          )
       )}
 
-      {/* ─── APPROVED RIDERS ─── */}
-      {tab === 'approved' && (
-        approvedRiders.length === 0 ? (
-          <p className="riders-empty">No approved riders yet.</p>
-        ) : (
-          <div className="riders-table-wrapper">
-            <table className="riders-table">
-              <thead>
-                <tr><th>Name</th><th>Email</th><th>Phone</th><th>Vehicle</th><th>DK Rider ID</th><th>Date Applied</th><th>Action</th></tr>
-              </thead>
-              <tbody>
-                {approvedRiders.map(rider => (
-                  <tr key={rider._id}>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        {rider.riderPhoto ? (
-                          <img src={rider.riderPhoto} alt={rider.fullName}
-                            style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', border: '2px solid #c4b5fd', flexShrink: 0 }} />
-                        ) : (
-                          <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#f3e8ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>👤</div>
-                        )}
-                        {rider.fullName}
-                      </div>
-                    </td>
-                    <td>{rider.email}</td>
-                    <td>{rider.phone}</td>
-                    <td style={{ textTransform: 'capitalize' }}>{rider.vehicleType || '—'}</td>
-                    <td>
-                      {rider.dkRiderId ? (
-                        <span className="dk-rider-id-badge">{rider.dkRiderId}</span>
-                      ) : '—'}
-                    </td>
-                    <td>{rider.appliedAt ? new Date(rider.appliedAt).toLocaleDateString('en-PH') : 'N/A'}</td>
-                    <td className="riders-actions">
-                      {rider.dkRiderId && (
-                        <button className="riders-btn view" onClick={() => setApprovedRider(rider)}>🪪 View ID</button>
-                      )}
-                      <button className="riders-btn reject" onClick={() => handleRevokeRider(rider._id, rider.fullName)}>Revoke</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )
+      {/* ── Completed Tab ── */}
+      {tab === 'completed' && (
+        completedOrders.length === 0
+          ? (
+            <div className="ar-empty">
+              <div className="ar-empty-icon">✅</div>
+              <p>No completed deliveries yet.</p>
+            </div>
+          )
+          : (
+            <div className="ar-orders-list">
+              {completedOrders.map(o => (
+                <CompletedOrderCard key={o._id} order={o} onRemove={setRemoveTarget} />
+              ))}
+            </div>
+          )
       )}
 
-      {/* ─── PENDING PICKUP REQUESTS ─── */}
-      {tab === 'pickups' && (
-        pendingPickups.length === 0 ? (
-          <p className="riders-empty">No pending pickup requests.</p>
-        ) : (
-          <div className="riders-table-wrapper">
-            <table className="riders-table">
-              <thead>
-                <tr><th>Order ID</th><th>Rider</th><th>Phone</th><th>Vehicle / Plate</th><th>Customer</th><th>Total</th><th>Requested</th><th>Actions</th></tr>
-              </thead>
-              <tbody>
-                {pendingPickups.map(req => (
-                  <tr key={req._id}>
-                    <td><strong>#{req.orderId?.slice(-8)}</strong></td>
-                    <td>
-                      <strong>{req.riderName}</strong>
-                      <div style={{ fontSize: '12px', color: '#888' }}>{req.riderEmail}</div>
-                    </td>
-                    <td>{req.riderPhone || '—'}</td>
-                    <td>
-                      <span style={{ textTransform: 'capitalize' }}>{req.riderVehicle || '—'}</span>
-                      {req.riderPlate && <span style={{ display: 'block', fontSize: '12px', color: '#666' }}>{req.riderPlate}</span>}
-                    </td>
-                    <td>{req.customerName || '—'}</td>
-                    <td>₱{(req.total || 0).toLocaleString()}</td>
-                    <td>{new Date(req.requestedAt).toLocaleDateString('en-PH')}</td>
-                    <td className="riders-actions">
-                      <button className="riders-btn approve" onClick={() => approvePickup(req._id, req.riderName)}>✅ Approve</button>
-                      <button className="riders-btn reject" onClick={() => rejectPickup(req._id)}>❌ Reject</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )
+      {/* ── Riders Tab ── */}
+      {tab === 'riders' && (
+        approvedRiders.length === 0
+          ? (
+            <div className="ar-empty">
+              <div className="ar-empty-icon">🛵</div>
+              <p>No approved riders yet.</p>
+            </div>
+          )
+          : (
+            <div className="ar-riders-grid">
+              {approvedRiders.map(rider => (
+                <div key={rider._id} className="ar-rider-tile">
+                  {rider.riderPhoto
+                    ? <img src={rider.riderPhoto} alt={rider.fullName} className="ar-tile-avatar" />
+                    : <div className="ar-tile-avatar-placeholder">👤</div>}
+                  <div className="ar-tile-info">
+                    <div className="ar-tile-name">{rider.fullName}</div>
+                    {rider.dkRiderId && <span className="dk-rider-id-badge">{rider.dkRiderId}</span>}
+                    <div className="ar-tile-detail">📞 {rider.phone}</div>
+                    <div className="ar-tile-detail">✉️ {rider.email}</div>
+                  </div>
+                  <button className="ar-btn ar-btn-view" onClick={() => setSelectedRider(rider)}>View</button>
+                </div>
+              ))}
+            </div>
+          )
       )}
 
-      {/* ─── ALL PICKUPS HISTORY ─── */}
-      {tab === 'all-pickups' && (
-        allPickupRequests.length === 0 ? (
-          <p className="riders-empty">No pickup requests yet.</p>
-        ) : (
-          <div className="riders-table-wrapper">
-            <table className="riders-table">
-              <thead>
-                <tr><th>Order ID</th><th>Rider</th><th>Customer</th><th>Total</th><th>Status</th><th>Requested</th><th>Resolved</th></tr>
-              </thead>
-              <tbody>
-                {allPickupRequests.map(req => (
-                  <tr key={req._id}>
-                    <td><strong>#{req.orderId?.slice(-8)}</strong></td>
-                    <td>
-                      <strong>{req.riderName}</strong>
-                      <div style={{ fontSize: '12px', color: '#888' }}>{req.riderEmail}</div>
-                    </td>
-                    <td>{req.customerName || '—'}</td>
-                    <td>₱{(req.total || 0).toLocaleString()}</td>
-                    <td>
-                      <span className="rider-badge" style={{ backgroundColor: getPickupStatusColor(req.status), color: 'white' }}>
-                        {getPickupStatusLabel(req.status)}
-                      </span>
-                    </td>
-                    <td>{new Date(req.requestedAt).toLocaleDateString('en-PH')}</td>
-                    <td>
-                      {req.approvedAt ? new Date(req.approvedAt).toLocaleDateString('en-PH')
-                        : req.rejectedAt ? new Date(req.rejectedAt).toLocaleDateString('en-PH')
-                        : '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )
-      )}
-
-      {/* ─── MODALS ─── */}
-      {selectedApp && (
-        <ApplicationDetailModal
-          app={selectedApp}
-          onClose={() => setSelectedApp(null)}
-          onApprove={handleApproveRider}
-          onReject={handleRejectRider}
-        />
-      )}
-
-      {approvedRider && (
-        <RiderIdCardModal
-          rider={approvedRider}
-          onClose={() => setApprovedRider(null)}
+      {/* ── Modals ── */}
+      {shareOrder    && <ShareModal order={shareOrder} onClose={() => setShareOrder(null)} />}
+      {selectedRider && <RiderDetailModal rider={selectedRider} onClose={() => setSelectedRider(null)} />}
+      {removeTarget  && <RemoveConfirmModal order={removeTarget} onConfirm={confirmRemove} onClose={() => setRemoveTarget(null)} />}
+      {mapOrder      && (
+        <LiveMapModal
+          orderId={mapOrder.orderId}
+          order={mapOrder}
+          onClose={() => { setMapOrder(null); setMapFullscreen(false); }}
+          fullscreen={mapFullscreen}
         />
       )}
     </div>
