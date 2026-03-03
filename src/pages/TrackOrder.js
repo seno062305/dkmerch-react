@@ -168,7 +168,7 @@ const RefundBadge = ({ status }) => {
   return <span className={`refund-status-badge ${c.cls}`}><i className={`fas ${c.icon}`}></i> {c.label}</span>;
 };
 
-// ─── RIDER MAP (with last known location support) ─────────────────────────────
+// ─── RIDER MAP ────────────────────────────────────────────────────────────────
 const RiderMap = ({ orderId, riderName, orderData }) => {
   const mapRef             = useRef(null);
   const mapInstanceRef     = useRef(null);
@@ -188,7 +188,6 @@ const RiderMap = ({ orderId, riderName, orderData }) => {
                        (Date.now() - locationData.updatedAt) < 30000);
   const hasLastKnown = !!(locationData?.lastKnownLat && locationData?.lastKnownLng);
 
-  // Load Leaflet
   useEffect(() => {
     if (window.L) { setLeafletLoaded(true); return; }
     if (!document.getElementById('leaflet-css')) {
@@ -206,7 +205,6 @@ const RiderMap = ({ orderId, riderName, orderData }) => {
     document.head.appendChild(script);
   }, []);
 
-  // Init map
   useEffect(() => {
     if (!leafletLoaded || mapInstanceRef.current || !mapRef.current) return;
     try {
@@ -214,8 +212,6 @@ const RiderMap = ({ orderId, riderName, orderData }) => {
       const map = L.map(mapRef.current, { zoomControl: true, attributionControl: true, tap: false, scrollWheelZoom: true }).setView([14.5995, 120.9842], 15);
       map.zoomControl.setPosition('bottomright');
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>', maxZoom: 19 }).addTo(map);
-
-      // Live rider marker (hidden until we get coords)
       const riderIcon = L.divIcon({
         className: '',
         html: `<div style="width:44px;height:44px;background:linear-gradient(135deg,#6a0dad,#9b30ff);border-radius:50%;border:3px solid white;box-shadow:0 3px 14px rgba(106,13,173,0.5);display:flex;align-items:center;justify-content:center;font-size:22px;">🛵</div>`,
@@ -223,7 +219,6 @@ const RiderMap = ({ orderId, riderName, orderData }) => {
       });
       const marker = L.marker([14.5995, 120.9842], { icon: riderIcon, opacity: 0 }).addTo(map)
         .bindPopup(`<div class="rider-map-popup"><strong>🛵 ${riderName || 'Your Rider'}</strong><br><small>Waiting for location…</small></div>`);
-
       mapInstanceRef.current = map; markerRef.current = marker;
       setMapReady(true);
       setTimeout(() => { try { map.invalidateSize(); } catch {} }, 300);
@@ -237,7 +232,6 @@ const RiderMap = ({ orderId, riderName, orderData }) => {
     return () => document.removeEventListener('visibilitychange', h);
   }, []);
 
-  // Helper: clear route
   const clearRoute = useCallback(() => {
     if (routeLineRef.current) {
       if (Array.isArray(routeLineRef.current)) { routeLineRef.current.forEach(l => { try { l.remove(); } catch {} }); }
@@ -246,13 +240,11 @@ const RiderMap = ({ orderId, riderName, orderData }) => {
     }
   }, []);
 
-  // Helper: draw OSRM road route
   const drawRoute = useCallback((lat, lng, destLat, destLng, dashed = false) => {
     if (!mapInstanceRef.current || !window.L) return;
     const L   = window.L;
     const map = mapInstanceRef.current;
     clearRoute();
-
     if (dashed) {
       try {
         routeLineRef.current = L.polyline([[lat, lng], [destLat, destLng]], { color: '#9ca3af', weight: 3, opacity: 0.75, dashArray: '8, 8' }).addTo(map);
@@ -260,7 +252,6 @@ const RiderMap = ({ orderId, riderName, orderData }) => {
       } catch {}
       return;
     }
-
     fetch(`https://router.project-osrm.org/route/v1/bike/${lng},${lat};${destLng},${destLat}?overview=full&geometries=geojson`)
       .then(r => r.json())
       .then(data => {
@@ -285,16 +276,13 @@ const RiderMap = ({ orderId, riderName, orderData }) => {
       });
   }, [clearRoute]);
 
-  // ── MAIN: React to every Convex location update ──
   useEffect(() => {
     if (!mapReady || !mapInstanceRef.current || !markerRef.current || !window.L) return;
-
     const L       = window.L;
     const map     = mapInstanceRef.current;
     const destLat = orderData?.addressLat;
     const destLng = orderData?.addressLng;
 
-    // Add destination 📍 marker once
     if (destLat && destLng && !destMarkerRef.current) {
       try {
         const destIcon = L.divIcon({
@@ -305,43 +293,25 @@ const RiderMap = ({ orderId, riderName, orderData }) => {
       } catch {}
     }
 
-    // ── CASE 1: Rider is LIVE ──
     if (isLive) {
       const { lat, lng, accuracy, updatedAt } = locationData;
-
-      // Remove ghost marker if present
       if (lastKnownMarkerRef.current) { try { lastKnownMarkerRef.current.remove(); } catch {} lastKnownMarkerRef.current = null; }
-
-      // Show live marker at full opacity
       try { markerRef.current.setLatLng([lat, lng]); markerRef.current.setOpacity(1); } catch {}
-      markerRef.current.getPopup()?.setContent(
-        `<div class="rider-map-popup"><strong>🛵 ${riderName || 'Your Rider'}</strong><br><small>📍 Live</small></div>`
-      );
-
-      // Accuracy circle
+      markerRef.current.getPopup()?.setContent(`<div class="rider-map-popup"><strong>🛵 ${riderName || 'Your Rider'}</strong><br><small>📍 Live</small></div>`);
       if (accuracyCircleRef.current) { try { map.removeLayer(accuracyCircleRef.current); } catch {} accuracyCircleRef.current = null; }
       if (accuracy && accuracy < 2000) {
         try { accuracyCircleRef.current = L.circle([lat, lng], { radius: accuracy, color: '#7c3aed', fillColor: '#7c3aed', fillOpacity: 0.08, weight: 1.5 }).addTo(map); } catch {}
       }
-
       if (destLat && destLng) { drawRoute(lat, lng, destLat, destLng, false); }
       else { try { map.panTo([lat, lng], { animate: true, duration: 0.8 }); } catch {} }
-
       setLastUpdateTime(new Date(updatedAt));
       return;
     }
 
-    // ── CASE 2: Rider OFFLINE but has last known location ──
     if (!isLive && hasLastKnown) {
       const { lastKnownLat, lastKnownLng, lastKnownAt, lastKnownAddress } = locationData;
-
-      // Hide live marker
       try { markerRef.current.setOpacity(0); } catch {}
-
-      // Remove accuracy circle
       if (accuracyCircleRef.current) { try { map.removeLayer(accuracyCircleRef.current); } catch {} accuracyCircleRef.current = null; }
-
-      // Ghost marker with amber "!" badge
       if (!lastKnownMarkerRef.current) {
         try {
           const ghostIcon = L.divIcon({
@@ -355,33 +325,21 @@ const RiderMap = ({ orderId, riderName, orderData }) => {
           const lastTimeStr = lastKnownAt ? new Date(lastKnownAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }) : '';
           lastKnownMarkerRef.current = L.marker([lastKnownLat, lastKnownLng], { icon: ghostIcon })
             .addTo(map)
-            .bindPopup(`
-              <div class="rider-map-popup">
-                <strong>🛵 ${riderName || 'Your Rider'}</strong><br>
-                <small style="color:#f59e0b;font-weight:600">⚠️ Last seen ${lastTimeStr}</small><br>
-                ${lastKnownAddress ? `<small style="color:#6b7280">📍 ${lastKnownAddress}</small>` : ''}
-              </div>
-            `);
+            .bindPopup(`<div class="rider-map-popup"><strong>🛵 ${riderName || 'Your Rider'}</strong><br><small style="color:#f59e0b;font-weight:600">⚠️ Last seen ${lastTimeStr}</small><br>${lastKnownAddress ? `<small style="color:#6b7280">📍 ${lastKnownAddress}</small>` : ''}</div>`);
         } catch {}
       } else {
         try { lastKnownMarkerRef.current.setLatLng([lastKnownLat, lastKnownLng]); } catch {}
       }
-
-      // Dashed grey line to destination
       if (destLat && destLng) { drawRoute(lastKnownLat, lastKnownLng, destLat, destLng, true); }
       else { try { map.panTo([lastKnownLat, lastKnownLng], { animate: true, duration: 0.8 }); } catch {} }
-
       if (lastKnownAt) setLastUpdateTime(new Date(lastKnownAt));
       return;
     }
 
-    // ── CASE 3: No location data yet — show destination only ──
     if (destLat && destLng) { try { map.setView([destLat, destLng], 15); } catch {} }
-
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [locationData, mapReady]);
 
-  // Cleanup on unmount
   useEffect(() => () => {
     clearRoute();
     if (lastKnownMarkerRef.current) { try { lastKnownMarkerRef.current.remove(); } catch {} lastKnownMarkerRef.current = null; }
@@ -391,42 +349,24 @@ const RiderMap = ({ orderId, riderName, orderData }) => {
     }
   }, [clearRoute]);
 
-  // Status bar
-  const lastKnownTimeStr = locationData?.lastKnownAt
-    ? new Date(locationData.lastKnownAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })
-    : null;
+  const lastKnownTimeStr = locationData?.lastKnownAt ? new Date(locationData.lastKnownAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }) : null;
   const lastKnownAddr = locationData?.lastKnownAddress;
 
-  const statusClass = !locationData ? 'status-waiting'
-    : isLive        ? 'status-live'
-    : hasLastKnown  ? 'status-stopped'
-    : locationData.isTracking ? 'status-stale'
-    : 'status-stopped';
-
+  const statusClass = !locationData ? 'status-waiting' : isLive ? 'status-live' : hasLastKnown ? 'status-stopped' : locationData.isTracking ? 'status-stale' : 'status-stopped';
   const statusContent = !locationData
     ? <><span className="map-status-dot dot-waiting"></span> Waiting for rider to share location…</>
     : isLive
     ? <><span className="map-status-dot dot-live"></span> <strong>Live</strong> · Updated {lastUpdateTime?.toLocaleTimeString()}</>
     : hasLastKnown
-    ? <>
-        <span className="map-status-dot dot-stopped"></span>
-        <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <span>Rider offline · Last seen {lastKnownTimeStr || 'unknown'}</span>
-          {lastKnownAddr && <span style={{ fontSize: '0.72rem', color: '#6b7280' }}>📍 {lastKnownAddr}</span>}
-        </span>
-      </>
+    ? <><span className="map-status-dot dot-stopped"></span><span style={{ display:'flex', flexDirection:'column', gap:2 }}><span>Rider offline · Last seen {lastKnownTimeStr || 'unknown'}</span>{lastKnownAddr && <span style={{ fontSize:'0.72rem', color:'#6b7280' }}>📍 {lastKnownAddr}</span>}</span></>
     : <><span className="map-status-dot dot-stopped"></span> Rider stopped sharing location</>;
 
-  if (mapError) return (
-    <div className="rider-map-error"><i className="fas fa-map-marked-alt"></i><p>{mapError}</p><small>Try refreshing.</small></div>
-  );
+  if (mapError) return <div className="rider-map-error"><i className="fas fa-map-marked-alt"></i><p>{mapError}</p><small>Try refreshing.</small></div>;
 
   return (
     <div className="rider-map-wrapper">
       <div className={`rider-map-status-bar ${statusClass}`}>{statusContent}</div>
       <div ref={mapRef} className="rider-map-container" />
-
-      {/* Live accuracy bar */}
       {isLive && (
         <div className="rider-map-accuracy">
           {locationData.accuracy && <span><i className="fas fa-crosshairs"></i> ±{Math.round(locationData.accuracy)}m</span>}
@@ -434,20 +374,12 @@ const RiderMap = ({ orderId, riderName, orderData }) => {
           <span style={{ marginLeft: 'auto', color: '#e53e3e', fontWeight: 700 }}>━━ Route &nbsp;·&nbsp; 🛵 = Rider &nbsp;·&nbsp; 📍 = You</span>
         </div>
       )}
-
-      {/* Last known location bar */}
       {!isLive && hasLastKnown && (
         <div className="rider-map-accuracy" style={{ background: '#fef3c7', borderTop: '1px solid #fde68a' }}>
-          <span style={{ color: '#92400e' }}>
-            <i className="fas fa-exclamation-triangle" style={{ marginRight: 5 }}></i>
-            Showing last known location
-            {lastKnownAddr && <> · <strong>{lastKnownAddr}</strong></>}
-          </span>
+          <span style={{ color: '#92400e' }}><i className="fas fa-exclamation-triangle" style={{ marginRight: 5 }}></i>Showing last known location{lastKnownAddr && <> · <strong>{lastKnownAddr}</strong></>}</span>
           <span style={{ marginLeft: 'auto', color: '#9ca3af', fontWeight: 700 }}>- - = Last seen &nbsp;·&nbsp; 📍 = You</span>
         </div>
       )}
-
-      {/* No location yet overlay */}
       {!locationData && (
         <div className="rider-map-waiting-overlay">
           <div className="rider-map-waiting-inner">
@@ -466,10 +398,11 @@ const TrackOrder = () => {
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
   const [searchParams] = useSearchParams();
-  const orderIdParam = searchParams.get('order') || searchParams.get('orderId');
+  const orderIdParam = searchParams.get('order') || searchParams.get('orderId') || searchParams.get('id');
 
   const [filter,             setFilter]             = useState('active');
   const [selectedOrderId,    setSelectedOrderId]    = useState(null);
+  const [qrOrder,            setQrOrder]            = useState(null); // ← for QR scan guest view
   const [trackingEmail,      setTrackingEmail]      = useState('');
   const [searchEmail,        setSearchEmail]        = useState('');
   const [showTrackedOrders,  setShowTrackedOrders]  = useState(false);
@@ -488,15 +421,33 @@ const TrackOrder = () => {
   const products         = [...regularProducts, ...preOrderProducts];
   const allAvailableOrders = [...orders, ...emailOrders];
   const selectedOrder = selectedOrderId ? allAvailableOrders.find(o => o._id === selectedOrderId) || null : null;
+
+  // ── Direct lookup via QR scan (works for guests) ──
+  const directOrder = useQuery(
+    api.orders.getOrderById,
+    orderIdParam && !selectedOrderId ? { orderId: orderIdParam } : 'skip'
+  );
+
   const urlParamProcessedRef = useRef(false);
 
   useEffect(() => {
     if (urlParamProcessedRef.current) return;
     if (!orderIdParam) return;
+
+    // First try to find in own orders (authenticated)
     const found = [...orders, ...emailOrders].find(o => o.orderId === orderIdParam);
-    if (found) { urlParamProcessedRef.current = true; setSelectedOrderId(found._id); }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orderIdParam, orders, emailOrders]);
+    if (found) {
+      urlParamProcessedRef.current = true;
+      setSelectedOrderId(found._id);
+      return;
+    }
+
+    // Fallback: use directOrder from Convex (works for anyone scanning QR)
+    if (directOrder !== undefined) {
+      urlParamProcessedRef.current = true;
+      if (directOrder) setQrOrder(directOrder);
+    }
+  }, [orderIdParam, orders, emailOrders, directOrder]);
 
   const handleCloseModal = useCallback(() => setSelectedOrderId(null), []);
   const handleOpenModal  = useCallback((order) => setSelectedOrderId(order._id), []);
@@ -709,6 +660,32 @@ const TrackOrder = () => {
     );
   };
 
+  // ─── QR SCAN VIEW — show order modal immediately, no login needed ──────────
+  if (orderIdParam && qrOrder && !isAuthenticated) {
+    return (
+      <main className="trackorder-main">
+        <div className="page-header">
+          <div className="container">
+            <h1 className="page-title">Order Tracking</h1>
+            <p className="page-description">Scan result — Order #{qrOrder.orderId?.slice(-8)}</p>
+          </div>
+        </div>
+        <TrackingModal
+          key={qrOrder.orderId}
+          order={qrOrder}
+          products={products}
+          onClose={() => { setQrOrder(null); navigate('/track-order'); }}
+          getTimelineSteps={getTimelineSteps}
+          getStatusClass={getStatusClass}
+          getDisplayStatus={getDisplayStatus}
+          isOutForDeliveryStatus={isOutForDeliveryStatus}
+          onRequestRefund={null}
+          isGuest={true}
+        />
+      </main>
+    );
+  }
+
   // ─── AUTHENTICATED VIEW ────────────────────────────────────────────────────
   if (isAuthenticated && user) {
     const activeTab = FILTERS.find(f => f.key === filter);
@@ -847,7 +824,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
           </div>
 
           {isGuest && (
-            <div className="guest-modal-notice"><i className="fas fa-lock"></i><span>Guest mode — timeline only. <a href="/login" onClick={e => { e.preventDefault(); onClose(); }}>Log in</a> for full access.</span></div>
+            <div className="guest-modal-notice"><i className="fas fa-lock"></i><span>Viewing as guest — order timeline only. <a href="/login" onClick={e => { e.preventDefault(); onClose(); }}>Log in</a> for full access.</span></div>
           )}
 
           {!isGuest && needsPayment && (
@@ -896,7 +873,6 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
             <button className="modal-refund-btn" onClick={() => onRequestRefund(order)}><i className="fas fa-undo-alt"></i>{order.refundStatus === 'rejected' ? 'Request Again' : 'Request Refund'}</button>
           )}
 
-          {/* ── REAL-TIME LEAFLET MAP (shows last known location when rider offline) ── */}
           {isOutForDelivery && (
             <div className="rider-map-section">
               <div className="rider-map-section-title">
@@ -904,15 +880,11 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
                 <span>Real-Time Rider Location</span>
                 <span className="rider-map-live-pill">LIVE</span>
               </div>
-              <RiderMap
-                orderId={order.orderId}
-                riderName={order.riderInfo?.name}
-                orderData={order}
-              />
+              <RiderMap orderId={order.orderId} riderName={order.riderInfo?.name} orderData={order} />
             </div>
           )}
 
-          {/* OTP section — logged-in only */}
+          {/* OTP — logged-in only, NOT shown to guest QR scanners */}
           {!isGuest && isOutForDelivery && (
             <div className="customer-otp-section">
               {!localOtp ? (
@@ -944,7 +916,6 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
             </div>
           )}
 
-          {/* Timeline */}
           <div className="tracking-timeline">
             <h3>Order Timeline</h3>
             <div className="timeline">
@@ -962,7 +933,6 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
             </div>
           </div>
 
-          {/* Order Items */}
           <div className="order-items-timeline">
             <h3>Order Items</h3>
             {order.items?.map((item, index) => {

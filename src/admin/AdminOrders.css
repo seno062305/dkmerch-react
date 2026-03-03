@@ -2351,3 +2351,197 @@
     overflow-y: auto !important;
   }
 }
+
+/* ══════════════════════════════════════
+   WAYBILL MODAL STYLES — append to AdminOrders.css
+══════════════════════════════════════ */
+.waybill-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999;
+  padding: 20px;
+  animation: fadeInOverlay 0.2s ease;
+}
+
+.waybill-modal {
+  background: white;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 860px;
+  max-height: 92vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.3);
+  animation: slideUp 0.25s ease;
+}
+
+.waybill-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: linear-gradient(135deg, #fc1268, #9c27b0);
+  color: white;
+  flex-shrink: 0;
+}
+
+.waybill-toolbar-title {
+  font-size: 16px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.waybill-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.waybill-print-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 20px;
+  background: white;
+  color: #fc1268;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.waybill-print-btn:hover {
+  background: #fff1f5;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.waybill-toolbar .close-btn {
+  background: rgba(255,255,255,0.2);
+  color: white;
+}
+
+.waybill-toolbar .close-btn:hover {
+  background: rgba(255,255,255,0.35);
+  color: white;
+}
+
+.waybill-preview-wrap {
+  flex: 1;
+  overflow-y: auto;
+  background: #f1f5f9;
+  padding: 24px;
+}
+
+.waybill-print-root {
+  background: white;
+  border-radius: 12px;
+  padding: 28px;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+  max-width: 800px;
+  margin: 0 auto;
+  font-family: 'Segoe UI', Arial, sans-serif;
+}
+
+/* Print Waybill button in modal header */
+.print-waybill-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #fc1268, #9c27b0);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.print-waybill-btn:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(252,18,104,0.35);
+}
+
+/* Print Waybill button at modal-actions bottom */
+.print-waybill-btn-bottom {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #fc1268, #9c27b0);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-right: auto;
+}
+
+.print-waybill-btn-bottom:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(252,18,104,0.35);
+}
+
+/* Waybill inner elements */
+.wb-header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 16px; border-bottom: 3px solid #fc1268; margin-bottom: 20px; }
+.wb-brand-name { font-size: 28px; font-weight: 900; color: #fc1268; }
+.wb-brand-sub  { font-size: 12px; color: #6b7280; font-weight: 600; margin-top: 2px; }
+.wb-brand-contact { margin-top: 8px; font-size: 11px; color: #6b7280; }
+.wb-qr-block { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.wb-qr-label { font-size: 10px; color: #9ca3af; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+.wb-order-banner { background: linear-gradient(135deg, #fc1268, #9c27b0); color: white; border-radius: 10px; padding: 12px 20px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+.wb-order-id { font-size: 22px; font-weight: 900; letter-spacing: 2px; font-family: 'Courier New', monospace; }
+.wb-order-status { background: rgba(255,255,255,0.25); border-radius: 20px; padding: 4px 14px; font-size: 12px; font-weight: 700; }
+.wb-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+.wb-box { border: 1.5px solid #e5e7eb; border-radius: 10px; overflow: hidden; }
+.wb-box-hd { background: #f3f4f6; padding: 8px 14px; font-size: 11px; font-weight: 800; color: #374151; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #e5e7eb; }
+.wb-box-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.wb-field-lbl { font-size: 10px; color: #9ca3af; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 2px; }
+.wb-field-val { font-size: 13px; color: #1f2937; font-weight: 600; }
+.wb-otp-box { background: #f0fdf4; border: 2px solid #86efac; border-radius: 10px; padding: 10px 16px; display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+.wb-otp-lbl { font-size: 11px; font-weight: 700; color: #15803d; text-transform: uppercase; letter-spacing: 0.5px; }
+.wb-otp-val { font-size: 28px; font-weight: 900; letter-spacing: 8px; color: #16a34a; font-family: 'Courier New', monospace; }
+.wb-items-box { border: 1.5px solid #e5e7eb; border-radius: 10px; overflow: hidden; margin-bottom: 20px; }
+.wb-items-hd  { background: #f3f4f6; padding: 8px 14px; font-size: 11px; font-weight: 800; color: #374151; text-transform: uppercase; border-bottom: 1px solid #e5e7eb; }
+.wb-items-table { width: 100%; border-collapse: collapse; }
+.wb-items-table th { padding: 8px 12px; text-align: left; font-size: 11px; font-weight: 700; color: #6b7280; border-bottom: 1px solid #f0f0f0; }
+.wb-items-table td { padding: 8px 12px; font-size: 13px; color: #1f2937; border-bottom: 1px solid #f8f8f8; }
+.wb-items-table tr:last-child td { border-bottom: none; }
+.td-right { text-align: right; font-weight: 700; }
+.td-center { text-align: center; }
+.wb-totals { border: 1.5px solid #e5e7eb; border-radius: 10px; overflow: hidden; margin-bottom: 20px; }
+.wb-totals-row { display: flex; justify-content: space-between; padding: 8px 16px; font-size: 13px; border-bottom: 1px solid #f0f0f0; }
+.wb-totals-row:last-child { border-bottom: none; }
+.wb-grand { background: #fff1f5; font-size: 16px; font-weight: 800; color: #fc1268; }
+.wb-promo-row { color: #16a34a; font-weight: 600; }
+.wb-sig-strip { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+.wb-sig-box { border: 1.5px dashed #d1d5db; border-radius: 8px; padding: 12px 16px; }
+.wb-sig-lbl { font-size: 10px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 32px; }
+.wb-sig-line { border-top: 1.5px solid #374151; padding-top: 6px; font-size: 10px; color: #9ca3af; }
+.wb-footer { text-align: center; font-size: 11px; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 12px; }
+
+@media (max-width: 768px) {
+  .waybill-overlay { padding: 0; align-items: flex-end; }
+  .waybill-modal { border-radius: 20px 20px 0 0; max-height: 94vh; }
+  .waybill-preview-wrap { padding: 12px; }
+  .waybill-print-root { padding: 16px; }
+  .wb-cols { grid-template-columns: 1fr; }
+  .wb-sig-strip { grid-template-columns: 1fr; }
+  .print-waybill-btn { font-size: 12px; padding: 7px 12px; }
+}
