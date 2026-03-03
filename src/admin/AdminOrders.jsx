@@ -68,7 +68,6 @@ const WaybillModal = ({ order, onClose }) => {
   .wb-qr-label { font-size: 9px; color: #9ca3af; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
   .wb-order-banner { background: linear-gradient(135deg, #fc1268, #9c27b0) !important; color: white !important; border-radius: 8px; padding: 10px 16px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
   .wb-order-id { font-size: 20px; font-weight: 900; letter-spacing: 2px; font-family: 'Courier New', monospace; }
-  .wb-order-status { background: rgba(255,255,255,0.25); border-radius: 20px; padding: 3px 12px; font-size: 11px; font-weight: 700; }
   .wb-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
   .wb-box { border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
   .wb-box-hd { background: #f3f4f6 !important; padding: 6px 12px; font-size: 10px; font-weight: 800; color: #374151; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #e5e7eb; }
@@ -127,29 +126,12 @@ const WaybillModal = ({ order, onClose }) => {
             <div className="wb-header">
               <div>
                 <div className="wb-brand-name">DKMerch</div>
-                {/* ✅ FIX 1: Removed "Official Waybill" — now just "K-Pop Paradise" */}
                 <div className="wb-brand-sub">K-Pop Paradise</div>
                 <div className="wb-brand-contact">📍 Manila, Philippines &nbsp;|&nbsp; support@dkmerch.com</div>
               </div>
               <div className="wb-qr-block">
                 <QRCodeSVG value={trackUrl} size={90} level="M" includeMargin={false} fgColor="#1f2937" />
                 <div className="wb-qr-label">Scan to Track</div>
-              </div>
-            </div>
-
-            <div className="wb-order-banner">
-              <div>
-                <div style={{ fontSize: '10px', opacity: 0.75, marginBottom: '3px', fontWeight: 600 }}>ORDER ID</div>
-                <div className="wb-order-id">#{shortId}</div>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <div className="wb-order-status">
-                  {order.orderStatus === 'confirmed'         ? '✅ Confirmed'
-                  : order.orderStatus === 'out_for_delivery' ? '🛵 Out for Delivery'
-                  : order.orderStatus === 'completed'        ? '✔ Delivered'
-                  : (order.orderStatus || 'PENDING').toUpperCase()}
-                </div>
-                <div style={{ fontSize: '11px', opacity: 0.85, marginTop: '5px' }}>📅 {orderDate}</div>
               </div>
             </div>
 
@@ -162,9 +144,11 @@ const WaybillModal = ({ order, onClose }) => {
                   <div><div className="wb-field-lbl">Contact</div><div className="wb-field-val">support@dkmerch.com</div></div>
                 </div>
               </div>
+              {/* ✅ FIX: Added Order ID field inside Recipient box */}
               <div className="wb-box">
                 <div className="wb-box-hd">📍 To (Recipient)</div>
                 <div className="wb-box-body">
+                  <div><div className="wb-field-lbl">Order ID</div><div className="wb-field-val" style={{ fontFamily: 'Courier New, monospace', fontWeight: 800, color: '#fc1268' }}>#{shortId}</div></div>
                   <div><div className="wb-field-lbl">Name</div><div className="wb-field-val" style={{ fontWeight: 800, fontSize: '14px' }}>{order.customerName || 'N/A'}</div></div>
                   <div><div className="wb-field-lbl">Phone</div><div className="wb-field-val">{order.phone || 'N/A'}</div></div>
                   <div><div className="wb-field-lbl">Address</div><div className="wb-field-val">{order.shippingAddress || 'N/A'}</div></div>
@@ -378,7 +362,6 @@ const AdminOrders = () => {
 
   const clearDateFilter = () => { setStartDate(''); setEndDate(''); };
 
-  // ✅ FIX 2: Removed "Out for Delivery" tab
   const tabs = [
     { key: 'all',       icon: 'fa-list',         label: 'All Orders' },
     { key: 'paid',      icon: 'fa-peso-sign',     label: 'Paid & Awaiting' },
@@ -614,7 +597,6 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
     <div className="order-modal-overlay" onClick={onClose}>
       <div className="order-modal" onClick={e => e.stopPropagation()}>
 
-        {/* ✅ FIX 3: Removed "Print Waybill" button from modal header */}
         <div className="modal-header">
           <div>
             <h2>Order #{order.orderId?.slice(-8) || 'N/A'}</h2>
