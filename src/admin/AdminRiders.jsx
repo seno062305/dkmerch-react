@@ -39,15 +39,18 @@ const LiveBadge = ({ orderId }) => {
 
 // ─── LIVE MAP MODAL ───────────────────────────────────────────
 const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
-  const mapRef    = useRef(null);
-  const mapObjRef = useRef(null);
-  const markerRef = useRef(null);
-  const circleRef = useRef(null);
+  const mapRef       = useRef(null);
+  const mapObjRef    = useRef(null);
+  const markerRef    = useRef(null);
+  const circleRef    = useRef(null);
+  const routeLineRef  = useRef(null);
+  const destMarkerRef = useRef(null);
   const [leafletReady, setLeafletReady] = useState(!!window.L);
   const [lastUpdate,   setLastUpdate]   = useState(null);
   const [isFullscreen, setIsFullscreen] = useState(fullscreen);
   const location = useQuery(api.riders.getRiderLocation, { orderId });
 
+  // Load Leaflet
   useEffect(() => {
     if (window.L) { setLeafletReady(true); return; }
     const link = document.createElement('link');
@@ -60,6 +63,7 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
     document.head.appendChild(script);
   }, []);
 
+  // Init map
   useEffect(() => {
     if (!leafletReady || !mapRef.current || mapObjRef.current) return;
     const L = window.L;
@@ -67,43 +71,102 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors', maxZoom: 19,
     }).addTo(map);
-    const icon = L.divIcon({
+
+    const destLat = order?.addressLat || null;
+    const destLng = order?.addressLng || null;
+
+    // Destination marker (customer address)
+    const destIcon = L.divIcon({
+      html: `<div style="width:40px;height:40px;background:linear-gradient(135deg,#fc1268,#9c27b0);border-radius:50%;border:3px solid white;box-shadow:0 3px 14px rgba(252,18,104,0.5);display:flex;align-items:center;justify-content:center;font-size:20px;">📍</div>`,
+      className: '', iconSize: [40, 40], iconAnchor: [20, 40],
+    });
+
+    // Rider marker
+    const riderIcon = L.divIcon({
       html: `<div style="width:40px;height:40px;background:linear-gradient(135deg,#6a0dad,#9b30ff);border-radius:50%;border:3px solid white;box-shadow:0 3px 14px rgba(106,13,173,0.55);display:flex;align-items:center;justify-content:center;font-size:20px;">🛵</div>`,
       className: '', iconSize: [40, 40], iconAnchor: [20, 20],
     });
-    map.setView([14.5995, 120.9842], 13);
-    const marker = L.marker([14.5995, 120.9842], { icon }).addTo(map);
-    marker.bindPopup(`<b>🛵 ${order.riderInfo?.name || 'Rider'}</b><br>Loading…`);
+
+    const centerLat = destLat || 14.5995;
+    const centerLng = destLng || 120.9842;
+    map.setView([centerLat, centerLng], 14);
+
+    if (destLat && destLng) {
+      const dm = L.marker([destLat, destLng], { icon: destIcon }).addTo(map);
+      dm.bindPopup(`<b>📍 Deliver to:</b><br>${order?.customerName || 'Customer'}<br><small>${order?.shippingAddress || ''}</small>`).openPopup();
+      destMarkerRef.current = dm;
+    }
+
+    const marker = L.marker([centerLat, centerLng], { icon: riderIcon }).addTo(map);
+    marker.bindPopup(`<b>🛵 ${order.riderInfo?.name || 'Rider'}</b><br>Waiting for GPS…`);
     mapObjRef.current = map;
     markerRef.current = marker;
-  }, [leafletReady]);
+  }, [leafletReady, order]);
 
+  // Invalidate size on fullscreen toggle
   useEffect(() => {
     if (mapObjRef.current) setTimeout(() => mapObjRef.current.invalidateSize(), 150);
   }, [isFullscreen]);
 
+  // Handle tab/window visibility — reinvalidate map when coming back
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && mapObjRef.current) {
+        setTimeout(() => { if (mapObjRef.current) mapObjRef.current.invalidateSize(); }, 200);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
+
+  // Update rider position + draw route line when location changes
   useEffect(() => {
     if (!mapObjRef.current || !markerRef.current || !location?.lat) return;
     const L = window.L;
     const { lat, lng, accuracy } = location;
+
     markerRef.current.setLatLng([lat, lng]);
     markerRef.current.setPopupContent(
       `<b>🛵 ${order.riderInfo?.name || 'Rider'}</b><br>📍 ${lat.toFixed(6)}, ${lng.toFixed(6)}<br>${accuracy ? `±${Math.round(accuracy)}m` : ''}<br><small>${new Date(location.updatedAt).toLocaleTimeString()}</small>`
     );
+
+    // Accuracy circle
     if (circleRef.current) circleRef.current.remove();
     if (accuracy) {
       circleRef.current = L.circle([lat, lng], {
         radius: accuracy, color: '#7c3aed', fillColor: '#7c3aed', fillOpacity: 0.07, weight: 1.5,
       }).addTo(mapObjRef.current);
     }
-    mapObjRef.current.flyTo([lat, lng], Math.max(mapObjRef.current.getZoom(), 16), { animate: true, duration: 1 });
-    setLastUpdate(new Date(location.updatedAt));
-  }, [location]);
 
+    // Red dashed route line from rider → destination
+    const destLat = order?.addressLat;
+    const destLng = order?.addressLng;
+    if (routeLineRef.current) { routeLineRef.current.remove(); routeLineRef.current = null; }
+    if (destLat && destLng) {
+      routeLineRef.current = L.polyline(
+        [[lat, lng], [destLat, destLng]],
+        { color: '#e53e3e', weight: 4, opacity: 0.85, dashArray: '10, 8', lineJoin: 'round' }
+      ).addTo(mapObjRef.current);
+
+      // Fit both in view
+      const bounds = L.latLngBounds([lat, lng], [destLat, destLng]);
+      mapObjRef.current.fitBounds(bounds, { padding: [48, 48], maxZoom: 17 });
+    } else {
+      mapObjRef.current.flyTo([lat, lng], Math.max(mapObjRef.current.getZoom(), 16), { animate: true, duration: 1 });
+    }
+
+    setLastUpdate(new Date(location.updatedAt));
+  }, [location, order]);
+
+  // Cleanup
   useEffect(() => () => {
     if (mapObjRef.current) {
       try { mapObjRef.current.remove(); } catch {}
-      mapObjRef.current = null; markerRef.current = null; circleRef.current = null;
+      mapObjRef.current    = null;
+      markerRef.current    = null;
+      circleRef.current    = null;
+      routeLineRef.current  = null;
+      destMarkerRef.current = null;
     }
   }, []);
 
@@ -122,7 +185,7 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
               ? <div className="ar-map-live-badge"><span className="ar-gps-live-dot" />Live · {lastUpdate?.toLocaleTimeString()}</div>
               : location?.updatedAt
               ? <div className="ar-map-stale-badge">⏸ {new Date(location.updatedAt).toLocaleTimeString()}</div>
-              : <div className="ar-map-waiting-badge">⏳ Waiting…</div>}
+              : <div className="ar-map-waiting-badge">⏳ Waiting for rider to open link…</div>}
             <button className="ar-map-fullscreen-btn" onClick={() => setIsFullscreen(f => !f)}>
               {isFullscreen ? '⛶ Exit' : '⛶ Full'}
             </button>
@@ -130,11 +193,18 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
           </div>
         </div>
         <div ref={mapRef} className="ar-map-container" />
+        {!location?.lat && (
+          <div className="ar-map-waiting-overlay">
+            <span className="ar-gps-live-dot" style={{ background: '#f59e0b' }} />
+            <span>Waiting for rider to open their link and share GPS…</span>
+          </div>
+        )}
         {location?.lat && (
           <div className="ar-map-info-bar">
             <span>🛵 {order.riderInfo?.name || 'Rider'}</span>
             <span>📍 {location.lat.toFixed(5)}, {location.lng.toFixed(5)}</span>
             {location.speed > 0 && <span>🚀 {(location.speed * 3.6).toFixed(1)} km/h</span>}
+            <span style={{ color: '#e53e3e', fontWeight: 700 }}>━━ Route</span>
           </div>
         )}
         <div className="ar-map-link-row">
@@ -249,8 +319,6 @@ const RemoveConfirmModal = ({ order, onConfirm, onClose }) => (
 );
 
 // ─── ACTIVE ORDER CARD ────────────────────────────────────────
-// Defined OUTSIDE AdminRiders to prevent re-mounting on parent re-render.
-// Uses LOCAL state for inputs — this fixes the typing/blocking bug.
 const ActiveOrderCard = ({
   order,
   savingRider, savedRider,
@@ -261,7 +329,6 @@ const ActiveOrderCard = ({
 }) => {
   const { orderId } = order;
 
-  // ── LOCAL INPUT STATE (fixes the typing bug) ──
   const [ri, setRi] = useState({
     name:  order.riderInfo?.name  || '',
     phone: order.riderInfo?.phone || '',
@@ -270,7 +337,6 @@ const ActiveOrderCard = ({
   const [gps,    setGps]    = useState(order.riderGpsLink || '');
   const [errors, setErrors] = useState({});
 
-  // Sync when riderInfo changes from outside (after save)
   useEffect(() => {
     setRi({
       name:  order.riderInfo?.name  || '',
@@ -300,25 +366,22 @@ const ActiveOrderCard = ({
     setTimeout(() => setCopiedCust(false), 2000);
   };
 
-  // ── VALIDATION ──
   const validate = () => {
     const e = {};
-    if (!ri.name?.trim())                                   e.name  = 'Name is required';
-    if (!ri.phone?.trim())                                  e.phone = 'Phone is required';
-    else if (!/^09\d{9}$/.test(ri.phone.trim()))            e.phone = 'Must be 11 digits starting with 09';
-    if (!ri.plate?.trim())                                  e.plate = 'Plate number is required';
+    if (!ri.name?.trim())                        e.name  = 'Name is required';
+    if (!ri.phone?.trim())                       e.phone = 'Phone is required';
+    else if (!/^09\d{9}$/.test(ri.phone.trim())) e.phone = 'Must be 11 digits starting with 09';
+    if (!ri.plate?.trim())                       e.plate = 'Plate number is required';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
 
   const handlePhoneChange = (val) => {
-    // Allow digits only, max 11
     const digits = val.replace(/\D/g, '').slice(0, 11);
     setRi(prev => ({ ...prev, phone: digits }));
     if (errors.phone) setErrors(prev => ({ ...prev, phone: '' }));
   };
 
-  // Notify is only enabled when rider info is SAVED in DB (not just typed locally)
   const savedRiderInfo    = order.riderInfo || {};
   const hasSavedRiderInfo = !!(
     savedRiderInfo.name?.trim() &&
@@ -346,7 +409,6 @@ const ActiveOrderCard = ({
         </div>
       </div>
 
-      {/* Collapsed summary */}
       {collapsed && (
         <div className="ar-collapsed-summary">
           <span className="ar-cs-name">{order.customerName || '—'}</span>
@@ -361,11 +423,9 @@ const ActiveOrderCard = ({
         </div>
       )}
 
-      {/* Body */}
       {!collapsed && (
         <div className="ar-order-body">
 
-          {/* ── Customer + Rider Info — 2 columns ── */}
           <div className="ar-two-col">
             <div className="ar-section">
               <div className="ar-section-title">👤 Customer</div>
@@ -379,9 +439,7 @@ const ActiveOrderCard = ({
               </div>
               <div className="ar-compact-row">
                 <span className="ar-cl">Total</span>
-                <span className="ar-cv ar-total">
-                  ₱{(order.finalTotal ?? order.total ?? 0).toLocaleString()}
-                </span>
+                <span className="ar-cv ar-total">₱{(order.finalTotal ?? order.total ?? 0).toLocaleString()}</span>
               </div>
             </div>
 
@@ -432,7 +490,7 @@ const ActiveOrderCard = ({
             </div>
           </div>
 
-          {/* ── Notify Customer — full width ── */}
+          {/* Notify Section */}
           <div className="ar-notify-section">
             {alreadyNotified ? (
               <div className="ar-notify-done">
@@ -446,11 +504,7 @@ const ActiveOrderCard = ({
                   disabled={notifying || !hasSavedRiderInfo}
                   title={!hasSavedRiderInfo ? 'Save rider info first before notifying' : ''}
                 >
-                  {notifying
-                    ? '⏳ Sending…'
-                    : notified
-                    ? '✅ Customer Notified!'
-                    : '🔔 Notify Customer (Out for Delivery)'}
+                  {notifying ? '⏳ Sending…' : notified ? '✅ Customer Notified!' : '🔔 Notify Customer (Out for Delivery)'}
                 </button>
                 {!hasSavedRiderInfo && (
                   <p className="ar-notify-hint">⚠️ Save rider info first (click 💾 Save Rider) before notifying</p>
@@ -458,7 +512,6 @@ const ActiveOrderCard = ({
               </>
             )}
 
-            {/* ── OTP Display — shows when customer generates it ── */}
             {alreadyNotified && (
               <div className="ar-otp-block">
                 {order.deliveryOtp ? (
@@ -490,7 +543,7 @@ const ActiveOrderCard = ({
             )}
           </div>
 
-          {/* ── GPS Tracking — full width ── */}
+          {/* GPS Tracking */}
           <div className="ar-section ar-section-full">
             <div className="ar-section-title">📍 GPS Tracking</div>
             <div className="ar-tracking-compact">
@@ -538,13 +591,8 @@ const ActiveOrderCard = ({
                   </button>
                 </div>
                 {order.riderGpsLink && (
-                  <a
-                    href={order.riderGpsLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="ar-gps-open-btn"
-                    style={{ marginTop: 6, display: 'inline-block' }}
-                  >
+                  <a href={order.riderGpsLink} target="_blank" rel="noopener noreferrer"
+                    className="ar-gps-open-btn" style={{ marginTop: 6, display: 'inline-block' }}>
                     🗺️ Open Saved Link
                   </a>
                 )}
@@ -584,16 +632,12 @@ const CompletedOrderCard = ({ order, onRemove }) => {
         </div>
         <div className="ar-completed-row">
           <span className="ar-info-label">Total</span>
-          <span className="ar-info-value ar-total">
-            ₱{(order.finalTotal ?? order.total ?? 0).toLocaleString()}
-          </span>
+          <span className="ar-info-value ar-total">₱{(order.finalTotal ?? order.total ?? 0).toLocaleString()}</span>
         </div>
         {riderInfo.name && (
           <div className="ar-completed-row">
             <span className="ar-info-label">Rider</span>
-            <span className="ar-info-value">
-              🛵 {riderInfo.name}{riderInfo.plate ? ` · ${riderInfo.plate}` : ''}
-            </span>
+            <span className="ar-info-value">🛵 {riderInfo.name}{riderInfo.plate ? ` · ${riderInfo.plate}` : ''}</span>
           </div>
         )}
         {deliveredAt && (
@@ -627,11 +671,9 @@ const AdminRiders = () => {
   const [notified,        setNotified]        = useState({});
 
   const allOrders      = useQuery(api.orders.getAllOrders) ?? [];
-  const allRiders      = useQuery(api.riders.getAllRiders) ?? [];
   const updateFields   = useMutation(api.orders.updateOrderFields);
   const notifyMutation = useMutation(api.orders.notifyCustomerOutForDelivery);
 
-  const approvedRiders    = allRiders.filter(r => r.status === 'approved');
   const activeStatuses    = ['confirmed', 'shipped', 'out_for_delivery', 'processing'];
   const completedStatuses = ['completed', 'delivered'];
 
@@ -644,22 +686,14 @@ const AdminRiders = () => {
     .filter(o => !hiddenCompleted.includes(o._id))
     .sort((a, b) => (b.deliveryConfirmedAt || b._creationTime || 0) - (a.deliveryConfirmedAt || a._creationTime || 0));
 
-  // ── HANDLERS ──────────────────────────────────────────────────
-
   const handleSaveRider = async (orderId, ri) => {
     setSavingRider(p => ({ ...p, [orderId]: true }));
     try {
-      await updateFields({
-        orderId,
-        riderInfo: { name: ri.name || '', phone: ri.phone || '', plate: ri.plate || '' },
-      });
+      await updateFields({ orderId, riderInfo: { name: ri.name || '', phone: ri.phone || '', plate: ri.plate || '' } });
       setSavedRider(p => ({ ...p, [orderId]: true }));
       setTimeout(() => setSavedRider(p => ({ ...p, [orderId]: false })), 2000);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setSavingRider(p => ({ ...p, [orderId]: false }));
-    }
+    } catch (e) { console.error(e); }
+    finally { setSavingRider(p => ({ ...p, [orderId]: false })); }
   };
 
   const handleSaveGps = async (orderId, gpsValue) => {
@@ -668,22 +702,15 @@ const AdminRiders = () => {
       await updateFields({ orderId, riderGpsLink: gpsValue ?? '' });
       setSavedGps(p => ({ ...p, [orderId]: true }));
       setTimeout(() => setSavedGps(p => ({ ...p, [orderId]: false })), 2000);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setSavingGps(p => ({ ...p, [orderId]: false }));
-    }
+    } catch (e) { console.error(e); }
+    finally { setSavingGps(p => ({ ...p, [orderId]: false })); }
   };
 
   const handleCopyLink = (orderId) => {
     const link = getRiderLink(orderId);
     navigator.clipboard.writeText(link).catch(() => {
-      const ta = document.createElement('textarea');
-      ta.value = link;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      document.body.removeChild(ta);
+      const ta = document.createElement('textarea'); ta.value = link;
+      document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
     });
     setCopiedLink(p => ({ ...p, [orderId]: true }));
     setTimeout(() => setCopiedLink(p => ({ ...p, [orderId]: false })), 2000);
@@ -691,149 +718,66 @@ const AdminRiders = () => {
 
   const handleNotifyCustomer = async (order, ri) => {
     const { orderId } = order;
-    if (!ri.name?.trim() || !ri.phone?.trim()) {
-      alert('Please enter rider name and phone first.');
-      return;
-    }
-    if (!order.email) {
-      alert('No customer email on this order.');
-      return;
-    }
+    if (!ri.name?.trim() || !ri.phone?.trim()) { alert('Please enter rider name and phone first.'); return; }
+    if (!order.email) { alert('No customer email on this order.'); return; }
     setNotifying(p => ({ ...p, [orderId]: true }));
     try {
-      await updateFields({
-        orderId,
-        riderInfo: { name: ri.name, phone: ri.phone, plate: ri.plate || '' },
-      });
-      await notifyMutation({
-        orderId,
-        riderName:     ri.name,
-        riderPhone:    ri.phone,
-        riderPlate:    ri.plate || undefined,
-        customerEmail: order.email,
-      });
+      await updateFields({ orderId, riderInfo: { name: ri.name, phone: ri.phone, plate: ri.plate || '' } });
+      await notifyMutation({ orderId, riderName: ri.name, riderPhone: ri.phone, riderPlate: ri.plate || undefined, customerEmail: order.email });
       setNotified(p => ({ ...p, [orderId]: true }));
       setTimeout(() => setNotified(p => ({ ...p, [orderId]: false })), 4000);
-    } catch (e) {
-      console.error('Notify error:', e);
-      alert('Failed to notify customer. Please try again.');
-    } finally {
-      setNotifying(p => ({ ...p, [orderId]: false }));
-    }
+    } catch (e) { console.error('Notify error:', e); alert('Failed to notify customer. Please try again.'); }
+    finally { setNotifying(p => ({ ...p, [orderId]: false })); }
   };
 
   const handleToggleCollapse = (orderId) => setCollapsed(p => ({ ...p, [orderId]: !p[orderId] }));
   const confirmRemove        = ()         => { if (!removeTarget) return; setHiddenCompleted(p => [...p, removeTarget._id]); setRemoveTarget(null); };
   const openMap              = (order, full = false) => { setMapOrder(order); setMapFullscreen(full); };
 
-  // ── RENDER ────────────────────────────────────────────────────
   return (
     <div className="admin-riders">
       <h1 className="admin-riders-title">🚚 Delivery Management</h1>
 
+      {/* ── Tabs — Riders tab removed ── */}
       <div className="riders-tabs">
-        <button
-          className={`riders-tab-btn ${tab === 'delivery' ? 'active' : ''}`}
-          onClick={() => setTab('delivery')}
-        >
+        <button className={`riders-tab-btn ${tab === 'delivery' ? 'active' : ''}`} onClick={() => setTab('delivery')}>
           📦 Active {activeOrders.length > 0 && <span className="riders-tab-badge">{activeOrders.length}</span>}
         </button>
-        <button
-          className={`riders-tab-btn ${tab === 'completed' ? 'active' : ''}`}
-          onClick={() => setTab('completed')}
-        >
+        <button className={`riders-tab-btn ${tab === 'completed' ? 'active' : ''}`} onClick={() => setTab('completed')}>
           ✅ Completed {completedOrders.length > 0 && <span className="riders-tab-badge ar-badge-green">{completedOrders.length}</span>}
-        </button>
-        <button
-          className={`riders-tab-btn ${tab === 'riders' ? 'active' : ''}`}
-          onClick={() => setTab('riders')}
-        >
-          🛵 Riders ({approvedRiders.length})
         </button>
       </div>
 
       {/* ── Active Tab ── */}
       {tab === 'delivery' && (
         activeOrders.length === 0
-          ? (
-            <div className="ar-empty">
-              <div className="ar-empty-icon">📭</div>
-              <p>No active deliveries.</p>
-              <span>Confirmed orders appear here.</span>
-            </div>
-          )
-          : (
-            <div className="ar-orders-list">
+          ? <div className="ar-empty"><div className="ar-empty-icon">📭</div><p>No active deliveries.</p><span>Confirmed orders appear here.</span></div>
+          : <div className="ar-orders-list">
               {activeOrders.map(o => (
                 <ActiveOrderCard
-                  key={o._id}
-                  order={o}
-                  savingRider={!!savingRider[o.orderId]}
-                  savedRider={!!savedRider[o.orderId]}
-                  savingGps={!!savingGps[o.orderId]}
-                  savedGps={!!savedGps[o.orderId]}
-                  copiedLink={!!copiedLink[o.orderId]}
-                  collapsed={!!collapsed[o.orderId]}
-                  notifying={!!notifying[o.orderId]}
-                  notified={!!notified[o.orderId]}
-                  onSaveRider={handleSaveRider}
-                  onSaveGps={handleSaveGps}
-                  onCopyLink={handleCopyLink}
-                  onToggleCollapse={handleToggleCollapse}
-                  onShareOrder={setShareOrder}
-                  onOpenMap={openMap}
+                  key={o._id} order={o}
+                  savingRider={!!savingRider[o.orderId]} savedRider={!!savedRider[o.orderId]}
+                  savingGps={!!savingGps[o.orderId]}     savedGps={!!savedGps[o.orderId]}
+                  copiedLink={!!copiedLink[o.orderId]}   collapsed={!!collapsed[o.orderId]}
+                  notifying={!!notifying[o.orderId]}     notified={!!notified[o.orderId]}
+                  onSaveRider={handleSaveRider}          onSaveGps={handleSaveGps}
+                  onCopyLink={handleCopyLink}            onToggleCollapse={handleToggleCollapse}
+                  onShareOrder={setShareOrder}           onOpenMap={openMap}
                   onNotifyCustomer={handleNotifyCustomer}
                 />
               ))}
             </div>
-          )
       )}
 
       {/* ── Completed Tab ── */}
       {tab === 'completed' && (
         completedOrders.length === 0
-          ? (
-            <div className="ar-empty">
-              <div className="ar-empty-icon">✅</div>
-              <p>No completed deliveries yet.</p>
-            </div>
-          )
-          : (
-            <div className="ar-orders-list">
+          ? <div className="ar-empty"><div className="ar-empty-icon">✅</div><p>No completed deliveries yet.</p></div>
+          : <div className="ar-orders-list">
               {completedOrders.map(o => (
                 <CompletedOrderCard key={o._id} order={o} onRemove={setRemoveTarget} />
               ))}
             </div>
-          )
-      )}
-
-      {/* ── Riders Tab ── */}
-      {tab === 'riders' && (
-        approvedRiders.length === 0
-          ? (
-            <div className="ar-empty">
-              <div className="ar-empty-icon">🛵</div>
-              <p>No approved riders yet.</p>
-            </div>
-          )
-          : (
-            <div className="ar-riders-grid">
-              {approvedRiders.map(rider => (
-                <div key={rider._id} className="ar-rider-tile">
-                  {rider.riderPhoto
-                    ? <img src={rider.riderPhoto} alt={rider.fullName} className="ar-tile-avatar" />
-                    : <div className="ar-tile-avatar-placeholder">👤</div>}
-                  <div className="ar-tile-info">
-                    <div className="ar-tile-name">{rider.fullName}</div>
-                    {rider.dkRiderId && <span className="dk-rider-id-badge">{rider.dkRiderId}</span>}
-                    <div className="ar-tile-detail">📞 {rider.phone}</div>
-                    <div className="ar-tile-detail">✉️ {rider.email}</div>
-                  </div>
-                  <button className="ar-btn ar-btn-view" onClick={() => setSelectedRider(rider)}>View</button>
-                </div>
-              ))}
-            </div>
-          )
       )}
 
       {/* ── Modals ── */}
@@ -842,8 +786,7 @@ const AdminRiders = () => {
       {removeTarget  && <RemoveConfirmModal order={removeTarget} onConfirm={confirmRemove} onClose={() => setRemoveTarget(null)} />}
       {mapOrder      && (
         <LiveMapModal
-          orderId={mapOrder.orderId}
-          order={mapOrder}
+          orderId={mapOrder.orderId} order={mapOrder}
           onClose={() => { setMapOrder(null); setMapFullscreen(false); }}
           fullscreen={mapFullscreen}
         />

@@ -1,5 +1,5 @@
 // src/pages/RiderTrack.jsx
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
@@ -19,11 +19,14 @@ export default function RiderTrack() {
   const [isTracking, setIsTracking] = useState(false);
   const watchIdRef                  = useRef(null);
   const riderMarkerRef              = useRef(null);
+  const routeLineRef                = useRef(null);
 
   // Map
-  const mapRef     = useRef(null);
-  const mapObjRef  = useRef(null);
+  const mapRef        = useRef(null);
+  const mapObjRef     = useRef(null);
+  const destMarkerRef = useRef(null);
   const [leafletReady, setLeafletReady] = useState(!!window.L);
+  const mapInitializedRef = useRef(false);
 
   // OTP
   const [otpInput,   setOtpInput]   = useState('');
@@ -42,7 +45,7 @@ export default function RiderTrack() {
   // Tab
   const [activeTab, setActiveTab] = useState('map');
 
-  // ── Call Modal ──
+  // Call Modal
   const [showCallModal, setShowCallModal] = useState(false);
 
   // ── Load Leaflet ──
@@ -58,9 +61,18 @@ export default function RiderTrack() {
     document.head.appendChild(script);
   }, []);
 
-  // ── Init map ──
-  useEffect(() => {
-    if (!leafletReady || !mapRef.current || mapObjRef.current || activeTab !== 'map') return;
+  // ── Init or reinit map ──
+  const initMap = useCallback(() => {
+    if (!leafletReady || !mapRef.current || !order) return;
+
+    // If map already exists, just invalidate size and return
+    if (mapObjRef.current) {
+      setTimeout(() => {
+        if (mapObjRef.current) mapObjRef.current.invalidateSize();
+      }, 150);
+      return;
+    }
+
     const L   = window.L;
     const map = L.map(mapRef.current, { zoomControl: true });
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -72,27 +84,110 @@ export default function RiderTrack() {
 
     const destIcon = L.divIcon({
       html: `<div style="width:44px;height:44px;background:linear-gradient(135deg,#fc1268,#9c27b0);border-radius:50%;border:3px solid white;box-shadow:0 3px 14px rgba(252,18,104,0.5);display:flex;align-items:center;justify-content:center;font-size:22px;">📍</div>`,
-      className: '', iconSize: [44, 44], iconAnchor: [22, 22],
+      className: '', iconSize: [44, 44], iconAnchor: [22, 44],
     });
 
     const marker = L.marker([lat, lng], { icon: destIcon }).addTo(map);
     marker.bindPopup(`<b>📍 Deliver to:</b><br>${order?.customerName || 'Customer'}<br><small>${order?.shippingAddress || ''}</small>`).openPopup();
     map.setView([lat, lng], 15);
-    mapObjRef.current = map;
-  }, [leafletReady, order, activeTab]);
+    mapObjRef.current  = map;
+    destMarkerRef.current = marker;
+    mapInitializedRef.current = true;
 
-  // Invalidate map size when switching to map tab
-  useEffect(() => {
-    if (activeTab === 'map' && mapObjRef.current) {
-      setTimeout(() => mapObjRef.current?.invalidateSize(), 100);
+    // If we already have GPS coords, draw the route immediately
+    if (gpsCoords) {
+      drawRoute(map, gpsCoords.lat, gpsCoords.lng, lat, lng);
+      const riderIcon = L.divIcon({
+        html: `<div style="width:36px;height:36px;background:linear-gradient(135deg,#6a0dad,#9b30ff);border-radius:50%;border:3px solid white;box-shadow:0 3px 10px rgba(106,13,173,0.5);display:flex;align-items:center;justify-content:center;font-size:18px;">🛵</div>`,
+        className: '', iconSize: [36, 36], iconAnchor: [18, 18],
+      });
+      if (!riderMarkerRef.current) {
+        riderMarkerRef.current = L.marker([gpsCoords.lat, gpsCoords.lng], { icon: riderIcon }).addTo(map);
+        riderMarkerRef.current.bindPopup('🛵 You are here');
+      }
+      // Fit both markers in view
+      const bounds = L.latLngBounds(
+        [gpsCoords.lat, gpsCoords.lng],
+        [lat, lng]
+      );
+      map.fitBounds(bounds, { padding: [48, 48] });
     }
-  }, [activeTab]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leafletReady, order]);
+
+  // Draw red route polyline between rider and destination
+  const drawRoute = (map, rLat, rLng, dLat, dLng) => {
+    if (!map || !window.L) return;
+    if (routeLineRef.current) {
+      routeLineRef.current.remove();
+      routeLineRef.current = null;
+    }
+    routeLineRef.current = window.L.polyline(
+      [[rLat, rLng], [dLat, dLng]],
+      {
+        color: '#e53e3e',
+        weight: 4,
+        opacity: 0.85,
+        dashArray: '10, 8',
+        lineJoin: 'round',
+      }
+    ).addTo(map);
+  };
+
+  // ── Handle visibility change (tab switch / window focus) ──
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        if (mapObjRef.current) {
+          // Map still exists — just invalidate size
+          setTimeout(() => {
+            if (mapObjRef.current) mapObjRef.current.invalidateSize();
+          }, 200);
+        } else if (activeTab === 'map') {
+          // Map was destroyed — reinitialize
+          initMap();
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [activeTab, initMap]);
+
+  // ── Init map when tab becomes 'map' ──
+  useEffect(() => {
+    if (activeTab === 'map') {
+      // Small delay to ensure DOM is ready
+      setTimeout(() => initMap(), 100);
+    }
+  }, [activeTab, initMap]);
+
+  // ── Also init map when leaflet becomes ready ──
+  useEffect(() => {
+    if (leafletReady && activeTab === 'map') {
+      setTimeout(() => initMap(), 100);
+    }
+  }, [leafletReady, initMap, activeTab]);
 
   // Cleanup
   useEffect(() => () => {
     if (watchIdRef.current) navigator.geolocation.clearWatch(watchIdRef.current);
-    if (mapObjRef.current) { try { mapObjRef.current.remove(); } catch {} mapObjRef.current = null; }
+    if (mapObjRef.current) {
+      try { mapObjRef.current.remove(); } catch {}
+      mapObjRef.current     = null;
+      destMarkerRef.current = null;
+      riderMarkerRef.current = null;
+      routeLineRef.current  = null;
+    }
   }, []);
+
+  // ── Auto-start GPS as soon as order loads ──
+  const autoStartedRef = useRef(false);
+  useEffect(() => {
+    if (!order || autoStartedRef.current) return;
+    autoStartedRef.current = true;
+    startTracking();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order]);
 
   // ── Start GPS ──
   const startTracking = () => {
@@ -120,16 +215,26 @@ export default function RiderTrack() {
         }
 
         if (mapObjRef.current && window.L) {
-          const riderIcon = window.L.divIcon({
+          const L = window.L;
+          const riderIcon = L.divIcon({
             html: `<div style="width:36px;height:36px;background:linear-gradient(135deg,#6a0dad,#9b30ff);border-radius:50%;border:3px solid white;box-shadow:0 3px 10px rgba(106,13,173,0.5);display:flex;align-items:center;justify-content:center;font-size:18px;">🛵</div>`,
             className: '', iconSize: [36, 36], iconAnchor: [18, 18],
           });
           if (!riderMarkerRef.current) {
-            riderMarkerRef.current = window.L.marker([lat, lng], { icon: riderIcon }).addTo(mapObjRef.current);
+            riderMarkerRef.current = L.marker([lat, lng], { icon: riderIcon }).addTo(mapObjRef.current);
             riderMarkerRef.current.bindPopup('🛵 You are here');
           } else {
             riderMarkerRef.current.setLatLng([lat, lng]);
           }
+
+          // Draw/update route line
+          const dLat = order?.addressLat || 14.5995;
+          const dLng = order?.addressLng || 120.9842;
+          drawRoute(mapObjRef.current, lat, lng, dLat, dLng);
+
+          // Fit both markers in view
+          const bounds = L.latLngBounds([lat, lng], [dLat, dLng]);
+          mapObjRef.current.fitBounds(bounds, { padding: [48, 48], maxZoom: 17 });
         }
       },
       () => setGpsStatus('error'),
@@ -296,13 +401,10 @@ export default function RiderTrack() {
 
       {/* GPS Bar */}
       <div className={`rt-gps-bar rt-gps-${gpsStatus}`}>
-        {gpsStatus === 'idle'     && <><span>📡 GPS not started — admin &amp; customer can't see you yet</span><button className="rt-gps-btn rt-gps-start" onClick={startTracking}>▶ Start GPS Tracking</button></>}
-        {gpsStatus === 'starting' && <span>⏳ Getting your location…</span>}
-        {gpsStatus === 'active'   && <>
-          <span><span className="rt-live-dot" />  Live GPS Active{gpsCoords && <small> · ±{Math.round(gpsCoords.accuracy || 0)}m</small>}</span>
-          <button className="rt-gps-btn rt-gps-stop" onClick={stopTracking}>⏹ Stop</button>
-        </>}
-        {gpsStatus === 'error'    && <><span>⚠️ GPS unavailable</span><button className="rt-gps-btn rt-gps-start" onClick={startTracking}>↺ Retry</button></>}
+        {gpsStatus === 'idle'     && <span>📡 Starting GPS…</span>}
+        {gpsStatus === 'starting' && <><span className="rt-live-dot rt-dot-yellow" />  <span>⏳ Getting your location…</span></>}
+        {gpsStatus === 'active'   && <><span className="rt-live-dot" /><span>Live GPS Active — admin &amp; customer can see you{gpsCoords ? ` · ±${Math.round(gpsCoords.accuracy || 0)}m` : ''}</span></>}
+        {gpsStatus === 'error'    && <><span>⚠️ GPS unavailable — </span><button className="rt-gps-btn rt-gps-start" onClick={startTracking}>↺ Retry</button></>}
       </div>
 
       {/* Tabs */}
@@ -319,13 +421,14 @@ export default function RiderTrack() {
         ))}
       </div>
 
-      {/* Tab: Map */}
-      {activeTab === 'map' && (
-        <div className="rt-tab-content">
-          <div ref={mapRef} className="rt-map" />
-          <p className="rt-map-hint">📍 = Customer location &nbsp;·&nbsp; 🛵 = Your location (GPS active)</p>
-        </div>
-      )}
+      {/* Tab: Map — always rendered but hidden when not active (prevents destroy) */}
+      <div style={{ display: activeTab === 'map' ? 'block' : 'none' }} className="rt-tab-content">
+        <div ref={mapRef} className="rt-map" />
+        <p className="rt-map-hint">
+          📍 = Customer &nbsp;·&nbsp; 🛵 = You &nbsp;·&nbsp;
+          <span style={{ color: '#e53e3e', fontWeight: 700 }}>━━</span> = Route
+        </p>
+      </div>
 
       {/* Tab: OTP */}
       {activeTab === 'otp' && (
@@ -391,7 +494,7 @@ export default function RiderTrack() {
       {/* Delivery Footer */}
       <div className="rt-footer">
         <div className="rt-checklist">
-          <div className={`rt-check ${isTracking ? 'done' : ''}`}>{isTracking ? '✅' : '⬜'} GPS Tracking</div>
+          <div className={`rt-check done`}>✅ GPS Tracking</div>
           <div className={`rt-check ${otpVerified ? 'done' : ''}`}>{otpVerified ? '✅' : '⬜'} OTP Verified</div>
           <div className={`rt-check ${photoFile ? 'done' : ''}`}>{photoFile ? '✅' : '⬜'} Photo Taken</div>
         </div>
