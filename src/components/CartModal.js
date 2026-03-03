@@ -11,9 +11,8 @@ const CartModal = ({ cart, onClose }) => {
 
   const regularProducts    = useProducts() || [];
   const preOrderProducts   = usePreOrderProducts() || [];
-  const collectionProducts = useCollectionProducts() || []; // ✅ includes released pre-orders
+  const collectionProducts = useCollectionProducts() || [];
 
-  // ✅ Merge all, deduplicate by _id so released pre-orders are findable
   const allProducts = [...new Map(
     [...regularProducts, ...preOrderProducts, ...collectionProducts]
       .map(p => [p._id || p.id, p])
@@ -46,25 +45,14 @@ const CartModal = ({ cart, onClose }) => {
 
   const getEffectivePrice = (item, product) => {
     if (item.finalPrice !== undefined && item.finalPrice !== null) return item.finalPrice;
-    // ✅ Fallback to item.price (stored from pre-order add-to-cart) if product not found
     return product?.price ?? item.price ?? 0;
   };
-
-  const getTotalPieces = () =>
-    cart.reduce((sum, item) => sum + getQty(item), 0);
 
   const calculateSubtotal = () =>
     cart.reduce((total, item) => {
       const product = findProduct(item.productId || item.id);
       return total + getEffectivePrice(item, product) * getQty(item);
     }, 0);
-
-  const calculateShipping = () => {
-    if (cart.length === 0) return 0;
-    const totalPcs = getTotalPieces();
-    if (totalPcs >= 10) return 0;
-    return 10 + totalPcs * 10;
-  };
 
   const calculateTotalDiscount = () =>
     cart.reduce((total, item) => {
@@ -76,10 +64,8 @@ const CartModal = ({ cart, onClose }) => {
     }, 0);
 
   const subtotal      = calculateSubtotal();
-  const shipping      = calculateShipping();
   const totalDiscount = calculateTotalDiscount();
-  const finalTotal    = subtotal + shipping;
-  const totalPcs      = getTotalPieces();
+  // ✅ REMOVED: shipping calculation — shipping is now computed in Checkout based on address/distance
 
   const promoItems = cart.filter(i => i.promoCode);
   const cartPromo  = promoItems.length > 0 ? {
@@ -127,7 +113,6 @@ const CartModal = ({ cart, onClose }) => {
     const productId      = item.productId || item.id;
     const product        = findProduct(productId);
 
-    // ✅ Use stored item data as fallback if product not found in local state
     const displayName    = product?.name  ?? item.name  ?? 'Product';
     const displayImage   = product?.image ?? item.image ?? '';
     const displayGroup   = product?.kpopGroup ?? '';
@@ -155,9 +140,7 @@ const CartModal = ({ cart, onClose }) => {
 
         <div className="cart-item-details">
           <div className="cart-item-name-row">
-            <div className="cart-item-name">
-              {displayName}
-            </div>
+            <div className="cart-item-name">{displayName}</div>
             <div className="cart-item-stock-info">{displayStock} available</div>
           </div>
 
@@ -171,12 +154,8 @@ const CartModal = ({ cart, onClose }) => {
             </span>
             {hasPromo && (
               <>
-                <span className="cart-item-price-original">
-                  ₱{originalTotal.toLocaleString()}
-                </span>
-                <span className="cart-item-saved-badge">
-                  Save ₱{savedAmount.toLocaleString()}
-                </span>
+                <span className="cart-item-price-original">₱{originalTotal.toLocaleString()}</span>
+                <span className="cart-item-saved-badge">Save ₱{savedAmount.toLocaleString()}</span>
               </>
             )}
           </div>
@@ -244,7 +223,6 @@ const CartModal = ({ cart, onClose }) => {
                     {nonPromoCartItems.map(item => renderCartItem(item))}
                   </>
                 )}
-
                 {promoCartItems.length > 0 && (
                   <>
                     <div className="cart-group-label cart-group-label-promo">
@@ -256,18 +234,11 @@ const CartModal = ({ cart, onClose }) => {
               </div>
 
               <div className="cart-summary">
-                {totalPcs < 10 && (
-                  <div className="shipping-notice">
-                    <i className="fas fa-truck"></i>
-                    Add <strong>{10 - totalPcs} more pc{10 - totalPcs > 1 ? 's' : ''}</strong> to get <strong>FREE shipping!</strong>
-                  </div>
-                )}
-                {totalPcs >= 10 && (
-                  <div className="shipping-notice free">
-                    <i className="fas fa-check-circle"></i>
-                    You got FREE shipping!
-                  </div>
-                )}
+                {/* ✅ REMOVED: Shipping notice/free shipping bar — moved to Checkout */}
+                <div className="shipping-notice">
+                  <i className="fas fa-truck"></i>
+                  <span>Shipping fee will be calculated at checkout based on your address.</span>
+                </div>
 
                 {totalDiscount > 0 && (
                   <div className="summary-row cart-original-row">
@@ -283,13 +254,10 @@ const CartModal = ({ cart, onClose }) => {
                   <span>₱{subtotal.toLocaleString()}</span>
                 </div>
 
-                <div className="summary-row">
-                  <span>Shipping ({totalPcs} pc{totalPcs > 1 ? 's' : ''}):</span>
-                  <span>
-                    {shipping === 0
-                      ? <span className="free-shipping-text">FREE</span>
-                      : `₱${shipping.toLocaleString()}`}
-                  </span>
+                {/* ✅ REMOVED: Shipping row — will show in Checkout */}
+                <div className="summary-row" style={{ fontSize: '12px', color: '#888', fontStyle: 'italic' }}>
+                  <span>Shipping:</span>
+                  <span>Calculated at checkout</span>
                 </div>
 
                 {totalDiscount > 0 && (
@@ -303,8 +271,8 @@ const CartModal = ({ cart, onClose }) => {
                 )}
 
                 <div className="summary-row summary-total">
-                  <span>Total:</span>
-                  <span>₱{finalTotal.toLocaleString()}</span>
+                  <span>Subtotal:</span>
+                  <span>₱{subtotal.toLocaleString()}</span>
                 </div>
 
                 {totalDiscount > 0 && (
@@ -321,9 +289,7 @@ const CartModal = ({ cart, onClose }) => {
         {cart.length > 0 && (
           <div className="modal-footer">
             <button className="btn btn-primary" onClick={handleCheckout}>
-              {totalDiscount > 0
-                ? `Checkout · ₱${finalTotal.toLocaleString()}`
-                : 'Proceed to Checkout'}
+              Proceed to Checkout
             </button>
           </div>
         )}

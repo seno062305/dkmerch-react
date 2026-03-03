@@ -9,12 +9,41 @@ import { useMutation, useQuery, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import './Checkout.css';
 
-const calcShipping = (totalPcs) => {
-  if (totalPcs === 0) return 0;
-  if (totalPcs >= 10) return 0;
-  return 10 + totalPcs * 10;
-};
+// ─── SHIPPING CONFIG ──────────────────────────────────────────────────────────
+// ✅ Change these to your actual store coordinates
+const STORE_LAT = 14.5995;
+const STORE_LNG = 120.9842;
 
+const SHIPPING_TIERS = [
+  { maxKm: 5,        fee: 10  },
+  { maxKm: 10,       fee: 20  },
+  { maxKm: 20,       fee: 30 },
+  { maxKm: 40,       fee: 40 },
+  { maxKm: 70,       fee: 50 },
+  { maxKm: 120,      fee: 60 },
+  { maxKm: Infinity, fee: 70 },
+];
+
+function getDistanceKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+    Math.cos((lat2 * Math.PI) / 180) *
+    Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function calcShippingByDistance(lat, lng) {
+  if (!lat || !lng) return null;
+  const km = getDistanceKm(STORE_LAT, STORE_LNG, lat, lng);
+  const tier = SHIPPING_TIERS.find(t => km <= t.maxKm);
+  return { fee: tier?.fee ?? 300, km: Math.round(km * 10) / 10 };
+}
+
+// ─── ADDRESS MAP PICKER ───────────────────────────────────────────────────────
 const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) => {
   const mapRef         = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -305,6 +334,7 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) 
   );
 };
 
+// ─── MAIN CHECKOUT ────────────────────────────────────────────────────────────
 const Checkout = () => {
   const navigate  = useNavigate();
   const location  = useLocation();
@@ -338,11 +368,15 @@ const Checkout = () => {
   const [errors, setErrors]                     = useState({ phone: '' });
   const cartPromo = location.state?.appliedPromo || null;
 
-  const [formData, setFormData] = useState({ fullName: '', email: '', phone: '', address: '', city: '', zipCode: '', notes: '' });
+  const [formData, setFormData]         = useState({ fullName: '', email: '', phone: '', address: '', city: '', zipCode: '', notes: '' });
   const [savedContact, setSavedContact] = useState({ fullName: '', email: '', phone: '' });
   const [savedAddress, setSavedAddress] = useState({ address: '', city: '', zipCode: '' });
   const [addressCoords, setAddressCoords] = useState(null);
   const [savedCoords, setSavedCoords]     = useState(null);
+
+  // ✅ Distance-based shipping — only computed once coords are available
+  const shippingInfo = addressCoords ? calcShippingByDistance(addressCoords.lat, addressCoords.lng) : null;
+  const shippingFee  = shippingInfo?.fee ?? 0;
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -381,7 +415,6 @@ const Checkout = () => {
 
   const getProductById    = (id) => products.find(p => p._id?.toString() === id?.toString() || p.id === id);
   const getQty            = (item) => item.qty ?? item.quantity ?? 1;
-  const getTotalPcs       = () => cartItems.reduce((sum, item) => sum + getQty(item), 0);
   const getEffectivePrice = (item, product) => {
     if (item.finalPrice !== undefined && item.finalPrice !== null) return item.finalPrice;
     if (item.price     !== undefined && item.price     !== null) return item.price;
@@ -402,7 +435,6 @@ const Checkout = () => {
     }, 0);
 
   const subtotal      = calculateSubtotal();
-  const shippingFee   = calcShipping(getTotalPcs());
   const totalDiscount = calculateTotalDiscount();
   const finalTotal    = subtotal + shippingFee;
 
@@ -506,7 +538,7 @@ const Checkout = () => {
         if (product) await updateProduct({ id: product._id, stock: product.stock - getQty(item) });
       }
       const orderId  = `DK-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
-      const shipping = calcShipping(getTotalPcs());
+      const shipping = shippingFee; // ✅ distance-based
       const orderItems = cartItems.map(item => {
         const product = getProductById(item.productId || item.id);
         return {
@@ -585,11 +617,12 @@ const Checkout = () => {
           name: savedContact.fullName,
           orderId,
           items: orderItems.map(i => ({ name: i.name, price: i.price, quantity: i.quantity })),
-          total:          originalSubtotal + shipping,
-          promoCode:      promoItem?.promoCode,
-          discountAmount: totalDiscount > 0 ? totalDiscount : undefined,
+          total:              originalSubtotal + shipping,
+          promoCode:          promoItem?.promoCode,
+          discountAmount:     totalDiscount > 0 ? totalDiscount : undefined,
           finalTotal,
-          shippingFee:    shipping,
+          shippingFee:        shipping,
+          shippingDistanceKm: shippingInfo?.km, // ✅ pass distance to email
         });
       } catch (emailErr) { console.warn('Email failed:', emailErr); }
       await clearCart();
@@ -605,7 +638,6 @@ const Checkout = () => {
 
   const promoCartItems    = cartItems.filter(i => !!i.promoCode);
   const nonPromoCartItems = cartItems.filter(i => !i.promoCode);
-  const totalPcs          = getTotalPcs();
 
   const renderSummaryItem = (item) => {
     const product = getProductById(item.productId || item.id);
@@ -700,11 +732,32 @@ const Checkout = () => {
                       <span className="info-label"><i className="fas fa-map-marker-alt"></i> Street Address</span>
                       <span className="info-value">{savedAddress.address || <span className="info-missing">Not set — click Edit</span>}</span>
                     </div>
-                    {addressCoords && (
+                    {/* ✅ Show shipping fee after address is saved */}
+                    {shippingInfo && (
                       <div className="info-display-item info-display-full" style={{ background: '#f0fdf4', borderColor: '#86efac' }}>
-                        <span className="info-label" style={{ color: '#16a34a' }}><i className="fas fa-map-marker-alt"></i> Map Pin</span>
-                        <span className="info-value" style={{ fontSize: '13px', color: '#166534' }}>
-                          <i className="fas fa-check-circle" style={{ color: '#16a34a', marginRight: '6px' }}></i>
+                        <span className="info-label" style={{ color: '#16a34a' }}><i className="fas fa-truck"></i> Shipping Fee</span>
+                        <span className="info-value" style={{ color: '#15803d' }}>
+                          <strong>₱{shippingInfo.fee.toLocaleString()}</strong>
+                          <span style={{ fontSize: '12px', color: '#4ade80', marginLeft: '8px', fontWeight: 500 }}>
+                            (~{shippingInfo.km} km from store)
+                          </span>
+                        </span>
+                      </div>
+                    )}
+                    {!shippingInfo && isAddressComplete() && (
+                      <div className="info-display-item info-display-full" style={{ background: '#fffbeb', borderColor: '#fde68a' }}>
+                        <span className="info-label" style={{ color: '#92400e' }}><i className="fas fa-truck"></i> Shipping Fee</span>
+                        <span className="info-value" style={{ fontSize: '13px', color: '#78350f' }}>
+                          <i className="fas fa-map-marker-alt" style={{ color: '#f59e0b', marginRight: '6px' }}></i>
+                          Pin your location on the map to compute shipping fee
+                        </span>
+                      </div>
+                    )}
+                    {addressCoords && (
+                      <div className="info-display-item info-display-full" style={{ background: '#eff6ff', borderColor: '#bfdbfe' }}>
+                        <span className="info-label" style={{ color: '#1e40af' }}><i className="fas fa-map-marker-alt"></i> Map Pin</span>
+                        <span className="info-value" style={{ fontSize: '13px', color: '#1e3a8a' }}>
+                          <i className="fas fa-check-circle" style={{ color: '#3b82f6', marginRight: '6px' }}></i>
                           Exact location saved — rider will navigate to your pin
                         </span>
                       </div>
@@ -721,6 +774,29 @@ const Checkout = () => {
                         savedCoords={savedCoords}
                       />
                     </div>
+                    {/* ✅ Live shipping preview while editing */}
+                    {addressCoords && (() => {
+                      const preview = calcShippingByDistance(addressCoords.lat, addressCoords.lng);
+                      return preview ? (
+                        <div className="form-group full-width">
+                          <div style={{
+                            display: 'flex', alignItems: 'center', gap: '10px',
+                            background: '#f0fdf4', border: '1.5px solid #86efac',
+                            borderRadius: '10px', padding: '12px 16px',
+                          }}>
+                            <i className="fas fa-truck" style={{ color: '#16a34a', fontSize: '16px' }}></i>
+                            <div>
+                              <div style={{ fontWeight: 700, color: '#15803d', fontSize: '14px' }}>
+                                Estimated Shipping: ₱{preview.fee.toLocaleString()}
+                              </div>
+                              <div style={{ fontSize: '12px', color: '#4ade80', marginTop: '2px' }}>
+                                ~{preview.km} km from store · Save address to confirm
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ) : null;
+                    })()}
                   </div>
                 )}
               </div>
@@ -790,13 +866,7 @@ const Checkout = () => {
                   )}
                 </div>
                 <div className="summary-divider"></div>
-                {totalPcs > 0 && totalPcs < 10 && (
-                  <div className="shipping-nudge">
-                    <i className="fas fa-truck"></i>
-                    Add <strong>{10 - totalPcs} more pc{10 - totalPcs > 1 ? 's' : ''}</strong> for <strong>FREE shipping!</strong>
-                  </div>
-                )}
-                {totalPcs >= 10 && <div className="shipping-nudge shipping-nudge-free"><i className="fas fa-check-circle"></i> You got FREE shipping!</div>}
+
                 <div className="summary-totals">
                   {totalDiscount > 0 && (
                     <div className="summary-row summary-row-original">
@@ -804,18 +874,50 @@ const Checkout = () => {
                       <span className="summary-strikethrough">₱{(subtotal + totalDiscount).toLocaleString()}</span>
                     </div>
                   )}
-                  <div className="summary-row"><span>Subtotal</span><span>₱{subtotal.toLocaleString()}</span></div>
                   <div className="summary-row">
-                    <span>Shipping ({totalPcs} pc{totalPcs !== 1 ? 's' : ''})</span>
-                    <span>{shippingFee === 0 ? <span className="free-shipping-text">FREE</span> : `₱${shippingFee.toLocaleString()}`}</span>
+                    <span>Subtotal</span>
+                    <span>₱{subtotal.toLocaleString()}</span>
                   </div>
+
+                  {/* ✅ Shipping row — shows "Set address first" until coords are available */}
+                  <div className="summary-row">
+                    <span>
+                      <i className="fas fa-truck" style={{ marginRight: '6px', color: '#6c63ff' }}></i>
+                      Shipping
+                      {shippingInfo && (
+                        <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 400, marginLeft: '4px' }}>
+                          (~{shippingInfo.km} km)
+                        </span>
+                      )}
+                    </span>
+                    <span>
+                      {shippingInfo
+                        ? <strong style={{ color: '#1e293b' }}>₱{shippingInfo.fee.toLocaleString()}</strong>
+                        : <span style={{ fontSize: '12px', color: '#f59e0b', fontWeight: 600 }}>
+                            <i className="fas fa-map-marker-alt" style={{ marginRight: '4px' }}></i>
+                            Set address first
+                          </span>
+                      }
+                    </span>
+                  </div>
+
                   {totalDiscount > 0 && (
                     <div className="summary-row promo-discount-row">
                       <span><i className="fas fa-tag" style={{ marginRight: '6px', color: '#ec4899' }}></i>Promo Discount</span>
                       <span className="promo-discount-amount">−₱{totalDiscount.toLocaleString()}</span>
                     </div>
                   )}
-                  <div className="summary-row total"><span>Total</span><span>₱{finalTotal.toLocaleString()}</span></div>
+
+                  <div className="summary-row total">
+                    <span>Total</span>
+                    <span>
+                      {shippingInfo
+                        ? `₱${finalTotal.toLocaleString()}`
+                        : <span style={{ fontSize: '15px', color: '#f59e0b' }}>Set address to see total</span>
+                      }
+                    </span>
+                  </div>
+
                   {totalDiscount > 0 && (
                     <div className="promo-savings-checkout">
                       <i className="fas fa-piggy-bank"></i>
@@ -823,6 +925,7 @@ const Checkout = () => {
                     </div>
                   )}
                 </div>
+
                 <button
                   type="submit"
                   className={`btn btn-primary btn-checkout${!isFormReady() || loading ? ' btn-checkout-disabled' : ''}`}
@@ -832,7 +935,9 @@ const Checkout = () => {
                     ? <><i className="fas fa-spinner fa-spin"></i> Processing...</>
                     : !isFormReady()
                       ? <><i className="fas fa-lock"></i> Complete Your Info First</>
-                      : <>Pay ₱{finalTotal.toLocaleString()} Securely</>
+                      : shippingInfo
+                        ? <>Pay ₱{finalTotal.toLocaleString()} Securely</>
+                        : <>Pay Securely</>
                   }
                 </button>
                 {!isFormReady() && !loading && (

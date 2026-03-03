@@ -117,23 +117,26 @@ export const sendOrderConfirmation = action({
       })
     ),
     total: v.number(),
-    promoCode:      v.optional(v.string()),
-    promoName:      v.optional(v.string()),
-    discountAmount: v.optional(v.number()),
-    finalTotal:     v.optional(v.number()),
-    shippingFee:    v.optional(v.number()),
+    promoCode:          v.optional(v.string()),
+    promoName:          v.optional(v.string()),
+    discountAmount:     v.optional(v.number()),
+    finalTotal:         v.optional(v.number()),
+    shippingFee:        v.optional(v.number()),
+    shippingDistanceKm: v.optional(v.number()), // ✅ NEW
   },
   handler: async (
     ctx,
     {
       to, name, orderId, items, total,
       promoCode, promoName, discountAmount, finalTotal, shippingFee,
+      shippingDistanceKm, // ✅ NEW
     }: {
       to: string; name: string; orderId: string;
       items: { name: string; price: number; quantity: number }[];
       total: number;
       promoCode?: string; promoName?: string;
       discountAmount?: number; finalTotal?: number; shippingFee?: number;
+      shippingDistanceKm?: number; // ✅ NEW
     }
   ): Promise<{ success: boolean; message?: string; id?: string }> => {
 
@@ -160,14 +163,24 @@ export const sendOrderConfirmation = action({
       </tr>
     ` : '';
 
+    // ✅ Shipping row with distance label
+    const shippingKmLabel = shippingDistanceKm
+      ? ` <span style="font-size: 12px; color: #94a3b8; font-weight: 400;">(~${shippingDistanceKm} km)</span>`
+      : '';
+
     const shippingRow = `
       <tr>
-        <td colspan="3" style="padding: 10px 12px; border-bottom: 1px solid #eee; color: #555; font-size: 14px;">Shipping Fee</td>
+        <td colspan="3" style="padding: 10px 12px; border-bottom: 1px solid #eee; color: #555; font-size: 14px;">Shipping Fee${shippingKmLabel}</td>
         <td style="padding: 10px 12px; border-bottom: 1px solid #eee; text-align: right; color: #333; font-size: 14px;">
           ${(shippingFee ?? 0) === 0 ? '<span style="color: #16a34a; font-weight: 600;">FREE</span>' : `₱${(shippingFee ?? 0).toLocaleString()}`}
         </td>
       </tr>
     `;
+
+    // ✅ Summary shipping label with distance
+    const summaryShippingLabel = shippingDistanceKm
+      ? `Shipping (~${shippingDistanceKm} km)`
+      : `Shipping`;
 
     const html = `
       <div style="font-family: 'Segoe UI', sans-serif; max-width: 620px; margin: 0 auto; background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.1);">
@@ -200,7 +213,7 @@ export const sendOrderConfirmation = action({
                 <td style="padding: 6px 0; text-align: right; color: #333; font-size: 14px;">₱${subtotalAmount.toLocaleString()}</td>
               </tr>
               <tr>
-                <td style="padding: 6px 0; color: #555; font-size: 14px;">Shipping</td>
+                <td style="padding: 6px 0; color: #555; font-size: 14px;">${summaryShippingLabel}</td>
                 <td style="padding: 6px 0; text-align: right; color: #333; font-size: 14px;">${(shippingFee ?? 0) === 0 ? '<span style="color: #16a34a; font-weight: 600;">FREE</span>' : `₱${(shippingFee ?? 0).toLocaleString()}`}</td>
               </tr>
               ${hasPromo ? `
