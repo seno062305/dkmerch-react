@@ -7,11 +7,20 @@
   max-width: 1100px;
 }
 
+/* ── Title row (title + bell) ── */
+.ar-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  gap: 12px;
+}
+
 .admin-riders-title {
   font-size: 24px;
   font-weight: 700;
   color: #6a0dad;
-  margin-bottom: 20px;
+  margin: 0;
 }
 
 /* ── TABS ── */
@@ -194,10 +203,8 @@
   grid-template-columns: 1fr 1fr;
 }
 
-/* ── TWO-COL ROW (Customer + Rider side by side) ── */
-.ar-two-col {
-  display: contents;
-}
+/* ── TWO-COL ROW ── */
+.ar-two-col { display: contents; }
 
 /* ── SECTION ── */
 .ar-section {
@@ -249,7 +256,7 @@
 
 .ar-total { font-weight: 700; color: #6a0dad; }
 
-/* ── COMPACT RIDER INPUTS (fixes typing bug) ── */
+/* ── COMPACT RIDER INPUTS ── */
 .ar-input-compact {
   display: flex;
   flex-direction: column;
@@ -377,15 +384,6 @@
   color: #f59e0b;
   margin: 5px 0 0 0;
   font-weight: 600;
-}
-
-.ar-otp-preview {
-  background: white;
-  border: 1px solid #86efac;
-  border-radius: 6px;
-  padding: 3px 10px;
-  font-size: 13px;
-  color: #065f46;
 }
 
 /* ── GPS SECTION ── */
@@ -592,16 +590,6 @@
 .ar-btn-danger             { background: #dc2626; color: white; }
 .ar-btn-danger:hover       { background: #b91c1c; }
 
-.ar-btn-view {
-  background: #6a0dad; color: white;
-  padding: 7px 14px; border-radius: 7px;
-  font-size: 13px; font-weight: 600;
-  border: none; cursor: pointer;
-  transition: opacity 0.2s; align-self: flex-start;
-  white-space: nowrap; flex-shrink: 0;
-}
-.ar-btn-view:hover { opacity: 0.85; }
-
 /* ── CONFIRM MODAL ── */
 .ar-confirm-modal {
   background: white;
@@ -625,7 +613,7 @@
 
 .ar-confirm-actions { display: flex; gap: 10px; justify-content: center; }
 
-/* ── RIDER DIRECTORY GRID ── */
+/* ── RIDERS GRID ── */
 .ar-riders-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -959,229 +947,18 @@
   width: 100vw !important;
   height: 100vh !important;
   border-radius: 0 !important;
+  margin: 0 !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
 }
 
 .ar-map-modal--full .ar-map-container { height: calc(100vh - 160px) !important; }
+.ar-overlay--full { padding: 0 !important; align-items: stretch !important; justify-content: stretch !important; }
 
-.ar-overlay--full { padding: 0 !important; align-items: stretch !important; }
-
-/* ══ RESPONSIVE ══ */
-@media (max-width: 768px) {
-  .admin-riders { padding: 14px; }
-  .admin-riders-title { font-size: 20px; }
-
-  .ar-order-body { grid-template-columns: 1fr; }
-  .ar-section { border-right: none; }
-  .ar-riders-grid { grid-template-columns: 1fr; }
-
-  .ar-share-modal,
-  .ar-detail-modal,
-  .ar-confirm-modal { max-width: 100%; border-radius: 20px 20px 0 0; }
-  .ar-modal-overlay { align-items: flex-end; padding: 0; }
-
-  .ar-header-actions { gap: 6px; }
-  .ar-share-btn, .ar-collapse-btn { padding: 6px 10px; font-size: 12px; }
-
-  .ar-map-modal { max-width: 100%; border-radius: 20px 20px 0 0; max-height: 95vh; }
-  .ar-map-container { height: 320px; }
-  .ar-map-btn-row { flex-direction: column; }
-  .ar-track-map-btn { width: 100%; text-align: center; }
-}
-
-@media (max-width: 480px) {
-  .admin-riders { padding: 10px; }
-  .riders-tab-btn { padding: 8px 12px; font-size: 12px; }
-  .ar-order-header { padding: 12px 14px; }
-  .ar-order-id { font-size: 14px; }
-  .ar-section { padding: 12px 14px; }
-  .ar-share-actions { flex-direction: column; }
-  .ar-btn { width: 100%; text-align: center; }
-  .ar-confirm-actions { flex-direction: column; }
-}
-
-/* ══ RIDERTRACK — Call Modal CSS ══ */
-/* Add these to your RiderTrack.css */
-
-/* Customer Banner */
-.rt-customer-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: linear-gradient(135deg, #1e1b4b, #312e81);
-  padding: 14px 18px;
-  gap: 12px;
-}
-
-.rt-customer-info { flex: 1; min-width: 0; }
-
-.rt-customer-name {
-  font-size: 15px;
-  font-weight: 700;
-  color: white;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.rt-customer-phone {
-  font-size: 16px;
-  color: #c4b5fd;
-  margin-top: 3px;
-  letter-spacing: 0.5px;
-}
-
-.rt-customer-phone strong {
-  color: white;
-  font-size: 17px;
-}
-
-.rt-call-btn {
-  background: linear-gradient(135deg, #16a34a, #15803d);
-  color: white;
-  border: none;
-  border-radius: 50px;
-  padding: 11px 22px;
-  font-size: 15px;
-  font-weight: 700;
-  cursor: pointer;
-  white-space: nowrap;
-  flex-shrink: 0;
-  box-shadow: 0 3px 12px rgba(22,163,74,0.45);
-  transition: all 0.2s;
-}
-
-.rt-call-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 5px 18px rgba(22,163,74,0.55);
-}
-
-.rt-no-phone {
-  font-size: 12px;
-  color: #6b7280;
-  font-style: italic;
-}
-
-/* ── Call Modal ── */
-.rt-call-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.75);
-  z-index: 99999;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  padding-bottom: 0;
-  animation: rtFadeIn 0.2s ease;
-}
-
-@keyframes rtFadeIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-
-.rt-call-modal {
-  background: white;
-  border-radius: 24px 24px 0 0;
-  padding: 32px 24px 40px;
-  width: 100%;
-  max-width: 480px;
-  text-align: center;
-  animation: rtSlideUp 0.25s ease;
-  box-shadow: 0 -8px 40px rgba(0,0,0,0.3);
-}
-
-@keyframes rtSlideUp {
-  from { transform: translateY(100%); }
-  to   { transform: translateY(0); }
-}
-
-.rt-call-modal-avatar {
-  width: 80px;
-  height: 80px;
-  background: linear-gradient(135deg, #16a34a, #15803d);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 36px;
-  margin: 0 auto 16px;
-  box-shadow: 0 4px 20px rgba(22,163,74,0.4);
-  animation: rtPulse 1.5s ease-in-out infinite;
-}
-
-@keyframes rtPulse {
-  0%, 100% { box-shadow: 0 4px 20px rgba(22,163,74,0.4); }
-  50%       { box-shadow: 0 4px 30px rgba(22,163,74,0.7); }
-}
-
-.rt-call-modal-label {
-  font-size: 13px;
-  color: #9ca3af;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  font-weight: 600;
-  margin-bottom: 6px;
-}
-
-.rt-call-modal-name {
-  font-size: 20px;
-  font-weight: 800;
-  color: #1f2937;
-  margin-bottom: 8px;
-}
-
-.rt-call-modal-number {
-  font-size: 28px;
-  font-weight: 800;
-  color: #6a0dad;
-  letter-spacing: 2px;
-  margin-bottom: 28px;
-  font-family: 'Courier New', monospace;
-}
-
-.rt-call-modal-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.rt-call-confirm-btn {
-  display: block;
-  width: 100%;
-  padding: 16px;
-  background: linear-gradient(135deg, #16a34a, #15803d);
-  color: white;
-  border-radius: 14px;
-  font-size: 17px;
-  font-weight: 700;
-  text-decoration: none;
-  text-align: center;
-  box-shadow: 0 4px 16px rgba(22,163,74,0.4);
-  transition: all 0.2s;
-}
-
-.rt-call-confirm-btn:hover {
-  filter: brightness(1.08);
-  transform: translateY(-1px);
-}
-
-.rt-call-cancel-btn {
-  width: 100%;
-  padding: 14px;
-  background: #f1f5f9;
-  color: #6b7280;
-  border: none;
-  border-radius: 14px;
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.rt-call-cancel-btn:hover { background: #e2e8f0; }
-
-/* ══ OTP DISPLAY BLOCK (shown after customer generates OTP) ══ */
-
+/* ══ OTP BLOCK ══ */
 .ar-otp-block {
   margin-top: 10px;
   background: white;
@@ -1255,7 +1032,6 @@
   line-height: 1.4;
 }
 
-/* Waiting state — before customer generates */
 .ar-otp-waiting {
   display: flex;
   flex-direction: column;
@@ -1287,4 +1063,243 @@
 @keyframes otpWaitPulse {
   0%, 100% { background: #d1d5db; transform: scale(1); }
   50%       { background: #7c3aed; transform: scale(1.3); }
+}
+
+/* ── Map waiting overlay ── */
+.ar-map-waiting-overlay {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: #fffbeb;
+  border-top: 1px solid #fde68a;
+  font-size: 13px;
+  color: #92400e;
+  font-weight: 600;
+}
+
+/* ══ NOTIFICATION BELL ══ */
+.ar-bell-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.ar-bell-btn {
+  position: relative;
+  background: #f5f3ff;
+  border: 2px solid #e9d5ff;
+  border-radius: 10px;
+  width: 44px;
+  height: 44px;
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  color: #6a0dad;
+}
+
+.ar-bell-btn:hover {
+  background: #ede9fe;
+  border-color: #c4b5fd;
+}
+
+.ar-bell-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: #dc2626;
+  color: white;
+  border-radius: 20px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid white;
+  animation: bellPop 0.3s ease;
+}
+
+@keyframes bellPop {
+  from { transform: scale(0); }
+  to   { transform: scale(1); }
+}
+
+.ar-bell-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 340px;
+  background: white;
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+  border: 1px solid #e9d5ff;
+  z-index: 9999;
+  overflow: hidden;
+  animation: bellDropIn 0.18s ease;
+}
+
+@keyframes bellDropIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.ar-bell-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid #f0e6ff;
+  background: linear-gradient(135deg, #6a0dad, #9b30ff);
+}
+
+.ar-bell-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: white;
+}
+
+.ar-bell-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ar-bell-clear {
+  background: rgba(255,255,255,0.2);
+  color: white;
+  border: 1px solid rgba(255,255,255,0.4);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.ar-bell-clear:hover { background: rgba(255,255,255,0.35); }
+
+.ar-bell-close {
+  background: rgba(255,255,255,0.15);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 26px;
+  height: 26px;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+.ar-bell-close:hover { background: rgba(220,38,38,0.5); }
+
+.ar-bell-list {
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.ar-bell-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 32px 20px;
+  color: #9ca3af;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.ar-bell-empty span:first-child { font-size: 28px; }
+
+.ar-bell-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f9f5ff;
+  transition: background 0.15s;
+  position: relative;
+}
+
+.ar-bell-item:hover { background: #faf5ff; }
+.ar-bell-item:last-child { border-bottom: none; }
+
+.ar-bell-item--unread { background: #faf5ff; }
+
+.ar-bell-item-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  background: #f3e8ff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.ar-bell-item-body { flex: 1; min-width: 0; }
+
+.ar-bell-item-msg {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2937;
+  line-height: 1.4;
+  margin-bottom: 3px;
+}
+
+.ar-bell-item-time {
+  font-size: 11px;
+  color: #9ca3af;
+  font-weight: 500;
+}
+
+.ar-bell-unread-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #7c3aed;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+/* ══ RESPONSIVE ══ */
+@media (max-width: 768px) {
+  .admin-riders { padding: 14px; }
+  .admin-riders-title { font-size: 20px; }
+  .ar-overlay--full { padding: 0 !important; }
+  .ar-order-body { grid-template-columns: 1fr; }
+  .ar-section { border-right: none; }
+  .ar-riders-grid { grid-template-columns: 1fr; }
+  .ar-share-modal,
+  .ar-detail-modal,
+  .ar-confirm-modal { max-width: 100%; border-radius: 20px 20px 0 0; }
+ .ar-modal-overlay:not(.ar-overlay--full) { align-items: flex-end; padding: 0; }
+.ar-overlay--full { align-items: stretch !important; justify-content: stretch !important; padding: 0 !important; }
+  .ar-header-actions { gap: 6px; }
+  .ar-share-btn, .ar-collapse-btn { padding: 6px 10px; font-size: 12px; }
+ .ar-map-modal { max-width: calc(100vw - 24px); border-radius: 16px; max-height: 85vh; }
+.ar-modal-overlay:has(.ar-map-modal) { align-items: center !important; padding: 12px !important; }
+  .ar-map-container { height: 320px; }
+  .ar-map-btn-row { flex-direction: column; }
+  .ar-track-map-btn { width: 100%; text-align: center; }
+  .ar-bell-dropdown { width: 300px; right: -10px; }
+}
+
+@media (max-width: 480px) {
+  .admin-riders { padding: 10px; }
+  .riders-tab-btn { padding: 8px 12px; font-size: 12px; }
+  .ar-order-header { padding: 12px 14px; }
+  .ar-order-id { font-size: 14px; }
+  .ar-section { padding: 12px 14px; }
+  .ar-share-actions { flex-direction: column; }
+  .ar-btn { width: 100%; text-align: center; }
+  .ar-confirm-actions { flex-direction: column; }
+  .ar-bell-dropdown { width: 280px; }
 }

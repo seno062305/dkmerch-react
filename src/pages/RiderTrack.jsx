@@ -1,4 +1,4 @@
-// src/pages/RiderTrack.jsx  (full replacement)
+// src/pages/RiderTrack.jsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation } from 'convex/react';
@@ -22,7 +22,47 @@ const getDeviceInfo = () => {
   return 'another device';
 };
 
-// ─── Link Already In Use Screen ──────────────────────────────
+const reverseGeocode = async (lat, lng) => {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=18&addressdetails=1`,
+      { headers: { 'Accept-Language': 'en' } }
+    );
+    const data = await res.json();
+    if (data?.display_name) {
+      const a = data.address || {};
+      const parts = [
+        a.road || a.pedestrian || a.footway,
+        a.suburb || a.village || a.town || a.city_district,
+        a.city || a.municipality,
+      ].filter(Boolean);
+      return parts.length ? parts.join(', ') : data.display_name.split(',').slice(0, 3).join(',');
+    }
+  } catch {}
+  return null;
+};
+
+// ── FIX: OSRM fetch with 8s timeout + 2 retries ──
+const fetchOsrmRoute = async (rLat, rLng, dLat, dLng, retries = 2, timeoutMs = 8000) => {
+  const url = `https://router.project-osrm.org/route/v1/bike/${rLng},${rLat};${dLng},${dLat}?overview=full&geometries=geojson`;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timer);
+      const data = await res.json();
+      if (data.code === 'Ok' && data.routes?.[0]?.geometry?.coordinates?.length > 1) {
+        return data.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+      }
+    } catch {
+      clearTimeout(timer);
+      if (attempt < retries) await new Promise(r => setTimeout(r, 1500));
+    }
+  }
+  return null;
+};
+
 function LinkInUseScreen({ deviceInfo, takenAt, onRetry }) {
   const [retrying, setRetrying] = useState(false);
   const ago = takenAt ? Math.round((Date.now() - takenAt) / 1000) : null;
@@ -48,30 +88,34 @@ function LinkInUseScreen({ deviceInfo, takenAt, onRetry }) {
   );
 }
 
-// ─── Fullscreen Map Modal ─────────────────────────────────────
 function FullscreenMapModal({ order, gpsCoords, onClose }) {
   const modalMapRef = useRef(null), modalMapObjRef = useRef(null),
         modalRouteRef = useRef(null), modalRiderRef = useRef(null);
+  const modalLastRouteRef = useRef({ rLat: null, rLng: null });
 
   const drawModalRoute = async (map, rLat, rLng, dLat, dLng) => {
     if (!map || !window.L) return;
+    const prev = modalLastRouteRef.current;
+    const movedEnough = !prev.rLat ||
+      Math.abs(rLat - prev.rLat) > 0.00015 ||
+      Math.abs(rLng - prev.rLng) > 0.00015;
+    if (!movedEnough) return;
     if (modalRouteRef.current) {
       (Array.isArray(modalRouteRef.current) ? modalRouteRef.current : [modalRouteRef.current]).forEach(l => l.remove());
       modalRouteRef.current = null;
     }
-    try {
-      const res = await fetch(`https://router.project-osrm.org/route/v1/bike/${rLng},${rLat};${dLng},${dLat}?overview=full&geometries=geojson`);
-      const data = await res.json();
-      if (data.code === 'Ok' && data.routes?.[0]?.geometry?.coordinates) {
-        const coords = data.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng]);
-        modalRouteRef.current = [
-          window.L.polyline(coords, { color: 'white',   weight: 7,   opacity: 0.6  }).addTo(map),
-          window.L.polyline(coords, { color: '#e53e3e', weight: 4.5, opacity: 0.92 }).addTo(map),
-        ];
-        map.fitBounds(window.L.latLngBounds(coords), { padding: [60, 60], maxZoom: 17 });
-      } else throw new Error();
-    } catch {
-      modalRouteRef.current = window.L.polyline([[rLat, rLng], [dLat, dLng]], { color: '#e53e3e', weight: 4, opacity: 0.8, dashArray: '10, 8' }).addTo(map);
+    const coords = await fetchOsrmRoute(rLat, rLng, dLat, dLng);
+    if (coords) {
+      modalLastRouteRef.current = { rLat, rLng };
+      modalRouteRef.current = [
+        window.L.polyline(coords, { color: 'white',   weight: 7,   opacity: 0.6  }).addTo(map),
+        window.L.polyline(coords, { color: '#e53e3e', weight: 4.5, opacity: 0.92 }).addTo(map),
+      ];
+      map.fitBounds(window.L.latLngBounds(coords), { padding: [60, 60], maxZoom: 17 });
+    } else {
+      if (!modalRouteRef.current) {
+        modalRouteRef.current = window.L.polyline([[rLat, rLng], [dLat, dLng]], { color: '#e53e3e', weight: 4, opacity: 0.8, dashArray: '10, 8' }).addTo(map);
+      }
     }
   };
 
@@ -120,7 +164,6 @@ function FullscreenMapModal({ order, gpsCoords, onClose }) {
   );
 }
 
-// ─── Main ─────────────────────────────────────────────────────
 export default function RiderTrack() {
   const { orderId } = useParams();
   const SESSION_ID  = useRef(getTabSessionId()).current;
@@ -140,12 +183,13 @@ export default function RiderTrack() {
   const [gpsCoords,   setGpsCoords]   = useState(null);
   const watchIdRef          = useRef(null);
   const lastConvexUpdateRef = useRef(0);
+  const lastGeocodedRef     = useRef({ lat: null, lng: null, address: null });
+  const lastRouteDrawRef    = useRef({ time: 0, rLat: null, rLng: null });
   const riderMarkerRef      = useRef(null);
   const routeLineRef        = useRef(null);
   const mapRef              = useRef(null);
   const mapObjRef           = useRef(null);
   const destMarkerRef       = useRef(null);
-  const mapInitializedRef   = useRef(false);
   const [leafletReady,  setLeafletReady]  = useState(!!window.L);
   const [showFullMap,   setShowFullMap]   = useState(false);
   const [activeTab,     setActiveTab]     = useState('map');
@@ -159,7 +203,6 @@ export default function RiderTrack() {
   const [marking,       setMarking]       = useState(false);
   const [deliveryDone,  setDeliveryDone]  = useState(false);
 
-  // ── Claim session ──
   const tryClaim = useCallback(async () => {
     if (!orderId) return;
     setSessionStatus('checking');
@@ -173,7 +216,6 @@ export default function RiderTrack() {
   useEffect(() => { if (order && sessionStatus === 'checking') tryClaim(); }, // eslint-disable-next-line react-hooks/exhaustive-deps
   [order]);
 
-  // ── Heartbeat every 30s ──
   useEffect(() => {
     if (sessionStatus !== 'allowed' || !orderId) return;
     heartbeatRef.current = setInterval(async () => {
@@ -188,36 +230,78 @@ export default function RiderTrack() {
     return () => clearInterval(heartbeatRef.current);
   }, [sessionStatus, orderId, SESSION_ID, heartbeatSession]);
 
-  // ── Release on page close ──
   useEffect(() => {
-    const release = () => { if (orderId && SESSION_ID) releaseSession({ orderId, sessionId: SESSION_ID }).catch(() => {}); };
+    const release = () => {
+      if (orderId && SESSION_ID) {
+        releaseSession({ orderId, sessionId: SESSION_ID }).catch(() => {});
+        if (gpsCoords && order) {
+          updateLocation({
+            orderId,
+            riderEmail: order?.riderInfo?.email || 'rider@dkmerch.com',
+            riderName: order?.riderInfo?.name || 'Rider',
+            lat: 0, lng: 0, accuracy: 0, speed: 0,
+            isTracking: false, sessionId: SESSION_ID,
+          }).catch(() => {});
+        }
+      }
+    };
     window.addEventListener('beforeunload', release);
     return () => { window.removeEventListener('beforeunload', release); release(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orderId, SESSION_ID]);
+  }, [orderId, SESSION_ID, gpsCoords, order]);
 
-  // ── Leaflet ──
   useEffect(() => {
     if (window.L) { setLeafletReady(true); return; }
     const link = document.createElement('link'); link.rel = 'stylesheet'; link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'; document.head.appendChild(link);
     const script = document.createElement('script'); script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'; script.onload = () => setLeafletReady(true); document.head.appendChild(script);
   }, []);
 
+  // FIX: throttled — skip redraw if <15m moved or <10s passed
   const drawRoute = async (map, rLat, rLng, dLat, dLng) => {
     if (!map || !window.L) return;
-    if (routeLineRef.current) { (Array.isArray(routeLineRef.current) ? routeLineRef.current : [routeLineRef.current]).forEach(l => l.remove()); routeLineRef.current = null; }
-    try {
-      const res = await fetch(`https://router.project-osrm.org/route/v1/bike/${rLng},${rLat};${dLng},${dLat}?overview=full&geometries=geojson`);
-      const data = await res.json();
-      if (data.code === 'Ok' && data.routes?.[0]?.geometry?.coordinates) {
-        const coords = data.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng]);
-        routeLineRef.current = [
-          window.L.polyline(coords, { color: 'white',   weight: 7,   opacity: 0.6,  lineJoin: 'round', lineCap: 'round' }).addTo(map),
-          window.L.polyline(coords, { color: '#e53e3e', weight: 4.5, opacity: 0.92, lineJoin: 'round', lineCap: 'round' }).addTo(map),
-        ];
-        map.fitBounds(window.L.latLngBounds(coords), { padding: [48,48], maxZoom: 17 });
-      } else throw new Error();
-    } catch {
+    const now = Date.now();
+    const prev = lastRouteDrawRef.current;
+    const movedEnough = !prev.rLat ||
+      Math.abs(rLat - prev.rLat) > 0.00015 ||
+      Math.abs(rLng - prev.rLng) > 0.00015;
+    const enoughTimePassed = now - prev.time > 10_000;
+    if (!movedEnough || !enoughTimePassed) return;
+    if (routeLineRef.current) {
+      (Array.isArray(routeLineRef.current) ? routeLineRef.current : [routeLineRef.current]).forEach(l => l.remove());
+      routeLineRef.current = null;
+    }
+    const coords = await fetchOsrmRoute(rLat, rLng, dLat, dLng);
+    if (coords) {
+      lastRouteDrawRef.current = { time: now, rLat, rLng };
+      routeLineRef.current = [
+        window.L.polyline(coords, { color: 'white',   weight: 7,   opacity: 0.6,  lineJoin: 'round', lineCap: 'round' }).addTo(map),
+        window.L.polyline(coords, { color: '#e53e3e', weight: 4.5, opacity: 0.92, lineJoin: 'round', lineCap: 'round' }).addTo(map),
+      ];
+      map.fitBounds(window.L.latLngBounds(coords), { padding: [48,48], maxZoom: 17 });
+    } else {
+      // keep existing route on failure, straight line only if no route at all
+      if (!routeLineRef.current) {
+        routeLineRef.current = window.L.polyline([[rLat,rLng],[dLat,dLng]], { color: '#e53e3e', weight: 4, opacity: 0.8, dashArray: '10, 8' }).addTo(map);
+      }
+    }
+  };
+
+  // FIX: force draw — bypasses throttle, used on first GPS fix & map init
+  const drawRouteForce = async (map, rLat, rLng, dLat, dLng) => {
+    if (!map || !window.L) return;
+    if (routeLineRef.current) {
+      (Array.isArray(routeLineRef.current) ? routeLineRef.current : [routeLineRef.current]).forEach(l => l.remove());
+      routeLineRef.current = null;
+    }
+    const coords = await fetchOsrmRoute(rLat, rLng, dLat, dLng);
+    if (coords) {
+      lastRouteDrawRef.current = { time: Date.now(), rLat, rLng };
+      routeLineRef.current = [
+        window.L.polyline(coords, { color: 'white',   weight: 7,   opacity: 0.6,  lineJoin: 'round', lineCap: 'round' }).addTo(map),
+        window.L.polyline(coords, { color: '#e53e3e', weight: 4.5, opacity: 0.92, lineJoin: 'round', lineCap: 'round' }).addTo(map),
+      ];
+      map.fitBounds(window.L.latLngBounds(coords), { padding: [48,48], maxZoom: 17 });
+    } else {
       routeLineRef.current = window.L.polyline([[rLat,rLng],[dLat,dLng]], { color: '#e53e3e', weight: 4, opacity: 0.8, dashArray: '10, 8' }).addTo(map);
     }
   };
@@ -231,9 +315,9 @@ export default function RiderTrack() {
     const destIcon = L.divIcon({ html: `<div style="width:44px;height:44px;background:linear-gradient(135deg,#fc1268,#9c27b0);border-radius:50%;border:3px solid white;box-shadow:0 3px 14px rgba(252,18,104,0.5);display:flex;align-items:center;justify-content:center;font-size:22px;">📍</div>`, className: '', iconSize: [44,44], iconAnchor: [22,44] });
     const marker = L.marker([dLat, dLng], { icon: destIcon }).addTo(map);
     marker.bindPopup(`<b>📍 Deliver to:</b><br>${order?.customerName || 'Customer'}<br><small>${order?.shippingAddress || ''}</small>`).openPopup();
-    map.setView([dLat, dLng], 15); mapObjRef.current = map; destMarkerRef.current = marker; mapInitializedRef.current = true;
+    map.setView([dLat, dLng], 15); mapObjRef.current = map; destMarkerRef.current = marker;
     if (gpsCoords) {
-      drawRoute(map, gpsCoords.lat, gpsCoords.lng, dLat, dLng);
+      drawRouteForce(map, gpsCoords.lat, gpsCoords.lng, dLat, dLng);
       const riderIcon = L.divIcon({ html: `<div style="width:36px;height:36px;background:linear-gradient(135deg,#6a0dad,#9b30ff);border-radius:50%;border:3px solid white;box-shadow:0 3px 10px rgba(106,13,173,0.5);display:flex;align-items:center;justify-content:center;font-size:18px;">🛵</div>`, className: '', iconSize: [36,36], iconAnchor: [18,18] });
       if (!riderMarkerRef.current) { riderMarkerRef.current = L.marker([gpsCoords.lat, gpsCoords.lng], { icon: riderIcon }).addTo(map); riderMarkerRef.current.bindPopup('🛵 You are here'); }
       map.fitBounds(L.latLngBounds([gpsCoords.lat, gpsCoords.lng], [dLat, dLng]), { padding: [48,48] });
@@ -263,21 +347,40 @@ export default function RiderTrack() {
     if (!navigator.geolocation) { setGpsStatus('error'); return; }
     setGpsStatus('starting');
     watchIdRef.current = navigator.geolocation.watchPosition(
-      (pos) => {
+      async (pos) => {
         const { latitude: lat, longitude: lng, accuracy, speed } = pos.coords;
         setGpsCoords({ lat, lng, accuracy }); setGpsStatus('active');
         const now = Date.now();
         if (orderId && now - lastConvexUpdateRef.current >= 5000) {
           lastConvexUpdateRef.current = now;
-          updateLocation({ orderId, riderEmail: order?.riderInfo?.email || 'rider@dkmerch.com', riderName: order?.riderInfo?.name || order?.riderInfo?.fullName || 'Rider', lat, lng, accuracy, speed: speed || 0, isTracking: true, sessionId: SESSION_ID }).catch(() => {});
+          let lastAddr = lastGeocodedRef.current.address;
+          const lastLat = lastGeocodedRef.current.lat, lastLng = lastGeocodedRef.current.lng;
+          const movedFar = !lastLat || Math.abs(lat - lastLat) > 0.0003 || Math.abs(lng - lastLng) > 0.0003;
+          if (movedFar) {
+            const addr = await reverseGeocode(lat, lng);
+            if (addr) { lastAddr = addr; lastGeocodedRef.current = { lat, lng, address: addr }; }
+          }
+          updateLocation({
+            orderId,
+            riderEmail: order?.riderInfo?.email || 'rider@dkmerch.com',
+            riderName: order?.riderInfo?.name || order?.riderInfo?.fullName || 'Rider',
+            lat, lng, accuracy, speed: speed || 0,
+            isTracking: true, sessionId: SESSION_ID,
+            lastKnownAddress: lastAddr || undefined,
+          }).catch(() => {});
         }
         if (mapObjRef.current && window.L) {
           const L = window.L;
-          const riderIcon = L.divIcon({ html: `<div style="width:36px;height:36px;background:linear-gradient(135deg,#6a0dad,#9b30ff);border-radius:50%;border:3px solid white;box-shadow:0 3px 10px rgba(106,13,173,0.5);display:flex;align-items:center;justify-content:center;font-size:18px;">🛵</div>`, className: '', iconSize: [36,36], iconAnchor: [18,18] });
-          if (!riderMarkerRef.current) { riderMarkerRef.current = L.marker([lat, lng], { icon: riderIcon }).addTo(mapObjRef.current); riderMarkerRef.current.bindPopup('🛵 You are here'); }
-          else riderMarkerRef.current.setLatLng([lat, lng]);
           const dLat = order?.addressLat || 14.5995, dLng = order?.addressLng || 120.9842;
-          drawRoute(mapObjRef.current, lat, lng, dLat, dLng);
+          const riderIcon = L.divIcon({ html: `<div style="width:36px;height:36px;background:linear-gradient(135deg,#6a0dad,#9b30ff);border-radius:50%;border:3px solid white;box-shadow:0 3px 10px rgba(106,13,173,0.5);display:flex;align-items:center;justify-content:center;font-size:18px;">🛵</div>`, className: '', iconSize: [36,36], iconAnchor: [18,18] });
+          if (!riderMarkerRef.current) {
+            riderMarkerRef.current = L.marker([lat, lng], { icon: riderIcon }).addTo(mapObjRef.current);
+            riderMarkerRef.current.bindPopup('🛵 You are here');
+            drawRouteForce(mapObjRef.current, lat, lng, dLat, dLng);
+          } else {
+            riderMarkerRef.current.setLatLng([lat, lng]);
+            drawRoute(mapObjRef.current, lat, lng, dLat, dLng);
+          }
           mapObjRef.current.fitBounds(L.latLngBounds([lat, lng], [dLat, dLng]), { padding: [48,48], maxZoom: 17 });
         }
       },
@@ -288,7 +391,13 @@ export default function RiderTrack() {
 
   const stopTracking = () => {
     if (watchIdRef.current) { navigator.geolocation.clearWatch(watchIdRef.current); watchIdRef.current = null; }
-    if (orderId) updateLocation({ orderId, riderEmail: order?.riderInfo?.email || 'rider@dkmerch.com', riderName: order?.riderInfo?.name || 'Rider', lat: 0, lng: 0, accuracy: 0, speed: 0, isTracking: false, sessionId: SESSION_ID }).catch(() => {});
+    if (orderId) updateLocation({
+      orderId,
+      riderEmail: order?.riderInfo?.email || 'rider@dkmerch.com',
+      riderName: order?.riderInfo?.name || 'Rider',
+      lat: 0, lng: 0, accuracy: 0, speed: 0,
+      isTracking: false, sessionId: SESSION_ID,
+    }).catch(() => {});
     setGpsStatus('idle');
   };
 

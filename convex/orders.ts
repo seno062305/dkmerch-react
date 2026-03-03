@@ -156,6 +156,7 @@ export const updateOrderFields = mutation({
     orderStatus:         v.optional(v.string()),
     riderId:             v.optional(v.string()),
     riderInfo:           v.optional(v.any()),
+    riderGpsLink:        v.optional(v.string()),
     deliveryOtp:         v.optional(v.string()),
     deliveryOtpVerified: v.optional(v.boolean()),
     deliveryProofPhoto:  v.optional(v.string()),
@@ -247,7 +248,6 @@ export const updatePaymentSource = mutation({
 
 // ─── REFUND MUTATIONS ─────────────────────────────────────────────────────────
 
-// ✅ Step 1: Generate upload URL for damage photo
 export const generateRefundUploadUrl = mutation({
   args: {},
   handler: async ({ storage }) => {
@@ -255,7 +255,6 @@ export const generateRefundUploadUrl = mutation({
   },
 });
 
-// ✅ Step 2: Get public URL of uploaded damage photo
 export const getRefundPhotoUrl = query({
   args: { storageId: v.string() },
   handler: async ({ storage }, { storageId }) => {
@@ -263,7 +262,6 @@ export const getRefundPhotoUrl = query({
   },
 });
 
-// ✅ Step 3: Customer submits refund request
 export const requestRefund = mutation({
   args: {
     orderId:             v.string(),
@@ -294,14 +292,13 @@ export const requestRefund = mutation({
       refundAccountNumber: args.refundAccountNumber,
       refundComment:       args.refundComment || '',
       status:              'requested',
-      resolvedAt:          null,  // stored in history only — allowed as any
-      adminNote:           null,  // stored in history only — allowed as any
+      resolvedAt:          null,
+      adminNote:           null,
     };
 
     const existingHistory = (order as any).refundHistory || [];
 
     await db.patch(order._id, {
-      // ✅ Use undefined instead of null for optional string/number fields
       refundStatus:          'requested',
       refundReason:          'damaged',
       refundPhotoId:         args.refundPhotoId,
@@ -321,9 +318,6 @@ export const requestRefund = mutation({
   },
 });
 
-// ✅ Step 4: Admin approves or rejects a refund
-// - If approved: refundAmount auto-computed from finalTotal, email sent to customer
-// - If rejected: email sent to customer with admin note
 export const resolveRefund = mutation({
   args: {
     orderId:         v.string(),
@@ -337,11 +331,8 @@ export const resolveRefund = mutation({
     if (!order) return { success: false };
 
     const now = new Date().toISOString();
-
-    // Auto-compute refund amount from order final total
     const refundAmount = (order as any).finalTotal ?? (order as any).total ?? 0;
 
-    // Update the latest history entry
     const history = ((order as any).refundHistory || []).map((entry: any, idx: number, arr: any[]) => {
       if (idx === arr.length - 1 && entry.status === 'requested') {
         return {
@@ -369,7 +360,6 @@ export const resolveRefund = mutation({
 
     await db.patch(order._id, patchData);
 
-    // ── Send email notification to customer ──────────────────────────────────
     const customerEmail = (order as any).email;
     const customerName  = (order as any).customerName || 'Customer';
 
@@ -396,5 +386,47 @@ export const resolveRefund = mutation({
     }
 
     return { success: true };
+  },
+});
+
+// ─── NEW: NOTIFY CUSTOMER OUT FOR DELIVERY ────────────────────────────────────
+
+export const notifyCustomerOutForDelivery = mutation({
+  args: {
+    orderId:       v.string(),
+    riderName:     v.string(),
+    riderPhone:    v.string(),
+    riderPlate:    v.optional(v.string()),
+    customerEmail: v.string(),
+  },
+  handler: async ({ db, scheduler }, { orderId, riderName, riderPhone, riderPlate, customerEmail }) => {
+    const order = await db.query("orders")
+      .withIndex("by_orderId", q => q.eq("orderId", orderId))
+      .first();
+    if (!order) throw new Error("Order not found");
+
+    // Generate 4-digit OTP
+    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+    const now = new Date().toISOString();
+
+    await db.patch(order._id, {
+      orderStatus:      'out_for_delivery',
+      status:           'Out for Delivery',
+      outForDeliveryAt: now,
+      deliveryOtp:      otp,
+    });
+
+    // Send email to customer
+    await scheduler.runAfter(0, internal.sendEmail.sendRiderOnTheWayEmail, {
+      to:           customerEmail,
+      customerName: order.customerName || 'Customer',
+      orderId:      order.orderId,
+      riderName,
+      riderPhone,
+      riderPlate,
+      otp,
+    });
+
+    return { success: true, otp };
   },
 });

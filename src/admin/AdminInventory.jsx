@@ -175,9 +175,6 @@ const AdminInventory = () => {
                               <button className="adjust-btn increase" onClick={() => adjustStock(product, 10)} title="Add 10">
                                 <i className="fas fa-plus"></i> 10
                               </button>
-                              <button className="adjust-btn decrease" onClick={() => adjustStock(product, -10)} title="Remove 10" disabled={product.stock === 0}>
-                                <i className="fas fa-minus"></i> 10
-                              </button>
                             </div>
                           </td>
                         </tr>

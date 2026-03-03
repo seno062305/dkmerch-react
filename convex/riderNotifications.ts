@@ -35,3 +35,21 @@ export const markAllRead = mutation({
     return { success: true, count: unread.length };
   },
 });
+
+// Mark single notification as read
+export const markOneRead = mutation({
+  args: { id: v.id("riderNotifications") },
+  handler: async ({ db }, { id }) => {
+    await db.patch(id, { read: true });
+    return { success: true };
+  },
+});
+
+// Delete old notifications (optional cleanup)
+export const clearAll = mutation({
+  handler: async ({ db }) => {
+    const all = await db.query("riderNotifications").collect();
+    await Promise.all(all.map(n => db.delete(n._id)));
+    return { success: true, deleted: all.length };
+  },
+});

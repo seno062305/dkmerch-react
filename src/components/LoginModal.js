@@ -3,28 +3,21 @@ import React, { useState, useEffect } from "react";
 import "./LoginModal.css";
 import { useAuth } from "../context/AuthContext";
 import RegisterModal from "./RegisterModal";
-import RiderRegistrationModal from "./RiderRegistrationModal";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
 
-const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
+const LoginModal = ({ onClose, onLoginSuccess }) => {
   const { login } = useAuth();
   const navigate = useNavigate();
 
   const [view, setView] = useState("login");
 
-  const [formData, setFormData] = useState({
-    email: "",
-    password: ""
-  });
-
+  const [formData, setFormData] = useState({ email: "", password: "" });
   const [showRegister, setShowRegister] = useState(false);
-  const [showRiderRegister, setShowRiderRegister] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
-  const [isRiderMode, setIsRiderMode] = useState(defaultRiderMode);
 
   const [forgotEmail, setForgotEmail] = useState("");
   const [verificationCode, setVerificationCode] = useState("");
@@ -88,13 +81,7 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
     }
   }, [view]);
 
-  const isRiderPwValid = (pw) =>
-    pw.startsWith("@rider") && pw.length >= 7 && pw.length <= 10;
-
-  const isNewPwValid = () => {
-    if (isRiderMode) return isRiderPwValid(newPassword);
-    return Object.values(newPwValidation).every(v => v === true);
-  };
+  const isNewPwValid = () => Object.values(newPwValidation).every(v => v === true);
 
   const getStrength = (validation) => {
     const count = Object.values(validation).filter(v => v).length;
@@ -109,9 +96,9 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
   const showNewPwReqs = (newPwFocused || newPassword) && !isNewPwValid();
   const newPasswordsMatch = confirmNewPassword && newPassword === confirmNewPassword;
 
-  const accentColor      = isRiderMode ? "#7c3aed" : "#ec4899";
-  const accentGradient   = isRiderMode ? "linear-gradient(135deg, #7c3aed, #a855f7)" : "linear-gradient(135deg, #ec4899, #f472b6)";
-  const accentShadow     = isRiderMode ? "rgba(124,58,237,0.3)" : "rgba(236,72,153,0.3)";
+  const accentColor    = "#ec4899";
+  const accentGradient = "linear-gradient(135deg, #ec4899, #f472b6)";
+  const accentShadow   = "rgba(236,72,153,0.3)";
 
   const PwToggleIcon = ({ show }) => show ? (
     <svg viewBox="0 0 20 20" fill="currentColor">
@@ -151,47 +138,16 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
     </div>
   );
 
-  const RiderPwRequirements = ({ pw }) => (
-    <div className="password-requirements" style={{ borderColor: "#ede9fe", background: "#f5f3ff" }}>
-      <div className="requirements-title" style={{ color: "#5b21b6" }}>Rider password rules:</div>
-      <div className="requirements-list">
-        <div className={`requirement-item ${pw.startsWith("@rider") ? "valid" : ""}`}>
-          <svg viewBox="0 0 20 20" fill="currentColor">
-            {pw.startsWith("@rider") ? (
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-            ) : (
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-            )}
-          </svg>
-          <span>Must start with <strong>@rider</strong></span>
-        </div>
-        <div className={`requirement-item ${pw.length >= 7 && pw.length <= 10 ? "valid" : ""}`}>
-          <svg viewBox="0 0 20 20" fill="currentColor">
-            {pw.length >= 7 && pw.length <= 10 ? (
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-            ) : (
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-            )}
-          </svg>
-          <span>Total 7–10 characters max</span>
-        </div>
-      </div>
-    </div>
-  );
-
-  // ── LOGIN HANDLER — FIXED: pass role to onLoginSuccess instead of navigating directly ──
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setIsLoading(true);
     try {
-      const mode = isRiderMode ? "rider" : "user";
-      const result = await login(formData.email, formData.password, mode);
+      const result = await login(formData.email, formData.password, "user");
       if (!result.success) {
         setError(result.message);
         return;
       }
-      // ✅ FIXED: Always call onLoginSuccess(role) — let App.js handle the navigation
       if (onLoginSuccess) {
         onLoginSuccess(result.role);
       } else {
@@ -218,12 +174,6 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
 
   const handleRegisterSuccess = () => setShowRegister(false);
 
-  const toggleRiderMode = () => {
-    setIsRiderMode(!isRiderMode);
-    setFormData({ email: "", password: "" });
-    setError("");
-  };
-
   const handleSendCode = async () => {
     if (passwordCooldown > 0) return;
     if (!forgotEmail.trim() || !/\S+@\S+\.\S+/.test(forgotEmail)) {
@@ -244,7 +194,7 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
       const result = await sendPasswordResetCode({
         to: forgotEmail,
         code,
-        accountType: isRiderMode ? "rider" : "customer",
+        accountType: "customer",
       });
       if (result?.success) {
         setCodeMsg(`✅ Code sent to ${forgotEmail}! Check your inbox.`);
@@ -269,10 +219,7 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
     if (!sentCode) { setResetMsg("❌ Please request a verification code first."); return; }
     if (verificationCode !== sentCode) { setResetMsg("❌ Invalid verification code."); return; }
     if (!isNewPwValid()) {
-      setResetMsg(isRiderMode
-        ? "❌ Rider password must start with @rider and be 7–10 characters."
-        : "❌ Password does not meet all requirements."
-      );
+      setResetMsg("❌ Password does not meet all requirements.");
       return;
     }
     if (!newPasswordsMatch) { setResetMsg("❌ Passwords do not match."); return; }
@@ -282,7 +229,7 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
       const result = await resetPasswordByEmail({
         email: forgotEmail,
         newPassword: newPassword,
-        accountType: isRiderMode ? "rider" : "customer",
+        accountType: "customer",
       });
       if (result?.success) {
         setResetMsg("✅ Password reset successful! You can now log in.");
@@ -302,7 +249,6 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
   };
 
   if (showRegister) return <RegisterModal onClose={handleRegisterSuccess} />;
-  if (showRiderRegister) return <RiderRegistrationModal onClose={() => setShowRiderRegister(false)} />;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -322,23 +268,14 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
                 </svg>
               </div>
               <h2 style={{ background: accentGradient, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
-                {isRiderMode ? "🛵 Rider Password Reset" : "Reset Password"}
+                Reset Password
               </h2>
-              <p className="login-subtitle">
-                {isRiderMode
-                  ? "Reset your DKMerch Rider account password"
-                  : "Enter your email to get a verification code"}
-              </p>
-              {isRiderMode && (
-                <div className="rider-mode-badge" style={{ background: accentGradient }}>
-                  🛵 Rider Portal
-                </div>
-              )}
+              <p className="login-subtitle">Enter your email to get a verification code</p>
             </div>
 
             <form onSubmit={handleResetPassword} className="login-form">
               <div className="input-group">
-                <label>{isRiderMode ? "Rider Email Address" : "Email Address"}</label>
+                <label>Email Address</label>
                 <div className="input-wrapper">
                   <svg className="input-icon" viewBox="0 0 20 20" fill="currentColor">
                     <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
@@ -346,7 +283,7 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
                   </svg>
                   <input
                     type="email"
-                    placeholder={isRiderMode ? "Enter your rider email" : "Enter your registered email"}
+                    placeholder="Enter your registered email"
                     className="form-input"
                     value={forgotEmail}
                     onChange={(e) => { setForgotEmail(e.target.value); setCodeMsg(""); }}
@@ -403,13 +340,12 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
                   </svg>
                   <input
                     type={showNewPw ? "text" : "password"}
-                    placeholder={isRiderMode ? "@rider + up to 4 more chars" : "Create a strong password"}
+                    placeholder="Create a strong password"
                     className={`form-input password-input ${isNewPwValid() && newPassword ? "valid" : ""}`}
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     onFocus={() => setNewPwFocused(true)}
                     onBlur={() => setNewPwFocused(false)}
-                    maxLength={isRiderMode ? 10 : undefined}
                     required
                   />
                   <button type="button" className="password-toggle" onClick={() => setShowNewPw(p => !p)}>
@@ -417,30 +353,22 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
                   </button>
                 </div>
 
-                {isRiderMode ? (
-                  (newPwFocused || newPassword) && !isNewPwValid() && (
-                    <RiderPwRequirements pw={newPassword} />
-                  )
-                ) : (
-                  <>
-                    {newPassword && (
-                      <div className="password-strength-container">
-                        <div className="password-strength-bar">
-                          <div className="password-strength-fill" style={{ width: `${newPwStrength.percentage}%`, backgroundColor: newPwStrength.color }} />
-                        </div>
-                        {newPwStrength.text && <div className="password-strength-label" style={{ color: newPwStrength.color }}>{newPwStrength.text}</div>}
-                      </div>
-                    )}
-                    {showNewPwReqs && <PwRequirements validation={newPwValidation} />}
-                  </>
+                {newPassword && (
+                  <div className="password-strength-container">
+                    <div className="password-strength-bar">
+                      <div className="password-strength-fill" style={{ width: `${newPwStrength.percentage}%`, backgroundColor: newPwStrength.color }} />
+                    </div>
+                    {newPwStrength.text && <div className="password-strength-label" style={{ color: newPwStrength.color }}>{newPwStrength.text}</div>}
+                  </div>
                 )}
+                {showNewPwReqs && <PwRequirements validation={newPwValidation} />}
 
                 {isNewPwValid() && newPassword && (
                   <div className="password-success-message">
                     <svg viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                     </svg>
-                    <span>{isRiderMode ? "Valid rider password!" : "Great! Your password is strong"}</span>
+                    <span>Great! Your password is strong</span>
                   </div>
                 )}
               </div>
@@ -457,7 +385,6 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
                     className={`form-input password-input ${newPasswordsMatch ? "valid" : ""}`}
                     value={confirmNewPassword}
                     onChange={(e) => setConfirmNewPassword(e.target.value)}
-                    maxLength={isRiderMode ? 10 : undefined}
                     required
                   />
                   <button type="button" className="password-toggle" onClick={() => setShowConfirmNewPw(p => !p)}>
@@ -499,7 +426,7 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
                     <svg viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
                     </svg>
-                    {isRiderMode ? "Reset Rider Password" : "Reset Password"}
+                    Reset Password
                   </>
                 )}
               </button>
@@ -507,13 +434,8 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
               <div className="divider"><span>OR</span></div>
               <div className="signup-section">
                 <p>
-                  <button
-                    type="button"
-                    className="signup-link"
-                    style={{ color: accentColor }}
-                    onClick={() => setView("login")}
-                  >
-                    ← Back to {isRiderMode ? "Rider Login" : "Login"}
+                  <button type="button" className="signup-link" style={{ color: accentColor }} onClick={() => setView("login")}>
+                    ← Back to Login
                   </button>
                 </p>
               </div>
@@ -522,37 +444,16 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
 
         ) : (
           <>
-            <button
-              className={`rider-toggle-btn ${isRiderMode ? 'rider-mode-active' : ''}`}
-              onClick={toggleRiderMode}
-              title={isRiderMode ? "Switch to User Login" : "Rider Login"}
-              aria-label="Rider Login"
-            >
-              <svg viewBox="0 0 24 24" fill="currentColor">
-                <path d="M19 7c0-1.1-.9-2-2-2h-3v2h3v2.65L13.52 14H10V9H6c-2.21 0-4 1.79-4 4v3h2c0 1.66 1.34 3 3 3s3-1.34 3-3h4.48L19 10.35V7zm-13 8c-.55 0-1-.45-1-1h2c0 .55-.45 1-1 1z"/>
-                <path d="M5 6h5v2H5zm14 7c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3zm0 4c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1z"/>
-              </svg>
-              <span>Rider</span>
-            </button>
-
             <div className="login-modal-header">
-              <div className={`login-icon ${isRiderMode ? 'rider-icon-mode' : ''}`}>
-                {isRiderMode ? (
-                  <svg viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M19 7c0-1.1-.9-2-2-2h-3v2h3v2.65L13.52 14H10V9H6c-2.21 0-4 1.79-4 4v3h2c0 1.66 1.34 3 3 3s3-1.34 3-3h4.48L19 10.35V7zm-13 8c-.55 0-1-.45-1-1h2c0 .55-.45 1-1 1z"/>
-                    <path d="M5 6h5v2H5zm14 7c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3zm0 4c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1z"/>
-                  </svg>
-                ) : (
-                  <svg viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
-                  </svg>
-                )}
+              <div className="login-icon" style={{ background: accentGradient, boxShadow: `0 10px 25px ${accentShadow}` }}>
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
+                </svg>
               </div>
-              <h2>{isRiderMode ? "Rider Login" : "Welcome Back!"}</h2>
-              <p className="login-subtitle">
-                {isRiderMode ? "Log in to your DKMerch Rider account" : "Log in to your DKMerch account"}
-              </p>
-              {isRiderMode && <div className="rider-mode-badge">🛵 Rider Portal</div>}
+              <h2 style={{ background: accentGradient, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
+                Welcome Back!
+              </h2>
+              <p className="login-subtitle">Log in to your DKMerch account</p>
             </div>
 
             <form onSubmit={handleSubmit} className="login-form">
@@ -574,7 +475,7 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
                   </svg>
                   <input
                     type="text" id="email" name="email"
-                    placeholder={isRiderMode ? "Enter your rider email" : "Enter your email or username"}
+                    placeholder="Enter your email or username"
                     className="form-input"
                     value={formData.email}
                     onChange={handleChange}
@@ -591,7 +492,7 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
                   </svg>
                   <input
                     type={showPassword ? "text" : "password"} id="password" name="password"
-                    placeholder={isRiderMode ? "Enter your @rider password" : "Enter your password"}
+                    placeholder="Enter your password"
                     className="form-input password-input"
                     value={formData.password}
                     onChange={handleChange}
@@ -601,25 +502,15 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
                     <PwToggleIcon show={showPassword} />
                   </button>
                 </div>
-                {isRiderMode && (
-                  <p className="rider-password-hint">
-                    🔑 Rider passwords must start with <strong>@rider</strong> (max 10 characters)
-                  </p>
-                )}
               </div>
 
               <div className="forgot-password-wrapper">
-                <button
-                  type="button"
-                  className="forgot-password-link"
-                  style={{ color: accentColor }}
-                  onClick={() => setView("forgot")}
-                >
+                <button type="button" className="forgot-password-link" style={{ color: accentColor }} onClick={() => setView("forgot")}>
                   Forgot Password?
                 </button>
               </div>
 
-              <button type="submit" className={`login-submit-btn ${isRiderMode ? 'rider-submit-mode' : ''}`} disabled={isLoading}>
+              <button type="submit" className="login-submit-btn" style={{ background: accentGradient, boxShadow: `0 4px 12px ${accentShadow}` }} disabled={isLoading}>
                 {isLoading ? (
                   <>
                     <svg className="spinner" viewBox="0 0 24 24">
@@ -633,23 +524,15 @@ const LoginModal = ({ onClose, onLoginSuccess, defaultRiderMode = false }) => {
                     <svg viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M3 3a1 1 0 011 1v12a1 1 0 11-2 0V4a1 1 0 011-1zm7.707 3.293a1 1 0 010 1.414L9.414 9H17a1 1 0 110 2H9.414l1.293 1.293a1 1 0 01-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
-                    {isRiderMode ? "Rider Log In" : "Log In"}
+                    Log In
                   </>
                 )}
               </button>
 
               <div className="divider"><span>OR</span></div>
-
-              {isRiderMode ? (
-                <div className="signup-section">
-                  <p>Want to be a rider?{" "}<button type="button" className="signup-link" onClick={() => setShowRiderRegister(true)}>Apply Now</button></p>
-                  <p style={{ marginTop: '10px' }}>Not a rider?{" "}<button type="button" className="signup-link" onClick={toggleRiderMode}>User Login</button></p>
-                </div>
-              ) : (
-                <div className="signup-section">
-                  <p>New to DKMerch?{" "}<button type="button" className="signup-link" onClick={handleSwitchToRegister}>Create an account</button></p>
-                </div>
-              )}
+              <div className="signup-section">
+                <p>New to DKMerch?{" "}<button type="button" className="signup-link" onClick={handleSwitchToRegister}>Create an account</button></p>
+              </div>
             </form>
           </>
         )}

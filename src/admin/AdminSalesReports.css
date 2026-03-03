@@ -422,3 +422,33 @@
 @media (max-width: 400px) {
   .summary-cards { grid-template-columns: 1fr; }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   APPEND THIS TO THE BOTTOM OF AdminSalesReports.css
+   ══════════════════════════════════════════════════════════════ */
+
+/* Info note below charts */
+.sales-info-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #eff6ff;
+  border: 1.5px solid #bfdbfe;
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin-top: 4px;
+  font-size: 13px;
+  color: #1e40af;
+  line-height: 1.6;
+}
+
+.sales-info-note i {
+  color: #2563eb;
+  font-size: 15px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.sales-info-note strong {
+  color: #1e3a8a;
+}

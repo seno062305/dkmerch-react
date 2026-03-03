@@ -9,7 +9,6 @@ const fmtNum = (n) => Number(n).toLocaleString('en-PH');
 
 const toDateStr = (ms) => new Date(ms).toISOString().split('T')[0];
 
-// ─── Build N-month buckets ending at nowMs ────────────────────────────────────
 const getLastNMonths = (nowMs, n = 6) => {
   const now = new Date(nowMs);
   const result = [];
@@ -20,7 +19,6 @@ const getLastNMonths = (nowMs, n = 6) => {
   return result;
 };
 
-// ─── Build daily buckets for Today / Last 7 days / Last 30 days ──────────────
 const getDailyBuckets = (nowMs, mode) => {
   const buckets = [];
   if (mode === 'today') {
@@ -53,50 +51,26 @@ const getDailyBuckets = (nowMs, mode) => {
   return buckets;
 };
 
-// ─── Tooltip Component ────────────────────────────────────────────────────────
 const ChartTooltip = ({ visible, x, y, lines, chartWidth = 600 }) => {
   if (!visible) return null;
-
   const TIP_W = 140;
   const TIP_H = lines.length * 20 + 16;
-
   let tx = x - TIP_W / 2;
   if (tx < 4) tx = 4;
   if (tx + TIP_W > chartWidth - 4) tx = chartWidth - TIP_W - 4;
-
   let ty = y - TIP_H - 12;
   if (ty < 4) ty = y + 12;
-
   return (
     <g className="chart-tooltip-group">
-      <rect
-        x={tx} y={ty} width={TIP_W} height={TIP_H}
-        rx="6" ry="6"
-        fill="rgba(17,24,39,0.92)"
-        style={{ filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.28))' }}
-      />
-      <polygon
-        points={`${x},${ty > y ? ty - 6 : ty + TIP_H + 6} ${x - 5},${ty > y ? ty : ty + TIP_H} ${x + 5},${ty > y ? ty : ty + TIP_H}`}
-        fill="rgba(17,24,39,0.92)"
-      />
+      <rect x={tx} y={ty} width={TIP_W} height={TIP_H} rx="6" ry="6" fill="rgba(17,24,39,0.92)" style={{ filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.28))' }} />
+      <polygon points={`${x},${ty > y ? ty - 6 : ty + TIP_H + 6} ${x - 5},${ty > y ? ty : ty + TIP_H} ${x + 5},${ty > y ? ty : ty + TIP_H}`} fill="rgba(17,24,39,0.92)" />
       {lines.map((line, i) => (
-        <text
-          key={i}
-          x={tx + 10}
-          y={ty + 14 + i * 20}
-          fill={i === 0 ? '#f9fafb' : '#34d399'}
-          fontSize="11"
-          fontWeight={i === 0 ? '600' : '500'}
-          fontFamily="inherit"
-        >
-          {line}
-        </text>
+        <text key={i} x={tx + 10} y={ty + 14 + i * 20} fill={i === 0 ? '#f9fafb' : '#34d399'} fontSize="11" fontWeight={i === 0 ? '600' : '500'} fontFamily="inherit">{line}</text>
       ))}
     </g>
   );
 };
 
-// ─── Chart Filter Pills ───────────────────────────────────────────────────────
 const CHART_FILTERS = [
   { key: 'today',      label: 'Today'      },
   { key: 'last_week',  label: 'Last Week'  },
@@ -140,6 +114,7 @@ const AdminSalesReports = () => {
   const [salesTooltip,  setSalesTooltip]  = useState({ visible: false, x: 0, y: 0, lines: [] });
   const [volumeTooltip, setVolumeTooltip] = useState({ visible: false, x: 0, y: 0, lines: [] });
 
+  // ── isPaid: any order that has been paid ──────────────────────────────────
   const isPaid = (o) =>
     o.paymentStatus === 'paid' ||
     ['completed','Completed','Delivered','delivered'].includes(o.status || o.orderStatus || '');
@@ -147,7 +122,7 @@ const AdminSalesReports = () => {
   const isCompleted = (o) =>
     ['completed','Completed','Delivered','delivered'].includes(o.status || o.orderStatus || '');
 
-  // ─── Summary Cards (date-range filtered) ─────────────────────────────────
+  // ── Summary Cards (date-range filtered) ──────────────────────────────────
   const filtered = useMemo(() => {
     const start = new Date(effectiveStart);
     const end   = new Date(effectiveEnd);
@@ -159,22 +134,25 @@ const AdminSalesReports = () => {
   }, [allOrders, effectiveStart, effectiveEnd]);
 
   const summary = useMemo(() => {
-    const paidOrders       = filtered.filter(isPaid);
-    const completedOrders  = filtered.filter(isCompleted);
-    // Total Revenue = all paid orders
-    const totalRevenue     = paidOrders.reduce((s, o) => s + (o.finalTotal ?? o.total ?? 0), 0);
-    // Avg Order Value = revenue from completed orders ÷ completed order count (most accurate)
+    const paidOrders      = filtered.filter(isPaid);
+    const completedOrders = filtered.filter(isCompleted);
+
+    // ✅ Total Sales = sum of ALL paid orders (not just completed)
+    const totalSales    = paidOrders.reduce((s, o) => s + (o.finalTotal ?? o.total ?? 0), 0);
+
+    // Avg Order Value = revenue from completed ÷ completed count
     const completedRevenue = completedOrders.reduce((s, o) => s + (o.finalTotal ?? o.total ?? 0), 0);
     const avgOrderValue    = completedOrders.length ? completedRevenue / completedOrders.length : 0;
+
     return {
-      totalRevenue,
+      totalSales,
       totalOrders:     filtered.length,
       completedOrders: completedOrders.length,
       avgOrderValue,
     };
   }, [filtered]);
 
-  // ─── Chart Data Builder ───────────────────────────────────────────────────
+  // ── Chart Data Builder ────────────────────────────────────────────────────
   const buildChartData = useCallback((mode, type) => {
     if (mode === 'today' || mode === 'last_week' || mode === 'last_month') {
       const buckets = getDailyBuckets(nowMs, mode);
@@ -209,24 +187,7 @@ const AdminSalesReports = () => {
   const salesData  = useMemo(() => buildChartData(salesFilter,  'sales'),  [buildChartData, salesFilter]);
   const volumeData = useMemo(() => buildChartData(volumeFilter, 'volume'), [buildChartData, volumeFilter]);
 
-  // ─── Top Products ─────────────────────────────────────────────────────────
-  const topProducts = useMemo(() => {
-    const map = {};
-    filtered.filter(isCompleted).forEach(o => {
-      (o.items || []).forEach(item => {
-        const key = item.name || item.id || 'Unknown';
-        if (!map[key]) map[key] = { name: key, unitsSold: 0, revenue: 0 };
-        map[key].unitsSold += item.quantity || 1;
-        map[key].revenue   += (item.price || 0) * (item.quantity || 1);
-      });
-    });
-    return Object.values(map)
-      .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 5)
-      .map((p, i) => ({ rank: i + 1, ...p, revenue: Math.round(p.revenue) }));
-  }, [filtered]);
-
-  // ─── SVG chart helpers ────────────────────────────────────────────────────
+  // ── SVG chart helpers ─────────────────────────────────────────────────────
   const maxVal = (arr) => Math.max(...arr.map(i => i.value), 1);
 
   const CHART_W   = 600;
@@ -305,28 +266,16 @@ const AdminSalesReports = () => {
             <label htmlFor="startDate">
               <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" /></svg>
             </label>
-            <input
-              type="date" id="startDate"
-              value={effectiveStart}
-              min="2020-01-01" max={effectiveEnd}
-              onChange={e => setStartDate(e.target.value)}
-            />
+            <input type="date" id="startDate" value={effectiveStart} min="2020-01-01" max={effectiveEnd} onChange={e => setStartDate(e.target.value)} />
           </div>
           <span className="date-separator">to</span>
           <div className="date-input-group">
             <label htmlFor="endDate">
               <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" /></svg>
             </label>
-            <input
-              type="date" id="endDate"
-              value={effectiveEnd}
-              min={effectiveStart} max={maxDate}
-              onChange={e => setEndDate(e.target.value)}
-            />
+            <input type="date" id="endDate" value={effectiveEnd} min={effectiveStart} max={maxDate} onChange={e => setEndDate(e.target.value)} />
           </div>
-          <button className="reset-date-btn" onClick={() => { setStartDate(''); setEndDate(''); }}>
-            Reset
-          </button>
+          <button className="reset-date-btn" onClick={() => { setStartDate(''); setEndDate(''); }}>Reset</button>
         </div>
         <div className="server-time-badge">
           <i className="fas fa-server"></i>
@@ -339,15 +288,18 @@ const AdminSalesReports = () => {
 
       {/* ── Summary Cards ── */}
       <div className="summary-cards">
+        {/* ✅ Total Sales (all paid orders) */}
         <div className="summary-card">
           <div className="card-icon revenue-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
           </div>
           <div className="card-content">
-            <div className="card-value">{fmt(summary.totalRevenue)}</div>
-            <div className="card-label">Total Revenue</div>
+            <div className="card-value">{fmt(summary.totalSales)}</div>
+            <div className="card-label">Total Sales</div>
           </div>
         </div>
+
+        {/* Total Orders */}
         <div className="summary-card">
           <div className="card-icon orders-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
@@ -357,6 +309,8 @@ const AdminSalesReports = () => {
             <div className="card-label">Total Orders</div>
           </div>
         </div>
+
+        {/* Completed Orders */}
         <div className="summary-card">
           <div className="card-icon completed-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -366,6 +320,8 @@ const AdminSalesReports = () => {
             <div className="card-label">Completed Orders</div>
           </div>
         </div>
+
+        {/* Avg Order Value */}
         <div className="summary-card">
           <div className="card-icon average-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
@@ -397,48 +353,24 @@ const AdminSalesReports = () => {
             </div>
           </div>
           <div className="line-chart">
-            <svg
-              viewBox={`0 0 ${CHART_W} ${CHART_H}`}
-              className="chart-svg"
-              onMouseLeave={() => setSalesTooltip({ visible: false })}
-            >
+            <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} className="chart-svg" onMouseLeave={() => setSalesTooltip({ visible: false })}>
               <ChartY max={maxVal(salesData)} steps={4} isRevenue />
               <GridLines />
-
               {linePoints.length > 1 && (
-                <polyline
-                  points={linePoints.map(p => `${p.x},${p.y}`).join(' ')}
-                  fill="none" stroke="#ec4899" strokeWidth="2.5"
-                  strokeLinecap="round" strokeLinejoin="round"
-                />
+                <polyline points={linePoints.map(p => `${p.x},${p.y}`).join(' ')} fill="none" stroke="#ec4899" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
               )}
-
               {linePoints.map((pt, i) => (
                 <g key={i}>
-                  <circle
-                    cx={pt.x} cy={pt.y} r="14"
-                    fill="transparent"
-                    style={{ cursor: 'pointer' }}
-                    onMouseEnter={() => setSalesTooltip({
-                      visible: true, x: pt.x, y: pt.y,
-                      lines: [pt.label, fmt(pt.value)],
-                    })}
+                  <circle cx={pt.x} cy={pt.y} r="14" fill="transparent" style={{ cursor: 'pointer' }}
+                    onMouseEnter={() => setSalesTooltip({ visible: true, x: pt.x, y: pt.y, lines: [pt.label, fmt(pt.value)] })}
                     onMouseLeave={() => setSalesTooltip({ visible: false })}
                   />
-                  <circle
-                    cx={pt.x} cy={pt.y} r="5"
-                    fill={salesTooltip.visible && salesTooltip.x === pt.x ? '#fff' : '#ec4899'}
-                    stroke="#ec4899" strokeWidth="2.5"
-                    style={{ pointerEvents: 'none' }}
-                  />
+                  <circle cx={pt.x} cy={pt.y} r="5" fill={salesTooltip.visible && salesTooltip.x === pt.x ? '#fff' : '#ec4899'} stroke="#ec4899" strokeWidth="2.5" style={{ pointerEvents: 'none' }} />
                   {(salesData.length <= 10 || i % Math.ceil(salesData.length / 8) === 0 || i === salesData.length - 1) && (
-                    <text x={pt.x} y={CHART_H - 5} className="x-axis-label" textAnchor="middle" style={{ pointerEvents: 'none' }}>
-                      {pt.label}
-                    </text>
+                    <text x={pt.x} y={CHART_H - 5} className="x-axis-label" textAnchor="middle" style={{ pointerEvents: 'none' }}>{pt.label}</text>
                   )}
                 </g>
               ))}
-
               <ChartTooltip {...salesTooltip} chartWidth={CHART_W} />
             </svg>
           </div>
@@ -461,84 +393,39 @@ const AdminSalesReports = () => {
             </div>
           </div>
           <div className="bar-chart">
-            <svg
-              viewBox={`0 0 ${CHART_W} ${CHART_H}`}
-              className="chart-svg"
-              onMouseLeave={() => setVolumeTooltip({ visible: false })}
-            >
+            <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} className="chart-svg" onMouseLeave={() => setVolumeTooltip({ visible: false })}>
               <ChartY max={maxVal(volumeData)} steps={4} />
               <GridLines />
-
               {volumeData.map((item, i) => {
                 const { x, y, barW, barH } = getBarProps(volumeData, i);
                 const isHovered = volumeTooltip.visible && volumeTooltip.barIdx === i;
                 return (
                   <g key={i}>
-                    <rect
-                      x={x} y={y} width={barW} height={Math.max(barH, 1)}
-                      fill={isHovered ? '#7c3aed' : '#8b5cf6'}
-                      rx={Math.min(4, barW / 2)}
+                    <rect x={x} y={y} width={barW} height={Math.max(barH, 1)} fill={isHovered ? '#7c3aed' : '#8b5cf6'} rx={Math.min(4, barW / 2)}
                       style={{ cursor: 'pointer', transition: 'fill 0.15s' }}
-                      onMouseEnter={() => setVolumeTooltip({
-                        visible: true,
-                        x: x + barW / 2,
-                        y,
-                        barIdx: i,
-                        lines: [item.label || '—', `${fmtNum(item.value)} orders`],
-                      })}
+                      onMouseEnter={() => setVolumeTooltip({ visible: true, x: x + barW / 2, y, barIdx: i, lines: [item.label || '—', `${fmtNum(item.value)} orders`] })}
                       onMouseLeave={() => setVolumeTooltip({ visible: false })}
                     />
                     {item.label && (volumeData.length <= 10 || i % Math.ceil(volumeData.length / 8) === 0 || i === volumeData.length - 1) && (
-                      <text
-                        x={x + barW / 2} y={CHART_H - 5}
-                        className="x-axis-label" textAnchor="middle"
-                        style={{ pointerEvents: 'none' }}
-                      >
-                        {item.label}
-                      </text>
+                      <text x={x + barW / 2} y={CHART_H - 5} className="x-axis-label" textAnchor="middle" style={{ pointerEvents: 'none' }}>{item.label}</text>
                     )}
                   </g>
                 );
               })}
-
               <ChartTooltip {...volumeTooltip} chartWidth={CHART_W} />
             </svg>
           </div>
         </div>
       </div>
 
-      {/* ── Top Selling Products ── */}
-      <div className="top-products-section">
-        <h3>Top Selling Products</h3>
-        {topProducts.length > 0 ? (
-          <div className="products-table-container">
-            <table className="products-table">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Product</th>
-                  <th>Units Sold</th>
-                  <th>Revenue</th>
-                </tr>
-              </thead>
-              <tbody>
-                {topProducts.map(p => (
-                  <tr key={p.rank}>
-                    <td className="rank-cell">{p.rank}</td>
-                    <td className="product-name">{p.name}</td>
-                    <td>{p.unitsSold}</td>
-                    <td className="revenue-cell">{fmt(p.revenue)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="empty-state">
-            <i className="fas fa-chart-line"></i>
-            <p>No completed orders in the selected date range</p>
-          </div>
-        )}
+      {/* ── Difference Explainer ── */}
+      <div className="sales-info-note">
+        <i className="fas fa-info-circle"></i>
+        <span>
+          <strong>Sales Trend</strong> shows revenue over time from paid orders. 
+          <strong> Order Volume</strong> shows total number of orders placed. 
+          For top selling products, see the <strong>Dashboard</strong>.
+        </span>
       </div>
     </div>
   );

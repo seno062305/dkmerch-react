@@ -2187,3 +2187,151 @@
 }
 
 .refund-sidebar-badge i { font-size: 9px; }
+
+
+/* ══════════════════════════════════════════════════════════════
+   APPEND THESE TO THE BOTTOM OF AdminOrders.css
+   (These ADD to the existing REFUND STYLES section)
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Refund amount highlight row ── */
+.admin-refund-amount-row {
+  background: #f0fdf4;
+  border-radius: 6px;
+  padding: 10px 16px !important;
+}
+
+.admin-refund-amount-value {
+  font-size: 18px !important;
+  color: #059669 !important;
+  font-weight: 800 !important;
+}
+
+/* ── Refund method cell ── */
+.admin-refund-method-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* ── Damage photo section ── */
+.admin-refund-photo-section {
+  background: white;
+  border-top: 1px solid #f0f0f0;
+}
+
+.admin-refund-photo-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.admin-refund-photo-header:hover { background: #f8f9fa; }
+
+.admin-refund-photo-label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #1a1f36;
+}
+
+.admin-refund-photo-label i { color: #ee4d2d; font-size: 15px; }
+
+.admin-refund-photo-wrap {
+  padding: 0 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.admin-refund-photo {
+  width: 100%;
+  max-height: 380px;
+  object-fit: contain;
+  border-radius: 10px;
+  border: 2px solid #e2e8f0;
+  background: #f8f9fa;
+}
+
+.admin-refund-photo-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 30px 20px;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.admin-refund-photo-loading i { color: #94a3b8; }
+
+/* ── Confirm notice before approving ── */
+.admin-refund-confirm-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #fff7ed;
+  border: 1.5px solid #fed7aa;
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 13px;
+  color: #c2410c;
+  line-height: 1.55;
+}
+
+.admin-refund-confirm-notice i { color: #f97316; flex-shrink: 0; margin-top: 2px; }
+.admin-refund-confirm-notice strong { color: #9a3412; }
+
+/* ── Responsive ── */
+@media (max-width: 576px) {
+  .admin-refund-method-cell { justify-content: flex-start; }
+  .admin-refund-amount-value { font-size: 15px !important; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   TAB COUNT BADGES — append to bottom of AdminOrders.css
+   ══════════════════════════════════════════════════════════════ */
+
+/* Generic count badge on every tab */
+.tab-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  margin-left: 4px;
+  background: #e2e8f0;
+  color: #475569;
+  transition: background 0.2s, color 0.2s;
+}
+
+/* Active tab — badge turns accent color */
+.tab-btn.active .tab-count-badge {
+  background: #ee4d2d;
+  color: white;
+}
+
+/* Refund tab badge — always red + pulse */
+.tab-count-badge--refund {
+  background: #ef4444 !important;
+  color: white !important;
+  animation: refundPulse 2s ease-in-out infinite;
+}
+
+/* Remove old tab-refund-badge rule conflict — this overrides it */
+.tab-refund-badge {
+  display: none; /* replaced by .tab-count-badge--refund */
+}

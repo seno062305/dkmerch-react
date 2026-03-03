@@ -2,7 +2,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
-
 export default defineSchema({
   users: defineTable({
     name: v.string(),
@@ -113,10 +112,10 @@ export default defineSchema({
     notes: v.optional(v.string()),
     riderId: v.optional(v.string()),
     riderInfo: v.optional(v.any()),
-    riderGpsLink: v.optional(v.string()),  
+    riderGpsLink: v.optional(v.string()),
     riderLinkSessionId:  v.optional(v.string()),
     riderLinkSessionAt:  v.optional(v.number()),
-    riderLinkDeviceInfo: v.optional(v.string()), // Google Maps live share link (manual by admin)
+    riderLinkDeviceInfo: v.optional(v.string()),
     deliveryOtp: v.optional(v.string()),
     deliveryOtpVerified: v.optional(v.boolean()),
     deliveryProofPhoto: v.optional(v.string()),
@@ -235,6 +234,11 @@ export default defineSchema({
     isTracking: v.boolean(),
     updatedAt: v.number(),
     sessionId: v.optional(v.string()),
+    // ── NEW: last known position (preserved even after rider goes offline) ──
+    lastKnownLat:     v.optional(v.number()),
+    lastKnownLng:     v.optional(v.number()),
+    lastKnownAt:      v.optional(v.number()),
+    lastKnownAddress: v.optional(v.union(v.string(), v.null())),
   })
     .index("by_orderId", ["orderId"])
     .index("by_riderEmail", ["riderEmail"]),
@@ -244,6 +248,7 @@ export default defineSchema({
     orderId: v.string(),
     customerName: v.string(),
     total: v.number(),
+    message: v.optional(v.string()),
     createdAt: v.string(),
     read: v.boolean(),
   }).index("by_read", ["read"]),

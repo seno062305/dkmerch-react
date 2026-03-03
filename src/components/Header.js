@@ -185,7 +185,6 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
           </Link>
 
           <nav className={`main-nav ${showMobileMenu ? 'active' : ''}`}>
-            {/* ✅ Sidebar header — DKMerch logo sa kaliwa, X button sa kanan */}
             <div className="mobile-nav-header">
               <div className="mobile-nav-brand">
                 <img src="/images/dklogo.jpg" alt="DKMerch Logo" className="mobile-nav-logo-img" />
@@ -271,17 +270,6 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
               </button>
             )}
 
-            {!isAuthenticated && (
-              <button
-                className="header-action-item rider-register-btn"
-                onClick={() => window.dispatchEvent(new CustomEvent('openLoginModal', { detail: { riderMode: true } }))}
-                title="Apply as Rider"
-              >
-                <i className="fas fa-motorcycle"></i><span>Riders</span>
-              </button>
-            )}
-
-            {/* ✅ Burger — naka-hide kapag bukas na ang sidebar */}
             {!showMobileMenu && (
               <button className="mobile-menu-toggle" onClick={() => setShowMobileMenu(true)} aria-label="Open menu">
                 <span></span><span></span><span></span>

@@ -1823,3 +1823,552 @@
   .refund-status-badge { font-size: 10px; padding: 2px 8px; }
 }
 
+/* ══════════════════════════════════════════════════════════════
+   APPEND THESE STYLES TO THE BOTTOM OF src/pages/TrackOrder.css
+   (These REPLACE the old REFUND FEATURE STYLES section)
+   ══════════════════════════════════════════════════════════════ */
+
+/* Refund button on order card */
+.order-refund-btn {
+  width: 100%;
+  justify-content: center;
+  font-size: 12px;
+  padding: 7px 12px;
+  background: white;
+  border: 1.5px solid #f59e0b;
+  color: #b45309;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+  font-weight: 600;
+  margin-top: 6px;
+}
+.order-refund-btn:hover { background: #fffbeb; border-color: #d97706; color: #92400e; }
+
+/* Re-request refund button (after rejection) */
+.order-refund-retry-btn {
+  border-color: #6366f1;
+  color: #4338ca;
+}
+.order-refund-retry-btn:hover { background: #eef2ff; border-color: #4f46e5; color: #3730a3; }
+
+/* Refund status badge (on card) */
+.refund-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 20px;
+}
+.refund-badge-pending  { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+.refund-badge-approved { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
+.refund-badge-rejected { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+
+/* Refund button inside tracking modal */
+.modal-refund-btn {
+  width: 100%;
+  padding: 11px 16px;
+  margin-bottom: 16px;
+  background: linear-gradient(135deg, #fffbeb, #fef3c7);
+  border: 1.5px solid #f59e0b;
+  color: #92400e;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s;
+}
+.modal-refund-btn:hover { background: #fef3c7; border-color: #d97706; }
+
+/* Refund status banner inside modal */
+.refund-status-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  border-width: 1.5px;
+  border-style: solid;
+}
+.refund-banner-requested { background: #fffbeb; border-color: #fde68a; }
+.refund-banner-approved  { background: #f0fdf4; border-color: #86efac; }
+.refund-banner-rejected  { background: #fef2f2; border-color: #fca5a5; }
+
+.refund-banner-icon { font-size: 22px; flex-shrink: 0; margin-top: 2px; }
+.refund-banner-requested .refund-banner-icon { color: #d97706; }
+.refund-banner-approved  .refund-banner-icon { color: #16a34a; }
+.refund-banner-rejected  .refund-banner-icon { color: #dc2626; }
+
+.refund-banner-text strong { display: block; font-size: 14px; margin-bottom: 3px; }
+.refund-banner-requested .refund-banner-text strong { color: #92400e; }
+.refund-banner-approved  .refund-banner-text strong { color: #14532d; }
+.refund-banner-rejected  .refund-banner-text strong { color: #991b1b; }
+.refund-banner-text p { font-size: 13px; margin: 0; line-height: 1.5; }
+.refund-banner-requested .refund-banner-text p { color: #b45309; }
+.refund-banner-approved  .refund-banner-text p { color: #166534; }
+.refund-banner-rejected  .refund-banner-text p { color: #b91c1c; }
+
+/* ─── NEW REFUND MODAL ─────────────────────────────────────── */
+.refund-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  z-index: 3500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fadeInLightbox 0.2s ease;
+}
+
+.refund-modal {
+  background: white;
+  border-radius: 18px;
+  width: 100%;
+  max-width: 520px;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+  animation: zoomInLightbox 0.25s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.refund-modal-close {
+  position: absolute;
+  top: 14px; right: 14px;
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  background: #f3f4f6;
+  border: none;
+  font-size: 15px;
+  color: #6b7280;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+  z-index: 5;
+}
+.refund-modal-close:hover { background: #e5e7eb; color: #111; }
+
+/* Header */
+.refund-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 22px 22px 16px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.refund-modal-icon {
+  width: 48px; height: 48px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; color: #d97706; flex-shrink: 0;
+}
+
+.refund-modal-header h3 { font-size: 17px; color: #111827; margin: 0 0 3px; }
+.refund-modal-header p  { font-size: 13px; color: #6b7280; margin: 0; }
+
+/* Body */
+.refund-modal-body { padding: 18px 22px; flex: 1; display: flex; flex-direction: column; gap: 16px; }
+
+.refund-modal-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #374151;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.refund-required { color: #ef4444; }
+
+/* Fixed reason (damaged only) */
+.refund-reason-fixed {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: #fffbeb;
+  border: 1.5px solid #fde68a;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.refund-reason-fixed-icon {
+  width: 36px; height: 36px;
+  border-radius: 8px;
+  background: #fef3c7;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; color: #d97706; flex-shrink: 0;
+}
+
+.refund-reason-fixed-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  color: #92400e;
+  margin-bottom: 3px;
+}
+
+.refund-reason-fixed-desc {
+  display: block;
+  font-size: 12px;
+  color: #b45309;
+  line-height: 1.4;
+}
+
+/* Field groups */
+.refund-field-group { display: flex; flex-direction: column; gap: 0; }
+
+/* Photo upload area */
+.refund-photo-upload-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 2px dashed #d1d5db;
+  border-radius: 12px;
+  padding: 28px 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: #f9fafb;
+  color: #6b7280;
+  text-align: center;
+}
+.refund-photo-upload-area:hover { border-color: #f59e0b; background: #fffbeb; color: #d97706; }
+.refund-photo-upload-area i { font-size: 28px; }
+.refund-photo-upload-area p  { font-size: 14px; font-weight: 600; margin: 0; }
+.refund-photo-upload-area small { font-size: 12px; }
+
+/* Photo preview */
+.refund-photo-preview-wrap {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 2px solid #e5e7eb;
+}
+
+.refund-photo-preview {
+  width: 100%;
+  max-height: 200px;
+  object-fit: cover;
+  display: block;
+}
+
+.refund-photo-remove {
+  position: absolute;
+  bottom: 10px; right: 10px;
+  background: rgba(0,0,0,0.6);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: background 0.2s;
+}
+.refund-photo-remove:hover { background: rgba(220,38,38,0.8); }
+
+/* Payment method buttons */
+.refund-method-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.refund-method-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 14px 10px;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  font-size: 14px;
+  font-weight: 700;
+  color: #374151;
+}
+.refund-method-btn:hover { border-color: #d1d5db; background: #f9fafb; }
+.refund-method-btn.selected {
+  border-color: #f59e0b;
+  background: #fffbeb;
+  box-shadow: 0 0 0 3px rgba(245,158,11,0.15);
+}
+
+.refund-method-logo {
+  width: 56px;
+  height: auto;
+  object-fit: contain;
+}
+
+.refund-method-check {
+  position: absolute;
+  top: 8px; right: 8px;
+  font-size: 16px;
+  color: #f59e0b;
+}
+
+/* Account input fields */
+.refund-account-fields { gap: 8px; }
+
+.refund-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  color: #111827;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+.refund-input:focus { border-color: #f59e0b; outline: none; box-shadow: 0 0 0 3px rgba(245,158,11,0.12); }
+
+.refund-account-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 12px;
+  color: #059669;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 7px;
+  padding: 8px 10px;
+  line-height: 1.5;
+}
+.refund-account-note i { color: #16a34a; flex-shrink: 0; margin-top: 2px; }
+.refund-account-note strong { color: #065f46; }
+
+/* Comment box */
+.refund-comment-box {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+.refund-comment-box:focus { border-color: #f59e0b; outline: none; box-shadow: 0 0 0 3px rgba(245,158,11,0.12); }
+
+.refund-comment-count {
+  text-align: right;
+  font-size: 11px;
+  color: #9ca3af;
+  margin-top: 4px;
+}
+
+/* Error message */
+.refund-error-msg {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  color: #dc2626;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+
+/* Info note */
+.refund-modal-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 12px;
+  color: #0369a1;
+  line-height: 1.5;
+}
+.refund-modal-note i { color: #0284c7; flex-shrink: 0; margin-top: 2px; }
+
+/* Footer */
+.refund-modal-footer {
+  display: flex;
+  gap: 10px;
+  padding: 14px 22px 20px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.refund-cancel-btn {
+  flex: 1;
+  padding: 11px;
+  background: white;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.refund-cancel-btn:hover:not(:disabled) { border-color: #9ca3af; color: #374151; }
+
+.refund-submit-btn {
+  flex: 2;
+  padding: 11px;
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: opacity 0.2s;
+  box-shadow: 0 3px 12px rgba(245,158,11,0.35);
+}
+.refund-submit-btn:hover:not(:disabled) { opacity: 0.9; }
+.refund-submit-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* Refund success toast */
+.refund-success-toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #f0fdf4;
+  border: 1.5px solid #86efac;
+  color: #15803d;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 12px 18px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  animation: slideDown 0.3s ease;
+}
+.refund-success-toast i { font-size: 18px; color: #16a34a; flex-shrink: 0; }
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .refund-modal-overlay { align-items: flex-end; padding: 0; }
+  .refund-modal { max-width: 100%; max-height: 92vh; border-radius: 20px 20px 0 0; }
+  .refund-modal-body { padding: 14px 16px; }
+  .refund-modal-footer { padding: 12px 16px 20px; }
+  .order-refund-btn { display: none; }
+  .refund-status-badge { font-size: 10px; padding: 2px 8px; }
+}
+
+/* ══════════════════════════════════════════════
+   IDAGDAG SA DULO NG TrackOrder.css
+   GPS Link Section (replaces Leaflet map)
+══════════════════════════════════════════════ */
+
+/* GPS Link Section — kapag may link si admin */
+.rider-gps-link-section {
+  padding: 20px;
+  background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+}
+
+.rider-gps-link-desc {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: #166534;
+  font-weight: 500;
+}
+
+.rider-gps-link-desc i {
+  font-size: 20px;
+  color: #16a34a;
+  flex-shrink: 0;
+}
+
+.rider-gps-open-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(135deg, #16a34a, #15803d);
+  color: white;
+  padding: 14px 28px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: all 0.2s;
+  box-shadow: 0 4px 14px rgba(22,163,74,0.35);
+  letter-spacing: 0.3px;
+}
+
+.rider-gps-open-link:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(22,163,74,0.45);
+}
+
+.rider-gps-open-link i { font-size: 16px; }
+
+/* GPS Waiting — kapag wala pang link */
+.rider-gps-waiting {
+  padding: 32px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: #f8fafc;
+  text-align: center;
+  color: #64748b;
+}
+
+.rider-gps-waiting i {
+  font-size: 36px;
+  color: #fc1268;
+  opacity: 0.5;
+  animation: waitingPulse 2s ease-in-out infinite;
+  display: block;
+}
+
+.rider-gps-waiting p {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  margin: 0;
+}
+
+.rider-gps-waiting small {
+  font-size: 12px;
+  color: #9ca3af;
+}

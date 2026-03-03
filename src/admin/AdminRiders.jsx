@@ -8,6 +8,16 @@ const SITE_URL = process.env.REACT_APP_SITE_URL || 'https://dkmerchwebsite.verce
 const getRiderLink    = (orderId) => `${SITE_URL}/rider-track/${orderId}`;
 const getCustomerLink = (orderId) => `${SITE_URL}/track-order?order=${orderId}`;
 
+// ─── TIME HELPER ──────────────────────────────────────────────
+const timeAgo = (ts) => {
+  if (!ts) return 'unknown';
+  const diff = Math.floor((Date.now() - ts) / 1000);
+  if (diff < 10)   return 'just now';
+  if (diff < 60)   return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  return `${Math.floor(diff / 3600)}h ago`;
+};
+
 // ─── STATUS BADGE ─────────────────────────────────────────────
 const StatusBadge = ({ order }) => {
   const s = (order.orderStatus || order.status || '').toLowerCase();
@@ -37,20 +47,99 @@ const LiveBadge = ({ orderId }) => {
   );
 };
 
+// ─── NOTIFICATION BELL ───────────────────────────────────────
+const NotificationBell = () => {
+  const [open, setOpen]       = useState(false);
+  const dropdownRef           = useRef(null);
+  const notifications         = useQuery(api.riderNotifications.getRecent)  ?? [];
+  const unread                = useQuery(api.riderNotifications.getUnread)   ?? [];
+  const markAllRead           = useMutation(api.riderNotifications.markAllRead);
+  const clearAll              = useMutation(api.riderNotifications.clearAll);
+  const unreadCount           = unread.length;
+
+  const handleOpen = async () => {
+    setOpen(o => !o);
+    if (!open && unreadCount > 0) await markAllRead().catch(() => {});
+  };
+
+  const timeAgoStr = (isoStr) => {
+    const diff = Date.now() - new Date(isoStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1)  return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24)  return `${hrs}h ago`;
+    return `${Math.floor(hrs / 24)}d ago`;
+  };
+
+  return (
+    <div className="ar-bell-wrap" ref={dropdownRef}>
+      <button className="ar-bell-btn" onClick={handleOpen} title="Rider notifications">
+        🔔
+        {unreadCount > 0 && (
+          <span className="ar-bell-badge">{unreadCount > 9 ? '9+' : unreadCount}</span>
+        )}
+      </button>
+      {open && (
+        <div className="ar-bell-dropdown">
+          <div className="ar-bell-header">
+            <span className="ar-bell-title">🛵 Rider Notifications</span>
+            <div className="ar-bell-header-actions">
+              {notifications.length > 0 && (
+                <button className="ar-bell-clear" onClick={async () => { await clearAll().catch(() => {}); }}>
+                  Clear all
+                </button>
+              )}
+              <button className="ar-bell-close" onClick={() => setOpen(false)}>✕</button>
+            </div>
+          </div>
+          <div className="ar-bell-list">
+            {notifications.length === 0 ? (
+              <div className="ar-bell-empty"><span>🔕</span><span>No notifications yet</span></div>
+            ) : (
+              notifications.map(n => (
+                <div key={n._id} className={`ar-bell-item ${!n.read ? 'ar-bell-item--unread' : ''}`}>
+                  <div className="ar-bell-item-icon">{n.type === 'rider_link_reopened' ? '🔄' : '🛵'}</div>
+                  <div className="ar-bell-item-body">
+                    <div className="ar-bell-item-msg">
+                      {n.message || `Rider opened link for Order #${n.orderId?.slice(-8).toUpperCase()}`}
+                    </div>
+                    <div className="ar-bell-item-time">{timeAgoStr(n.createdAt)}</div>
+                  </div>
+                  {!n.read && <span className="ar-bell-unread-dot" />}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ─── LIVE MAP MODAL ───────────────────────────────────────────
 const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
-  const mapRef       = useRef(null);
-  const mapObjRef    = useRef(null);
-  const markerRef    = useRef(null);
-  const circleRef    = useRef(null);
-  const routeLineRef  = useRef(null);
-  const destMarkerRef = useRef(null);
+  const mapRef             = useRef(null);
+  const mapObjRef          = useRef(null);
+  const markerRef          = useRef(null);
+  const lastKnownMarkerRef = useRef(null);
+  const circleRef          = useRef(null);
+  const routeLineRef       = useRef(null);
+  const destMarkerRef      = useRef(null);
+  const routeAbortRef      = useRef(null);   // FIX: abort controller for OSRM
+  const routeTimerRef      = useRef(null);   // FIX: debounce timer
+
   const [leafletReady, setLeafletReady] = useState(!!window.L);
   const [lastUpdate,   setLastUpdate]   = useState(null);
   const [isFullscreen, setIsFullscreen] = useState(fullscreen);
+
   const location = useQuery(api.riders.getRiderLocation, { orderId });
 
-  // Load Leaflet
+  const isLive       = !!(location?.isTracking && location?.updatedAt && (Date.now() - location.updatedAt) < 30000);
+  const hasLoc       = !!(location?.lat && location?.lng && location.lat !== 0);
+  const hasLastKnown = !!(location?.lastKnownLat && location?.lastKnownLng);
+
+  // ── Load Leaflet ──
   useEffect(() => {
     if (window.L) { setLeafletReady(true); return; }
     const link = document.createElement('link');
@@ -63,7 +152,7 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
     document.head.appendChild(script);
   }, []);
 
-  // Init map
+  // ── Init map ──
   useEffect(() => {
     if (!leafletReady || !mapRef.current || mapObjRef.current) return;
     const L = window.L;
@@ -72,128 +161,256 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
       attribution: '© OpenStreetMap contributors', maxZoom: 19,
     }).addTo(map);
 
-    const destLat = order?.addressLat || null;
-    const destLng = order?.addressLng || null;
-
-    // Destination marker (customer address)
-    const destIcon = L.divIcon({
-      html: `<div style="width:40px;height:40px;background:linear-gradient(135deg,#fc1268,#9c27b0);border-radius:50%;border:3px solid white;box-shadow:0 3px 14px rgba(252,18,104,0.5);display:flex;align-items:center;justify-content:center;font-size:20px;">📍</div>`,
-      className: '', iconSize: [40, 40], iconAnchor: [20, 40],
-    });
-
-    // Rider marker
-    const riderIcon = L.divIcon({
-      html: `<div style="width:40px;height:40px;background:linear-gradient(135deg,#6a0dad,#9b30ff);border-radius:50%;border:3px solid white;box-shadow:0 3px 14px rgba(106,13,173,0.55);display:flex;align-items:center;justify-content:center;font-size:20px;">🛵</div>`,
-      className: '', iconSize: [40, 40], iconAnchor: [20, 20],
-    });
-
+    const destLat  = order?.addressLat  || null;
+    const destLng  = order?.addressLng  || null;
     const centerLat = destLat || 14.5995;
     const centerLng = destLng || 120.9842;
     map.setView([centerLat, centerLng], 14);
 
     if (destLat && destLng) {
+      const destIcon = L.divIcon({
+        html: `<div style="width:40px;height:40px;background:linear-gradient(135deg,#fc1268,#9c27b0);border-radius:50%;border:3px solid white;box-shadow:0 3px 14px rgba(252,18,104,0.5);display:flex;align-items:center;justify-content:center;font-size:20px;">📍</div>`,
+        className: '', iconSize: [40, 40], iconAnchor: [20, 40],
+      });
       const dm = L.marker([destLat, destLng], { icon: destIcon }).addTo(map);
       dm.bindPopup(`<b>📍 Deliver to:</b><br>${order?.customerName || 'Customer'}<br><small>${order?.shippingAddress || ''}</small>`).openPopup();
       destMarkerRef.current = dm;
     }
 
-    const marker = L.marker([centerLat, centerLng], { icon: riderIcon }).addTo(map);
+    const riderIcon = L.divIcon({
+      html: `<div style="width:40px;height:40px;background:linear-gradient(135deg,#6a0dad,#9b30ff);border-radius:50%;border:3px solid white;box-shadow:0 3px 14px rgba(106,13,173,0.55);display:flex;align-items:center;justify-content:center;font-size:20px;">🛵</div>`,
+      className: '', iconSize: [40, 40], iconAnchor: [20, 20],
+    });
+    const marker = L.marker([centerLat, centerLng], { icon: riderIcon, opacity: 0 }).addTo(map);
     marker.bindPopup(`<b>🛵 ${order.riderInfo?.name || 'Rider'}</b><br>Waiting for GPS…`);
-    mapObjRef.current = map;
-    markerRef.current = marker;
-  }, [leafletReady, order]);
 
-  // Invalidate size on fullscreen toggle
+    mapObjRef.current  = map;
+    markerRef.current  = marker;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leafletReady]);
+
+  // ── Invalidate size on fullscreen toggle ──
   useEffect(() => {
     if (mapObjRef.current) setTimeout(() => mapObjRef.current.invalidateSize(), 150);
   }, [isFullscreen]);
 
-  // Handle tab/window visibility — reinvalidate map when coming back
+  // ── Invalidate size on visibility change ──
   useEffect(() => {
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible' && mapObjRef.current) {
+      if (document.visibilityState === 'visible' && mapObjRef.current)
         setTimeout(() => { if (mapObjRef.current) mapObjRef.current.invalidateSize(); }, 200);
-      }
     };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, []);
 
-  // Update rider position + draw route line when location changes
-  useEffect(() => {
-    if (!mapObjRef.current || !markerRef.current || !location?.lat) return;
-    const L = window.L;
-    const { lat, lng, accuracy } = location;
-
-    markerRef.current.setLatLng([lat, lng]);
-    markerRef.current.setPopupContent(
-      `<b>🛵 ${order.riderInfo?.name || 'Rider'}</b><br>📍 ${lat.toFixed(6)}, ${lng.toFixed(6)}<br>${accuracy ? `±${Math.round(accuracy)}m` : ''}<br><small>${new Date(location.updatedAt).toLocaleTimeString()}</small>`
-    );
-
-    // Accuracy circle
-    if (circleRef.current) circleRef.current.remove();
-    if (accuracy) {
-      circleRef.current = L.circle([lat, lng], {
-        radius: accuracy, color: '#7c3aed', fillColor: '#7c3aed', fillOpacity: 0.07, weight: 1.5,
-      }).addTo(mapObjRef.current);
-    }
-
-    // Real road route using OSRM
-    const destLat = order?.addressLat;
-    const destLng = order?.addressLng;
+  // ── Helper: clear route lines ──
+  const clearRoute = () => {
     if (routeLineRef.current) {
-      if (Array.isArray(routeLineRef.current)) { routeLineRef.current.forEach(l => l.remove()); }
-      else { routeLineRef.current.remove(); }
+      if (Array.isArray(routeLineRef.current)) {
+        routeLineRef.current.forEach(l => { try { l.remove(); } catch {} });
+      } else {
+        try { routeLineRef.current.remove(); } catch {}
+      }
       routeLineRef.current = null;
     }
-    if (destLat && destLng) {
-      const drawOSRM = async () => {
+  };
+
+  // ── Helper: draw OSRM road route (with abort + debounce) ──
+  const drawRoute = (lat, lng, destLat, destLng, dashed = false) => {
+    // FIX: Cancel any in-flight OSRM request
+    if (routeAbortRef.current) {
+      routeAbortRef.current.abort();
+      routeAbortRef.current = null;
+    }
+    // FIX: Debounce — don't fire on every tiny location tick
+    if (routeTimerRef.current) clearTimeout(routeTimerRef.current);
+
+    routeTimerRef.current = setTimeout(async () => {
+      if (!mapObjRef.current || !window.L) return;
+      const L   = window.L;
+      const map = mapObjRef.current;
+      clearRoute();
+
+      if (dashed) {
         try {
-          const url = `https://router.project-osrm.org/route/v1/bike/${lng},${lat};${destLng},${destLat}?overview=full&geometries=geojson`;
-          const res  = await fetch(url);
-          const data = await res.json();
-          if (!mapObjRef.current) return;
-          if (data.code === 'Ok' && data.routes?.[0]?.geometry?.coordinates) {
-            const coords = data.routes[0].geometry.coordinates.map(([lo, la]) => [la, lo]);
-            const outline = L.polyline(coords, { color: 'white', weight: 7, opacity: 0.6, lineJoin: 'round', lineCap: 'round' }).addTo(mapObjRef.current);
-            const line    = L.polyline(coords, { color: '#e53e3e', weight: 4.5, opacity: 0.92, lineJoin: 'round', lineCap: 'round' }).addTo(mapObjRef.current);
-            routeLineRef.current = [outline, line];
-            mapObjRef.current.fitBounds(L.latLngBounds(coords), { padding: [48, 48], maxZoom: 17 });
-          } else {
-            routeLineRef.current = L.polyline([[lat, lng], [destLat, destLng]], { color: '#e53e3e', weight: 4, opacity: 0.8, dashArray: '10, 8' }).addTo(mapObjRef.current);
-            mapObjRef.current.fitBounds(L.latLngBounds([lat, lng], [destLat, destLng]), { padding: [48, 48], maxZoom: 17 });
-          }
-        } catch {
-          if (!mapObjRef.current) return;
-          routeLineRef.current = L.polyline([[lat, lng], [destLat, destLng]], { color: '#e53e3e', weight: 4, opacity: 0.8, dashArray: '10, 8' }).addTo(mapObjRef.current);
-          mapObjRef.current.fitBounds(L.latLngBounds([lat, lng], [destLat, destLng]), { padding: [48, 48], maxZoom: 17 });
+          routeLineRef.current = L.polyline([[lat, lng], [destLat, destLng]], {
+            color: '#9ca3af', weight: 3, opacity: 0.75, dashArray: '8, 8',
+          }).addTo(map);
+          map.fitBounds(L.latLngBounds([lat, lng], [destLat, destLng]), { padding: [48, 48], maxZoom: 17 });
+        } catch {}
+        return;
+      }
+
+      // FIX: New AbortController per request
+      const controller = new AbortController();
+      routeAbortRef.current = controller;
+
+      try {
+        const url  = `https://router.project-osrm.org/route/v1/bike/${lng},${lat};${destLng},${destLat}?overview=full&geometries=geojson`;
+        const res  = await fetch(url, { signal: controller.signal });
+        const data = await res.json();
+
+        // FIX: Check if map still alive + request not aborted
+        if (!mapObjRef.current || controller.signal.aborted) return;
+
+        if (data.code === 'Ok' && data.routes?.[0]?.geometry?.coordinates) {
+          const coords  = data.routes[0].geometry.coordinates.map(([lo, la]) => [la, lo]);
+          const outline = L.polyline(coords, { color: 'white',   weight: 7,   opacity: 0.6,  lineJoin: 'round', lineCap: 'round' }).addTo(map);
+          const line    = L.polyline(coords, { color: '#e53e3e', weight: 4.5, opacity: 0.92, lineJoin: 'round', lineCap: 'round' }).addTo(map);
+          routeLineRef.current = [outline, line];
+          map.fitBounds(L.latLngBounds(coords), { padding: [48, 48], maxZoom: 17 });
+        } else {
+          throw new Error('OSRM no route');
         }
-      };
-      drawOSRM();
-    } else {
-      mapObjRef.current.flyTo([lat, lng], Math.max(mapObjRef.current.getZoom(), 16), { animate: true, duration: 1 });
+      } catch (err) {
+        // FIX: Don't draw fallback if aborted (user closed modal / new request fired)
+        if (err?.name === 'AbortError') return;
+        if (!mapObjRef.current) return;
+        try {
+          const dLat = order?.addressLat, dLng = order?.addressLng;
+          if (dLat && dLng) {
+            routeLineRef.current = window.L.polyline([[lat, lng], [dLat, dLng]], {
+              color: '#e53e3e', weight: 4, opacity: 0.8, dashArray: '10, 8',
+            }).addTo(mapObjRef.current);
+            mapObjRef.current.fitBounds(window.L.latLngBounds([lat, lng], [dLat, dLng]), { padding: [48, 48], maxZoom: 17 });
+          }
+        } catch {}
+      } finally {
+        if (routeAbortRef.current === controller) routeAbortRef.current = null;
+      }
+    }, 600); // 600ms debounce
+  };
+
+  // ── React to every Convex location update ──
+  useEffect(() => {
+    if (!mapObjRef.current || !markerRef.current || !window.L) return;
+    const L       = window.L;
+    const map     = mapObjRef.current;
+    const destLat = order?.addressLat;
+    const destLng = order?.addressLng;
+
+    // CASE 1: Rider is LIVE
+    if (isLive && hasLoc) {
+      const { lat, lng, accuracy, updatedAt } = location;
+
+      if (lastKnownMarkerRef.current) {
+        try { lastKnownMarkerRef.current.remove(); } catch {}
+        lastKnownMarkerRef.current = null;
+      }
+
+      try {
+        markerRef.current.setLatLng([lat, lng]);
+        markerRef.current.setOpacity(1);
+        markerRef.current.setPopupContent(
+          `<b>🛵 ${order.riderInfo?.name || 'Rider'}</b><br>
+           📍 ${lat.toFixed(6)}, ${lng.toFixed(6)}<br>
+           ${accuracy ? `±${Math.round(accuracy)}m` : ''}<br>
+           <small>${new Date(updatedAt).toLocaleTimeString()}</small>`
+        );
+      } catch {}
+
+      if (circleRef.current) { try { circleRef.current.remove(); } catch {} circleRef.current = null; }
+      if (accuracy) {
+        try {
+          circleRef.current = L.circle([lat, lng], {
+            radius: accuracy, color: '#7c3aed', fillColor: '#7c3aed', fillOpacity: 0.07, weight: 1.5,
+          }).addTo(map);
+        } catch {}
+      }
+
+      if (destLat && destLng) {
+        drawRoute(lat, lng, destLat, destLng, false);
+      } else {
+        try { map.flyTo([lat, lng], Math.max(map.getZoom(), 16), { animate: true, duration: 1 }); } catch {}
+      }
+
+      setLastUpdate(new Date(updatedAt));
+      return;
     }
 
-    setLastUpdate(new Date(location.updatedAt));
-  }, [location, order]);
+    // CASE 2: Rider OFFLINE but has last known location
+    if (!isLive && hasLastKnown) {
+      const { lastKnownLat, lastKnownLng, lastKnownAt, lastKnownAddress } = location;
 
-  // Cleanup
+      try { markerRef.current.setOpacity(0); } catch {}
+      if (circleRef.current) { try { circleRef.current.remove(); } catch {} circleRef.current = null; }
+
+      const ghostIcon = L.divIcon({
+        className: '',
+        html: `<div style="position:relative;width:40px;height:40px;">
+          <div style="width:40px;height:40px;background:linear-gradient(135deg,#6b7280,#9ca3af);border-radius:50%;border:3px solid white;box-shadow:0 3px 14px rgba(107,114,128,0.45);display:flex;align-items:center;justify-content:center;font-size:20px;opacity:0.88;">🛵</div>
+          <div style="position:absolute;top:-5px;right:-5px;background:#f59e0b;color:white;border-radius:50%;width:17px;height:17px;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid white;">!</div>
+        </div>`,
+        iconSize: [40, 40], iconAnchor: [20, 20], popupAnchor: [0, -24],
+      });
+
+      const lastTimeStr = lastKnownAt
+        ? new Date(lastKnownAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })
+        : '';
+
+      if (!lastKnownMarkerRef.current) {
+        try {
+          lastKnownMarkerRef.current = L.marker([lastKnownLat, lastKnownLng], { icon: ghostIcon })
+            .addTo(map)
+            .bindPopup(`
+              <div style="min-width:160px;font-family:sans-serif">
+                <strong>🛵 ${order.riderInfo?.name || 'Rider'}</strong><br>
+                <span style="color:#f59e0b;font-weight:600;font-size:12px">⚠️ Last seen ${lastTimeStr} (${timeAgo(lastKnownAt)})</span><br>
+                ${lastKnownAddress ? `<span style="color:#6b7280;font-size:11px">📍 ${lastKnownAddress}</span>` : ''}
+              </div>
+            `);
+        } catch {}
+      } else {
+        try {
+          lastKnownMarkerRef.current.setLatLng([lastKnownLat, lastKnownLng]);
+          lastKnownMarkerRef.current.setIcon(ghostIcon);
+        } catch {}
+      }
+
+      if (destLat && destLng) {
+        drawRoute(lastKnownLat, lastKnownLng, destLat, destLng, true);
+      } else {
+        try { map.panTo([lastKnownLat, lastKnownLng], { animate: true, duration: 0.8 }); } catch {}
+      }
+
+      if (lastKnownAt) setLastUpdate(new Date(lastKnownAt));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location, isLive, hasLoc, hasLastKnown]);
+
+  // ── Cleanup on unmount ──
   useEffect(() => () => {
+    // FIX: abort any pending OSRM fetch on close
+    if (routeAbortRef.current) { routeAbortRef.current.abort(); routeAbortRef.current = null; }
+    if (routeTimerRef.current) { clearTimeout(routeTimerRef.current); routeTimerRef.current = null; }
+    if (lastKnownMarkerRef.current) { try { lastKnownMarkerRef.current.remove(); } catch {} lastKnownMarkerRef.current = null; }
     if (mapObjRef.current) {
       try { mapObjRef.current.remove(); } catch {}
-      mapObjRef.current    = null;
-      markerRef.current    = null;
-      circleRef.current    = null;
-      routeLineRef.current  = null;
+      mapObjRef.current  = null;
+      markerRef.current  = null;
+      circleRef.current  = null;
+      routeLineRef.current = null;
       destMarkerRef.current = null;
     }
   }, []);
 
-  const isLive = location?.isTracking && location?.updatedAt && (Date.now() - location.updatedAt) < 60000;
+  const lastKnownTimeStr = location?.lastKnownAt
+    ? new Date(location.lastKnownAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })
+    : null;
+  const lastKnownAddr = location?.lastKnownAddress;
+
+  // ── FIX: Separate overlay class for map vs fullscreen ──
+  const overlayClass = isFullscreen
+    ? 'ar-modal-overlay ar-map-overlay ar-overlay--full'
+    : 'ar-modal-overlay ar-map-overlay';
 
   return (
-    <div className={`ar-modal-overlay ${isFullscreen ? 'ar-overlay--full' : ''}`} onClick={onClose}>
-      <div className={`ar-map-modal ${isFullscreen ? 'ar-map-modal--full' : ''}`} onClick={e => e.stopPropagation()}>
+    <div className={overlayClass} onClick={onClose}>
+      <div
+        className={`ar-map-modal ${isFullscreen ? 'ar-map-modal--full' : ''}`}
+        onClick={e => e.stopPropagation()}
+      >
         <div className="ar-map-header">
           <div className="ar-map-title-row">
             <span className="ar-map-title">📍 Live Rider Location</span>
@@ -202,23 +419,41 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
           <div className="ar-map-header-right">
             {isLive
               ? <div className="ar-map-live-badge"><span className="ar-gps-live-dot" />Live · {lastUpdate?.toLocaleTimeString()}</div>
-              : location?.updatedAt
-              ? <div className="ar-map-stale-badge">⏸ {new Date(location.updatedAt).toLocaleTimeString()}</div>
-              : <div className="ar-map-waiting-badge">⏳ Waiting for rider to open link…</div>}
+              : hasLastKnown
+              ? <div className="ar-map-stale-badge" style={{ background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a' }}>
+                  ⚠️ Offline · Last seen {lastKnownTimeStr || 'unknown'}
+                </div>
+              : !location
+              ? <div className="ar-map-waiting-badge">⏳ Waiting for rider…</div>
+              : <div className="ar-map-stale-badge">⏸ {lastUpdate?.toLocaleTimeString() || '—'}</div>}
             <button className="ar-map-fullscreen-btn" onClick={() => setIsFullscreen(f => !f)}>
               {isFullscreen ? '⛶ Exit' : '⛶ Full'}
             </button>
             <button className="ar-modal-close ar-modal-close--map" onClick={onClose}>✕</button>
           </div>
         </div>
+
         <div ref={mapRef} className="ar-map-container" />
-        {!location?.lat && (
+
+        {!location && (
           <div className="ar-map-waiting-overlay">
             <span className="ar-gps-live-dot" style={{ background: '#f59e0b' }} />
             <span>Waiting for rider to open their link and share GPS…</span>
           </div>
         )}
-        {location?.lat && (
+
+        {!isLive && hasLastKnown && (
+          <div className="ar-map-offline-bar">
+            <span style={{ fontSize: 14 }}>⚠️</span>
+            <span>
+              <strong>Rider offline</strong> · Showing last known location
+              {lastKnownTimeStr && <> · {lastKnownTimeStr} ({timeAgo(location?.lastKnownAt)})</>}
+              {lastKnownAddr && <> · <strong>📍 {lastKnownAddr}</strong></>}
+            </span>
+          </div>
+        )}
+
+        {isLive && hasLoc && (
           <div className="ar-map-info-bar">
             <span>🛵 {order.riderInfo?.name || 'Rider'}</span>
             <span>📍 {location.lat.toFixed(5)}, {location.lng.toFixed(5)}</span>
@@ -226,6 +461,7 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
             <span style={{ color: '#e53e3e', fontWeight: 700 }}>━━ Route</span>
           </div>
         )}
+
         <div className="ar-map-link-row">
           <code className="ar-map-link-code">{getRiderLink(orderId)}</code>
           <button className="ar-map-copy-btn" onClick={() => navigator.clipboard.writeText(getRiderLink(orderId))}>
@@ -347,7 +583,6 @@ const ActiveOrderCard = ({
   onCopyLink, onToggleCollapse, onShareOrder, onOpenMap, onNotifyCustomer,
 }) => {
   const { orderId } = order;
-
   const [ri, setRi] = useState({
     name:  order.riderInfo?.name  || '',
     phone: order.riderInfo?.phone || '',
@@ -357,16 +592,10 @@ const ActiveOrderCard = ({
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
-    setRi({
-      name:  order.riderInfo?.name  || '',
-      phone: order.riderInfo?.phone || '',
-      plate: order.riderInfo?.plate || '',
-    });
+    setRi({ name: order.riderInfo?.name || '', phone: order.riderInfo?.phone || '', plate: order.riderInfo?.plate || '' });
   }, [order.riderInfo?.name, order.riderInfo?.phone, order.riderInfo?.plate]);
 
-  useEffect(() => {
-    setGps(order.riderGpsLink || '');
-  }, [order.riderGpsLink]);
+  useEffect(() => { setGps(order.riderGpsLink || ''); }, [order.riderGpsLink]);
 
   const [copiedCust, setCopiedCust] = useState(false);
   const custLink  = getCustomerLink(orderId);
@@ -374,15 +603,10 @@ const ActiveOrderCard = ({
 
   const copyCust = () => {
     navigator.clipboard.writeText(custLink).catch(() => {
-      const ta = document.createElement('textarea');
-      ta.value = custLink;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      document.body.removeChild(ta);
+      const ta = document.createElement('textarea'); ta.value = custLink;
+      document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
     });
-    setCopiedCust(true);
-    setTimeout(() => setCopiedCust(false), 2000);
+    setCopiedCust(true); setTimeout(() => setCopiedCust(false), 2000);
   };
 
   const validate = () => {
@@ -391,8 +615,7 @@ const ActiveOrderCard = ({
     if (!ri.phone?.trim())                       e.phone = 'Phone is required';
     else if (!/^09\d{9}$/.test(ri.phone.trim())) e.phone = 'Must be 11 digits starting with 09';
     if (!ri.plate?.trim())                       e.plate = 'Plate number is required';
-    setErrors(e);
-    return Object.keys(e).length === 0;
+    setErrors(e); return Object.keys(e).length === 0;
   };
 
   const handlePhoneChange = (val) => {
@@ -403,17 +626,13 @@ const ActiveOrderCard = ({
 
   const savedRiderInfo    = order.riderInfo || {};
   const hasSavedRiderInfo = !!(
-    savedRiderInfo.name?.trim() &&
-    savedRiderInfo.phone?.trim() &&
-    savedRiderInfo.plate?.trim() &&
+    savedRiderInfo.name?.trim() && savedRiderInfo.phone?.trim() && savedRiderInfo.plate?.trim() &&
     /^09\d{9}$/.test(savedRiderInfo.phone.trim())
   );
   const alreadyNotified = (order.orderStatus || '').toLowerCase() === 'out_for_delivery';
 
   return (
     <div className={`ar-order-card ${collapsed ? 'ar-card-collapsed' : ''}`}>
-
-      {/* Header */}
       <div className="ar-order-header">
         <div className="ar-order-id-block">
           <span className="ar-order-id">#{orderId?.slice(-8).toUpperCase()}</span>
@@ -433,77 +652,43 @@ const ActiveOrderCard = ({
           <span className="ar-cs-name">{order.customerName || '—'}</span>
           <span className="ar-cs-sep">·</span>
           <span className="ar-cs-total">₱{(order.finalTotal ?? order.total ?? 0).toLocaleString()}</span>
-          {ri.name && (
-            <>
-              <span className="ar-cs-sep">·</span>
-              <span className="ar-cs-rider">🛵 {ri.name}</span>
-            </>
-          )}
+          {ri.name && (<><span className="ar-cs-sep">·</span><span className="ar-cs-rider">🛵 {ri.name}</span></>)}
         </div>
       )}
 
       {!collapsed && (
         <div className="ar-order-body">
-
           <div className="ar-two-col">
             <div className="ar-section">
               <div className="ar-section-title">👤 Customer</div>
-              <div className="ar-compact-row">
-                <span className="ar-cl">Name</span>
-                <span className="ar-cv">{order.customerName || '—'}</span>
-              </div>
-              <div className="ar-compact-row">
-                <span className="ar-cl">Phone</span>
-                <span className="ar-cv">{order.phone || '—'}</span>
-              </div>
-              <div className="ar-compact-row">
-                <span className="ar-cl">Total</span>
-                <span className="ar-cv ar-total">₱{(order.finalTotal ?? order.total ?? 0).toLocaleString()}</span>
-              </div>
+              <div className="ar-compact-row"><span className="ar-cl">Name</span><span className="ar-cv">{order.customerName || '—'}</span></div>
+              <div className="ar-compact-row"><span className="ar-cl">Phone</span><span className="ar-cv">{order.phone || '—'}</span></div>
+              <div className="ar-compact-row"><span className="ar-cl">Total</span><span className="ar-cv ar-total">₱{(order.finalTotal ?? order.total ?? 0).toLocaleString()}</span></div>
             </div>
 
             <div className="ar-section">
               <div className="ar-section-title">🛵 Rider Info</div>
               <div className="ar-input-compact">
                 <div className="ar-input-field">
-                  <input
-                    type="text"
-                    placeholder="Name *"
-                    value={ri.name}
+                  <input type="text" placeholder="Name *" value={ri.name}
                     onChange={e => { setRi(prev => ({ ...prev, name: e.target.value })); if (errors.name) setErrors(prev => ({ ...prev, name: '' })); }}
-                    className={errors.name ? 'ar-input-error' : ''}
-                  />
+                    className={errors.name ? 'ar-input-error' : ''} />
                   {errors.name && <span className="ar-field-error">{errors.name}</span>}
                 </div>
                 <div className="ar-input-field">
-                  <input
-                    type="tel"
-                    placeholder="Phone * (09XXXXXXXXX)"
-                    value={ri.phone}
-                    onChange={e => handlePhoneChange(e.target.value)}
-                    maxLength={11}
-                    className={errors.phone ? 'ar-input-error' : ''}
-                  />
-                  {errors.phone
-                    ? <span className="ar-field-error">{errors.phone}</span>
-                    : <span className="ar-field-hint">{ri.phone.length}/11 digits</span>}
+                  <input type="tel" placeholder="Phone * (09XXXXXXXXX)" value={ri.phone}
+                    onChange={e => handlePhoneChange(e.target.value)} maxLength={11}
+                    className={errors.phone ? 'ar-input-error' : ''} />
+                  {errors.phone ? <span className="ar-field-error">{errors.phone}</span> : <span className="ar-field-hint">{ri.phone.length}/11 digits</span>}
                 </div>
                 <div className="ar-input-field">
-                  <input
-                    type="text"
-                    placeholder="Plate Number *"
-                    value={ri.plate}
+                  <input type="text" placeholder="Plate Number *" value={ri.plate}
                     onChange={e => { setRi(prev => ({ ...prev, plate: e.target.value.toUpperCase() })); if (errors.plate) setErrors(prev => ({ ...prev, plate: '' })); }}
-                    className={errors.plate ? 'ar-input-error' : ''}
-                  />
+                    className={errors.plate ? 'ar-input-error' : ''} />
                   {errors.plate && <span className="ar-field-error">{errors.plate}</span>}
                 </div>
               </div>
-              <button
-                className="ar-save-btn ar-save-btn-sm"
-                onClick={() => { if (validate()) onSaveRider(orderId, ri); }}
-                disabled={savingRider}
-              >
+              <button className="ar-save-btn ar-save-btn-sm" onClick={() => { if (validate()) onSaveRider(orderId, ri); }} disabled={savingRider}>
                 {savingRider ? '⏳' : savedRider ? '✅ Saved' : '💾 Save Rider'}
               </button>
             </div>
@@ -512,9 +697,7 @@ const ActiveOrderCard = ({
           {/* Notify Section */}
           <div className="ar-notify-section">
             {alreadyNotified ? (
-              <div className="ar-notify-done">
-                <span>✅ Customer notified — Out for Delivery</span>
-              </div>
+              <div className="ar-notify-done"><span>✅ Customer notified — Out for Delivery</span></div>
             ) : (
               <>
                 <button
@@ -525,9 +708,7 @@ const ActiveOrderCard = ({
                 >
                   {notifying ? '⏳ Sending…' : notified ? '✅ Customer Notified!' : '🔔 Notify Customer (Out for Delivery)'}
                 </button>
-                {!hasSavedRiderInfo && (
-                  <p className="ar-notify-hint">⚠️ Save rider info first (click 💾 Save Rider) before notifying</p>
-                )}
+                {!hasSavedRiderInfo && <p className="ar-notify-hint">⚠️ Save rider info first (click 💾 Save Rider) before notifying</p>}
               </>
             )}
 
@@ -541,14 +722,10 @@ const ActiveOrderCard = ({
                       <span className="ar-otp-ready-badge">✅ Generated</span>
                     </div>
                     <div className="ar-otp-digits">
-                      {String(order.deliveryOtp).split('').map((d, i) => (
-                        <span key={i} className="ar-otp-digit">{d}</span>
-                      ))}
+                      {String(order.deliveryOtp).split('').map((d, i) => <span key={i} className="ar-otp-digit">{d}</span>)}
                     </div>
                     <p className="ar-otp-sub">
-                      {order.deliveryOtpVerified
-                        ? '✅ OTP verified by rider — package delivered!'
-                        : '⏳ Waiting for rider to verify this OTP from customer'}
+                      {order.deliveryOtpVerified ? '✅ OTP verified by rider — package delivered!' : '⏳ Waiting for rider to verify this OTP from customer'}
                     </p>
                   </>
                 ) : (
@@ -569,24 +746,16 @@ const ActiveOrderCard = ({
               <div className="ar-tl-row">
                 <span className="ar-tl-badge">🛵</span>
                 <div className="ar-tl-url">{riderLink}</div>
-                <button className="ar-tl-copy" onClick={() => onCopyLink(orderId)}>
-                  {copiedLink ? '✅' : '📋'}
-                </button>
+                <button className="ar-tl-copy" onClick={() => onCopyLink(orderId)}>{copiedLink ? '✅' : '📋'}</button>
               </div>
               <div className="ar-tl-row">
                 <span className="ar-tl-badge">👤</span>
                 <div className="ar-tl-url">{custLink}</div>
-                <button className="ar-tl-copy ar-tl-copy--green" onClick={copyCust}>
-                  {copiedCust ? '✅' : '📋'}
-                </button>
+                <button className="ar-tl-copy ar-tl-copy--green" onClick={copyCust}>{copiedCust ? '✅' : '📋'}</button>
               </div>
               <div className="ar-map-btn-row">
-                <button className="ar-track-map-btn" onClick={() => onOpenMap(order, false)}>
-                  🗺️ Live Map
-                </button>
-                <button className="ar-track-map-btn ar-track-map-btn--full" onClick={() => onOpenMap(order, true)}>
-                  ⛶ Full Map
-                </button>
+                <button className="ar-track-map-btn" onClick={() => onOpenMap(order, false)}>🗺️ Live Map</button>
+                <button className="ar-track-map-btn ar-track-map-btn--full" onClick={() => onOpenMap(order, true)}>⛶ Full Map</button>
               </div>
             </div>
 
@@ -594,31 +763,19 @@ const ActiveOrderCard = ({
               <summary>Manual Google Maps link (optional fallback)</summary>
               <div style={{ marginTop: 8 }}>
                 <div className="ar-jnt-row">
-                  <input
-                    type="url"
-                    className="ar-jnt-input"
-                    placeholder="Paste Google Maps live link…"
-                    value={gps}
-                    onChange={e => setGps(e.target.value)}
-                  />
-                  <button
-                    className="ar-save-btn ar-jnt-save"
-                    onClick={() => onSaveGps(orderId, gps)}
-                    disabled={savingGps}
-                  >
+                  <input type="url" className="ar-jnt-input" placeholder="Paste Google Maps live link…" value={gps} onChange={e => setGps(e.target.value)} />
+                  <button className="ar-save-btn ar-jnt-save" onClick={() => onSaveGps(orderId, gps)} disabled={savingGps}>
                     {savingGps ? '⏳' : savedGps ? '✅' : '💾'}
                   </button>
                 </div>
                 {order.riderGpsLink && (
-                  <a href={order.riderGpsLink} target="_blank" rel="noopener noreferrer"
-                    className="ar-gps-open-btn" style={{ marginTop: 6, display: 'inline-block' }}>
+                  <a href={order.riderGpsLink} target="_blank" rel="noopener noreferrer" className="ar-gps-open-btn" style={{ marginTop: 6, display: 'inline-block' }}>
                     🗺️ Open Saved Link
                   </a>
                 )}
               </div>
             </details>
           </div>
-
         </div>
       )}
     </div>
@@ -629,10 +786,7 @@ const ActiveOrderCard = ({
 const CompletedOrderCard = ({ order, onRemove }) => {
   const riderInfo   = order.riderInfo || {};
   const deliveredAt = order.deliveryConfirmedAt
-    ? new Date(order.deliveryConfirmedAt).toLocaleString('en-PH', {
-        month: 'short', day: 'numeric', year: 'numeric',
-        hour: '2-digit', minute: '2-digit',
-      })
+    ? new Date(order.deliveryConfirmedAt).toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
     : null;
 
   return (
@@ -645,25 +799,13 @@ const CompletedOrderCard = ({ order, onRemove }) => {
         <button className="ar-remove-btn" onClick={() => onRemove(order)} title="Remove">🗑️</button>
       </div>
       <div className="ar-completed-body">
-        <div className="ar-completed-row">
-          <span className="ar-info-label">Customer</span>
-          <span className="ar-info-value">{order.customerName || '—'}</span>
-        </div>
-        <div className="ar-completed-row">
-          <span className="ar-info-label">Total</span>
-          <span className="ar-info-value ar-total">₱{(order.finalTotal ?? order.total ?? 0).toLocaleString()}</span>
-        </div>
+        <div className="ar-completed-row"><span className="ar-info-label">Customer</span><span className="ar-info-value">{order.customerName || '—'}</span></div>
+        <div className="ar-completed-row"><span className="ar-info-label">Total</span><span className="ar-info-value ar-total">₱{(order.finalTotal ?? order.total ?? 0).toLocaleString()}</span></div>
         {riderInfo.name && (
-          <div className="ar-completed-row">
-            <span className="ar-info-label">Rider</span>
-            <span className="ar-info-value">🛵 {riderInfo.name}{riderInfo.plate ? ` · ${riderInfo.plate}` : ''}</span>
-          </div>
+          <div className="ar-completed-row"><span className="ar-info-label">Rider</span><span className="ar-info-value">🛵 {riderInfo.name}{riderInfo.plate ? ` · ${riderInfo.plate}` : ''}</span></div>
         )}
         {deliveredAt && (
-          <div className="ar-completed-row">
-            <span className="ar-info-label">Delivered</span>
-            <span className="ar-info-value ar-delivered-time">✅ {deliveredAt}</span>
-          </div>
+          <div className="ar-completed-row"><span className="ar-info-label">Delivered</span><span className="ar-info-value ar-delivered-time">✅ {deliveredAt}</span></div>
         )}
       </div>
     </div>
@@ -755,9 +897,11 @@ const AdminRiders = () => {
 
   return (
     <div className="admin-riders">
-      <h1 className="admin-riders-title">🚚 Delivery Management</h1>
+      <div className="ar-title-row">
+        <h1 className="admin-riders-title">🚚 Delivery Management</h1>
+        <NotificationBell />
+      </div>
 
-      {/* ── Tabs — Riders tab removed ── */}
       <div className="riders-tabs">
         <button className={`riders-tab-btn ${tab === 'delivery' ? 'active' : ''}`} onClick={() => setTab('delivery')}>
           📦 Active {activeOrders.length > 0 && <span className="riders-tab-badge">{activeOrders.length}</span>}
@@ -767,7 +911,6 @@ const AdminRiders = () => {
         </button>
       </div>
 
-      {/* ── Active Tab ── */}
       {tab === 'delivery' && (
         activeOrders.length === 0
           ? <div className="ar-empty"><div className="ar-empty-icon">📭</div><p>No active deliveries.</p><span>Confirmed orders appear here.</span></div>
@@ -788,18 +931,14 @@ const AdminRiders = () => {
             </div>
       )}
 
-      {/* ── Completed Tab ── */}
       {tab === 'completed' && (
         completedOrders.length === 0
           ? <div className="ar-empty"><div className="ar-empty-icon">✅</div><p>No completed deliveries yet.</p></div>
           : <div className="ar-orders-list">
-              {completedOrders.map(o => (
-                <CompletedOrderCard key={o._id} order={o} onRemove={setRemoveTarget} />
-              ))}
+              {completedOrders.map(o => <CompletedOrderCard key={o._id} order={o} onRemove={setRemoveTarget} />)}
             </div>
       )}
 
-      {/* ── Modals ── */}
       {shareOrder    && <ShareModal order={shareOrder} onClose={() => setShareOrder(null)} />}
       {selectedRider && <RiderDetailModal rider={selectedRider} onClose={() => setSelectedRider(null)} />}
       {removeTarget  && <RemoveConfirmModal order={removeTarget} onConfirm={confirmRemove} onClose={() => setRemoveTarget(null)} />}

@@ -80,7 +80,6 @@ export const createRiderApplication = mutation({
 export const approveRider = mutation({
   args: { id: v.id("riderApplications") },
   handler: async ({ db }, { id }) => {
-    // Count all approved riders to generate next sequence number
     const allRiders = await db.query("riderApplications").collect();
     const approvedCount = allRiders.filter(r => r.dkRiderId).length;
     const nextSeq = approvedCount + 1;
@@ -228,6 +227,7 @@ export const setRiderKickedAt = mutation({
   },
 });
 
+// ── updateRiderLocation — now also saves lastKnownLat/Lng/address/At ──
 export const updateRiderLocation = mutation({
   args: {
     orderId: v.string(),
@@ -240,6 +240,8 @@ export const updateRiderLocation = mutation({
     speed: v.optional(v.number()),
     isTracking: v.boolean(),
     sessionId: v.optional(v.string()),
+    // ── NEW: reverse-geocoded street address from the rider's device ──
+    lastKnownAddress: v.optional(v.string()),
   },
   handler: async ({ db }, args) => {
     const existing = await db
@@ -247,30 +249,37 @@ export const updateRiderLocation = mutation({
       .withIndex("by_orderId", q => q.eq("orderId", args.orderId))
       .first();
 
+    const now = Date.now();
+
+    // Always update lastKnownLat/Lng/At if we have a real position (lat != 0)
+    const isRealPosition = args.lat !== 0 && args.lng !== 0;
+
+    const patch: any = {
+      lat: args.lat,
+      lng: args.lng,
+      accuracy: args.accuracy,
+      heading: args.heading,
+      speed: args.speed,
+      isTracking: args.isTracking,
+      updatedAt: now,
+      sessionId: args.sessionId,
+    };
+
+    if (isRealPosition) {
+      patch.lastKnownLat     = args.lat;
+      patch.lastKnownLng     = args.lng;
+      patch.lastKnownAt      = now;
+      patch.lastKnownAddress = args.lastKnownAddress ?? null;
+    }
+
     if (existing) {
-      await db.patch(existing._id, {
-        lat: args.lat,
-        lng: args.lng,
-        accuracy: args.accuracy,
-        heading: args.heading,
-        speed: args.speed,
-        isTracking: args.isTracking,
-        updatedAt: Date.now(),
-        sessionId: args.sessionId,
-      });
+      await db.patch(existing._id, patch);
     } else {
       await db.insert("riderLocations", {
-        orderId: args.orderId,
-        riderEmail: args.riderEmail,
-        riderName: args.riderName,
-        lat: args.lat,
-        lng: args.lng,
-        accuracy: args.accuracy,
-        heading: args.heading,
-        speed: args.speed,
-        isTracking: args.isTracking,
-        updatedAt: Date.now(),
-        sessionId: args.sessionId,
+        orderId:          args.orderId,
+        riderEmail:       args.riderEmail,
+        riderName:        args.riderName,
+        ...patch,
       });
     }
 
@@ -285,6 +294,13 @@ export const getRiderLocation = query({
       .query("riderLocations")
       .withIndex("by_orderId", q => q.eq("orderId", orderId))
       .first();
+  },
+});
+
+// ── NEW: Get last known locations of ALL riders (for AdminRiders map) ──
+export const getAllRiderLastLocations = query({
+  handler: async ({ db }) => {
+    return await db.query("riderLocations").collect();
   },
 });
 
@@ -307,9 +323,7 @@ export const stopRiderTracking = mutation({
   },
 });
 
-// ══════════════════════════════════════════════════════════════
-// RIDERS.TS PATCH — idagdag sa DULO ng convex/riders.ts
-// ══════════════════════════════════════════════════════════════
+// ── Rider Link Session (with admin notification) ──
 
 export const claimRiderLinkSession = mutation({
   args: {
@@ -330,13 +344,37 @@ export const claimRiderLinkSession = mutation({
     const now        = Date.now();
     const TWO_MINUTES = 2 * 60 * 1000;
 
-    // Allow if: no session, same session (refresh), or expired (>2 min)
-    if (!existing || existing === sessionId || (now - existingAt) > TWO_MINUTES) {
+    const isNewClaim    = !existing;
+    const isSameSession = existing === sessionId;
+    const isExpired     = (now - existingAt) > TWO_MINUTES;
+    const isReopening   = !isSameSession && (isNewClaim || isExpired);
+
+    if (isSameSession || isNewClaim || isExpired) {
       await db.patch(order._id, {
         riderLinkSessionId:  sessionId,
         riderLinkSessionAt:  now,
         riderLinkDeviceInfo: deviceInfo ?? "Unknown device",
       });
+
+      // ── Notify admin ──
+      const riderName   = order.riderInfo?.name || "Rider";
+      const shortId     = orderId.slice(-8).toUpperCase();
+      const device      = deviceInfo ?? "Unknown device";
+      const notifType   = isReopening ? "rider_link_reopened" : "rider_link_opened";
+      const message     = isReopening
+        ? `🔄 ${riderName} re-opened the delivery link on ${device} (Order #${shortId})`
+        : `🛵 ${riderName} opened the delivery link on ${device} (Order #${shortId})`;
+
+      await db.insert("riderNotifications", {
+        type:         notifType,
+        orderId,
+        customerName: order.customerName ?? "Customer",
+        total:        order.finalTotal   ?? order.total ?? 0,
+        message,
+        createdAt:    new Date().toISOString(),
+        read:         false,
+      });
+
       return { allowed: true };
     }
 
