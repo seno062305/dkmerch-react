@@ -487,3 +487,120 @@
   flex-shrink: 0;
   border-top: 1px solid rgba(255,255,255,0.08);
 }
+
+/* ══════════════════════════════════════════
+   IDAGDAG SA DULO ng RiderTrack.css
+   (CSS para sa "Link Already In Use" screen)
+   ══════════════════════════════════════════ */
+
+/* ── Link In Use Screen ── */
+.rt-inuse-screen {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  background: #fdf2f2;
+  font-family: 'Segoe UI', sans-serif;
+  text-align: center;
+  gap: 16px;
+}
+.rt-inuse-icon {
+  font-size: 72px;
+  line-height: 1;
+}
+.rt-inuse-title {
+  font-size: 24px;
+  font-weight: 800;
+  color: #991b1b;
+  margin: 0;
+}
+.rt-inuse-desc {
+  font-size: 15px;
+  color: #374151;
+  margin: 0;
+  max-width: 340px;
+  line-height: 1.6;
+}
+.rt-inuse-info-box {
+  background: white;
+  border: 1px solid #fca5a5;
+  border-radius: 12px;
+  padding: 16px 20px;
+  max-width: 360px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.rt-inuse-info-box p {
+  font-size: 13px;
+  color: #4b5563;
+  margin: 0;
+  line-height: 1.5;
+  text-align: left;
+}
+.rt-inuse-retry-btn {
+  background: linear-gradient(135deg, #6a0dad, #9b30ff);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  padding: 14px 32px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.15s;
+  min-width: 180px;
+}
+.rt-inuse-retry-btn:hover   { opacity: 0.9; transform: translateY(-1px); }
+.rt-inuse-retry-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.rt-inuse-hint {
+  font-size: 13px;
+  color: #9ca3af;
+  margin: 0;
+  max-width: 320px;
+  line-height: 1.5;
+}
+
+/* ── Fullscreen Map Modal ── */
+.rt-fullmap-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  background: #1a1a2e;
+}
+.rt-fullmap-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 18px;
+  background: rgba(20,20,40,0.97);
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  z-index: 10000;
+  flex-shrink: 0;
+}
+.rt-fullmap-title { color: white; font-size: 15px; font-weight: 700; letter-spacing: 0.3px; }
+.rt-fullmap-bar-right { display: flex; align-items: center; gap: 12px; }
+.rt-fullmap-live {
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(5,150,105,0.2); border: 1px solid rgba(5,150,105,0.5);
+  color: #34d399; font-size: 12px; font-weight: 700;
+  padding: 4px 10px; border-radius: 20px;
+}
+.rt-fullmap-close-btn {
+  background: rgba(255,255,255,0.12); color: white;
+  border: 1px solid rgba(255,255,255,0.2); border-radius: 8px;
+  padding: 6px 14px; font-size: 13px; font-weight: 700;
+  cursor: pointer; transition: background 0.2s;
+}
+.rt-fullmap-close-btn:hover { background: rgba(255,255,255,0.22); }
+.rt-fullmap-map { flex: 1; width: 100%; min-height: 0; }
+.rt-fullmap-legend {
+  padding: 8px 16px; background: rgba(20,20,40,0.95);
+  color: rgba(255,255,255,0.7); font-size: 12px; font-weight: 600;
+  text-align: center; flex-shrink: 0;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}

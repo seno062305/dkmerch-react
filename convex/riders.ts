@@ -306,3 +306,80 @@ export const stopRiderTracking = mutation({
     return { success: true };
   },
 });
+
+// ══════════════════════════════════════════════════════════════
+// RIDERS.TS PATCH — idagdag sa DULO ng convex/riders.ts
+// ══════════════════════════════════════════════════════════════
+
+export const claimRiderLinkSession = mutation({
+  args: {
+    orderId:    v.string(),
+    sessionId:  v.string(),
+    deviceInfo: v.optional(v.string()),
+  },
+  handler: async ({ db }, { orderId, sessionId, deviceInfo }) => {
+    const order = await db
+      .query("orders")
+      .withIndex("by_orderId", q => q.eq("orderId", orderId))
+      .first();
+
+    if (!order) return { allowed: false, reason: "order_not_found" };
+
+    const existing   = order.riderLinkSessionId;
+    const existingAt = order.riderLinkSessionAt ?? 0;
+    const now        = Date.now();
+    const TWO_MINUTES = 2 * 60 * 1000;
+
+    // Allow if: no session, same session (refresh), or expired (>2 min)
+    if (!existing || existing === sessionId || (now - existingAt) > TWO_MINUTES) {
+      await db.patch(order._id, {
+        riderLinkSessionId:  sessionId,
+        riderLinkSessionAt:  now,
+        riderLinkDeviceInfo: deviceInfo ?? "Unknown device",
+      });
+      return { allowed: true };
+    }
+
+    return {
+      allowed:    false,
+      reason:     "already_in_use",
+      takenAt:    existingAt,
+      deviceInfo: order.riderLinkDeviceInfo ?? "another device",
+    };
+  },
+});
+
+export const heartbeatRiderLinkSession = mutation({
+  args: { orderId: v.string(), sessionId: v.string() },
+  handler: async ({ db }, { orderId, sessionId }) => {
+    const order = await db
+      .query("orders")
+      .withIndex("by_orderId", q => q.eq("orderId", orderId))
+      .first();
+    if (!order) return { success: false };
+    if (order.riderLinkSessionId === sessionId) {
+      await db.patch(order._id, { riderLinkSessionAt: Date.now() });
+      return { success: true };
+    }
+    return { success: false, reason: "session_replaced" };
+  },
+});
+
+export const releaseRiderLinkSession = mutation({
+  args: { orderId: v.string(), sessionId: v.string() },
+  handler: async ({ db }, { orderId, sessionId }) => {
+    const order = await db
+      .query("orders")
+      .withIndex("by_orderId", q => q.eq("orderId", orderId))
+      .first();
+    if (!order) return { success: false };
+    if (order.riderLinkSessionId === sessionId) {
+      await db.patch(order._id, {
+        riderLinkSessionId:  undefined,
+        riderLinkSessionAt:  undefined,
+        riderLinkDeviceInfo: undefined,
+      });
+    }
+    return { success: true };
+  },
+});

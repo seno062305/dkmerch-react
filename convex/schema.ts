@@ -2,6 +2,7 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
+
 export default defineSchema({
   users: defineTable({
     name: v.string(),
@@ -112,6 +113,10 @@ export default defineSchema({
     notes: v.optional(v.string()),
     riderId: v.optional(v.string()),
     riderInfo: v.optional(v.any()),
+    riderGpsLink: v.optional(v.string()),  
+    riderLinkSessionId:  v.optional(v.string()),
+    riderLinkSessionAt:  v.optional(v.number()),
+    riderLinkDeviceInfo: v.optional(v.string()), // Google Maps live share link (manual by admin)
     deliveryOtp: v.optional(v.string()),
     deliveryOtpVerified: v.optional(v.boolean()),
     deliveryProofPhoto: v.optional(v.string()),
@@ -125,12 +130,19 @@ export default defineSchema({
     outForDeliveryAt: v.optional(v.string()),
     deliveryConfirmedAt: v.optional(v.string()),
     cancelledAt: v.optional(v.string()),
-    refundStatus: v.optional(v.string()),
-    refundReason: v.optional(v.string()),
-    refundComment: v.optional(v.string()),
-    refundRequestedAt: v.optional(v.string()),
-    refundResolvedAt: v.optional(v.string()),
-    refundAdminNote: v.optional(v.string()),
+    refundStatus:          v.optional(v.string()),
+    refundReason:          v.optional(v.string()),
+    refundComment:         v.optional(v.string()),
+    refundPhotoId:         v.optional(v.string()),
+    refundMethod:          v.optional(v.string()),
+    refundAccountName:     v.optional(v.string()),
+    refundAccountNumber:   v.optional(v.string()),
+    refundAmount:          v.optional(v.number()),
+    refundRequestedAt:     v.optional(v.string()),
+    refundResolvedAt:      v.optional(v.string()),
+    refundPaidAt:          v.optional(v.string()),
+    refundAdminNote:       v.optional(v.string()),
+    refundHistory:         v.optional(v.any()),
   })
     .index("by_orderId", ["orderId"])
     .index("by_email", ["email"]),
@@ -166,13 +178,11 @@ export default defineSchema({
     activeSessionId: v.optional(v.string()),
     activeDeviceAt:  v.optional(v.number()),
     kickedAt: v.optional(v.number()),
-    // ── NEW: Identity verification photos (base64 or URL) ──
     riderPhoto: v.optional(v.union(v.string(), v.null())),
     validId1: v.optional(v.union(v.string(), v.null())),
     validId2: v.optional(v.union(v.string(), v.null())),
-    // ── NEW: DKMerch Rider ID (auto-generated on approval) ──
-    dkRiderId: v.optional(v.string()),       // e.g. "DKR-2025-0001"
-    dkRiderIdGeneratedAt: v.optional(v.string()), // ISO timestamp
+    dkRiderId: v.optional(v.string()),
+    dkRiderIdGeneratedAt: v.optional(v.string()),
   })
     .index("by_email", ["email"])
     .index("by_status", ["status"]),
