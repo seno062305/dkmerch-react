@@ -144,7 +144,6 @@ const WaybillModal = ({ order, onClose }) => {
                   <div><div className="wb-field-lbl">Contact</div><div className="wb-field-val">support@dkmerch.com</div></div>
                 </div>
               </div>
-              {/* ✅ FIX: Added Order ID field inside Recipient box */}
               <div className="wb-box">
                 <div className="wb-box-hd">📍 To (Recipient)</div>
                 <div className="wb-box-body">
@@ -561,6 +560,9 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
   const hasRefund        = !!(order.refundStatus);
   const pm = getPaymentMethodLabel(order);
 
+  // Print waybill only allowed when order is confirmed (not pending)
+  const canPrintWaybill = isPaid && currentStatus !== 'pending';
+
   const canNotify       = isPaid && (currentStatus === 'confirmed' || currentStatus === 'shipped') && !!order.riderInfo?.name;
   const alreadyNotified = currentStatus === 'out_for_delivery';
 
@@ -845,8 +847,19 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
 
           <div className="modal-actions">
             {isPaid && (
-              <button className="print-waybill-btn-bottom" onClick={() => setShowWaybill(true)}>
+              <button
+                className="print-waybill-btn-bottom"
+                onClick={() => canPrintWaybill && setShowWaybill(true)}
+                disabled={!canPrintWaybill}
+                title={!canPrintWaybill ? 'Confirm the order first before printing waybill' : 'Print Waybill'}
+                style={!canPrintWaybill ? { opacity: 0.45, cursor: 'not-allowed', filter: 'grayscale(0.5)' } : {}}
+              >
                 <i className="fas fa-print"></i> Print Waybill
+                {!canPrintWaybill && (
+                  <span style={{ fontSize: '11px', fontWeight: 600, opacity: 0.85, marginLeft: 4 }}>
+                    (Confirm order first)
+                  </span>
+                )}
               </button>
             )}
             <button className="delete-order-btn" onClick={() => onDelete(order.orderId)}><i className="fas fa-trash"></i> Delete Order</button>
