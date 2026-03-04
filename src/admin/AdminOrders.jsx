@@ -28,17 +28,15 @@ const REFUND_METHOD_LABELS = {
 ══════════════════════════════════════ */
 const WaybillModal = ({ order, onClose }) => {
   const printRef = useRef(null);
+  const [paperSize, setPaperSize] = useState('label'); // 'label' = 100x150mm, 'a4' = A4
 
   const subtotal    = order.subtotal    || 0;
   const shippingFee = order.shippingFee || 0;
   const discount    = order.discountAmount || 0;
   const finalTotal  = order.finalTotal  ?? ((order.total || 0) - discount);
   const hasPromo    = !!(order.promoCode && discount > 0);
-  const orderDate   = order._creationTime
-    ? new Date(order._creationTime).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })
-    : 'N/A';
-  const trackUrl = `${SITE_URL}/track-order?order=${order.orderId}`;
-  const shortId  = order.orderId?.slice(-8).toUpperCase();
+  const trackUrl    = `${SITE_URL}/track-order?order=${order.orderId}`;
+  const shortId     = order.orderId?.slice(-8).toUpperCase();
 
   const handlePrint = () => {
     const node = printRef.current;
@@ -53,57 +51,112 @@ const WaybillModal = ({ order, onClose }) => {
     const printWindow = window.open('', '_blank', 'width=900,height=700');
     if (!printWindow) { alert('Pop-up blocked! Please allow pop-ups for this site.'); return; }
 
+    // ── Label (100x150mm) CSS — crisp, no scaling ──
+    const labelCss = `
+      * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      @page { size: 100mm 150mm; margin: 3mm; }
+      html, body { width: 100mm; height: 150mm; overflow: hidden; }
+      body { font-family: 'Segoe UI', Arial, sans-serif; background: white; font-size: 7pt; }
+      .waybill-print-root { width: 94mm; }
+
+      .wb-header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 4px; border-bottom: 2px solid #fc1268; margin-bottom: 5px; }
+      .wb-brand-name { font-size: 13pt; font-weight: 900; color: #fc1268; line-height: 1; }
+      .wb-brand-sub { font-size: 6pt; color: #6b7280; font-weight: 600; margin-top: 1px; }
+      .wb-brand-contact { margin-top: 2px; font-size: 5.5pt; color: #6b7280; }
+      .wb-qr-block { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+      .wb-qr-block svg { width: 36px !important; height: 36px !important; }
+      .wb-qr-label { font-size: 5pt; color: #9ca3af; font-weight: 700; text-transform: uppercase; }
+
+      .wb-order-banner { background: linear-gradient(135deg,#fc1268,#9c27b0) !important; color: white !important; border-radius: 4px; padding: 4px 8px; margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center; }
+      .wb-order-id { font-size: 11pt; font-weight: 900; letter-spacing: 1.5px; font-family: 'Courier New', monospace; }
+      .wb-order-date { font-size: 6pt; opacity: 0.85; }
+
+      .wb-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 5px; }
+      .wb-box { border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; }
+      .wb-box-hd { background: #f3f4f6 !important; padding: 2px 6px; font-size: 6pt; font-weight: 800; color: #374151; text-transform: uppercase; border-bottom: 1px solid #e5e7eb; }
+      .wb-box-body { padding: 4px 6px; display: flex; flex-direction: column; gap: 3px; }
+      .wb-field-lbl { font-size: 5pt; color: #9ca3af; font-weight: 700; text-transform: uppercase; margin-bottom: 0; }
+      .wb-field-val { font-size: 7pt; color: #1f2937; font-weight: 600; line-height: 1.2; }
+
+      .wb-items-box { border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; margin-bottom: 4px; }
+      .wb-items-hd { background: #f3f4f6 !important; padding: 2px 6px; font-size: 6pt; font-weight: 800; color: #374151; text-transform: uppercase; border-bottom: 1px solid #e5e7eb; }
+      .wb-items-table { width: 100%; border-collapse: collapse; }
+      .wb-items-table th { padding: 2px 5px; text-align: left; font-size: 5.5pt; font-weight: 700; color: #6b7280; border-bottom: 1px solid #f0f0f0; }
+      .wb-items-table td { padding: 2px 5px; font-size: 6.5pt; color: #1f2937; border-bottom: 1px solid #f8f8f8; }
+      .wb-items-table tr:last-child td { border-bottom: none; }
+      .td-right { text-align: right; font-weight: 700; }
+      .td-center { text-align: center; }
+
+      .wb-totals { border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; margin-bottom: 4px; }
+      .wb-totals-row { display: flex; justify-content: space-between; padding: 2px 7px; font-size: 6.5pt; border-bottom: 1px solid #f0f0f0; }
+      .wb-totals-row:last-child { border-bottom: none; }
+      .wb-grand { background: #fff1f5 !important; font-size: 8pt; font-weight: 800; color: #fc1268 !important; }
+      .wb-promo-row { color: #16a34a; font-weight: 600; }
+
+      .wb-sig-strip { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 4px; }
+      .wb-sig-box { border: 1px dashed #d1d5db; border-radius: 3px; padding: 4px 6px; }
+      .wb-sig-lbl { font-size: 5.5pt; font-weight: 700; color: #6b7280; text-transform: uppercase; margin-bottom: 10px; }
+      .wb-sig-line { border-top: 1px solid #374151; padding-top: 2px; font-size: 5pt; color: #9ca3af; }
+
+      .wb-footer { text-align: center; font-size: 5.5pt; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 3px; }
+      svg { display: block; }
+    `;
+
+    // ── A4 CSS — original full-size ──
+    const a4Css = `
+      * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      @page { size: A4 portrait; margin: 8mm; }
+      body { font-family: 'Segoe UI', Arial, sans-serif; background: white; }
+      .waybill-print-root { width: 100%; }
+      .wb-header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 10px; border-bottom: 3px solid #fc1268; margin-bottom: 12px; }
+      .wb-brand-name { font-size: 24px; font-weight: 900; color: #fc1268; line-height: 1; }
+      .wb-brand-sub { font-size: 11px; color: #6b7280; font-weight: 600; margin-top: 3px; }
+      .wb-brand-contact { margin-top: 5px; font-size: 10px; color: #6b7280; }
+      .wb-qr-block { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+      .wb-qr-label { font-size: 9px; color: #9ca3af; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+      .wb-order-banner { background: linear-gradient(135deg, #fc1268, #9c27b0) !important; color: white !important; border-radius: 8px; padding: 10px 16px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+      .wb-order-id { font-size: 20px; font-weight: 900; letter-spacing: 2px; font-family: 'Courier New', monospace; }
+      .wb-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+      .wb-box { border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
+      .wb-box-hd { background: #f3f4f6 !important; padding: 6px 12px; font-size: 10px; font-weight: 800; color: #374151; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #e5e7eb; }
+      .wb-box-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+      .wb-field-lbl { font-size: 9px; color: #9ca3af; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 1px; }
+      .wb-field-val { font-size: 12px; color: #1f2937; font-weight: 600; }
+      .wb-items-box { border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; margin-bottom: 12px; }
+      .wb-items-hd { background: #f3f4f6 !important; padding: 6px 12px; font-size: 10px; font-weight: 800; color: #374151; text-transform: uppercase; border-bottom: 1px solid #e5e7eb; }
+      .wb-items-table { width: 100%; border-collapse: collapse; }
+      .wb-items-table th { padding: 6px 10px; text-align: left; font-size: 10px; font-weight: 700; color: #6b7280; border-bottom: 1px solid #f0f0f0; }
+      .wb-items-table td { padding: 6px 10px; font-size: 12px; color: #1f2937; border-bottom: 1px solid #f8f8f8; }
+      .wb-items-table tr:last-child td { border-bottom: none; }
+      .td-right { text-align: right; font-weight: 700; }
+      .td-center { text-align: center; }
+      .wb-totals { border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; margin-bottom: 12px; }
+      .wb-totals-row { display: flex; justify-content: space-between; padding: 6px 14px; font-size: 12px; border-bottom: 1px solid #f0f0f0; }
+      .wb-totals-row:last-child { border-bottom: none; }
+      .wb-grand { background: #fff1f5 !important; font-size: 14px; font-weight: 800; color: #fc1268 !important; }
+      .wb-promo-row { color: #16a34a; font-weight: 600; }
+      .wb-sig-strip { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+      .wb-sig-box { border: 1px dashed #d1d5db; border-radius: 6px; padding: 10px 14px; }
+      .wb-sig-lbl { font-size: 9px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 26px; }
+      .wb-sig-line { border-top: 1px solid #374151; padding-top: 4px; font-size: 9px; color: #9ca3af; }
+      .wb-footer { text-align: center; font-size: 10px; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 8px; }
+      svg { display: block; }
+    `;
+
     printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <title>Waybill — ${shortId} | DKMerch</title>
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-  @page { size: A4 portrait; margin: 8mm; }
-  body { font-family: 'Segoe UI', Arial, sans-serif; background: white; }
-  .waybill-print-root { width: 100%; }
-  .wb-header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 10px; border-bottom: 3px solid #fc1268; margin-bottom: 12px; }
-  .wb-brand-name { font-size: 24px; font-weight: 900; color: #fc1268; line-height: 1; }
-  .wb-brand-sub { font-size: 11px; color: #6b7280; font-weight: 600; margin-top: 3px; }
-  .wb-brand-contact { margin-top: 5px; font-size: 10px; color: #6b7280; }
-  .wb-qr-block { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-  .wb-qr-label { font-size: 9px; color: #9ca3af; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
-  .wb-order-banner { background: linear-gradient(135deg, #fc1268, #9c27b0) !important; color: white !important; border-radius: 8px; padding: 10px 16px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
-  .wb-order-id { font-size: 20px; font-weight: 900; letter-spacing: 2px; font-family: 'Courier New', monospace; }
-  .wb-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
-  .wb-box { border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
-  .wb-box-hd { background: #f3f4f6 !important; padding: 6px 12px; font-size: 10px; font-weight: 800; color: #374151; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #e5e7eb; }
-  .wb-box-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
-  .wb-field-lbl { font-size: 9px; color: #9ca3af; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 1px; }
-  .wb-field-val { font-size: 12px; color: #1f2937; font-weight: 600; }
-  .wb-items-box { border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; margin-bottom: 12px; }
-  .wb-items-hd { background: #f3f4f6 !important; padding: 6px 12px; font-size: 10px; font-weight: 800; color: #374151; text-transform: uppercase; border-bottom: 1px solid #e5e7eb; }
-  .wb-items-table { width: 100%; border-collapse: collapse; }
-  .wb-items-table th { padding: 6px 10px; text-align: left; font-size: 10px; font-weight: 700; color: #6b7280; border-bottom: 1px solid #f0f0f0; }
-  .wb-items-table td { padding: 6px 10px; font-size: 12px; color: #1f2937; border-bottom: 1px solid #f8f8f8; }
-  .wb-items-table tr:last-child td { border-bottom: none; }
-  .td-right { text-align: right; font-weight: 700; }
-  .td-center { text-align: center; }
-  .wb-totals { border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; margin-bottom: 12px; }
-  .wb-totals-row { display: flex; justify-content: space-between; padding: 6px 14px; font-size: 12px; border-bottom: 1px solid #f0f0f0; }
-  .wb-totals-row:last-child { border-bottom: none; }
-  .wb-grand { background: #fff1f5 !important; font-size: 14px; font-weight: 800; color: #fc1268 !important; }
-  .wb-promo-row { color: #16a34a; font-weight: 600; }
-  .wb-sig-strip { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
-  .wb-sig-box { border: 1px dashed #d1d5db; border-radius: 6px; padding: 10px 14px; }
-  .wb-sig-lbl { font-size: 9px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 26px; }
-  .wb-sig-line { border-top: 1px solid #374151; padding-top: 4px; font-size: 9px; color: #9ca3af; }
-  .wb-footer { text-align: center; font-size: 10px; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 8px; }
-  svg { display: block; }
-</style>
+<style>${paperSize === 'label' ? labelCss : a4Css}</style>
 </head><body>
 <div class="waybill-print-root">${printContents}</div>
 <script>
-  window.onload = function() {
-    setTimeout(function() { window.print(); }, 400);
-  };
+  window.onload = function() { setTimeout(function() { window.print(); }, 400); };
 <\/script>
 </body></html>`);
     printWindow.document.close();
   };
+
+  // QR size: smaller for label, normal for A4
+  const qrSize = paperSize === 'label' ? 36 : 90;
 
   return (
     <div className="waybill-overlay" onClick={onClose}>
@@ -113,6 +166,30 @@ const WaybillModal = ({ order, onClose }) => {
             <i className="fas fa-print"></i> Print Waybill — #{shortId}
           </div>
           <div className="waybill-toolbar-actions">
+            {/* Paper size toggle */}
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginRight: '8px' }}>
+              <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600 }}>Size:</span>
+              <button
+                onClick={() => setPaperSize('label')}
+                style={{
+                  padding: '4px 10px', borderRadius: '6px', border: '1.5px solid',
+                  borderColor: paperSize === 'label' ? '#fc1268' : '#e5e7eb',
+                  background: paperSize === 'label' ? '#fff1f5' : 'white',
+                  color: paperSize === 'label' ? '#fc1268' : '#6b7280',
+                  fontWeight: 700, fontSize: '12px', cursor: 'pointer'
+                }}
+              >🏷️ Label (100×150mm)</button>
+              <button
+                onClick={() => setPaperSize('a4')}
+                style={{
+                  padding: '4px 10px', borderRadius: '6px', border: '1.5px solid',
+                  borderColor: paperSize === 'a4' ? '#fc1268' : '#e5e7eb',
+                  background: paperSize === 'a4' ? '#fff1f5' : 'white',
+                  color: paperSize === 'a4' ? '#fc1268' : '#6b7280',
+                  fontWeight: 700, fontSize: '12px', cursor: 'pointer'
+                }}
+              >📄 A4</button>
+            </div>
             <button className="waybill-print-btn" onClick={handlePrint}>
               <i className="fas fa-print"></i> Print
             </button>
@@ -130,9 +207,13 @@ const WaybillModal = ({ order, onClose }) => {
                 <div className="wb-brand-contact">📍 Manila, Philippines &nbsp;|&nbsp; support@dkmerch.com</div>
               </div>
               <div className="wb-qr-block">
-                <QRCodeSVG value={trackUrl} size={90} level="M" includeMargin={false} fgColor="#1f2937" />
+                <QRCodeSVG value={trackUrl} size={qrSize} level="M" includeMargin={false} fgColor="#1f2937" />
                 <div className="wb-qr-label">Scan to Track</div>
               </div>
+            </div>
+
+            <div className="wb-order-banner">
+              <div className="wb-order-id">#{shortId}</div>
             </div>
 
             <div className="wb-cols">
@@ -148,7 +229,7 @@ const WaybillModal = ({ order, onClose }) => {
                 <div className="wb-box-hd">📍 To (Recipient)</div>
                 <div className="wb-box-body">
                   <div><div className="wb-field-lbl">Order ID</div><div className="wb-field-val" style={{ fontFamily: 'Courier New, monospace', fontWeight: 800, color: '#fc1268' }}>#{shortId}</div></div>
-                  <div><div className="wb-field-lbl">Name</div><div className="wb-field-val" style={{ fontWeight: 800, fontSize: '14px' }}>{order.customerName || 'N/A'}</div></div>
+                  <div><div className="wb-field-lbl">Name</div><div className="wb-field-val" style={{ fontWeight: 800 }}>{order.customerName || 'N/A'}</div></div>
                   <div><div className="wb-field-lbl">Phone</div><div className="wb-field-val">{order.phone || 'N/A'}</div></div>
                   <div><div className="wb-field-lbl">Address</div><div className="wb-field-val">{order.shippingAddress || 'N/A'}</div></div>
                 </div>
@@ -156,9 +237,9 @@ const WaybillModal = ({ order, onClose }) => {
             </div>
 
             {order.riderInfo?.name && (
-              <div className="wb-box" style={{ marginBottom: '12px' }}>
+              <div className="wb-box" style={{ marginBottom: '5px' }}>
                 <div className="wb-box-hd">🛵 Assigned Rider</div>
-                <div className="wb-box-body" style={{ flexDirection: 'row', gap: '20px', flexWrap: 'wrap' }}>
+                <div className="wb-box-body" style={{ flexDirection: 'row', gap: '12px', flexWrap: 'wrap' }}>
                   <div><div className="wb-field-lbl">Name</div><div className="wb-field-val">{order.riderInfo.name}</div></div>
                   <div><div className="wb-field-lbl">Phone</div><div className="wb-field-val">{order.riderInfo.phone || 'N/A'}</div></div>
                   {order.riderInfo.plate && <div><div className="wb-field-lbl">Plate No.</div><div className="wb-field-val">{order.riderInfo.plate}</div></div>}
@@ -171,17 +252,14 @@ const WaybillModal = ({ order, onClose }) => {
               <table className="wb-items-table">
                 <thead>
                   <tr>
-                    <th>#</th>
-                    <th>Item</th>
-                    <th className="td-center">Qty</th>
-                    <th className="td-right">Unit Price</th>
-                    <th className="td-right">Subtotal</th>
+                    <th>#</th><th>Item</th><th className="td-center">Qty</th>
+                    <th className="td-right">Unit Price</th><th className="td-right">Subtotal</th>
                   </tr>
                 </thead>
                 <tbody>
                   {order.items?.map((item, idx) => (
                     <tr key={idx}>
-                      <td style={{ color: '#9ca3af', fontSize: '11px' }}>{idx + 1}</td>
+                      <td style={{ color: '#9ca3af' }}>{idx + 1}</td>
                       <td style={{ fontWeight: 600 }}>{item.name || 'N/A'}</td>
                       <td className="td-center">{item.quantity}</td>
                       <td className="td-right">₱{(item.price || 0).toLocaleString('en-PH')}</td>
@@ -195,18 +273,14 @@ const WaybillModal = ({ order, onClose }) => {
             </div>
 
             <div className="wb-totals">
-              <div className="wb-totals-row">
-                <span>Subtotal</span>
-                <strong>₱{subtotal.toLocaleString('en-PH')}</strong>
-              </div>
+              <div className="wb-totals-row"><span>Subtotal</span><strong>₱{subtotal.toLocaleString('en-PH')}</strong></div>
               <div className="wb-totals-row">
                 <span>Shipping{order.shippingDistanceKm ? ` (~${order.shippingDistanceKm} km)` : ''}</span>
                 <strong>{shippingFee === 0 ? 'FREE' : `₱${shippingFee.toLocaleString('en-PH')}`}</strong>
               </div>
               {hasPromo && (
                 <div className="wb-totals-row wb-promo-row">
-                  <span>Promo ({order.promoCode})</span>
-                  <strong>−₱{discount.toLocaleString('en-PH')}</strong>
+                  <span>Promo ({order.promoCode})</span><strong>−₱{discount.toLocaleString('en-PH')}</strong>
                 </div>
               )}
               <div className="wb-totals-row wb-grand">
@@ -230,7 +304,7 @@ const WaybillModal = ({ order, onClose }) => {
               <strong style={{ color: '#fc1268' }}>DKMerch</strong> · K-Pop Paradise · Manila, Philippines
               &nbsp;|&nbsp; Order #{shortId} &nbsp;|&nbsp; Printed {new Date().toLocaleDateString('en-PH')}
               <br />
-              <span style={{ fontSize: '9px', marginTop: '3px', display: 'block' }}>Track: {trackUrl}</span>
+              <span style={{ fontSize: '9px', marginTop: '2px', display: 'block' }}>Track: {trackUrl}</span>
             </div>
 
           </div>
@@ -377,18 +451,9 @@ const AdminOrders = () => {
           const count = tabCounts[t.key] ?? 0;
           const isRefund = t.key === 'refund';
           return (
-            <button
-              key={t.key}
-              className={`tab-btn ${activeTab === t.key ? 'active' : ''} ${isRefund ? 'tab-btn-refund' : ''}`}
-              onClick={() => setActiveTab(t.key)}
-            >
-              <i className={`fas ${t.icon}`}></i>
-              {t.label}
-              {count > 0 && (
-                <span className={`tab-count-badge ${isRefund ? 'tab-count-badge--refund' : ''}`}>
-                  {count}
-                </span>
-              )}
+            <button key={t.key} className={`tab-btn ${activeTab === t.key ? 'active' : ''} ${isRefund ? 'tab-btn-refund' : ''}`} onClick={() => setActiveTab(t.key)}>
+              <i className={`fas ${t.icon}`}></i>{t.label}
+              {count > 0 && <span className={`tab-count-badge ${isRefund ? 'tab-count-badge--refund' : ''}`}>{count}</span>}
             </button>
           );
         })}
@@ -530,7 +595,6 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
   const [resolvingRefund,   setResolvingRefund]   = useState(false);
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
   const [showWaybill,       setShowWaybill]       = useState(false);
-
   const [notifying, setNotifying] = useState(false);
   const [notified,  setNotified]  = useState(false);
   const notifyMutation = useMutation(api.orders.notifyCustomerOutForDelivery);
@@ -560,9 +624,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
   const hasRefund        = !!(order.refundStatus);
   const pm = getPaymentMethodLabel(order);
 
-  // Print waybill only allowed when order is confirmed (not pending)
   const canPrintWaybill = isPaid && currentStatus !== 'pending';
-
   const canNotify       = isPaid && (currentStatus === 'confirmed' || currentStatus === 'shipped') && !!order.riderInfo?.name;
   const alreadyNotified = currentStatus === 'out_for_delivery';
 
@@ -578,27 +640,18 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
     if (!order.email) { alert('No customer email found for this order.'); return; }
     setNotifying(true);
     try {
-      await notifyMutation({
-        orderId:       order.orderId,
-        riderName:     ri.name,
-        riderPhone:    ri.phone,
-        riderPlate:    ri.plate || undefined,
-        customerEmail: order.email,
-      });
+      await notifyMutation({ orderId: order.orderId, riderName: ri.name, riderPhone: ri.phone, riderPlate: ri.plate || undefined, customerEmail: order.email });
       setNotified(true);
       setTimeout(() => setNotified(false), 4000);
     } catch (e) {
       console.error('Notify error:', e);
       alert('Failed to notify customer. Please try again.');
-    } finally {
-      setNotifying(false);
-    }
+    } finally { setNotifying(false); }
   };
 
   return (
     <div className="order-modal-overlay" onClick={onClose}>
       <div className="order-modal" onClick={e => e.stopPropagation()}>
-
         <div className="modal-header">
           <div>
             <h2>Order #{order.orderId?.slice(-8) || 'N/A'}</h2>
@@ -619,7 +672,6 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
         </div>
 
         <div className="modal-body">
-
           {!isPaid && <div className="flow-notice warning"><i className="fas fa-exclamation-triangle"></i><div><strong>Payment not yet confirmed</strong><p>Do not confirm until payment is verified via PayMongo.</p></div></div>}
           {isPaid && currentStatus === 'pending' && <div className="flow-notice success"><i className="fas fa-check-circle"></i><div><strong>Payment received!</strong><p>Confirm order below. Then set rider info and click Notify Customer.</p></div></div>}
           {isPaid && currentStatus === 'confirmed' && <div className="flow-notice info"><i className="fas fa-motorcycle"></i><div><strong>Order confirmed</strong><p>Set rider info in AdminRiders, then click <strong>Notify Customer</strong> to dispatch.</p></div></div>}
@@ -818,20 +870,10 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                       {order.riderInfo.phone && <> · {order.riderInfo.phone}</>}
                       {order.riderInfo.plate && <> · {order.riderInfo.plate}</>}
                     </div>
-                    <button
-                      className={`notify-customer-btn ${notified ? 'notify-customer-btn--done' : ''}`}
-                      onClick={handleNotifyCustomer}
-                      disabled={notifying || !canNotify}
-                    >
-                      {notifying
-                        ? <><i className="fas fa-spinner fa-spin"></i> Sending…</>
-                        : notified
-                        ? <><i className="fas fa-check-circle"></i> Customer Notified!</>
-                        : <><i className="fas fa-bell"></i> Notify Customer (Out for Delivery)</>}
+                    <button className={`notify-customer-btn ${notified ? 'notify-customer-btn--done' : ''}`} onClick={handleNotifyCustomer} disabled={notifying || !canNotify}>
+                      {notifying ? <><i className="fas fa-spinner fa-spin"></i> Sending…</> : notified ? <><i className="fas fa-check-circle"></i> Customer Notified!</> : <><i className="fas fa-bell"></i> Notify Customer (Out for Delivery)</>}
                     </button>
-                    {notified && order.deliveryOtp && (
-                      <div className="notify-otp-display">Generated OTP: <strong>{order.deliveryOtp}</strong></div>
-                    )}
+                    {notified && order.deliveryOtp && <div className="notify-otp-display">Generated OTP: <strong>{order.deliveryOtp}</strong></div>}
                   </>
                 )}
               </div>
@@ -855,11 +897,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                 style={!canPrintWaybill ? { opacity: 0.45, cursor: 'not-allowed', filter: 'grayscale(0.5)' } : {}}
               >
                 <i className="fas fa-print"></i> Print Waybill
-                {!canPrintWaybill && (
-                  <span style={{ fontSize: '11px', fontWeight: 600, opacity: 0.85, marginLeft: 4 }}>
-                    (Confirm order first)
-                  </span>
-                )}
+                {!canPrintWaybill && <span style={{ fontSize: '11px', fontWeight: 600, opacity: 0.85, marginLeft: 4 }}>(Confirm order first)</span>}
               </button>
             )}
             <button className="delete-order-btn" onClick={() => onDelete(order.orderId)}><i className="fas fa-trash"></i> Delete Order</button>
@@ -867,24 +905,9 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
         </div>
       </div>
 
-      {showCancelModal && (
-        <CancelReasonModal
-          order={order}
-          onConfirm={reason => { onCancelWithReason(order.orderId, reason); setShowCancelModal(false); }}
-          onClose={() => setShowCancelModal(false)}
-        />
-      )}
-      {showRejectConfirm && (
-        <RejectConfirmDialog
-          order={order}
-          adminNote={refundAdminNote}
-          onConfirm={() => handleRefundResolve('rejected')}
-          onCancel={() => setShowRejectConfirm(false)}
-        />
-      )}
-      {showWaybill && (
-        <WaybillModal order={order} onClose={() => setShowWaybill(false)} />
-      )}
+      {showCancelModal && <CancelReasonModal order={order} onConfirm={reason => { onCancelWithReason(order.orderId, reason); setShowCancelModal(false); }} onClose={() => setShowCancelModal(false)} />}
+      {showRejectConfirm && <RejectConfirmDialog order={order} adminNote={refundAdminNote} onConfirm={() => handleRefundResolve('rejected')} onCancel={() => setShowRejectConfirm(false)} />}
+      {showWaybill && <WaybillModal order={order} onClose={() => setShowWaybill(false)} />}
     </div>
   );
 };
@@ -899,7 +922,6 @@ const CancelReasonModal = ({ order, onConfirm, onClose }) => {
   const [selectedPreset, setSelectedPreset] = useState('');
   const [customReason,   setCustomReason]   = useState('');
   const [error,          setError]          = useState('');
-
   const isOther     = selectedPreset === 'Other reason';
   const finalReason = isOther ? customReason.trim() : selectedPreset;
 
