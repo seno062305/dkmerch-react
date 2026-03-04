@@ -28,7 +28,6 @@ const REFUND_METHOD_LABELS = {
 ══════════════════════════════════════ */
 const WaybillModal = ({ order, onClose }) => {
   const printRef = useRef(null);
-  const [paperSize, setPaperSize] = useState('label'); // 'label' = 100x150mm, 'a4' = A4
 
   const subtotal    = order.subtotal    || 0;
   const shippingFee = order.shippingFee || 0;
@@ -39,124 +38,67 @@ const WaybillModal = ({ order, onClose }) => {
   const shortId     = order.orderId?.slice(-8).toUpperCase();
 
   const handlePrint = () => {
-    const node = printRef.current;
-    if (!node) return;
+    // Inject print styles directly — avoids blur from new window rendering
+    const existingStyle = document.getElementById('waybill-print-style');
+    if (existingStyle) existingStyle.remove();
 
-    const svgs = node.querySelectorAll('svg');
-    svgs.forEach(svg => {
-      if (!svg.getAttribute('xmlns')) svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-    });
+    const style = document.createElement('style');
+    style.id = 'waybill-print-style';
+    style.innerHTML = `
 
-    const printContents = node.innerHTML;
-    const printWindow = window.open('', '_blank', 'width=900,height=700');
-    if (!printWindow) { alert('Pop-up blocked! Please allow pop-ups for this site.'); return; }
+      @media print {
+        body > *:not(.waybill-overlay) { display: none !important; }
+        .waybill-overlay, .waybill-modal, .waybill-preview-wrap { 
+          position: static !important; background: none !important;
+          box-shadow: none !important; border: none !important;
+          padding: 0 !important; margin: 0 !important;
+          width: auto !important; height: auto !important;
+          overflow: visible !important;
+        }
+        .waybill-toolbar { display: none !important; }
+        .waybill-print-root { display: block !important; width: 94mm !important; }
+        @page { size: 100mm 150mm; margin: 3mm; }
 
-    // ── Label (100x150mm) CSS — crisp, no scaling ──
-    const labelCss = `
-      * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-      @page { size: 100mm 150mm; margin: 3mm; }
-      html, body { width: 100mm; height: 150mm; overflow: hidden; }
-      body { font-family: 'Segoe UI', Arial, sans-serif; background: white; font-size: 7pt; }
-      .waybill-print-root { width: 94mm; }
-
-      .wb-header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 4px; border-bottom: 2px solid #fc1268; margin-bottom: 5px; }
-      .wb-brand-name { font-size: 13pt; font-weight: 900; color: #fc1268; line-height: 1; }
-      .wb-brand-sub { font-size: 6pt; color: #6b7280; font-weight: 600; margin-top: 1px; }
-      .wb-brand-contact { margin-top: 2px; font-size: 5.5pt; color: #6b7280; }
-      .wb-qr-block { display: flex; flex-direction: column; align-items: center; gap: 2px; }
-      .wb-qr-block svg { width: 36px !important; height: 36px !important; }
-      .wb-qr-label { font-size: 5pt; color: #9ca3af; font-weight: 700; text-transform: uppercase; }
-
-      .wb-order-banner { background: linear-gradient(135deg,#fc1268,#9c27b0) !important; color: white !important; border-radius: 4px; padding: 4px 8px; margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center; }
-      .wb-order-id { font-size: 11pt; font-weight: 900; letter-spacing: 1.5px; font-family: 'Courier New', monospace; }
-      .wb-order-date { font-size: 6pt; opacity: 0.85; }
-
-      .wb-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 5px; }
-      .wb-box { border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; }
-      .wb-box-hd { background: #f3f4f6 !important; padding: 2px 6px; font-size: 6pt; font-weight: 800; color: #374151; text-transform: uppercase; border-bottom: 1px solid #e5e7eb; }
-      .wb-box-body { padding: 4px 6px; display: flex; flex-direction: column; gap: 3px; }
-      .wb-field-lbl { font-size: 5pt; color: #9ca3af; font-weight: 700; text-transform: uppercase; margin-bottom: 0; }
-      .wb-field-val { font-size: 7pt; color: #1f2937; font-weight: 600; line-height: 1.2; }
-
-      .wb-items-box { border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; margin-bottom: 4px; }
-      .wb-items-hd { background: #f3f4f6 !important; padding: 2px 6px; font-size: 6pt; font-weight: 800; color: #374151; text-transform: uppercase; border-bottom: 1px solid #e5e7eb; }
-      .wb-items-table { width: 100%; border-collapse: collapse; }
-      .wb-items-table th { padding: 2px 5px; text-align: left; font-size: 5.5pt; font-weight: 700; color: #6b7280; border-bottom: 1px solid #f0f0f0; }
-      .wb-items-table td { padding: 2px 5px; font-size: 6.5pt; color: #1f2937; border-bottom: 1px solid #f8f8f8; }
-      .wb-items-table tr:last-child td { border-bottom: none; }
-      .td-right { text-align: right; font-weight: 700; }
-      .td-center { text-align: center; }
-
-      .wb-totals { border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; margin-bottom: 4px; }
-      .wb-totals-row { display: flex; justify-content: space-between; padding: 2px 7px; font-size: 6.5pt; border-bottom: 1px solid #f0f0f0; }
-      .wb-totals-row:last-child { border-bottom: none; }
-      .wb-grand { background: #fff1f5 !important; font-size: 8pt; font-weight: 800; color: #fc1268 !important; }
-      .wb-promo-row { color: #16a34a; font-weight: 600; }
-
-      .wb-sig-strip { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 4px; }
-      .wb-sig-box { border: 1px dashed #d1d5db; border-radius: 3px; padding: 4px 6px; }
-      .wb-sig-lbl { font-size: 5.5pt; font-weight: 700; color: #6b7280; text-transform: uppercase; margin-bottom: 10px; }
-      .wb-sig-line { border-top: 1px solid #374151; padding-top: 2px; font-size: 5pt; color: #9ca3af; }
-
-      .wb-footer { text-align: center; font-size: 5.5pt; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 3px; }
-      svg { display: block; }
+        * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        .wb-header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 4px; border-bottom: 2px solid #fc1268; margin-bottom: 5px; }
+        .wb-brand-name { font-size: 13pt; font-weight: 900; color: #fc1268 !important; line-height: 1; }
+        .wb-brand-sub { font-size: 6pt; color: #6b7280; font-weight: 600; margin-top: 1px; }
+        .wb-brand-contact { margin-top: 2px; font-size: 5.5pt; color: #6b7280; }
+        .wb-qr-block { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+        .wb-qr-block svg { width: 36px !important; height: 36px !important; }
+        .wb-qr-label { font-size: 5pt; color: #9ca3af; font-weight: 700; text-transform: uppercase; }
+        .wb-order-banner { background: linear-gradient(135deg,#fc1268,#9c27b0) !important; color: white !important; border-radius: 4px; padding: 4px 8px; margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center; }
+        .wb-order-id { font-size: 11pt; font-weight: 900; letter-spacing: 1.5px; font-family: 'Courier New', monospace; }
+        .wb-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 5px; }
+        .wb-box { border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; }
+        .wb-box-hd { background: #f3f4f6 !important; padding: 2px 6px; font-size: 6pt; font-weight: 800; color: #374151; text-transform: uppercase; border-bottom: 1px solid #e5e7eb; }
+        .wb-box-body { padding: 4px 6px; display: flex; flex-direction: column; gap: 3px; }
+        .wb-field-lbl { font-size: 5pt; color: #9ca3af; font-weight: 700; text-transform: uppercase; margin-bottom: 0; }
+        .wb-field-val { font-size: 7pt; color: #1f2937; font-weight: 600; line-height: 1.2; }
+        .wb-items-box { border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; margin-bottom: 4px; }
+        .wb-items-hd { background: #f3f4f6 !important; padding: 2px 6px; font-size: 6pt; font-weight: 800; color: #374151; text-transform: uppercase; border-bottom: 1px solid #e5e7eb; }
+        .wb-items-table { width: 100%; border-collapse: collapse; }
+        .wb-items-table th { padding: 2px 5px; text-align: left; font-size: 5.5pt; font-weight: 700; color: #6b7280; border-bottom: 1px solid #f0f0f0; }
+        .wb-items-table td { padding: 2px 5px; font-size: 6.5pt; color: #1f2937; border-bottom: 1px solid #f8f8f8; }
+        .wb-items-table tr:last-child td { border-bottom: none; }
+        .td-right { text-align: right; font-weight: 700; }
+        .td-center { text-align: center; }
+        .wb-totals { border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; margin-bottom: 4px; }
+        .wb-totals-row { display: flex; justify-content: space-between; padding: 2px 7px; font-size: 6.5pt; border-bottom: 1px solid #f0f0f0; }
+        .wb-totals-row:last-child { border-bottom: none; }
+        .wb-grand { background: #fff1f5 !important; font-size: 8pt; font-weight: 800; color: #fc1268 !important; }
+        .wb-promo-row { color: #16a34a; font-weight: 600; }
+        .wb-sig-strip { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 4px; }
+        .wb-sig-box { border: 1px dashed #d1d5db; border-radius: 3px; padding: 4px 6px; }
+        .wb-sig-lbl { font-size: 5.5pt; font-weight: 700; color: #6b7280; text-transform: uppercase; margin-bottom: 10px; }
+        .wb-sig-line { border-top: 1px solid #374151; padding-top: 2px; font-size: 5pt; color: #9ca3af; }
+        .wb-footer { text-align: center; font-size: 5.5pt; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 3px; }
+      }
     `;
-
-    // ── A4 CSS — original full-size ──
-    const a4Css = `
-      * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-      @page { size: A4 portrait; margin: 8mm; }
-      body { font-family: 'Segoe UI', Arial, sans-serif; background: white; }
-      .waybill-print-root { width: 100%; }
-      .wb-header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 10px; border-bottom: 3px solid #fc1268; margin-bottom: 12px; }
-      .wb-brand-name { font-size: 24px; font-weight: 900; color: #fc1268; line-height: 1; }
-      .wb-brand-sub { font-size: 11px; color: #6b7280; font-weight: 600; margin-top: 3px; }
-      .wb-brand-contact { margin-top: 5px; font-size: 10px; color: #6b7280; }
-      .wb-qr-block { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-      .wb-qr-label { font-size: 9px; color: #9ca3af; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
-      .wb-order-banner { background: linear-gradient(135deg, #fc1268, #9c27b0) !important; color: white !important; border-radius: 8px; padding: 10px 16px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
-      .wb-order-id { font-size: 20px; font-weight: 900; letter-spacing: 2px; font-family: 'Courier New', monospace; }
-      .wb-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
-      .wb-box { border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
-      .wb-box-hd { background: #f3f4f6 !important; padding: 6px 12px; font-size: 10px; font-weight: 800; color: #374151; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #e5e7eb; }
-      .wb-box-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
-      .wb-field-lbl { font-size: 9px; color: #9ca3af; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 1px; }
-      .wb-field-val { font-size: 12px; color: #1f2937; font-weight: 600; }
-      .wb-items-box { border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; margin-bottom: 12px; }
-      .wb-items-hd { background: #f3f4f6 !important; padding: 6px 12px; font-size: 10px; font-weight: 800; color: #374151; text-transform: uppercase; border-bottom: 1px solid #e5e7eb; }
-      .wb-items-table { width: 100%; border-collapse: collapse; }
-      .wb-items-table th { padding: 6px 10px; text-align: left; font-size: 10px; font-weight: 700; color: #6b7280; border-bottom: 1px solid #f0f0f0; }
-      .wb-items-table td { padding: 6px 10px; font-size: 12px; color: #1f2937; border-bottom: 1px solid #f8f8f8; }
-      .wb-items-table tr:last-child td { border-bottom: none; }
-      .td-right { text-align: right; font-weight: 700; }
-      .td-center { text-align: center; }
-      .wb-totals { border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; margin-bottom: 12px; }
-      .wb-totals-row { display: flex; justify-content: space-between; padding: 6px 14px; font-size: 12px; border-bottom: 1px solid #f0f0f0; }
-      .wb-totals-row:last-child { border-bottom: none; }
-      .wb-grand { background: #fff1f5 !important; font-size: 14px; font-weight: 800; color: #fc1268 !important; }
-      .wb-promo-row { color: #16a34a; font-weight: 600; }
-      .wb-sig-strip { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
-      .wb-sig-box { border: 1px dashed #d1d5db; border-radius: 6px; padding: 10px 14px; }
-      .wb-sig-lbl { font-size: 9px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 26px; }
-      .wb-sig-line { border-top: 1px solid #374151; padding-top: 4px; font-size: 9px; color: #9ca3af; }
-      .wb-footer { text-align: center; font-size: 10px; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 8px; }
-      svg { display: block; }
-    `;
-
-    printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
-<title>Waybill — ${shortId} | DKMerch</title>
-<style>${paperSize === 'label' ? labelCss : a4Css}</style>
-</head><body>
-<div class="waybill-print-root">${printContents}</div>
-<script>
-  window.onload = function() { setTimeout(function() { window.print(); }, 400); };
-<\/script>
-</body></html>`);
-    printWindow.document.close();
+    document.head.appendChild(style);
+    window.print();
+    setTimeout(() => style.remove(), 1000);
   };
-
-  // QR size: smaller for label, normal for A4
-  const qrSize = paperSize === 'label' ? 36 : 90;
 
   return (
     <div className="waybill-overlay" onClick={onClose}>
@@ -166,30 +108,7 @@ const WaybillModal = ({ order, onClose }) => {
             <i className="fas fa-print"></i> Print Waybill — #{shortId}
           </div>
           <div className="waybill-toolbar-actions">
-            {/* Paper size toggle */}
-            <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginRight: '8px' }}>
-              <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600 }}>Size:</span>
-              <button
-                onClick={() => setPaperSize('label')}
-                style={{
-                  padding: '4px 10px', borderRadius: '6px', border: '1.5px solid',
-                  borderColor: paperSize === 'label' ? '#fc1268' : '#e5e7eb',
-                  background: paperSize === 'label' ? '#fff1f5' : 'white',
-                  color: paperSize === 'label' ? '#fc1268' : '#6b7280',
-                  fontWeight: 700, fontSize: '12px', cursor: 'pointer'
-                }}
-              >🏷️ Label (100×150mm)</button>
-              <button
-                onClick={() => setPaperSize('a4')}
-                style={{
-                  padding: '4px 10px', borderRadius: '6px', border: '1.5px solid',
-                  borderColor: paperSize === 'a4' ? '#fc1268' : '#e5e7eb',
-                  background: paperSize === 'a4' ? '#fff1f5' : 'white',
-                  color: paperSize === 'a4' ? '#fc1268' : '#6b7280',
-                  fontWeight: 700, fontSize: '12px', cursor: 'pointer'
-                }}
-              >📄 A4</button>
-            </div>
+
             <button className="waybill-print-btn" onClick={handlePrint}>
               <i className="fas fa-print"></i> Print
             </button>
@@ -207,13 +126,9 @@ const WaybillModal = ({ order, onClose }) => {
                 <div className="wb-brand-contact">📍 Manila, Philippines &nbsp;|&nbsp; support@dkmerch.com</div>
               </div>
               <div className="wb-qr-block">
-                <QRCodeSVG value={trackUrl} size={qrSize} level="M" includeMargin={false} fgColor="#1f2937" />
+                <QRCodeSVG value={trackUrl} size={36} level="M" includeMargin={false} fgColor="#1f2937" />
                 <div className="wb-qr-label">Scan to Track</div>
               </div>
-            </div>
-
-            <div className="wb-order-banner">
-              <div className="wb-order-id">#{shortId}</div>
             </div>
 
             <div className="wb-cols">
