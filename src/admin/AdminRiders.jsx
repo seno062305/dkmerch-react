@@ -8,7 +8,6 @@ const SITE_URL = process.env.REACT_APP_SITE_URL || 'https://dkmerchwebsite.verce
 const getRiderLink    = (orderId) => `${SITE_URL}/rider-track/${orderId}`;
 const getCustomerLink = (orderId) => `${SITE_URL}/track-order?order=${orderId}`;
 
-// ─── TIME HELPER ──────────────────────────────────────────────
 const timeAgo = (ts) => {
   if (!ts) return 'unknown';
   const diff = Math.floor((Date.now() - ts) / 1000);
@@ -18,7 +17,6 @@ const timeAgo = (ts) => {
   return `${Math.floor(diff / 3600)}h ago`;
 };
 
-// ─── STATUS BADGE ─────────────────────────────────────────────
 const StatusBadge = ({ order }) => {
   const s = (order.orderStatus || order.status || '').toLowerCase();
   const map = {
@@ -35,7 +33,6 @@ const StatusBadge = ({ order }) => {
     : <span className="ar-status-badge" style={{ background: '#6b7280' }}>{order.orderStatus || order.status}</span>;
 };
 
-// ─── LIVE BADGE ───────────────────────────────────────────────
 const LiveBadge = ({ orderId }) => {
   const loc = useQuery(api.riders.getRiderLocation, { orderId });
   if (!loc?.isTracking || (Date.now() - loc.updatedAt) >= 60000) return null;
@@ -47,7 +44,6 @@ const LiveBadge = ({ orderId }) => {
   );
 };
 
-// ─── NOTIFICATION BELL ───────────────────────────────────────
 const NotificationBell = () => {
   const [open, setOpen]       = useState(false);
   const dropdownRef           = useRef(null);
@@ -121,13 +117,14 @@ const NotificationBell = () => {
 const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
   const mapRef             = useRef(null);
   const mapObjRef          = useRef(null);
-  const markerRef          = useRef(null);
-  const lastKnownMarkerRef = useRef(null);
+  const markerRef          = useRef(null);          // live rider marker
+  const lastKnownMarkerRef = useRef(null);          // ghost marker (offline)
   const circleRef          = useRef(null);
   const routeLineRef       = useRef(null);
   const destMarkerRef      = useRef(null);
   const routeAbortRef      = useRef(null);
   const routeTimerRef      = useRef(null);
+  const lastPlottedRef     = useRef({ lat: null, lng: null }); // FIX: track last plotted coords
 
   const [leafletReady, setLeafletReady] = useState(!!window.L);
   const [lastUpdate,   setLastUpdate]   = useState(null);
@@ -136,7 +133,7 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
   const location = useQuery(api.riders.getRiderLocation, { orderId });
 
   const isLive       = !!(location?.isTracking && location?.updatedAt && (Date.now() - location.updatedAt) < 30000);
-  const hasLoc       = !!(location?.lat && location?.lng && location.lat !== 0);
+  const hasLoc       = !!(location?.lat && location?.lng && location.lat !== 0 && location.lng !== 0);
   const hasLastKnown = !!(location?.lastKnownLat && location?.lastKnownLng);
 
   // ── Load Leaflet ──
@@ -152,22 +149,27 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
     document.head.appendChild(script);
   }, []);
 
-  // ── Init map ──
+  // ── Init map — center on DESTINATION only, NO rider marker yet ──
   useEffect(() => {
     if (!leafletReady || !mapRef.current || mapObjRef.current) return;
     const L = window.L;
+
+    if (mapRef.current._leaflet_id) {
+      try { L.map(mapRef.current).remove(); } catch {}
+      delete mapRef.current._leaflet_id;
+    }
+
     const map = L.map(mapRef.current, { zoomControl: true });
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors', maxZoom: 19,
     }).addTo(map);
 
-    const destLat  = order?.addressLat  || null;
-    const destLng  = order?.addressLng  || null;
-    const centerLat = destLat || 14.5995;
-    const centerLng = destLng || 120.9842;
-    map.setView([centerLat, centerLng], 14);
+    const destLat = order?.addressLat || null;
+    const destLng = order?.addressLng || null;
 
+    // FIX: only center on destination — never on fake Manila fallback
     if (destLat && destLng) {
+      map.setView([destLat, destLng], 15);
       const destIcon = L.divIcon({
         html: `<div style="width:40px;height:40px;background:linear-gradient(135deg,#fc1268,#9c27b0);border-radius:50%;border:3px solid white;box-shadow:0 3px 14px rgba(252,18,104,0.5);display:flex;align-items:center;justify-content:center;font-size:20px;">📍</div>`,
         className: '', iconSize: [40, 40], iconAnchor: [20, 40],
@@ -175,17 +177,15 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
       const dm = L.marker([destLat, destLng], { icon: destIcon }).addTo(map);
       dm.bindPopup(`<b>📍 Deliver to:</b><br>${order?.customerName || 'Customer'}<br><small>${order?.shippingAddress || ''}</small>`).openPopup();
       destMarkerRef.current = dm;
+    } else {
+      // No destination coords at all — show a neutral view
+      map.setView([14.5995, 120.9842], 12);
     }
 
-    const riderIcon = L.divIcon({
-      html: `<div style="width:40px;height:40px;background:linear-gradient(135deg,#6a0dad,#9b30ff);border-radius:50%;border:3px solid white;box-shadow:0 3px 14px rgba(106,13,173,0.55);display:flex;align-items:center;justify-content:center;font-size:20px;">🛵</div>`,
-      className: '', iconSize: [40, 40], iconAnchor: [20, 20],
-    });
-    const marker = L.marker([centerLat, centerLng], { icon: riderIcon, opacity: 0 }).addTo(map);
-    marker.bindPopup(`<b>🛵 ${order.riderInfo?.name || 'Rider'}</b><br>Waiting for GPS…`);
+    // FIX: DO NOT add rider marker here — it will be added only when real GPS arrives
 
-    mapObjRef.current  = map;
-    markerRef.current  = marker;
+    mapObjRef.current = map;
+    setTimeout(() => { try { map.invalidateSize(); } catch {} }, 150);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leafletReady]);
 
@@ -204,7 +204,6 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, []);
 
-  // ── Helper: clear route lines ──
   const clearRoute = () => {
     if (routeLineRef.current) {
       if (Array.isArray(routeLineRef.current)) {
@@ -216,12 +215,8 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
     }
   };
 
-  // ── Helper: draw OSRM road route ──
   const drawRoute = (lat, lng, destLat, destLng, dashed = false) => {
-    if (routeAbortRef.current) {
-      routeAbortRef.current.abort();
-      routeAbortRef.current = null;
-    }
+    if (routeAbortRef.current) { routeAbortRef.current.abort(); routeAbortRef.current = null; }
     if (routeTimerRef.current) clearTimeout(routeTimerRef.current);
 
     routeTimerRef.current = setTimeout(async () => {
@@ -247,18 +242,14 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
         const url  = `https://router.project-osrm.org/route/v1/bike/${lng},${lat};${destLng},${destLat}?overview=full&geometries=geojson`;
         const res  = await fetch(url, { signal: controller.signal });
         const data = await res.json();
-
         if (!mapObjRef.current || controller.signal.aborted) return;
-
         if (data.code === 'Ok' && data.routes?.[0]?.geometry?.coordinates) {
           const coords  = data.routes[0].geometry.coordinates.map(([lo, la]) => [la, lo]);
           const outline = L.polyline(coords, { color: 'white',   weight: 7,   opacity: 0.6,  lineJoin: 'round', lineCap: 'round' }).addTo(map);
           const line    = L.polyline(coords, { color: '#e53e3e', weight: 4.5, opacity: 0.92, lineJoin: 'round', lineCap: 'round' }).addTo(map);
           routeLineRef.current = [outline, line];
           map.fitBounds(L.latLngBounds(coords), { padding: [48, 48], maxZoom: 17 });
-        } else {
-          throw new Error('OSRM no route');
-        }
+        } else { throw new Error('OSRM no route'); }
       } catch (err) {
         if (err?.name === 'AbortError') return;
         if (!mapObjRef.current) return;
@@ -279,22 +270,41 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
 
   // ── React to every Convex location update ──
   useEffect(() => {
-    if (!mapObjRef.current || !markerRef.current || !window.L) return;
+    if (!mapObjRef.current || !window.L) return;
     const L       = window.L;
     const map     = mapObjRef.current;
     const destLat = order?.addressLat;
     const destLng = order?.addressLng;
 
+    // ── LIVE GPS: real coords from rider ──
     if (isLive && hasLoc) {
       const { lat, lng, accuracy, updatedAt } = location;
 
+      // FIX: skip update if coords are identical to last plotted (avoid flicker)
+      const prev = lastPlottedRef.current;
+      if (prev.lat === lat && prev.lng === lng) return;
+      lastPlottedRef.current = { lat, lng };
+
+      // Remove ghost marker if present
       if (lastKnownMarkerRef.current) {
         try { lastKnownMarkerRef.current.remove(); } catch {}
         lastKnownMarkerRef.current = null;
       }
 
+      // Create or move rider marker
+      if (!markerRef.current) {
+        // FIX: create marker at REAL GPS coords, not fallback
+        const riderIcon = L.divIcon({
+          html: `<div style="width:40px;height:40px;background:linear-gradient(135deg,#6a0dad,#9b30ff);border-radius:50%;border:3px solid white;box-shadow:0 3px 14px rgba(106,13,173,0.55);display:flex;align-items:center;justify-content:center;font-size:20px;">🛵</div>`,
+          className: '', iconSize: [40, 40], iconAnchor: [20, 20],
+        });
+        markerRef.current = L.marker([lat, lng], { icon: riderIcon }).addTo(map);
+        markerRef.current.bindPopup(`<b>🛵 ${order.riderInfo?.name || 'Rider'}</b><br>📍 Live location`);
+      } else {
+        try { markerRef.current.setLatLng([lat, lng]); } catch {}
+      }
+
       try {
-        markerRef.current.setLatLng([lat, lng]);
         markerRef.current.setOpacity(1);
         markerRef.current.setPopupContent(
           `<b>🛵 ${order.riderInfo?.name || 'Rider'}</b><br>
@@ -323,10 +333,12 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
       return;
     }
 
+    // ── OFFLINE: show last known location as ghost ──
     if (!isLive && hasLastKnown) {
       const { lastKnownLat, lastKnownLng, lastKnownAt, lastKnownAddress } = location;
 
-      try { markerRef.current.setOpacity(0); } catch {}
+      // Hide live marker
+      if (markerRef.current) { try { markerRef.current.setOpacity(0); } catch {} }
       if (circleRef.current) { try { circleRef.current.remove(); } catch {} circleRef.current = null; }
 
       const ghostIcon = L.divIcon({
@@ -400,15 +412,9 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
     <div className={overlayClass} onClick={onClose}>
       <div
         className={`ar-map-modal ${isFullscreen ? 'ar-map-modal--full' : ''}`}
-        style={isFullscreen ? {
-          display: 'flex',
-          flexDirection: 'column',
-          height: '100dvh',
-          maxHeight: '100dvh',
-        } : {}}
+        style={isFullscreen ? { display: 'flex', flexDirection: 'column', height: '100dvh', maxHeight: '100dvh' } : {}}
         onClick={e => e.stopPropagation()}
       >
-        {/* ── HEADER ── */}
         <div className="ar-map-header" style={{ flexShrink: 0 }}>
           <div className="ar-map-title-row">
             <span className="ar-map-title">📍 Live Rider Location</span>
@@ -431,14 +437,12 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
           </div>
         </div>
 
-        {/* ── MAP — fills all remaining space ── */}
         <div
           ref={mapRef}
           className="ar-map-container"
           style={isFullscreen ? { flex: '1 1 auto', height: 'auto', minHeight: 0 } : {}}
         />
 
-        {/* ── STATUS BARS ── */}
         {!location && (
           <div className="ar-map-waiting-overlay" style={{ flexShrink: 0 }}>
             <span className="ar-gps-live-dot" style={{ background: '#f59e0b' }} />
@@ -529,7 +533,6 @@ const ShareModal = ({ order, onClose }) => {
   );
 };
 
-// ─── RIDER DETAIL MODAL ───────────────────────────────────────
 const RiderDetailModal = ({ rider, onClose }) => (
   <div className="ar-modal-overlay" onClick={onClose}>
     <div className="ar-detail-modal" onClick={e => e.stopPropagation()}>
@@ -559,7 +562,6 @@ const RiderDetailModal = ({ rider, onClose }) => (
   </div>
 );
 
-// ─── REMOVE CONFIRM ───────────────────────────────────────────
 const RemoveConfirmModal = ({ order, onConfirm, onClose }) => (
   <div className="ar-modal-overlay" onClick={onClose}>
     <div className="ar-confirm-modal" onClick={e => e.stopPropagation()}>
@@ -698,7 +700,6 @@ const ActiveOrderCard = ({
             </div>
           </div>
 
-          {/* Notify Section */}
           <div className="ar-notify-section">
             {alreadyNotified ? (
               <div className="ar-notify-done"><span>✅ Customer notified — Out for Delivery</span></div>
@@ -743,7 +744,6 @@ const ActiveOrderCard = ({
             )}
           </div>
 
-          {/* GPS Tracking */}
           <div className="ar-section ar-section-full">
             <div className="ar-section-title">📍 GPS Tracking</div>
             <div className="ar-tracking-compact">
@@ -786,7 +786,6 @@ const ActiveOrderCard = ({
   );
 };
 
-// ─── COMPLETED ORDER CARD ─────────────────────────────────────
 const CompletedOrderCard = ({ order, onRemove }) => {
   const riderInfo   = order.riderInfo || {};
   const deliveredAt = order.deliveryConfirmedAt
