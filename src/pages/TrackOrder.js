@@ -638,13 +638,23 @@ const TrackOrder = () => {
   };
 
 const Lightbox = () => {
-    const { images, index } = lightboxData || {};
-    const hasMultiple = (images?.length || 0) > 1;
+    const images = lightboxData?.images || [];
+    const index = lightboxData?.index || 0;
+    const hasMultiple = images.length > 1;
+
     useEffect(() => {
       if (!lightboxData) return;
-      const onKey = (e) => { if (e.key === 'Escape') closeLightbox(); if (e.key === 'ArrowRight' && hasMultiple) lightboxNext(); if (e.key === 'ArrowLeft' && hasMultiple) lightboxPrev(); };
-      window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey);
-    }, [hasMultiple]);
+      const onKey = (e) => {
+        if (e.key === 'Escape') closeLightbox();
+        if (e.key === 'ArrowRight' && hasMultiple) lightboxNext();
+        if (e.key === 'ArrowLeft'  && hasMultiple) lightboxPrev();
+      };
+      window.addEventListener('keydown', onKey);
+      return () => window.removeEventListener('keydown', onKey);
+    }, [hasMultiple, lightboxData]);
+
+    if (!lightboxData) return null;
+
     return (
       <div className="order-lightbox" onClick={closeLightbox}>
         <button className="lightbox-close" onClick={closeLightbox}><i className="fas fa-times"></i></button>
