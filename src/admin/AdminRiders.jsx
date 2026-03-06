@@ -117,24 +117,70 @@ const NotificationBell = () => {
 const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
   const mapRef             = useRef(null);
   const mapObjRef          = useRef(null);
-  const markerRef          = useRef(null);          // live rider marker
-  const lastKnownMarkerRef = useRef(null);          // ghost marker (offline)
+  const markerRef          = useRef(null);
+  const lastKnownMarkerRef = useRef(null);
   const circleRef          = useRef(null);
   const routeLineRef       = useRef(null);
   const destMarkerRef      = useRef(null);
   const routeAbortRef      = useRef(null);
   const routeTimerRef      = useRef(null);
-  const lastPlottedRef     = useRef({ lat: null, lng: null }); // FIX: track last plotted coords
+  const lastPlottedRef     = useRef({ lat: null, lng: null });
 
   const [leafletReady, setLeafletReady] = useState(!!window.L);
   const [lastUpdate,   setLastUpdate]   = useState(null);
   const [isFullscreen, setIsFullscreen] = useState(fullscreen);
+  const [sidebarWidth, setSidebarWidth] = useState(0);
+
+  // ── Measure sidebar width dynamically so fullscreen map never overlaps it ──
+  useEffect(() => {
+    const measure = () => {
+      const sidebar = document.querySelector('.admin-sidebar') ||
+                      document.querySelector('[class*="admin-sidebar"]') ||
+                      document.querySelector('.admin-layout > aside') ||
+                      document.querySelector('.admin-layout > nav') ||
+                      document.querySelector('aside.sidebar') ||
+                      document.querySelector('nav.sidebar') ||
+                      document.querySelector('[class*="sidebar"]') ||
+                      document.querySelector('aside');
+      if (sidebar) {
+        setSidebarWidth(sidebar.getBoundingClientRect().width);
+      }
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
 
   const location = useQuery(api.riders.getRiderLocation, { orderId });
 
   const isLive       = !!(location?.isTracking && location?.updatedAt && (Date.now() - location.updatedAt) < 30000);
   const hasLoc       = !!(location?.lat && location?.lng && location.lat !== 0 && location.lng !== 0);
   const hasLastKnown = !!(location?.lastKnownLat && location?.lastKnownLng);
+
+  // ── FIX 1: Lock body scroll + hide mobile burger when map opens ──
+  useEffect(() => {
+    const scrollY = window.scrollY;
+
+    // Lock background scroll — saves Y so it restores correctly on mobile
+    document.body.classList.add('ar-map-open');
+    document.body.style.top = `-${scrollY}px`;
+
+    // Hide mobile burger toggle
+    const burger = document.querySelector('.mobile-menu-toggle');
+    if (burger) burger.style.display = 'none';
+
+    return () => {
+      // Restore body scroll
+      document.body.classList.remove('ar-map-open');
+      document.body.style.top = '';
+      document.body.style.position = '';
+      window.scrollTo(0, scrollY);
+
+      // Restore burger
+      const burgerEl = document.querySelector('.mobile-menu-toggle');
+      if (burgerEl) burgerEl.style.display = '';
+    };
+  }, []);
 
   // ── Load Leaflet ──
   useEffect(() => {
@@ -149,7 +195,7 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
     document.head.appendChild(script);
   }, []);
 
-  // ── Init map — center on DESTINATION only, NO rider marker yet ──
+  // ── Init map ──
   useEffect(() => {
     if (!leafletReady || !mapRef.current || mapObjRef.current) return;
     const L = window.L;
@@ -167,7 +213,6 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
     const destLat = order?.addressLat || null;
     const destLng = order?.addressLng || null;
 
-    // FIX: only center on destination — never on fake Manila fallback
     if (destLat && destLng) {
       map.setView([destLat, destLng], 15);
       const destIcon = L.divIcon({
@@ -178,11 +223,8 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
       dm.bindPopup(`<b>📍 Deliver to:</b><br>${order?.customerName || 'Customer'}<br><small>${order?.shippingAddress || ''}</small>`).openPopup();
       destMarkerRef.current = dm;
     } else {
-      // No destination coords at all — show a neutral view
       map.setView([14.5995, 120.9842], 12);
     }
-
-    // FIX: DO NOT add rider marker here — it will be added only when real GPS arrives
 
     mapObjRef.current = map;
     setTimeout(() => { try { map.invalidateSize(); } catch {} }, 150);
@@ -191,7 +233,7 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
 
   // ── Invalidate size on fullscreen toggle ──
   useEffect(() => {
-    if (mapObjRef.current) setTimeout(() => mapObjRef.current.invalidateSize(), 150);
+    if (mapObjRef.current) setTimeout(() => { try { mapObjRef.current.invalidateSize(); } catch {} }, 150);
   }, [isFullscreen]);
 
   // ── Invalidate size on visibility change ──
@@ -276,24 +318,19 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
     const destLat = order?.addressLat;
     const destLng = order?.addressLng;
 
-    // ── LIVE GPS: real coords from rider ──
     if (isLive && hasLoc) {
       const { lat, lng, accuracy, updatedAt } = location;
 
-      // FIX: skip update if coords are identical to last plotted (avoid flicker)
       const prev = lastPlottedRef.current;
       if (prev.lat === lat && prev.lng === lng) return;
       lastPlottedRef.current = { lat, lng };
 
-      // Remove ghost marker if present
       if (lastKnownMarkerRef.current) {
         try { lastKnownMarkerRef.current.remove(); } catch {}
         lastKnownMarkerRef.current = null;
       }
 
-      // Create or move rider marker
       if (!markerRef.current) {
-        // FIX: create marker at REAL GPS coords, not fallback
         const riderIcon = L.divIcon({
           html: `<div style="width:40px;height:40px;background:linear-gradient(135deg,#6a0dad,#9b30ff);border-radius:50%;border:3px solid white;box-shadow:0 3px 14px rgba(106,13,173,0.55);display:flex;align-items:center;justify-content:center;font-size:20px;">🛵</div>`,
           className: '', iconSize: [40, 40], iconAnchor: [20, 20],
@@ -333,11 +370,9 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
       return;
     }
 
-    // ── OFFLINE: show last known location as ghost ──
     if (!isLive && hasLastKnown) {
       const { lastKnownLat, lastKnownLng, lastKnownAt, lastKnownAddress } = location;
 
-      // Hide live marker
       if (markerRef.current) { try { markerRef.current.setOpacity(0); } catch {} }
       if (circleRef.current) { try { circleRef.current.remove(); } catch {} circleRef.current = null; }
 
@@ -408,11 +443,28 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
     ? 'ar-modal-overlay ar-map-overlay ar-overlay--full'
     : 'ar-modal-overlay ar-map-overlay';
 
+  const fullscreenStyle = isFullscreen && sidebarWidth > 0
+    ? {
+        display: 'flex', flexDirection: 'column',
+        height: '100dvh', maxHeight: '100dvh',
+        position: 'fixed', top: 0,
+        left: sidebarWidth,
+        width: `calc(100vw - ${sidebarWidth}px)`,
+        maxWidth: `calc(100vw - ${sidebarWidth}px)`,
+      }
+    : isFullscreen
+    ? { display: 'flex', flexDirection: 'column', height: '100dvh', maxHeight: '100dvh' }
+    : {};
+
   return (
-    <div className={overlayClass} onClick={onClose}>
+    <div
+      className={overlayClass}
+      style={isFullscreen && sidebarWidth > 0 ? { left: sidebarWidth, width: `calc(100vw - ${sidebarWidth}px)` } : {}}
+      onClick={onClose}
+    >
       <div
         className={`ar-map-modal ${isFullscreen ? 'ar-map-modal--full' : ''}`}
-        style={isFullscreen ? { display: 'flex', flexDirection: 'column', height: '100dvh', maxHeight: '100dvh' } : {}}
+        style={fullscreenStyle}
         onClick={e => e.stopPropagation()}
       >
         <div className="ar-map-header" style={{ flexShrink: 0 }}>

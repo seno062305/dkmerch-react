@@ -7,6 +7,7 @@ import { useWishlist, useWishlistCount } from './context/wishlistUtils';
 
 import Header from './components/Header';
 import Footer from './components/Footer';
+import DKMerchChatBot from './components/DKMerchChatBot'; // ✅ Chatbot
 
 import Home from './pages/Home';
 import Collections from './pages/Collections';
@@ -49,12 +50,11 @@ const StartupRedirect = ({ children }) => {
     if (isAuthenticated && role) {
       const path = location.pathname;
 
-      // ✅ Never redirect away from these pages even if admin is logged in
       const isExempt =
         path.startsWith('/rider-track') ||
         path.startsWith('/promo') ||
         path.startsWith('/order-success') ||
-        path.startsWith('/track-order');  // ✅ FIX: allow QR scan redirect for admin users
+        path.startsWith('/track-order');
 
       if (role === 'admin' && !path.startsWith('/admin') && !isExempt) {
         navigate('/admin', { replace: true });
@@ -151,6 +151,9 @@ function AppContent() {
   const isRiderTrackRoute = location.pathname.startsWith('/rider-track');
   const hideHeaderFooter  = isAdminRoute || isPromoRoute || isRiderTrackRoute;
 
+  // ✅ Hide chatbot on admin, promo, and rider-track pages
+  const showChatBot = !isAdminRoute && !isPromoRoute && !isRiderTrackRoute;
+
   return (
     <StartupRedirect>
       <div className="App">
@@ -197,6 +200,9 @@ function AppContent() {
         </Routes>
 
         {!hideHeaderFooter && <Footer />}
+
+        {/* ✅ Chatbot — visible on all customer-facing pages */}
+        {showChatBot && <DKMerchChatBot />}
 
         {showLoginModal && (
           <LoginModal

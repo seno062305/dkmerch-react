@@ -203,7 +203,6 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
               <li><Link to="/collections" onClick={closeMobileMenu}>Collections</Link></li>
               <li><Link to="/preorder" onClick={closeMobileMenu}>Pre-Order</Link></li>
               <li><Link to="/track-order" onClick={closeMobileMenu}>Track Order</Link></li>
-              <li><Link to="/help" onClick={closeMobileMenu}>Help Center</Link></li>
             </ul>
           </nav>
 

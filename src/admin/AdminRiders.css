@@ -788,16 +788,29 @@
    LIVE MAP MODAL — FULLSCREEN FIX
 ══════════════════════════════════════════ */
 
-/* ── MAP OVERLAY (normal) ── */
-.ar-map-overlay {
-  padding: 16px;
+/* ── Prevent background scroll when map modal is open ── */
+body.ar-map-open {
+  overflow: hidden !important;
+  position: fixed !important;
+  width: 100% !important;
 }
 
-/* ── FULLSCREEN OVERLAY — no padding, fills entire screen ── */
+/* ── MAP OVERLAY BASE ── */
+.ar-map-overlay {
+  padding: 16px;
+  overflow: hidden;
+  /* Prevent overlay itself from scrolling */
+  touch-action: none;
+}
+
+/* ── FULLSCREEN OVERLAY ── */
 .ar-overlay--full {
   padding: 0 !important;
-  align-items: stretch !important;
-  justify-content: stretch !important;
+  align-items: flex-start !important;
+  justify-content: flex-start !important;
+  overflow: hidden !important;
+  touch-action: none !important;
+  /* left/width overridden by inline style from JSX (dynamic sidebar measurement) */
 }
 
 /* ── NORMAL MAP MODAL ── */
@@ -816,10 +829,10 @@
 
 /* ── FULLSCREEN MAP MODAL ── */
 .ar-map-modal--full {
-  max-width: 100vw !important;
+  max-width: 100% !important;
   max-height: 100vh !important;
   max-height: 100dvh !important;
-  width: 100vw !important;
+  width: 100% !important;
   height: 100vh !important;
   height: 100dvh !important;
   border-radius: 0 !important;
@@ -832,6 +845,8 @@
   z-index: 10001 !important;
   display: flex !important;
   flex-direction: column !important;
+  overflow: hidden !important;
+  /* left/width overridden by inline style from JSX (dynamic sidebar measurement) */
 }
 
 /* ── MAP HEADER — never shrinks ── */
@@ -851,13 +866,18 @@
   height: 420px;
   min-height: 300px;
   z-index: 1;
+  /* Allow map touch gestures, but isolate from body scroll */
+  touch-action: pan-x pan-y;
+  overscroll-behavior: contain;
 }
 
-/* ── MAP CONTAINER — fullscreen: fills all remaining space ── */
+/* ── MAP CONTAINER — fullscreen ── */
 .ar-map-modal--full .ar-map-container {
   flex: 1 1 auto !important;
   height: auto !important;
   min-height: 0 !important;
+  touch-action: pan-x pan-y !important;
+  overscroll-behavior: contain !important;
 }
 
 .ar-map-title-row {
@@ -1325,10 +1345,18 @@
     max-width: 100vw;
     border-radius: 20px 20px 0 0;
     max-height: 88vh;
+    /* Bottom sheet: flex column, map expands to fill */
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
 
+  /* Live Map bottom sheet: map fills available space */
   .ar-map-modal:not(.ar-map-modal--full) .ar-map-container {
-    height: 320px;
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 200px;
+    max-height: none;
   }
 
   /* Fullscreen map modal — true full screen on mobile */
@@ -1336,6 +1364,10 @@
     padding: 0 !important;
     align-items: stretch !important;
     justify-content: stretch !important;
+    overflow: hidden !important;
+    touch-action: none !important;
+    left: 0 !important;
+    width: 100vw !important;
   }
 
   .ar-map-modal--full {
@@ -1351,12 +1383,17 @@
     right: 0 !important;
     bottom: 0 !important;
     position: fixed !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
   }
 
   .ar-map-modal--full .ar-map-container {
     flex: 1 1 auto !important;
     height: auto !important;
     min-height: 0 !important;
+    touch-action: pan-x pan-y !important;
+    overscroll-behavior: contain !important;
   }
 
   .ar-map-modal--full .ar-map-header {
@@ -1399,9 +1436,7 @@
   .ar-map-fullscreen-btn { padding: 5px 8px; font-size: 11px; }
   .ar-modal-close--map { width: 28px; height: 28px; font-size: 12px; }
 
-  /* Hide link row on very small screens to maximize map space */
   .ar-map-modal--full .ar-map-link-row { display: none; }
-
   .ar-map-title { font-size: 13px; }
   .ar-map-order-id { font-size: 11px; }
 }
