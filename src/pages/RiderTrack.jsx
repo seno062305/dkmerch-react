@@ -146,7 +146,6 @@ function FullscreenMapModal({ order, gpsCoords, onClose }) {
     if (!window.L || !modalMapRef.current) return;
     const L = window.L;
 
-    // Clean up any stale leaflet instance on this DOM node
     if (modalMapRef.current._leaflet_id) {
       try { const t = L.map(modalMapRef.current); t.remove(); } catch {}
       delete modalMapRef.current._leaflet_id;
@@ -231,7 +230,7 @@ export default function RiderTrack() {
   const [sessionStatus, setSessionStatus] = useState('checking');
   const [blockedInfo,   setBlockedInfo]   = useState(null);
   const heartbeatRef    = useRef(null);
-  const sessionLostRef  = useRef(false); // prevent double-release
+  const sessionLostRef  = useRef(false);
 
   // ── GPS state ──
   const [gpsStatus,  setGpsStatus]  = useState('idle');
@@ -239,17 +238,18 @@ export default function RiderTrack() {
   const gpsCoordsRef        = useRef(null);
   const watchIdRef          = useRef(null);
   const lastConvexUpdateRef = useRef(0);
+  const firstFixSentRef     = useRef(false); // ← NEW: track if first fix was sent
   const lastGeocodedRef     = useRef({ lat: null, lng: null, address: null });
-  const gpsRetryRef         = useRef(null);  // retry timer for GPS errors
+  const gpsRetryRef         = useRef(null);
 
   // ── Map refs ──
-  const lastRouteDrawRef = useRef({ time: 0, rLat: null, rLng: null });
-  const riderMarkerRef   = useRef(null);
-  const routeLineRef     = useRef(null);
-  const mapRef           = useRef(null);
-  const mapObjRef        = useRef(null);
-  const destMarkerRef    = useRef(null);
-  const mapInitializedRef = useRef(false); // guard against double init
+  const lastRouteDrawRef  = useRef({ time: 0, rLat: null, rLng: null });
+  const riderMarkerRef    = useRef(null);
+  const routeLineRef      = useRef(null);
+  const mapRef            = useRef(null);
+  const mapObjRef         = useRef(null);
+  const destMarkerRef     = useRef(null);
+  const mapInitializedRef = useRef(false);
 
   // ── UI state ──
   const [leafletReady,  setLeafletReady]  = useState(!!window.L);
@@ -265,10 +265,8 @@ export default function RiderTrack() {
   const [marking,       setMarking]       = useState(false);
   const [deliveryDone,  setDeliveryDone]  = useState(false);
 
-  // Keep gpsCoordsRef in sync with state
   useEffect(() => { gpsCoordsRef.current = gpsCoords; }, [gpsCoords]);
 
-  // ── Rider identity helpers ──
   const getRiderEmail = useCallback(() =>
     loggedInRider?.email || order?.riderInfo?.email || 'rider@dkmerch.com',
   [loggedInRider, order]);
@@ -293,40 +291,33 @@ export default function RiderTrack() {
         setBlockedInfo({ activeCount: result.activeCount ?? 5 });
       }
     } catch {
-      // Network error → optimistically allow so rider isn't stuck
       setSessionStatus('allowed');
       sessionLostRef.current = false;
     }
   }, [orderId, SESSION_ID, claimSession]);
 
-  // Initial claim once order loads
   useEffect(() => {
     if (order && sessionStatus === 'checking') tryClaim();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order]);
 
-  // Heartbeat every 25 s (slightly under server's 30 s expiry)
   useEffect(() => {
     if (sessionStatus !== 'allowed' || !orderId) return;
     heartbeatRef.current = setInterval(async () => {
       try {
         const res = await heartbeatSession({ orderId, sessionId: SESSION_ID });
         if (res?.success === false && res?.reason === 'session_expired') {
-          // Session expired server-side → re-claim transparently
           const reclaim = await claimSession({ orderId, sessionId: SESSION_ID, deviceInfo: getDeviceInfo() });
           if (!reclaim.allowed) {
             setSessionStatus('blocked');
             setBlockedInfo({ activeCount: reclaim.activeCount ?? 5 });
           }
         }
-      } catch {
-        // Silently ignore transient network errors in heartbeat
-      }
+      } catch {}
     }, 25_000);
     return () => clearInterval(heartbeatRef.current);
   }, [sessionStatus, orderId, SESSION_ID, heartbeatSession, claimSession]);
 
-  // Re-claim when tab becomes visible again
   useEffect(() => {
     const handleVisibility = async () => {
       if (document.visibilityState === 'visible' && orderId) {
@@ -343,7 +334,6 @@ export default function RiderTrack() {
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, [orderId, SESSION_ID, claimSession]);
 
-  // Release session + stop GPS on page unload
   useEffect(() => {
     const release = () => {
       if (sessionLostRef.current) return;
@@ -393,14 +383,13 @@ export default function RiderTrack() {
     }
   }, []);
 
-  // Throttled route draw (skip if barely moved or too soon)
   const drawRoute = useCallback(async (map, rLat, rLng, dLat, dLng) => {
     if (!map || !window.L) return;
     const now  = Date.now();
     const prev = lastRouteDrawRef.current;
-    const movedEnough    = !prev.rLat || Math.abs(rLat - prev.rLat) > 0.00015 || Math.abs(rLng - prev.rLng) > 0.00015;
-    const enoughTime     = now - prev.time > 10_000;
-    const noRouteExists  = !routeLineRef.current;
+    const movedEnough   = !prev.rLat || Math.abs(rLat - prev.rLat) > 0.00015 || Math.abs(rLng - prev.rLng) > 0.00015;
+    const enoughTime    = now - prev.time > 10_000;
+    const noRouteExists = !routeLineRef.current;
     if (!noRouteExists && (!movedEnough || !enoughTime)) return;
     clearRouteLines();
     const coords = await fetchOsrmRoute(rLat, rLng, dLat, dLng);
@@ -419,7 +408,6 @@ export default function RiderTrack() {
     }
   }, [clearRouteLines]);
 
-  // Force route draw regardless of throttle (tab switch, init, etc.)
   const drawRouteForce = useCallback(async (map, rLat, rLng, dLat, dLng) => {
     if (!map || !window.L) return;
     clearRouteLines();
@@ -442,19 +430,18 @@ export default function RiderTrack() {
   const destroyMap = useCallback(() => {
     clearRouteLines();
     if (mapObjRef.current) { try { mapObjRef.current.remove(); } catch {} mapObjRef.current = null; }
-    destMarkerRef.current   = null;
-    riderMarkerRef.current  = null;
+    destMarkerRef.current     = null;
+    riderMarkerRef.current    = null;
     mapInitializedRef.current = false;
     lastRouteDrawRef.current  = { time: 0, rLat: null, rLng: null };
   }, [clearRouteLines]);
 
   /* ─────────────────────────────────────────
-     MAP init — only runs once, then reuses
+     MAP init
   ───────────────────────────────────────── */
   const initMap = useCallback(() => {
     if (!leafletReady || !mapRef.current || !order) return;
 
-    // Map already alive → just refresh size + re-draw route
     if (mapObjRef.current && mapInitializedRef.current) {
       try {
         mapObjRef.current.invalidateSize();
@@ -474,7 +461,6 @@ export default function RiderTrack() {
       }
     }
 
-    // Clean up stale Leaflet instance on the DOM node
     if (mapRef.current._leaflet_id) {
       try { const t = window.L.map(mapRef.current); t.remove(); } catch {}
       delete mapRef.current._leaflet_id;
@@ -513,13 +499,11 @@ export default function RiderTrack() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leafletReady, order, destroyMap, drawRouteForce]);
 
-  // Tab switch → map tab: just invalidate + re-draw (map DOM stays alive via display:none)
   useEffect(() => {
     if (activeTab === 'map') setTimeout(() => initMap(), 100);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
-  // Re-init when coming back from background
   useEffect(() => {
     const h = () => {
       if (document.visibilityState === 'visible' && activeTab === 'map') {
@@ -530,12 +514,10 @@ export default function RiderTrack() {
     return () => document.removeEventListener('visibilitychange', h);
   }, [activeTab, initMap]);
 
-  // Init once Leaflet is ready
   useEffect(() => {
     if (leafletReady && activeTab === 'map') setTimeout(() => initMap(), 100);
   }, [leafletReady, initMap, activeTab]);
 
-  // Cleanup on unmount
   useEffect(() => () => {
     if (watchIdRef.current) navigator.geolocation.clearWatch(watchIdRef.current);
     if (gpsRetryRef.current) clearTimeout(gpsRetryRef.current);
@@ -555,12 +537,15 @@ export default function RiderTrack() {
 
   const startTracking = useCallback(() => {
     if (!navigator.geolocation) { setGpsStatus('error'); return; }
-    // Clear any existing watch before starting a new one
     if (watchIdRef.current) {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
     }
     if (gpsRetryRef.current) { clearTimeout(gpsRetryRef.current); gpsRetryRef.current = null; }
+
+    // Reset first-fix flag so new watch sends immediately
+    firstFixSentRef.current = false;
+
     setGpsStatus('starting');
 
     watchIdRef.current = navigator.geolocation.watchPosition(
@@ -570,23 +555,44 @@ export default function RiderTrack() {
         setGpsStatus('active');
 
         const now = Date.now();
-        if (orderId && now - lastConvexUpdateRef.current >= 5000) {
+
+        // ── INSTANT FIRST FIX: send to Convex immediately, skip throttle ──
+        const isFirstFix = !firstFixSentRef.current;
+        const throttleOk = now - lastConvexUpdateRef.current >= 3000; // 3s throttle (was 5s)
+
+        if (orderId && (isFirstFix || throttleOk)) {
+          firstFixSentRef.current   = true;
           lastConvexUpdateRef.current = now;
-          let lastAddr = lastGeocodedRef.current.address;
-          const lastLat = lastGeocodedRef.current.lat, lastLng = lastGeocodedRef.current.lng;
-          const movedFar = !lastLat || Math.abs(lat - lastLat) > 0.0003 || Math.abs(lng - lastLng) > 0.0003;
-          if (movedFar) {
-            const addr = await reverseGeocode(lat, lng);
-            if (addr) { lastAddr = addr; lastGeocodedRef.current = { lat, lng, address: addr }; }
-          }
+
+          // Send location IMMEDIATELY — don't await geocode
           updateLocation({
             orderId,
             riderEmail: getRiderEmail(),
             riderName:  getRiderName(),
             lat, lng, accuracy, speed: speed || 0,
             isTracking: true, sessionId: SESSION_ID,
-            lastKnownAddress: lastAddr || undefined,
+            lastKnownAddress: lastGeocodedRef.current.address || undefined,
           }).catch(() => {});
+
+          // Geocode in background — update address when it comes in
+          const lastLat = lastGeocodedRef.current.lat, lastLng = lastGeocodedRef.current.lng;
+          const movedFar = !lastLat || Math.abs(lat - lastLat) > 0.0003 || Math.abs(lng - lastLng) > 0.0003;
+          if (movedFar) {
+            reverseGeocode(lat, lng).then(addr => {
+              if (addr) {
+                lastGeocodedRef.current = { lat, lng, address: addr };
+                // Update Convex with address (fire-and-forget)
+                updateLocation({
+                  orderId,
+                  riderEmail: getRiderEmail(),
+                  riderName:  getRiderName(),
+                  lat, lng, accuracy, speed: speed || 0,
+                  isTracking: true, sessionId: SESSION_ID,
+                  lastKnownAddress: addr,
+                }).catch(() => {});
+              }
+            });
+          }
         }
 
         // Update map marker + route
@@ -614,8 +620,7 @@ export default function RiderTrack() {
       (err) => {
         console.warn('GPS error:', err.code, err.message);
         setGpsStatus('error');
-        // Auto-retry after 8 s for transient errors (timeout / position unavailable)
-        if (err.code !== 1) { // code 1 = PERMISSION_DENIED, no point retrying
+        if (err.code !== 1) {
           gpsRetryRef.current = setTimeout(() => startTracking(), 8000);
         }
       },
@@ -807,7 +812,6 @@ export default function RiderTrack() {
         ))}
       </div>
 
-      {/* Map tab: kept in DOM via display:none so route + markers survive tab switches */}
       <div style={{ display: activeTab==='map' ? 'block' : 'none' }} className="rt-tab-content">
         <div ref={mapRef} className="rt-map" />
         <div className="rt-map-footer">
