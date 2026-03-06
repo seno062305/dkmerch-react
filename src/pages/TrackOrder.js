@@ -637,11 +637,11 @@ const TrackOrder = () => {
     );
   };
 
-  const Lightbox = () => {
-    if (!lightboxData) return null;
-    const { images, index } = lightboxData;
-    const hasMultiple = images.length > 1;
+const Lightbox = () => {
+    const { images, index } = lightboxData || {};
+    const hasMultiple = (images?.length || 0) > 1;
     useEffect(() => {
+      if (!lightboxData) return;
       const onKey = (e) => { if (e.key === 'Escape') closeLightbox(); if (e.key === 'ArrowRight' && hasMultiple) lightboxNext(); if (e.key === 'ArrowLeft' && hasMultiple) lightboxPrev(); };
       window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey);
     }, [hasMultiple]);
