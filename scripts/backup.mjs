@@ -6,10 +6,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { writeFileSync, mkdirSync } from 'fs';
-import { fetch } from 'node-fetch';
+// NOTE: No node-fetch import — Node.js v18+ has built-in fetch
 
-const CONVEX_URL     = process.env.CONVEX_URL;       // e.g. https://xxxxx.convex.cloud
-const DEPLOY_KEY     = process.env.CONVEX_DEPLOY_KEY; // from Convex dashboard → Settings → Deploy Keys
+const CONVEX_URL  = process.env.CONVEX_URL;        // e.g. https://xxxxx.convex.cloud
+const DEPLOY_KEY  = process.env.CONVEX_DEPLOY_KEY; // from Convex dashboard → Settings → Deploy Keys
 
 if (!CONVEX_URL || !DEPLOY_KEY) {
   console.error('❌ Missing CONVEX_URL or CONVEX_DEPLOY_KEY env variables.');
@@ -17,16 +17,14 @@ if (!CONVEX_URL || !DEPLOY_KEY) {
 }
 
 // ── Tables to back up ───────────────────────────────────────────────────────
-// These match the query function names in your convex/ folder.
-// Format: { table: 'display name', fn: 'api.module.functionName' }
 const TABLES = [
-  { table: 'users',              fn: 'internal.backup.getAllUsers' },
-  { table: 'orders',             fn: 'internal.backup.getAllOrders' },
-  { table: 'products',           fn: 'internal.backup.getAllProducts' },
-  { table: 'promos',             fn: 'internal.backup.getAllPromos' },
-  { table: 'preOrderRequests',   fn: 'internal.backup.getAllPreOrderRequests' },
-  { table: 'pickupRequests',     fn: 'internal.backup.getAllPickupRequests' },
-  { table: 'riderLocations',     fn: 'internal.backup.getAllRiderLocations' },
+  { table: 'users',            fn: 'internal.backup.getAllUsers' },
+  { table: 'orders',           fn: 'internal.backup.getAllOrders' },
+  { table: 'products',         fn: 'internal.backup.getAllProducts' },
+  { table: 'promos',           fn: 'internal.backup.getAllPromos' },
+  { table: 'preOrderRequests', fn: 'internal.backup.getAllPreOrderRequests' },
+  { table: 'pickupRequests',   fn: 'internal.backup.getAllPickupRequests' },
+  { table: 'riderLocations',   fn: 'internal.backup.getAllRiderLocations' },
 ];
 
 // ── Helper: call a Convex query via HTTP API ─────────────────────────────────
@@ -53,7 +51,6 @@ async function queryConvex(functionPath) {
 
   const data = await res.json();
 
-  // Convex HTTP API returns { status: 'success', value: [...] }
   if (data.status !== 'success') {
     throw new Error(`Convex error: ${JSON.stringify(data)}`);
   }
@@ -63,11 +60,10 @@ async function queryConvex(functionPath) {
 
 // ── Main backup logic ────────────────────────────────────────────────────────
 async function runBackup() {
-  const now       = new Date();
-  const dateStr   = now.toISOString().split('T')[0]; // e.g. 2026-03-07
+  const now      = new Date();
+  const dateStr  = now.toISOString().split('T')[0];
   const timestamp = now.toISOString();
 
-  // Create backup folder: backups/2026-03-07/
   const backupDir = `backups/${dateStr}`;
   mkdirSync(backupDir, { recursive: true });
 
@@ -90,7 +86,6 @@ async function runBackup() {
       const records = await queryConvex(fn);
       const count   = Array.isArray(records) ? records.length : 0;
 
-      // Save individual table file
       writeFileSync(
         `${backupDir}/${table}.json`,
         JSON.stringify(records, null, 2),
@@ -108,7 +103,6 @@ async function runBackup() {
     }
   }
 
-  // Save summary file
   summary.totalRecords = totalRecords;
   summary.status       = hasError ? 'partial' : 'success';
 
@@ -118,7 +112,6 @@ async function runBackup() {
     'utf8'
   );
 
-  // Also update a "latest" pointer file at root of backups/
   writeFileSync(
     'backups/latest.json',
     JSON.stringify({ latestBackup: dateStr, ...summary }, null, 2),
