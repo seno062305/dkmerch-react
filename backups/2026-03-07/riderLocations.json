@@ -2,19 +2,19 @@
   {
     "_creationTime": 1772611221694.075,
     "_id": "kh7cbfa6k7gnq95hfbjcwvz4hn828q1y",
-    "accuracy": 108,
+    "accuracy": 2.359999895095825,
     "isTracking": true,
-    "lastKnownAddress": "2nd District, Valenzuela",
-    "lastKnownAt": 1772841184976,
-    "lastKnownLat": 14.689969125000001,
-    "lastKnownLng": 120.998159375,
-    "lat": 14.689969125000001,
-    "lng": 120.998159375,
+    "lastKnownAddress": "General T. de Leon Road, 2nd District, Valenzuela",
+    "lastKnownAt": 1772844249263,
+    "lastKnownLat": 14.6862217,
+    "lastKnownLng": 120.9943467,
+    "lat": 14.6862217,
+    "lng": 120.9943467,
     "orderId": "DK-1772578600158-PLUSGO",
     "riderEmail": "rider@dkmerch.com",
     "riderName": "Rider",
-    "sessionId": "rt-1772840317420-gcnw3a5b-t7x3jfgf",
-    "speed": 0,
-    "updatedAt": 1772841184976
+    "sessionId": "rt-1772843948608-llsch5fd-533cy5bt",
+    "speed": 3.161423921585083,
+    "updatedAt": 1772844249263
   }
 ]

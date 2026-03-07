@@ -34,12 +34,12 @@
       "phone": "09814336575",
       "plate": "PRO 1234"
     },
-    "riderLinkDeviceInfo": "Windows PC",
-    "riderLinkSessionAt": 1772842881315,
+    "riderLinkDeviceInfo": "Android phone",
+    "riderLinkSessionAt": 1772844250480,
     "riderLinkSessions": {
-      "rt-1772840317420-gcnw3a5b-t7x3jfgf": {
-        "at": 1772842881315,
-        "deviceInfo": "Windows PC"
+      "rt-1772843948608-llsch5fd-533cy5bt": {
+        "at": 1772844250480,
+        "deviceInfo": "Android phone"
       }
     },
     "shippingAddress": "Quintin Demetillo Street, Demitillo, 2nd District, Valenzuela, Northern Manila District, Metro Manila, 1442, Philippines, Valenzuela, 1442",
