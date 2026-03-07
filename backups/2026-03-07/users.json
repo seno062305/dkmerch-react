@@ -1,0 +1,64 @@
+[
+  {
+    "_creationTime": 1771685121294.6147,
+    "_id": "js7fzdd8620at2z8q5vre8qqvn81k9qk",
+    "address": "Datamex Computer College, MacArthur Highway, Marulas, 2nd District, Valenzuela, Northern Manila District, Metro Manila, 1475, Philippines",
+    "city": "valenzuela",
+    "email": "justinetrajano023@gmail.com",
+    "fullName": "seno",
+    "name": "seno",
+    "password": "@Trajano23",
+    "phone": "09614336575",
+    "role": "user",
+    "status": "active",
+    "username": "seno",
+    "zipCode": "1442"
+  },
+  {
+    "_creationTime": 1771685283245.2297,
+    "_id": "js7dypqrevqs83ty5r2axpd4bh81k79c",
+    "email": "admin",
+    "name": "Administrator",
+    "password": "admin123",
+    "role": "admin",
+    "username": "admin"
+  },
+  {
+    "_creationTime": 1771941514713.2046,
+    "_id": "js745nh4ewftvhfbez55m2ax4n81s9b5",
+    "address": "Quintin Demetillo Street, Demitillo, 2nd District, Valenzuela, Northern Manila District, Metro Manila, 1442, Philippines",
+    "addressLat": 14.688079,
+    "addressLng": 120.9986515,
+    "city": "Valenzuela",
+    "email": "dkmerchtest@gmail.com",
+    "fullName": "dkmerch",
+    "name": "dkmerch",
+    "password": "@Dktest23",
+    "phone": "09614336575",
+    "role": "user",
+    "username": "dkmerch",
+    "zipCode": "1442"
+  },
+  {
+    "_creationTime": 1772273502839.5105,
+    "_id": "js79p717asf9ebktysasb3awx5821nxp",
+    "email": "sendomwa00@gmail.com",
+    "name": "Sendo Trajano",
+    "password": "Wyzmsendomwa1!",
+    "registeredAt": "2026-02-28T10:11:42.839Z",
+    "role": "user",
+    "status": "active",
+    "username": "rzsenhsha"
+  },
+  {
+    "_creationTime": 1772786313905.0466,
+    "_id": "js71npg8h13a1edtcedc8yacjh82cmas",
+    "email": "stel@gmail.com",
+    "name": "estela marie",
+    "password": "@Estela10",
+    "registeredAt": "2026-03-06T08:38:33.905Z",
+    "role": "user",
+    "status": "active",
+    "username": "stel"
+  }
+]

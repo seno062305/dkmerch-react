@@ -1,0 +1,20 @@
+[
+  {
+    "_creationTime": 1772611221694.075,
+    "_id": "kh7cbfa6k7gnq95hfbjcwvz4hn828q1y",
+    "accuracy": 108,
+    "isTracking": true,
+    "lastKnownAddress": "2nd District, Valenzuela",
+    "lastKnownAt": 1772841184976,
+    "lastKnownLat": 14.689969125000001,
+    "lastKnownLng": 120.998159375,
+    "lat": 14.689969125000001,
+    "lng": 120.998159375,
+    "orderId": "DK-1772578600158-PLUSGO",
+    "riderEmail": "rider@dkmerch.com",
+    "riderName": "Rider",
+    "sessionId": "rt-1772840317420-gcnw3a5b-t7x3jfgf",
+    "speed": 0,
+    "updatedAt": 1772841184976
+  }
+]

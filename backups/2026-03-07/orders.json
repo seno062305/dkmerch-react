@@ -1,0 +1,51 @@
+[
+  {
+    "_creationTime": 1772578596515.2542,
+    "_id": "j97c5hj6y5r65f416xhfn1653n8266mr",
+    "addressLat": 14.688079,
+    "addressLng": 120.9986515,
+    "confirmedAt": "2026-03-03T22:58:15.395Z",
+    "customerName": "dkmerch",
+    "deliveryOtp": "7338",
+    "email": "dkmerchtest@gmail.com",
+    "items": [
+      {
+        "id": "k178wrcpm98kyzygwdzpqymedh81y76j",
+        "image": "/images/BTS – Proof (Standard Edition Album).webp",
+        "isPreOrder": true,
+        "name": "BTS – Proof (Standard Edition Album)",
+        "price": 650,
+        "quantity": 1,
+        "releaseDate": "2026-02-27"
+      }
+    ],
+    "notes": "",
+    "orderId": "DK-1772578600158-PLUSGO",
+    "orderStatus": "out_for_delivery",
+    "outForDeliveryAt": "2026-03-06T23:40:24.782Z",
+    "paidAt": "2026-03-03T22:58:02.440Z",
+    "paymentLinkId": "cs_48d3f65e557b5cd7030b1dcc",
+    "paymentLinkUrl": "https://checkout-v2.paymongo.com/48d3f65e557b5cd7030b1dcc",
+    "paymentMethod": "Maya",
+    "paymentStatus": "paid",
+    "phone": "09614336575",
+    "riderInfo": {
+      "name": "seno",
+      "phone": "09814336575",
+      "plate": "PRO 1234"
+    },
+    "riderLinkDeviceInfo": "Windows PC",
+    "riderLinkSessionAt": 1772842881315,
+    "riderLinkSessions": {
+      "rt-1772840317420-gcnw3a5b-t7x3jfgf": {
+        "at": 1772842881315,
+        "deviceInfo": "Windows PC"
+      }
+    },
+    "shippingAddress": "Quintin Demetillo Street, Demitillo, 2nd District, Valenzuela, Northern Manila District, Metro Manila, 1442, Philippines, Valenzuela, 1442",
+    "shippingFee": 20,
+    "status": "Out for Delivery",
+    "subtotal": 650,
+    "total": 670
+  }
+]
