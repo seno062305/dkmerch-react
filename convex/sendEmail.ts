@@ -6,7 +6,7 @@ import { v } from "convex/values";
 const SITE_URL = process.env.SITE_URL || "https://dkmerchwebsite.vercel.app";
 
 const TEST_EMAIL = "dkmerchtest@gmail.com";
-const IS_TEST_MODE = true;
+const IS_TEST_MODE = false;
 
 // ── BASE EMAIL (internal) ─────────────────────────
 
@@ -122,21 +122,21 @@ export const sendOrderConfirmation = action({
     discountAmount:     v.optional(v.number()),
     finalTotal:         v.optional(v.number()),
     shippingFee:        v.optional(v.number()),
-    shippingDistanceKm: v.optional(v.number()), // ✅ NEW
+    shippingDistanceKm: v.optional(v.number()),
   },
   handler: async (
     ctx,
     {
       to, name, orderId, items, total,
       promoCode, promoName, discountAmount, finalTotal, shippingFee,
-      shippingDistanceKm, // ✅ NEW
+      shippingDistanceKm,
     }: {
       to: string; name: string; orderId: string;
       items: { name: string; price: number; quantity: number }[];
       total: number;
       promoCode?: string; promoName?: string;
       discountAmount?: number; finalTotal?: number; shippingFee?: number;
-      shippingDistanceKm?: number; // ✅ NEW
+      shippingDistanceKm?: number;
     }
   ): Promise<{ success: boolean; message?: string; id?: string }> => {
 
@@ -163,7 +163,6 @@ export const sendOrderConfirmation = action({
       </tr>
     ` : '';
 
-    // ✅ Shipping row with distance label
     const shippingKmLabel = shippingDistanceKm
       ? ` <span style="font-size: 12px; color: #94a3b8; font-weight: 400;">(~${shippingDistanceKm} km)</span>`
       : '';
@@ -177,7 +176,6 @@ export const sendOrderConfirmation = action({
       </tr>
     `;
 
-    // ✅ Summary shipping label with distance
     const summaryShippingLabel = shippingDistanceKm
       ? `Shipping (~${shippingDistanceKm} km)`
       : `Shipping`;
@@ -468,7 +466,7 @@ export const sendOrderConfirmedEmail = internalAction({
   },
 });
 
-// ── NEW ORDER EMAIL → RIDERS ──────────────────────────────────────────────────
+// ── NEW ORDER EMAIL → ALL APPROVED RIDERS ────────────────────────────────────
 
 export const sendRiderNewOrderEmail = internalAction({
   args: {
@@ -478,9 +476,16 @@ export const sendRiderNewOrderEmail = internalAction({
     itemCount:       v.number(),
     shippingAddress: v.string(),
   },
-  handler: async (ctx, args): Promise<{ success: boolean; message?: string; id?: string }> => {
+  handler: async (ctx, args): Promise<{ success: boolean; sent: number }> => {
     const shortId = args.orderId.slice(-8).toUpperCase();
     const riderUrl = `${SITE_URL}/rider?tab=available`;
+
+    // Blast to all approved riders
+    const riders: { name: string; email: string }[] = await ctx.runQuery(
+      internal.riders.getAllApprovedRiderEmails, {}
+    );
+
+    if (!riders || riders.length === 0) return { success: true, sent: 0 };
 
     const html = `<!DOCTYPE html>
 <html>
@@ -568,11 +573,19 @@ export const sendRiderNewOrderEmail = internalAction({
 </body>
 </html>`;
 
-    return await ctx.runAction(internal.sendEmail.sendEmail, {
-      to: TEST_EMAIL,
-      subject: `🛵 New Order Ready for Pickup — #${shortId} | DKMerch`,
-      html,
-    });
+    let sent = 0;
+    for (const rider of riders) {
+      if (!rider.email) continue;
+      await ctx.runAction(internal.sendEmail.sendEmail, {
+        to: rider.email,
+        subject: `🛵 New Order Ready for Pickup — #${shortId} | DKMerch`,
+        html,
+      });
+      await new Promise((r) => setTimeout(r, 400));
+      sent++;
+    }
+
+    return { success: true, sent };
   },
 });
 
@@ -898,7 +911,7 @@ export const sendRiderApprovedEmail = action({
   },
 });
 
-// ── NEW: RIDER ON THE WAY EMAIL → CUSTOMER ────────────────────────────────────
+// ── RIDER ON THE WAY EMAIL → CUSTOMER ────────────────────────────────────────
 
 export const sendRiderOnTheWayEmail = internalAction({
   args: {

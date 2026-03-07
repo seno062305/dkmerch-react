@@ -455,3 +455,20 @@ export const releaseRiderLinkSession = mutation({
     return { success: true };
   },
 });
+
+// ── i-paste ito sa DULO ng convex/riders.ts ──
+
+import { internalQuery } from "./_generated/server";
+
+export const getAllApprovedRiderEmails = internalQuery({
+  handler: async ({ db }): Promise<{ name: string; email: string }[]> => {
+    const riders = await db
+      .query("riderApplications")
+      .withIndex("by_status", q => q.eq("status", "approved"))
+      .collect();
+
+    return riders
+      .filter(r => !!r.email)
+      .map(r => ({ name: r.fullName, email: r.email }));
+  },
+});
