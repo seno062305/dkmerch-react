@@ -65,7 +65,6 @@ const CartModal = ({ cart, onClose }) => {
 
   const subtotal      = calculateSubtotal();
   const totalDiscount = calculateTotalDiscount();
-  // ✅ REMOVED: shipping calculation — shipping is now computed in Checkout based on address/distance
 
   const promoItems = cart.filter(i => i.promoCode);
   const cartPromo  = promoItems.length > 0 ? {
@@ -73,6 +72,25 @@ const CartModal = ({ cart, onClose }) => {
     discount:       promoItems[0].promoDiscount,
     discountAmount: totalDiscount,
   } : null;
+
+  // ── Estimated delivery date (2–4 business days from today) ──
+  const getEstimatedDelivery = () => {
+    const today = new Date();
+    const addBusinessDays = (date, days) => {
+      let d = new Date(date);
+      let added = 0;
+      while (added < days) {
+        d.setDate(d.getDate() + 1);
+        const day = d.getDay();
+        if (day !== 0 && day !== 6) added++;
+      }
+      return d;
+    };
+    const earliest = addBusinessDays(today, 2);
+    const latest   = addBusinessDays(today, 4);
+    const fmt = (d) => d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
+    return `${fmt(earliest)} – ${fmt(latest)}`;
+  };
 
   const handleRemoveItem = async (item) => {
     if (window.confirm('Remove this item from cart?')) {
@@ -234,10 +252,21 @@ const CartModal = ({ cart, onClose }) => {
               </div>
 
               <div className="cart-summary">
-                {/* ✅ REMOVED: Shipping notice/free shipping bar — moved to Checkout */}
+                {/* ── Estimated Delivery Banner ── */}
+                <div className="cart-estimated-delivery">
+                  <div className="cart-delivery-icon">
+                    <i className="fas fa-truck"></i>
+                  </div>
+                  <div className="cart-delivery-info">
+                    <span className="cart-delivery-label">Estimated Delivery</span>
+                    <span className="cart-delivery-date">{getEstimatedDelivery()}</span>
+                  </div>
+                  <div className="cart-delivery-badge">2–4 days</div>
+                </div>
+
                 <div className="shipping-notice">
-                  <i className="fas fa-truck"></i>
-                  <span>Shipping fee will be calculated at checkout based on your address.</span>
+                  <i className="fas fa-map-marker-alt"></i>
+                  <span>Shipping fee calculated at checkout based on your address.</span>
                 </div>
 
                 {totalDiscount > 0 && (
@@ -254,7 +283,6 @@ const CartModal = ({ cart, onClose }) => {
                   <span>₱{subtotal.toLocaleString()}</span>
                 </div>
 
-                {/* ✅ REMOVED: Shipping row — will show in Checkout */}
                 <div className="summary-row" style={{ fontSize: '12px', color: '#888', fontStyle: 'italic' }}>
                   <span>Shipping:</span>
                   <span>Calculated at checkout</span>

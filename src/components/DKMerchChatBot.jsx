@@ -13,6 +13,25 @@ const BOT_AVATAR = (
   }}>🎀</div>
 );
 
+// ─── Estimated delivery helper ───
+const getEstimatedDelivery = () => {
+  const addBusinessDays = (date, days) => {
+    let d = new Date(date);
+    let added = 0;
+    while (added < days) {
+      d.setDate(d.getDate() + 1);
+      const day = d.getDay();
+      if (day !== 0 && day !== 6) added++;
+    }
+    return d;
+  };
+  const today   = new Date();
+  const earliest = addBusinessDays(today, 2);
+  const latest   = addBusinessDays(today, 4);
+  const fmt = (d) => d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
+  return `${fmt(earliest)} – ${fmt(latest)}`;
+};
+
 // ─── All Q&A Tree ───
 const MAIN_MENU = [
   { id: "orders", label: "📦 My Orders", icon: "📦" },
@@ -113,8 +132,12 @@ const QA = {
     question: "What would you like to know about delivery?",
     options: [
       {
+        label: "How long does delivery take?",
+        answer: `Orders are typically delivered within **2–4 business days** after your order is confirmed. 🛵\n\nEstimated delivery: **${getEstimatedDelivery()}**\n\nDelivery time may vary depending on:\n• Your distance from our store\n• Rider availability\n• Weather conditions\n\nYou'll receive real-time updates as your order progresses!`
+      },
+      {
         label: "How does delivery work?",
-        answer: `DKMerch uses our own network of **DK Riders** for delivery! 🛵\n\nHere's the delivery flow:\n1. Admin confirms your order\n2. A rider requests to pick up your order\n3. Admin approves the rider's pickup\n4. Rider picks up your items\n5. Rider heads to your address\n6. You receive an **OTP code** via email when rider is on the way\n7. Give the OTP to the rider to confirm delivery ✅`
+        answer: `DKMerch uses our own network of **DK Riders** for delivery! 🛵\n\nHere's the delivery flow:\n1. Admin confirms your order\n2. A rider requests to pick up your order\n3. Admin approves the rider's pickup\n4. Rider picks up your items\n5. Rider heads to your address\n6. You receive an **OTP code** via email when rider is on the way\n7. Give the OTP to the rider to confirm delivery ✅\n\nEstimated time: **2–4 business days** from order confirmation.`
       },
       {
         label: "How do I track my rider's location?",
@@ -147,7 +170,7 @@ const QA = {
       },
       {
         label: "My refund request was rejected. What can I do?",
-        answer: `If your refund was rejected:\n\n1. Check the **reason** provided in the rejection email from admin\n2. You can **resubmit** a new refund request with:\n   - A clearer, more detailed photo of the damaged item\n   - Additional context if needed\n3. If you believe it was wrongly rejected, contact us at **support@dkmerch.com`
+        answer: `If your refund was rejected:\n\n1. Check the **reason** provided in the rejection email from admin\n2. You can **resubmit** a new refund request with:\n   - A clearer, more detailed photo of the damaged item\n   - Additional context if needed\n3. If you believe it was wrongly rejected, contact us at **support@dkmerch.com**`
       },
     ]
   },
@@ -175,8 +198,6 @@ const QA = {
 };
 
 // ─── Message Types ───
-// { from: "bot"|"user", text, options, isMenu }
-
 export default function DKMerchChatBot() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([]);
@@ -209,14 +230,12 @@ export default function DKMerchChatBot() {
     return () => clearTimeout(t);
   }, []);
 
-  // Safety net — restore scroll if component unmounts while chat is open
   useEffect(() => {
     return () => { document.body.style.overflow = ''; };
   }, []);
 
   const handleOption = (option) => {
     if (option.id) {
-      // Main menu category
       setMessages(prev => [
         ...prev,
         { from: "user", text: option.label },
@@ -228,7 +247,6 @@ export default function DKMerchChatBot() {
         }
       ]);
     } else if (option.answer) {
-      // Sub-question with answer
       setMessages(prev => [
         ...prev,
         { from: "user", text: option.label },
@@ -254,7 +272,6 @@ export default function DKMerchChatBot() {
   };
 
   const renderText = (text) => {
-    // Bold markdown support
     const parts = text.split(/\*\*(.*?)\*\*/g);
     return parts.map((part, i) =>
       i % 2 === 1
@@ -282,10 +299,8 @@ export default function DKMerchChatBot() {
             const willOpen = !open;
             setOpen(willOpen);
             if (willOpen) {
-              // Lock background scroll when chat opens
               document.body.style.overflow = 'hidden';
             } else {
-              // Restore scroll + reset conversation when chat closes
               document.body.style.overflow = '';
               setMessages([]);
               setHasGreeted(false);
@@ -358,7 +373,6 @@ export default function DKMerchChatBot() {
           }}>
             {messages.map((msg, i) => (
               <div key={i}>
-                {/* Bot message */}
                 {msg.from === "bot" && (
                   <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
                     {BOT_AVATAR}
@@ -374,11 +388,8 @@ export default function DKMerchChatBot() {
                         {renderText(msg.text)}
                       </div>
 
-                      {/* Options / Menu Buttons */}
                       {msg.options && (
-                        <div style={{
-                          display: "flex", flexDirection: "column", gap: 6, marginTop: 8,
-                        }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
                           {msg.options.map((opt, j) => (
                             <button
                               key={j}
@@ -413,7 +424,6 @@ export default function DKMerchChatBot() {
                         </div>
                       )}
 
-                      {/* Back to main menu */}
                       {msg.showBack && (
                         <button
                           onClick={handleBack}
@@ -438,7 +448,6 @@ export default function DKMerchChatBot() {
                   </div>
                 )}
 
-                {/* User message */}
                 {msg.from === "user" && (
                   <div style={{ display: "flex", justifyContent: "flex-end" }}>
                     <div style={{
@@ -472,7 +481,6 @@ export default function DKMerchChatBot() {
         </div>
       )}
 
-      {/* ── CSS Animations ── */}
       <style>{`
         @keyframes dkPulse {
           0% { transform: scale(1); opacity: 0.8; }
