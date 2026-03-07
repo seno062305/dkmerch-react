@@ -30,7 +30,7 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
       (p.originalPrice && Number(p.originalPrice) > Number(p.price))
     )
     .sort((a, b) => (b._creationTime || 0) - (a._creationTime || 0))
-    .slice(0, 5);
+    .slice(0, 8);
 
   const isPromoProduct = (product) => {
     if (!activePromo || !activePromo.isActive) return false;

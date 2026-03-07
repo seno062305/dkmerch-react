@@ -9,17 +9,18 @@ header {
 
 .main-header { background: white; padding: 1rem 0; }
 
-.main-header .container {
-  max-width: 1400px;
-  margin: 0 auto;
+/* ✅ Three-column layout: logo flush left | nav center | actions flush right */
+.header-inner {
+  width: 100%;
   padding: 0 2rem;
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 2rem;
+  gap: 1rem;
+  box-sizing: border-box;
 }
 
-/* Logo */
+/* ── Logo (left) ── */
 .logo {
   display: flex;
   align-items: center;
@@ -27,6 +28,7 @@ header {
   text-decoration: none;
   color: inherit;
   flex-shrink: 0;
+  justify-self: start;   /* flush left */
 }
 
 .logo img { height: 50px; width: auto; border-radius: 8px; }
@@ -48,8 +50,12 @@ header {
   font-weight: 500;
 }
 
-/* Main Navigation */
-.main-nav { flex: 1; display: flex; justify-content: center; }
+/* ── Main Navigation (center) ── */
+.main-nav {
+  display: flex;
+  justify-content: center;
+  justify-self: center;
+}
 
 .main-nav ul {
   display: flex;
@@ -89,12 +95,13 @@ header {
 /* Mobile nav header — hidden on desktop */
 .mobile-nav-header { display: none; }
 
-/* Header Actions */
+/* ── Header Actions (right) ── */
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 1.5rem;
+  gap: 1.25rem;
   flex-shrink: 0;
+  justify-self: end;   /* flush right */
 }
 
 .header-action-item {
@@ -121,7 +128,7 @@ header {
 .favorites-btn:hover { color: #a86800 !important; }
 .favorites-btn:hover i { transform: scale(1.2) rotate(-5deg); color: #f5a623; }
 
-/* ✅ Icon wrapper — anchors badge to the icon itself */
+/* ✅ Icon wrapper */
 .icon-wrapper {
   position: relative;
   display: inline-flex;
@@ -165,6 +172,9 @@ header {
   transition: all 0.3s ease;
   padding: 0.5rem 0.75rem;
   border-radius: 8px;
+  background: none;
+  border: none;
+  color: #333;
 }
 
 .account-btn:hover { background: #f8f9fa; color: #9c27b0; }
@@ -357,8 +367,6 @@ header {
 .no-results p { font-size: 1.1rem; margin-bottom: 0.5rem; color: #333; }
 .no-results span { font-size: 0.9rem; color: #999; }
 
-body.search-open { overflow: hidden; }
-
 /* Mobile Overlay */
 .mobile-overlay {
   display: none;
@@ -371,16 +379,22 @@ body.search-open { overflow: hidden; }
 
 /* ═══════════ RESPONSIVE ═══════════ */
 @media (max-width: 1024px) {
-  .main-header .container { padding: 0 1.5rem; gap: 1rem; }
+  .main-header .container { padding: 0 1.5rem; gap: 0.75rem; }
   .main-nav ul { gap: 1.5rem; }
   .header-actions { gap: 1rem; }
   .header-action-item span { font-size: 0.7rem; }
 }
 
 @media (max-width: 768px) {
-  .main-header .container { padding: 0 1rem; flex-wrap: nowrap; }
+  /* Switch back to flexbox on mobile */
+  .header-inner {
+    display: flex;
+    flex-wrap: nowrap;
+    padding: 0 1rem;
+    justify-content: space-between;
+  }
 
-  /* Sidebar — fixed width panel, slides in from left */
+  /* Sidebar */
   .main-nav {
     position: fixed;
     top: 0;
@@ -395,11 +409,11 @@ body.search-open { overflow: hidden; }
     padding: 0;
     flex-direction: column;
     justify-content: flex-start;
+    display: flex;
   }
 
   .main-nav.active { left: 0; }
 
-  /* Mobile nav header */
   .mobile-nav-header {
     display: flex;
     align-items: center;
@@ -408,40 +422,14 @@ body.search-open { overflow: hidden; }
     border-bottom: 1px solid #f0f0f0;
   }
 
-  .mobile-nav-brand {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-  }
-
-  .mobile-nav-logo-img {
-    height: 36px;
-    width: auto;
-    border-radius: 6px;
-  }
-
-  .mobile-nav-logo-text {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .mobile-nav-brand-name {
-    font-size: 1rem;
-    font-weight: 800;
-    color: #9c27b0;
-    line-height: 1;
-  }
-
-  .mobile-nav-brand-tagline {
-    font-size: 0.65rem;
-    color: #62306b;
-    font-weight: 500;
-    margin-top: 2px;
-  }
+  .mobile-nav-brand { display: flex; align-items: center; gap: 0.6rem; }
+  .mobile-nav-logo-img { height: 36px; width: auto; border-radius: 6px; }
+  .mobile-nav-logo-text { display: flex; flex-direction: column; }
+  .mobile-nav-brand-name { font-size: 1rem; font-weight: 800; color: #9c27b0; line-height: 1; }
+  .mobile-nav-brand-tagline { font-size: 0.65rem; color: #62306b; font-weight: 500; margin-top: 2px; }
 
   .mobile-nav-close {
-    width: 34px;
-    height: 34px;
+    width: 34px; height: 34px;
     border-radius: 50%;
     background: #f3f4f6;
     border: none;
@@ -455,67 +443,30 @@ body.search-open { overflow: hidden; }
     flex-shrink: 0;
   }
 
-  .mobile-nav-close:hover {
-    background: #9c27b0;
-    color: white;
-  }
+  .mobile-nav-close:hover { background: #9c27b0; color: white; }
 
-  .main-nav ul {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0;
-    width: 100%;
-  }
-
+  .main-nav ul { flex-direction: column; align-items: flex-start; gap: 0; width: 100%; }
   .main-nav li { width: 100%; border-bottom: 1px solid #f0f0f0; }
-
-  .main-nav a {
-    display: block;
-    padding: 1rem 1.5rem;
-    width: 100%;
-    font-size: 1rem;
-  }
-
+  .main-nav a { display: block; padding: 1rem 1.5rem; width: 100%; font-size: 1rem; }
   .main-nav a::after { display: none; }
 
-  /* Burger — visible on mobile */
   .mobile-menu-toggle { display: flex; order: 10; }
-
-  /* Dark overlay */
   .mobile-overlay { display: block; }
 
   .header-actions { gap: 0.75rem; }
 
-  /* ✅ Hide text labels on mobile, keep icon + badge visible */
-  .header-action-item {
-    padding: 0.4rem;
-    flex-direction: column;
-    gap: 0;
-  }
-
+  .header-action-item { padding: 0.4rem; flex-direction: column; gap: 0; }
   .header-action-item > span:not(.icon-wrapper) { display: none; }
   .header-action-item i { font-size: 1.35rem; }
 
-  /* ✅ Ensure icon-wrapper has enough room for badge overflow */
-  .icon-wrapper {
-    width: 1.8rem;
-    height: 1.8rem;
-    overflow: visible;
-  }
+  .icon-wrapper { width: 1.8rem; height: 1.8rem; overflow: visible; }
 
-  .cart-count, .wishlist-count {
-    top: -7px;
-    right: -9px;
-    font-size: 0.6rem;
-    min-width: 17px;
-    height: 17px;
-  }
+  .cart-count, .wishlist-count { top: -7px; right: -9px; font-size: 0.6rem; min-width: 17px; height: 17px; }
 
-  .account-btn { padding: 0.25rem; flex-direction: column; gap: 0; }
+  .account-btn { padding: 0.25rem; flex-direction: column; gap: 0; background: none; border: none; }
   .account-btn span { display: none; }
   .dropdown-arrow { display: none; }
 
-  /* Account dropdown — bottom sheet */
   .account-dropdown-menu {
     position: fixed;
     top: auto; bottom: 0;
@@ -531,7 +482,6 @@ body.search-open { overflow: hidden; }
     to { transform: translateY(0); }
   }
 
-  /* Logo — image only on mobile */
   .logo img { height: 38px; border-radius: 8px; }
   .logo-text { display: none; }
 
@@ -550,8 +500,7 @@ body.search-open { overflow: hidden; }
 /* ── Pre-Order dot indicator ── */
 .preorder-dot-indicator {
   display: inline-block;
-  width: 9px;
-  height: 9px;
+  width: 9px; height: 9px;
   background: #fc1268;
   border-radius: 50%;
   border: 2px solid white;

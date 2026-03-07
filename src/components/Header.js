@@ -68,9 +68,10 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // ✅ Only lock scroll for mobile menu, NOT for search
   useEffect(() => {
-    document.body.style.overflow = (showMobileMenu || showSearch) ? 'hidden' : '';
-  }, [showMobileMenu, showSearch]);
+    document.body.style.overflow = showMobileMenu ? 'hidden' : '';
+  }, [showMobileMenu]);
 
   useEffect(() => {
     const scrollTarget = location.state?.scrollTo;
@@ -175,7 +176,10 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
   return (
     <header>
       <div className="main-header">
-        <div className="container">
+        {/* ✅ Three-column layout: logo | nav | actions */}
+        <div className="header-inner">
+
+          {/* LEFT: Logo */}
           <Link to="/" className="logo">
             <img src="/images/dklogo.jpg" alt="DKMerch Logo" />
             <div className="logo-text">
@@ -184,6 +188,7 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
             </div>
           </Link>
 
+          {/* CENTER: Nav */}
           <nav className={`main-nav ${showMobileMenu ? 'active' : ''}`}>
             <div className="mobile-nav-header">
               <div className="mobile-nav-brand">
@@ -206,6 +211,7 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
             </ul>
           </nav>
 
+          {/* RIGHT: Actions */}
           <div className="header-actions">
             <button className="header-action-item" onClick={() => setShowSearch(true)}>
               <span className="icon-wrapper">

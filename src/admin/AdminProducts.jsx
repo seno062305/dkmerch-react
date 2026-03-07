@@ -26,7 +26,6 @@ const AdminProducts = () => {
   const updateProduct = useUpdateProduct();
   const deleteProduct = useDeleteProduct();
 
-  // ✅ NEW: Action to email all users when a new pre-order is added
   const announceNewPreOrder = useAction(api.preOrderRequests.announceNewPreOrderToAllUsers);
 
   const [form, setForm]           = useState(emptyForm);
@@ -85,14 +84,11 @@ const AdminProducts = () => {
     setSubmitting(true);
     try {
       if (editingId) {
-        // ── Editing existing product ──
         await updateProduct({ id: editingId, ...productData });
         setEditingId(null);
       } else {
-        // ── Adding new product ──
         await addProduct(productData);
 
-        // ✅ If new pre-order, email ALL users to announce it
         if (form.isPreOrder && form.releaseDate && form.releaseTime) {
           try {
             await announceNewPreOrder({
@@ -103,7 +99,6 @@ const AdminProducts = () => {
               releaseTime:  form.releaseTime,
             });
           } catch (emailErr) {
-            // Don't block the product add if email fails
             console.error('Email announcement failed:', emailErr);
           }
         }
@@ -152,7 +147,6 @@ const AdminProducts = () => {
     return matchesSearch && matchesCategory;
   });
 
-  // ✅ Proper PHT timestamp check
   const isReleased = (product) => {
     if (!product.isPreOrder) return false;
     if (!product.releaseDate) return false;
@@ -160,11 +154,6 @@ const AdminProducts = () => {
     const releaseMs = new Date(`${product.releaseDate}T${rt}:00+08:00`).getTime();
     return Date.now() >= releaseMs;
   };
-
-  const totalProducts  = products.length;
-  const totalValue     = products.reduce((sum, p) => sum + (p.price * p.stock), 0);
-  const onSaleCount    = products.filter(p => p.isSale).length;
-  const preOrderCount  = products.filter(p => p.isPreOrder && !isReleased(p)).length;
 
   const formatReleaseDateTime = (dateStr, timeStr) => {
     if (!dateStr) return null;
@@ -180,24 +169,6 @@ const AdminProducts = () => {
 
   return (
     <div className="admin-products-page">
-      <div className="products-stats">
-        <div className="stat-card">
-          <div className="stat-icon purple"><i className="fas fa-box"></i></div>
-          <div className="stat-info"><h3>{totalProducts}</h3><p>Total Products</p></div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon green"><i className="fas fa-peso-sign"></i></div>
-          <div className="stat-info"><h3>₱{totalValue.toLocaleString()}</h3><p>Total Inventory Value</p></div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon orange"><i className="fas fa-tag"></i></div>
-          <div className="stat-info"><h3>{onSaleCount}</h3><p>On Sale</p></div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon blue"><i className="fas fa-clock"></i></div>
-          <div className="stat-info"><h3>{preOrderCount}</h3><p>Pre-Orders</p></div>
-        </div>
-      </div>
 
       <div className="admin-product-form-wrapper">
         <form className="admin-product-form" onSubmit={handleSubmit}>
@@ -358,7 +329,6 @@ const AdminProducts = () => {
                   </div>
                 )}
 
-                {/* ✅ Notice to admin that email will be sent on add */}
                 {!editingId && (
                   <div className="form-group full-width">
                     <div style={{

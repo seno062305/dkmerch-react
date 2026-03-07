@@ -25,7 +25,7 @@ const getEstimatedDelivery = () => {
     }
     return d;
   };
-  const today   = new Date();
+  const today    = new Date();
   const earliest = addBusinessDays(today, 2);
   const latest   = addBusinessDays(today, 4);
   const fmt = (d) => d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
@@ -34,13 +34,13 @@ const getEstimatedDelivery = () => {
 
 // ─── All Q&A Tree ───
 const MAIN_MENU = [
-  { id: "orders", label: "📦 My Orders", icon: "📦" },
-  { id: "preorders", label: "⏰ Pre-Orders", icon: "⏰" },
-  { id: "payments", label: "💳 Payments", icon: "💳" },
-  { id: "promos", label: "🔥 Promos & Discounts", icon: "🔥" },
-  { id: "delivery", label: "🛵 Delivery & Tracking", icon: "🛵" },
-  { id: "refunds", label: "↩️ Refunds", icon: "↩️" },
-  { id: "products", label: "🛍️ Products & Collections", icon: "🛍️" },
+  { id: "orders",    label: "📦 My Orders",             icon: "📦" },
+  { id: "preorders", label: "⏰ Pre-Orders",             icon: "⏰" },
+  { id: "payments",  label: "💳 Payments",               icon: "💳" },
+  { id: "promos",    label: "🔥 Promos & Discounts",     icon: "🔥" },
+  { id: "delivery",  label: "🛵 Delivery & Tracking",    icon: "🛵" },
+  { id: "refunds",   label: "↩️ Refunds",                icon: "↩️" },
+  { id: "products",  label: "🛍️ Products & Collections", icon: "🛍️" },
 ];
 
 const QA = {
@@ -197,7 +197,6 @@ const QA = {
   },
 };
 
-// ─── Message Types ───
 export default function DKMerchChatBot() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([]);
@@ -230,9 +229,8 @@ export default function DKMerchChatBot() {
     return () => clearTimeout(t);
   }, []);
 
-  useEffect(() => {
-    return () => { document.body.style.overflow = ''; };
-  }, []);
+  // ✅ REMOVED: all document.body.style.overflow manipulation
+  // Page can now scroll freely even when chatbot is open
 
   const handleOption = (option) => {
     if (option.id) {
@@ -298,10 +296,8 @@ export default function DKMerchChatBot() {
           onClick={() => {
             const willOpen = !open;
             setOpen(willOpen);
-            if (willOpen) {
-              document.body.style.overflow = 'hidden';
-            } else {
-              document.body.style.overflow = '';
+            // ✅ No body overflow changes — page stays scrollable
+            if (!willOpen) {
               setMessages([]);
               setHasGreeted(false);
             }
