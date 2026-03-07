@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
@@ -19,27 +19,44 @@ const Collections = () => {
   const [highlightedProductId, setHighlightedProductId] = useState(null);
   const [selectedProduct, setSelectedProduct] = useState(null);
 
-  // ✅ FIX: Use getCollectionProducts instead of getAllProducts
-  // getCollectionProducts returns regular products + released pre-orders
+  // Dropdown open states
+  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
+  const [groupDropdownOpen, setGroupDropdownOpen] = useState(false);
+
+  const categoryRef = useRef(null);
+  const groupRef = useRef(null);
+
   const products = useQuery(api.products.getCollectionProducts) || [];
 
   const wishlistItems = useWishlist();
   const addToCartMutation = useAddToCart();
   const toggleWishlistMutation = useToggleWishlist();
 
-  // ✅ Fetch active promo for indicator
   const activePromos = useQuery(api.promos.getActivePromos) || [];
   const activePromo = activePromos[0] || null;
 
   const isWishlisted = (productId) =>
     wishlistItems.some(item => item.productId === productId);
 
-  // ✅ Check if product is promo-eligible
   const isPromoProduct = (product) => {
     if (!activePromo || !activePromo.isActive) return false;
     if (!activePromo.name) return false;
     return product.kpopGroup?.trim().toUpperCase() === activePromo.name.trim().toUpperCase();
   };
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (categoryRef.current && !categoryRef.current.contains(e.target)) {
+        setCategoryDropdownOpen(false);
+      }
+      if (groupRef.current && !groupRef.current.contains(e.target)) {
+        setGroupDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     const filterGroup = location.state?.filterGroup;
@@ -97,7 +114,6 @@ const Collections = () => {
         <h1>All Collections</h1>
         <p>Explore our complete K-Pop merchandise collection</p>
 
-        {/* ✅ Active promo banner */}
         {activePromo && activePromo.isActive && (
           <div className="collections-promo-banner">
             <i className="fas fa-tag"></i>
@@ -112,20 +128,58 @@ const Collections = () => {
 
       <div className="collections-filters">
         <div className="filters-single-line">
+
+          {/* CATEGORY FILTER */}
           <div className="filter-group">
-            <label>Category:</label>
-            <div className="filter-buttons">
+            <label>CATEGORY:</label>
+
+            {/* Desktop: buttons */}
+            <div className="filter-buttons desktop-only">
               {categories.map(cat => (
-                <button key={cat} className={`filter-btn ${selectedCategory === cat ? 'active' : ''}`} onClick={() => setSelectedCategory(cat)}>
+                <button
+                  key={cat}
+                  className={`filter-btn ${selectedCategory === cat ? 'active' : ''}`}
+                  onClick={() => setSelectedCategory(cat)}
+                >
                   {cat}
                 </button>
               ))}
             </div>
+
+            {/* Mobile: dropdown */}
+            <div className="filter-dropdown mobile-only" ref={categoryRef}>
+              <button
+                className="filter-dropdown-toggle"
+                onClick={() => { setCategoryDropdownOpen(o => !o); setGroupDropdownOpen(false); }}
+              >
+                <span>{selectedCategory}</span>
+                <i className={`fas fa-chevron-down ${categoryDropdownOpen ? 'open' : ''}`}></i>
+              </button>
+              {categoryDropdownOpen && (
+                <div className="filter-dropdown-menu">
+                  {categories.map(cat => (
+                    <button
+                      key={cat}
+                      className={`filter-dropdown-item ${selectedCategory === cat ? 'active' : ''}`}
+                      onClick={() => { setSelectedCategory(cat); setCategoryDropdownOpen(false); }}
+                    >
+                      {cat}
+                      {selectedCategory === cat && <i className="fas fa-check"></i>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
+
           <div className="filter-divider" />
+
+          {/* GROUP FILTER */}
           <div className="filter-group">
-            <label>Group:</label>
-            <div className="filter-buttons">
+            <label>GROUP:</label>
+
+            {/* Desktop: buttons */}
+            <div className="filter-buttons desktop-only">
               {groups.map(group => (
                 <button
                   key={group}
@@ -133,7 +187,6 @@ const Collections = () => {
                   onClick={() => setSelectedGroup(group)}
                 >
                   {group}
-                  {/* ✅ Promo dot on matching group button */}
                   {activePromo && activePromo.isActive &&
                     group.toUpperCase() === activePromo.name?.toUpperCase() && (
                     <span className="filter-promo-dot" title={`${activePromo.discount}% off!`}>●</span>
@@ -141,7 +194,45 @@ const Collections = () => {
                 </button>
               ))}
             </div>
+
+            {/* Mobile: dropdown */}
+            <div className="filter-dropdown mobile-only" ref={groupRef}>
+              <button
+                className="filter-dropdown-toggle"
+                onClick={() => { setGroupDropdownOpen(o => !o); setCategoryDropdownOpen(false); }}
+              >
+                <span>
+                  {selectedGroup}
+                  {activePromo && activePromo.isActive &&
+                    selectedGroup.toUpperCase() === activePromo.name?.toUpperCase() && (
+                    <span className="filter-promo-dot">●</span>
+                  )}
+                </span>
+                <i className={`fas fa-chevron-down ${groupDropdownOpen ? 'open' : ''}`}></i>
+              </button>
+              {groupDropdownOpen && (
+                <div className="filter-dropdown-menu">
+                  {groups.map(group => (
+                    <button
+                      key={group}
+                      className={`filter-dropdown-item ${selectedGroup === group ? 'active' : ''}`}
+                      onClick={() => { setSelectedGroup(group); setGroupDropdownOpen(false); }}
+                    >
+                      <span>
+                        {group}
+                        {activePromo && activePromo.isActive &&
+                          group.toUpperCase() === activePromo.name?.toUpperCase() && (
+                          <span className="filter-promo-dot">●</span>
+                        )}
+                      </span>
+                      {selectedGroup === group && <i className="fas fa-check"></i>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
+
         </div>
       </div>
 
@@ -179,7 +270,6 @@ const Collections = () => {
                   <div className="collection-sale-badge">SALE</div>
                 )}
 
-                {/* ✅ Promo indicator badge */}
                 {hasPromo && (
                   <div className="collection-promo-badge">
                     <i className="fas fa-tag"></i> {activePromo.discount}% OFF
@@ -200,7 +290,6 @@ const Collections = () => {
                       <span className="collection-card-price-original">₱{product.originalPrice?.toLocaleString()}</span>
                     )}
                   </div>
-                  {/* ✅ Promo hint */}
                   {hasPromo && (
                     <div className="collection-promo-hint">
                       <i className="fas fa-ticket-alt"></i> Code: <strong>{activePromo.code}</strong>

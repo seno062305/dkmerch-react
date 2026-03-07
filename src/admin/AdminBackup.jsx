@@ -17,8 +17,110 @@ const TABLES = [
   { key: 'riderNotifications', label: 'Rider Notifications', icon: 'fas fa-bell',           query: api.backup.getAllRiderNotifications },
 ];
 
-const downloadJSON = (data, filename) => {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+// ── Convert a JS value to a TypeScript literal string ──
+const toTsLiteral = (value, indent = 2) => {
+  if (value === null || value === undefined) return 'null';
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  if (typeof value === 'number') return String(value);
+  if (typeof value === 'string') return JSON.stringify(value);
+  if (Array.isArray(value)) {
+    if (value.length === 0) return '[]';
+    const pad = ' '.repeat(indent + 2);
+    const closePad = ' '.repeat(indent);
+    const items = value.map(v => `${pad}${toTsLiteral(v, indent + 2)}`).join(',\n');
+    return `[\n${items},\n${closePad}]`;
+  }
+  if (typeof value === 'object') {
+    const keys = Object.keys(value);
+    if (keys.length === 0) return '{}';
+    const pad = ' '.repeat(indent + 2);
+    const closePad = ' '.repeat(indent);
+    const entries = keys.map(k => `${pad}${k}: ${toTsLiteral(value[k], indent + 2)}`).join(',\n');
+    return `{\n${entries},\n${closePad}}`;
+  }
+  return JSON.stringify(value);
+};
+
+// ── Generate a .ts file string for a single table ──
+const generateTableTs = (tableKey, data) => {
+  const typeName = tableKey.charAt(0).toUpperCase() + tableKey.slice(1, -1); // e.g. users → User
+  const varName  = tableKey; // e.g. users
+
+  // Build field types from first record
+  const typeLines = data.length > 0
+    ? Object.entries(data[0]).map(([k, v]) => {
+        let t = 'unknown';
+        if (v === null || v === undefined) t = 'null';
+        else if (typeof v === 'boolean') t = 'boolean';
+        else if (typeof v === 'number')  t = 'number';
+        else if (typeof v === 'string')  t = 'string';
+        else if (Array.isArray(v))       t = 'unknown[]';
+        else if (typeof v === 'object')  t = 'Record<string, unknown>';
+        return `  ${k}: ${t};`;
+      }).join('\n')
+    : '  [key: string]: unknown;';
+
+  const recordsTs = data.map((row, i) => {
+    const fields = Object.entries(row)
+      .map(([k, v]) => `    ${k}: ${toTsLiteral(v, 4)}`)
+      .join(',\n');
+    return `  {\n${fields},\n  }`;
+  }).join(',\n');
+
+  return [
+    `// DKMerch Backup — ${tableKey}`,
+    `// Exported: ${new Date().toISOString()}`,
+    `// Records: ${data.length}`,
+    ``,
+    `export interface ${typeName}Record {`,
+    typeLines,
+    `}`,
+    ``,
+    `const ${varName}: ${typeName}Record[] = [`,
+    recordsTs,
+    `];`,
+    ``,
+    `export default ${varName};`,
+    ``,
+  ].join('\n');
+};
+
+// ── Generate a combined .ts backup file ──
+const generateAllTs = (allData, now) => {
+  const sections = Object.entries(allData).map(([key, data]) => {
+    if (!Array.isArray(data) || data.length === 0) {
+      return `// ${key}: 0 records\nexport const ${key}: unknown[] = [];\n`;
+    }
+    const recordsTs = data.map(row => {
+      const fields = Object.entries(row)
+        .map(([k, v]) => `    ${k}: ${toTsLiteral(v, 4)}`)
+        .join(',\n');
+      return `  {\n${fields},\n  }`;
+    }).join(',\n');
+    return `// ── ${key} (${data.length} records) ──\nexport const ${key} = [\n${recordsTs},\n] as const;\n`;
+  });
+
+  return [
+    `// DKMerch Full Database Backup`,
+    `// Exported: ${now}`,
+    `// Tables: ${Object.keys(allData).join(', ')}`,
+    ``,
+    ...sections,
+    `// ── Export summary ──`,
+    `export const backupMeta = {`,
+    `  exportedAt: "${now}",`,
+    `  tables: [${Object.keys(allData).map(k => `"${k}"`).join(', ')}],`,
+    `  recordCounts: {`,
+    ...Object.entries(allData).map(([k, v]) => `    ${k}: ${Array.isArray(v) ? v.length : 0},`),
+    `  },`,
+    `};`,
+    ``,
+  ].join('\n');
+};
+
+// ── Download helper ──
+const downloadTs = (content, filename) => {
+  const blob = new Blob([content], { type: 'text/plain' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
   a.href = url; a.download = filename; a.click();
@@ -61,7 +163,6 @@ const DataModal = ({ table, data, onClose }) => {
     </div>
   );
 
-  // Get columns from first record (excluding _id, show it first)
   const allKeys   = Object.keys(data[0]);
   const idKey     = allKeys.includes('_id') ? ['_id'] : [];
   const otherKeys = allKeys.filter(k => k !== '_id' && k !== '_creationTime');
@@ -86,8 +187,11 @@ const DataModal = ({ table, data, onClose }) => {
             <span className="ab-modal-count">{filtered.length.toLocaleString()} records</span>
           </div>
           <div className="ab-modal-actions">
-            <button className="ab-modal-dl" onClick={() => downloadJSON(data, `${table.key}.json`)}>
-              <i className="fas fa-download"></i> Download JSON
+            <button
+              className="ab-modal-dl"
+              onClick={() => downloadTs(generateTableTs(table.key, data), `${table.key}.ts`)}
+            >
+              <i className="fas fa-download"></i> Download .ts
             </button>
             <button className="ab-modal-close" onClick={onClose}><i className="fas fa-times"></i></button>
           </div>
@@ -178,8 +282,11 @@ const TableCard = ({ table, onDataReady }) => {
           {!loading && (
             <button
               className="ab-dl-btn"
-              title="Download JSON"
-              onClick={e => { e.stopPropagation(); downloadJSON(data, `${table.key}.json`); }}
+              title="Download .ts"
+              onClick={e => {
+                e.stopPropagation();
+                downloadTs(generateTableTs(table.key, data), `${table.key}.ts`);
+              }}
             >
               <i className="fas fa-download"></i>
             </button>
@@ -223,10 +330,10 @@ const AdminBackup = () => {
   const handleDownloadAll = async () => {
     setDownloading(true);
     await new Promise(r => setTimeout(r, 300));
-    const combined = {};
-    for (const [key, val] of Object.entries(allData)) combined[key] = val;
-    const dateStr = new Date().toISOString().split('T')[0];
-    downloadJSON({ exportedAt: new Date().toISOString(), tables: combined }, `dkmerch-backup-${dateStr}.json`);
+    const dateStr  = new Date().toISOString().split('T')[0];
+    const isoNow   = new Date().toISOString();
+    const content  = generateAllTs(allData, isoNow);
+    downloadTs(content, `dkmerch-backup-${dateStr}.ts`);
     setDownloading(false);
   };
 
@@ -248,7 +355,7 @@ const AdminBackup = () => {
         >
           {downloading
             ? <><span className="ab-spinner ab-spinner--white"></span> Preparing…</>
-            : <><i className="fas fa-file-download"></i> Export All</>
+            : <><i className="fas fa-file-code"></i> Export All .ts</>
           }
         </button>
       </div>
@@ -283,7 +390,7 @@ const AdminBackup = () => {
 
       <p className="ab-footer-note">
         <i className="fas fa-lock"></i> Backup data is only visible to admins.
-        Click any table to view records. Use Export All to download a full JSON snapshot.
+        Click any table to view records. Use Export All to download a full <code>.ts</code> snapshot.
       </p>
 
       {/* Data Modal */}

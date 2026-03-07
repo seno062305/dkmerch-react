@@ -27,6 +27,7 @@
   background: #f8f9fa;
   padding: 30px 40px;
   border-bottom: 2px solid #eee;
+  overflow: visible;
 }
 
 .filters-single-line {
@@ -72,6 +73,95 @@
 .filter-btn.active { background: #111; color: #fff; border-color: #111; }
 
 .filter-divider { width: 1px; height: 30px; background: #ccc; flex-shrink: 0; }
+
+/* ── DROPDOWN (mobile only) ── */
+.filter-dropdown {
+  position: relative;
+  min-width: 0;
+}
+
+.filter-dropdown-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 16px;
+  background: white;
+  border: 1.5px solid #ccc;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-transform: capitalize;
+}
+
+.filter-dropdown-toggle:hover { border-color: #111; background: #f5f5f5; }
+
+.filter-dropdown-toggle .fa-chevron-down {
+  font-size: 11px;
+  color: #666;
+  transition: transform 0.2s ease;
+}
+
+.filter-dropdown-toggle .fa-chevron-down.open {
+  transform: rotate(180deg);
+}
+
+.filter-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 200;
+  background: white;
+  border: 1.5px solid #e0e0e0;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  overflow: hidden;
+  min-width: 180px;
+  animation: dropdownFadeIn 0.15s ease;
+}
+
+@keyframes dropdownFadeIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.filter-dropdown-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 16px;
+  background: none;
+  border: none;
+  font-size: 13px;
+  font-weight: 500;
+  color: #333;
+  cursor: pointer;
+  text-align: left;
+  text-transform: capitalize;
+  transition: background 0.15s ease;
+}
+
+.filter-dropdown-item:hover { background: #f5f5f5; }
+
+.filter-dropdown-item.active {
+  color: #111;
+  font-weight: 700;
+  background: #f0f0f0;
+}
+
+.filter-dropdown-item .fa-check {
+  font-size: 11px;
+  color: var(--primary-color, #fc1268);
+}
+
+/* show/hide helpers */
+.desktop-only { display: flex; }
+.mobile-only  { display: none; }
 
 /* Results Count */
 .results-count { padding: 20px 40px; border-bottom: 1px solid #eee; }
@@ -316,21 +406,72 @@
 @media (max-width: 768px) {
   .collections-header { padding: 40px 20px; }
   .collections-header h1 { font-size: 28px; }
-  .collections-filters { padding: 20px; }
+  .collections-filters { padding: 16px; }
   .results-count { padding: 15px 20px; }
-  .collections-grid { grid-template-columns: repeat(3, 1fr); }  /* 3 cols on mobile */
+  .collections-grid { grid-template-columns: repeat(3, 1fr); }
   .collection-card-img { padding: 10px; }
   .collection-card-info { padding: 10px; }
   .collection-card-name { font-size: 11px; min-height: 30px; }
   .collection-card-price { font-size: 13px; }
+
+  /* Switch to dropdowns on mobile */
+  .desktop-only { display: none !important; }
+  .mobile-only  { display: flex !important; }
+
+  /* Two dropdowns side by side — override the 992px column layout */
+  .filters-single-line {
+    flex-direction: row !important;
+    align-items: flex-start !important;
+    flex-wrap: nowrap !important;
+    gap: 8px !important;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .filter-group {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 6px !important;
+    flex: 1 1 0 !important;
+    width: auto !important;       /* override the 992px width:100% */
+    min-width: 0 !important;
+    max-width: calc(50% - 4px) !important;
+    box-sizing: border-box;
+  }
+
+  .filter-group label {
+    font-size: 11px;
+  }
+
+  .filter-divider {
+    display: none !important;
+  }
+
+  .filter-dropdown {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .filter-dropdown-toggle {
+    width: 100%;
+    padding: 8px 10px;
+    font-size: 12px;
+    box-sizing: border-box;
+    min-width: 0;
+  }
+
+  .filter-dropdown-menu {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
 }
 
 @media (max-width: 576px) {
   .collections-header h1 { font-size: 24px; }
   .collections-header p { font-size: 14px; }
-  .filter-buttons { gap: 8px; }
-  .filter-btn { padding: 7px 16px; font-size: 12px; }
-  .collections-grid { grid-template-columns: repeat(3, 1fr); }  /* still 3 cols */
+  .collections-grid { grid-template-columns: repeat(3, 1fr); }
   .collection-card-img { padding: 8px; }
   .collection-card-info { padding: 8px; }
   .collection-card-name { font-size: 10px; min-height: 26px; }
@@ -338,8 +479,5 @@
   .collection-card-group { font-size: 9px; margin-bottom: 4px; }
   .collection-promo-badge { font-size: 10px; padding: 3px 8px; }
   .collections-promo-banner { font-size: 12px; padding: 8px 14px; }
-  .collection-promo-hint { display: none; } /* hide hint on tiny screens */
+  .collection-promo-hint { display: none; }
 }
-
-/* REMOVED the @media (max-width: 400px) { grid-template-columns: 1fr } 
-   that was causing single column layout */

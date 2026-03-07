@@ -8,7 +8,7 @@ import { api } from "../../convex/_generated/api";
 const RegisterModal = ({ onClose }) => {
   const { register } = useAuth();
 
-  const [view, setView] = useState("register");
+  const [view, setView] = useState("register"); // "register" | "forgot" | "verify_pending"
 
   const [formData, setFormData] = useState({
     name: "", username: "", email: "", password: "", confirmPassword: ""
@@ -23,6 +23,13 @@ const RegisterModal = ({ onClose }) => {
     hasNumber: false, hasSymbol: false
   });
 
+  // ── Email verification state ──────────────────────
+  const [pendingEmail, setPendingEmail] = useState(""); // email that's awaiting verification
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendMsg, setResendMsg] = useState("");
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  // ── Forgot password state ─────────────────────────
   const [forgotEmail, setForgotEmail] = useState("");
   const [verificationCode, setVerificationCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -42,11 +49,13 @@ const RegisterModal = ({ onClose }) => {
     hasNumber: false, hasSymbol: false
   });
 
+  // ── Convex mutations / actions ────────────────────
+  const registerPendingUser = useMutation(api.users.registerPendingUser);
   const resetPasswordByEmail = useMutation(api.users.resetPasswordByEmail);
   const sendPasswordResetCode = useAction(api.sendEmail.sendPasswordResetCode);
+  const sendVerificationEmail = useAction(api.sendEmail.sendVerificationEmail);
 
   // ── VALIDATION RULES ──────────────────────────────
-  // Gmail only, max 15 chars before @
   const gmailRegex = /^[a-zA-Z0-9._%+-]{1,25}@gmail\.com$/i;
   const isValidEmail = (email) => gmailRegex.test(email);
 
@@ -91,6 +100,12 @@ const RegisterModal = ({ onClose }) => {
     return () => clearTimeout(t);
   }, [passwordCooldown]);
 
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const t = setTimeout(() => setResendCooldown(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendCooldown]);
+
   // ── HELPERS ──────────────────────────────────────
   const isPasswordValid = () => Object.values(passwordValidation).every(v => v === true);
   const isNewPwValid = () => Object.values(newPwValidation).every(v => v === true);
@@ -110,6 +125,17 @@ const RegisterModal = ({ onClose }) => {
   const showNewPwReqs = (newPwFocused || newPassword) && !isNewPwValid();
   const passwordsMatch = formData.confirmPassword && formData.password === formData.confirmPassword;
   const newPasswordsMatch = confirmNewPassword && newPassword === confirmNewPassword;
+
+  // Get browser fingerprint (lightweight)
+  const getFingerprint = () => {
+    return btoa([
+      navigator.userAgent,
+      navigator.language,
+      screen.colorDepth,
+      screen.width + "x" + screen.height,
+      new Date().getTimezoneOffset(),
+    ].join("|")).slice(0, 32);
+  };
 
   const PwToggleIcon = ({ show }) => show ? (
     <svg viewBox="0 0 20 20" fill="currentColor">
@@ -153,11 +179,9 @@ const RegisterModal = ({ onClose }) => {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-    // Always clear the error for a field when the user is actively typing in it
     setErrors(prev => ({ ...prev, [name]: "" }));
   };
 
-  // Validate email only when user leaves the email field (on blur)
   const handleEmailBlur = () => {
     if (formData.email && !isValidEmail(formData.email)) {
       setErrors(prev => ({
@@ -208,23 +232,87 @@ const RegisterModal = ({ onClose }) => {
     return Object.keys(newErrors).length === 0;
   };
 
+  // ── ✅ UPDATED: handleSubmit — now uses email verification flow
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateForm()) return;
     setIsLoading(true);
+
     try {
-      const result = await register({
+      const fingerprint = getFingerprint();
+
+      // Step 1: Save to pendingUsers table (NOT users table yet)
+      const result = await registerPendingUser({
         name: formData.name,
         username: formData.username,
         email: formData.email,
-        password: formData.password
+        password: formData.password,
+        fingerprint,
       });
-      if (!result.success) { setErrors({ submit: result.message }); return; }
-      onClose();
-    } catch {
+
+      if (!result.success) {
+        if (result.rateLimited) {
+          setErrors({ submit: result.message });
+        } else {
+          setErrors({ submit: result.message });
+        }
+        return;
+      }
+
+      // Step 2: Send verification email with the token
+      const emailResult = await sendVerificationEmail({
+        to: formData.email,
+        name: formData.name,
+        token: result.token,
+      });
+
+      if (!emailResult?.success) {
+        setErrors({ submit: "Account created but failed to send verification email. Please contact support." });
+        return;
+      }
+
+      // Step 3: Show the "check your email" screen
+      setPendingEmail(formData.email);
+      setView("verify_pending");
+
+    } catch (err) {
       setErrors({ submit: "Registration failed. Please try again." });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // ── ✅ NEW: Resend verification email
+  const handleResendVerification = async () => {
+    if (resendCooldown > 0 || resendLoading) return;
+    setResendLoading(true);
+    setResendMsg("");
+
+    try {
+      // Re-register with same data (registerPendingUser will replace old pending record)
+      const result = await registerPendingUser({
+        name: formData.name,
+        username: formData.username,
+        email: pendingEmail,
+        password: formData.password,
+        fingerprint: getFingerprint(),
+      });
+
+      if (result.success) {
+        await sendVerificationEmail({
+          to: pendingEmail,
+          name: formData.name,
+          token: result.token,
+        });
+        setResendMsg("✅ Verification email resent! Check your inbox.");
+        setResendCooldown(60);
+      } else {
+        setResendMsg(`❌ ${result.message}`);
+      }
+    } catch {
+      setResendMsg("❌ Failed to resend. Please try again.");
+    } finally {
+      setResendLoading(false);
     }
   };
 
@@ -305,7 +393,135 @@ const RegisterModal = ({ onClose }) => {
           </svg>
         </button>
 
-        {view === "forgot" ? (
+        {/* ── ✅ NEW: Verify Pending View ── */}
+        {view === "verify_pending" ? (
+          <>
+            <div className="register-modal-header">
+              <div className="register-icon" style={{ background: "linear-gradient(135deg, #fc1268, #9c27b0)" }}>
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+                </svg>
+              </div>
+              <h2>Check Your Email!</h2>
+              <p className="register-subtitle">We sent a verification link to your inbox</p>
+            </div>
+
+            <div style={{ padding: "0 8px 24px" }}>
+              {/* Email display */}
+              <div style={{
+                background: "linear-gradient(135deg, #fff0f6, #f5f3ff)",
+                border: "2px solid #ffd6e7",
+                borderRadius: "12px",
+                padding: "20px",
+                textAlign: "center",
+                marginBottom: "20px"
+              }}>
+                <div style={{ fontSize: "40px", marginBottom: "8px" }}>✉️</div>
+                <p style={{ color: "#374151", fontSize: "14px", margin: "0 0 6px" }}>
+                  Verification email sent to:
+                </p>
+                <p style={{
+                  color: "#fc1268",
+                  fontWeight: "700",
+                  fontSize: "15px",
+                  margin: "0",
+                  fontFamily: "monospace"
+                }}>
+                  {pendingEmail}
+                </p>
+              </div>
+
+              {/* Instructions */}
+              <div style={{
+                background: "#f9fafb",
+                borderRadius: "10px",
+                border: "1px solid #e5e7eb",
+                padding: "16px 18px",
+                marginBottom: "20px"
+              }}>
+                <p style={{ color: "#374151", fontSize: "13px", margin: "0 0 10px", fontWeight: "600" }}>
+                  What to do next:
+                </p>
+                <ol style={{ color: "#6b7280", fontSize: "13px", margin: "0", paddingLeft: "18px", lineHeight: "1.8" }}>
+                  <li>Open your Gmail inbox</li>
+                  <li>Find the email from <strong>DKMerch</strong></li>
+                  <li>Click the <strong>"Verify My Email"</strong> button</li>
+                  <li>You'll be redirected to complete your account setup</li>
+                </ol>
+              </div>
+
+              {/* Warning */}
+              <div style={{
+                background: "#fffbeb",
+                border: "1px solid #fde68a",
+                borderRadius: "10px",
+                padding: "12px 16px",
+                marginBottom: "20px"
+              }}>
+                <p style={{ color: "#92400e", fontSize: "12px", margin: "0" }}>
+                  ⏱ The verification link expires in <strong>24 hours</strong>.
+                  Check your spam folder if you don't see it.
+                </p>
+              </div>
+
+              {/* Resend button */}
+              {resendMsg && (
+                <div style={{
+                  textAlign: "center",
+                  marginBottom: "12px",
+                  fontSize: "13px",
+                  color: resendMsg.startsWith("✅") ? "#16a34a" : "#dc2626"
+                }}>
+                  {resendMsg}
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={handleResendVerification}
+                disabled={resendCooldown > 0 || resendLoading}
+                style={{
+                  width: "100%",
+                  padding: "12px",
+                  borderRadius: "10px",
+                  border: "2px solid #fc1268",
+                  background: "transparent",
+                  color: "#fc1268",
+                  fontWeight: "700",
+                  fontSize: "14px",
+                  cursor: resendCooldown > 0 || resendLoading ? "not-allowed" : "pointer",
+                  opacity: resendCooldown > 0 || resendLoading ? 0.6 : 1,
+                  marginBottom: "12px",
+                  transition: "all 0.2s"
+                }}
+              >
+                {resendLoading
+                  ? "Sending..."
+                  : resendCooldown > 0
+                  ? `Resend available in ${resendCooldown}s`
+                  : "📨 Resend Verification Email"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setView("register")}
+                style={{
+                  width: "100%",
+                  padding: "10px",
+                  borderRadius: "10px",
+                  border: "none",
+                  background: "transparent",
+                  color: "#9ca3af",
+                  fontSize: "13px",
+                  cursor: "pointer"
+                }}
+              >
+                ← Back to Register
+              </button>
+            </div>
+          </>
+
+        ) : view === "forgot" ? (
           <>
             <div className="register-modal-header">
               <div className="register-icon forgot-icon">
@@ -541,7 +757,7 @@ const RegisterModal = ({ onClose }) => {
                 {errors.username && <span className="error-text">{errors.username}</span>}
               </div>
 
-              {/* Email — error only shows on blur or submit, NOT while typing */}
+              {/* Email */}
               <div className="input-group">
                 <label htmlFor="email">Email Address</label>
                 <div className="input-wrapper">
@@ -551,7 +767,7 @@ const RegisterModal = ({ onClose }) => {
                   </svg>
                   <input
                     type="email" id="email" name="email"
-                    placeholder="Enter your Gmail (max 15 chars before @)"
+                    placeholder="Enter your Gmail (max 25 chars before @)"
                     className={`form-input ${errors.email ? "error" : ""}`}
                     value={formData.email}
                     onChange={handleChange}

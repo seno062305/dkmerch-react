@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as backup from "../backup.js";
 import type * as cart from "../cart.js";
 import type * as crons from "../crons.js";
 import type * as init from "../init.js";
@@ -31,6 +32,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  backup: typeof backup;
   cart: typeof cart;
   crons: typeof crons;
   init: typeof init;

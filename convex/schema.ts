@@ -23,6 +23,20 @@ export default defineSchema({
     .index("by_email", ["email"])
     .index("by_username", ["username"]),
 
+  // ✅ NEW: Temporary table for unverified registrations
+  // Users only move to `users` table AFTER clicking the email verification link
+  pendingUsers: defineTable({
+    name: v.string(),
+    username: v.string(),
+    email: v.string(),
+    password: v.string(),
+    token: v.string(),        // UUID verification token sent via email
+    expiresAt: v.number(),    // Unix timestamp — expires in 24 hours
+    createdAt: v.number(),
+  })
+    .index("by_token", ["token"])
+    .index("by_email", ["email"]),
+
   registrationAttempts: defineTable({
     fingerprint: v.string(),
     attemptedAt: v.number(),
@@ -84,9 +98,8 @@ export default defineSchema({
     email: v.string(),
     customerName: v.optional(v.string()),
     phone: v.optional(v.string()),
-    riderLinkSessions:   v.optional(v.any()), 
+    riderLinkSessions:   v.optional(v.any()),
     items: v.array(
-      
       v.object({
         id: v.string(),
         name: v.string(),
@@ -236,7 +249,6 @@ export default defineSchema({
     isTracking: v.boolean(),
     updatedAt: v.number(),
     sessionId: v.optional(v.string()),
-    // ── NEW: last known position (preserved even after rider goes offline) ──
     lastKnownLat:     v.optional(v.number()),
     lastKnownLng:     v.optional(v.number()),
     lastKnownAt:      v.optional(v.number()),

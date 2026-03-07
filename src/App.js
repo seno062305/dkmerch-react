@@ -7,7 +7,7 @@ import { useWishlist, useWishlistCount } from './context/wishlistUtils';
 
 import Header from './components/Header';
 import Footer from './components/Footer';
-import DKMerchChatBot from './components/DKMerchChatBot'; // ✅ Chatbot
+import DKMerchChatBot from './components/DKMerchChatBot';
 
 import Home from './pages/Home';
 import Collections from './pages/Collections';
@@ -18,6 +18,7 @@ import Settings from './pages/Settings';
 import PromoRedirect from './pages/PromoRedirect';
 import MyPreOrders from './pages/MyPreOrders';
 import RiderTrack from './pages/RiderTrack';
+import VerifyEmail from './pages/VerifyEmail'; // ✅ NEW
 
 import LoginModal from './components/LoginModal';
 import CartModal from './components/CartModal';
@@ -33,6 +34,7 @@ import AdminPromos from './admin/AdminPromos';
 import AdminSalesReports from './admin/AdminSalesReports';
 import AdminUsers from './admin/AdminUsers';
 import AdminRiders from './admin/AdminRiders';
+import AdminBackup from './admin/AdminBackup';
 import Checkout from './pages/Checkout';
 import OrderSuccess from './pages/OrderSuccess';
 
@@ -49,13 +51,12 @@ const StartupRedirect = ({ children }) => {
     if (!isReady) return;
     if (isAuthenticated && role) {
       const path = location.pathname;
-
       const isExempt =
         path.startsWith('/rider-track') ||
         path.startsWith('/promo') ||
         path.startsWith('/order-success') ||
-        path.startsWith('/track-order');
-
+        path.startsWith('/track-order') ||
+        path.startsWith('/verify-email'); // ✅ exempt verify-email from redirect
       if (role === 'admin' && !path.startsWith('/admin') && !isExempt) {
         navigate('/admin', { replace: true });
       }
@@ -149,10 +150,9 @@ function AppContent() {
   const isAdminRoute      = location.pathname.startsWith('/admin');
   const isPromoRoute      = location.pathname.startsWith('/promo');
   const isRiderTrackRoute = location.pathname.startsWith('/rider-track');
-  const hideHeaderFooter  = isAdminRoute || isPromoRoute || isRiderTrackRoute;
-
-  // ✅ Hide chatbot on admin, promo, and rider-track pages
-  const showChatBot = !isAdminRoute && !isPromoRoute && !isRiderTrackRoute;
+  const isVerifyRoute     = location.pathname.startsWith('/verify-email'); // ✅ NEW
+  const hideHeaderFooter  = isAdminRoute || isPromoRoute || isRiderTrackRoute || isVerifyRoute;
+  const showChatBot       = !isAdminRoute && !isPromoRoute && !isRiderTrackRoute && !isVerifyRoute;
 
   return (
     <StartupRedirect>
@@ -177,31 +177,29 @@ function AppContent() {
           <Route path="/my-orders"     element={<Navigate to="/track-order" replace />} />
           <Route path="/order-success" element={<OrderSuccess />} />
           <Route path="/promo/:code"   element={<PromoRedirect />} />
-
-          {/* ── RIDER TRACKING PAGE (no header/footer, no auth needed) ── */}
           <Route path="/rider-track/:orderId" element={<RiderTrack />} />
+          <Route path="/verify-email"  element={<VerifyEmail />} /> {/* ✅ NEW */}
 
           <Route path="/my-preorders" element={
             <ProtectedRoute><MyPreOrders /></ProtectedRoute>
           } />
 
           <Route path="/admin" element={<AdminLayout />}>
-            <Route index            element={<AdminDashboard />} />
-            <Route path="products"  element={<AdminProducts />} />
-            <Route path="inventory" element={<AdminInventory />} />
-            <Route path="orders"    element={<AdminOrders />} />
-            <Route path="promos"    element={<AdminPromos />} />
+            <Route index                element={<AdminDashboard />} />
+            <Route path="products"      element={<AdminProducts />} />
+            <Route path="inventory"     element={<AdminInventory />} />
+            <Route path="orders"        element={<AdminOrders />} />
+            <Route path="promos"        element={<AdminPromos />} />
             <Route path="sales-reports" element={<AdminSalesReports />} />
-            <Route path="users"     element={<AdminUsers />} />
-            <Route path="riders"    element={<AdminRiders />} />
+            <Route path="users"         element={<AdminUsers />} />
+            <Route path="riders"        element={<AdminRiders />} />
+            <Route path="backup"        element={<AdminBackup />} />
           </Route>
 
           <Route path="/rider" element={<Navigate to="/" replace />} />
         </Routes>
 
         {!hideHeaderFooter && <Footer />}
-
-        {/* ✅ Chatbot — visible on all customer-facing pages */}
         {showChatBot && <DKMerchChatBot />}
 
         {showLoginModal && (

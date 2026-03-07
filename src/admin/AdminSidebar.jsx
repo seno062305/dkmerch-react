@@ -8,7 +8,6 @@ const AdminSidebar = ({ onLinkClick, onClose }) => {
   const { logout } = useAuth();
   const navigate = useNavigate();
 
-  // Orders badge — pending + confirmed
   const allOrders = useQuery(api.orders.getAllOrders) ?? [];
   const validOrders = allOrders.filter(o => o.orderId && o.items?.length > 0);
 
@@ -16,10 +15,8 @@ const AdminSidebar = ({ onLinkClick, onClose }) => {
     o.orderStatus === 'pending' || o.orderStatus === 'confirmed'
   ).length;
 
-  // Refund badge — orders with refundStatus === 'requested'
   const refundCount = validOrders.filter(o => o.refundStatus === 'requested').length;
 
-  // Riders badge — pending applications + pending pickup requests
   const allRiders         = useQuery(api.riders.getAllRiders)                ?? [];
   const allPickupRequests = useQuery(api.pickupRequests.getAllPickupRequests) ?? [];
   const pendingApplications = allRiders.filter(r => r.status === 'pending').length;
@@ -39,7 +36,6 @@ const AdminSidebar = ({ onLinkClick, onClose }) => {
 
   return (
     <>
-      {/* ✅ Logo row — DKMerch on left, X button on right (mobile only) */}
       <div className="admin-logo-container">
         <div className="admin-logo-info">
           <div className="admin-logo">
@@ -110,6 +106,12 @@ const AdminSidebar = ({ onLinkClick, onClose }) => {
           {riderBadgeCount > 0 && (
             <span className="order-badge">{riderBadgeCount}</span>
           )}
+        </NavLink>
+
+        {/* ── Backup ── */}
+        <NavLink to="/admin/backup" className="admin-nav-link" onClick={handleNavClick}>
+          <i className="fas fa-database"></i>
+          <span>Backup</span>
         </NavLink>
       </nav>
 

@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import './AdminRiders.css';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
+import { QRCodeSVG } from 'qrcode.react';
 
 const SITE_URL = process.env.REACT_APP_SITE_URL || 'https://dkmerchwebsite.vercel.app';
 const getRiderLink    = (orderId) => `${SITE_URL}/rider-track/${orderId}`;
@@ -41,6 +42,95 @@ const LiveBadge = ({ orderId }) => {
       <span className="ar-gps-live-dot" style={{ width: 7, height: 7 }} />
       Live
     </span>
+  );
+};
+
+// ─── QR CODE MODAL ────────────────────────────────────────────
+const QRModal = ({ orderId, onClose }) => {
+  const svgRef    = useRef(null);
+  const [copied,  setCopied] = useState(false);
+  const riderLink = getRiderLink(orderId);
+  const shortId   = orderId?.slice(-8).toUpperCase();
+
+  const handleDownload = () => {
+    // Convert SVG → canvas → PNG download
+    const svg = svgRef.current?.querySelector('svg');
+    if (!svg) return;
+    const svgData    = new XMLSerializer().serializeToString(svg);
+    const svgBlob    = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+    const svgUrl     = URL.createObjectURL(svgBlob);
+    const img        = new Image();
+    img.onload = () => {
+      const canvas  = document.createElement('canvas');
+      canvas.width  = 280; canvas.height = 280;
+      const ctx     = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, 280, 280);
+      ctx.drawImage(img, 0, 0, 280, 280);
+      URL.revokeObjectURL(svgUrl);
+      const link      = document.createElement('a');
+      link.download   = `rider-qr-${shortId}.png`;
+      link.href       = canvas.toDataURL('image/png');
+      link.click();
+    };
+    img.src = svgUrl;
+  };
+
+  const handleCopy = async () => {
+    try { await navigator.clipboard.writeText(riderLink); }
+    catch { const ta = document.createElement('textarea'); ta.value = riderLink; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); }
+    setCopied(true); setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="ar-modal-overlay ar-qr-overlay" onClick={onClose}>
+      <div className="ar-qr-modal" onClick={e => e.stopPropagation()}>
+        <button className="ar-modal-close" onClick={onClose}>✕</button>
+
+        <div className="ar-qr-header">
+          <div className="ar-qr-title-icon">📱</div>
+          <div>
+            <h3 className="ar-qr-title">Rider QR Code</h3>
+            <p className="ar-qr-subtitle">Order #{shortId}</p>
+          </div>
+        </div>
+
+        <div className="ar-qr-instruction">
+          <span className="ar-qr-step">1</span> Show this QR to the rider
+          <span className="ar-qr-step">2</span> Rider scans to open GPS link
+        </div>
+
+        <div className="ar-qr-canvas-wrap">
+          <div ref={svgRef} className="ar-qr-canvas">
+            <QRCodeSVG
+              value={riderLink}
+              size={240}
+              level="H"
+              includeMargin={false}
+              fgColor="#3b0764"
+              bgColor="#ffffff"
+            />
+          </div>
+        </div>
+
+        <div className="ar-qr-link-preview">
+          <span className="ar-qr-link-text">{riderLink}</span>
+        </div>
+
+        <div className="ar-qr-actions">
+          <button className="ar-btn ar-btn-primary ar-qr-btn" onClick={handleDownload}>
+            <i className="fas fa-download" /> Save QR
+          </button>
+          <button className="ar-btn ar-btn-ghost ar-qr-btn" onClick={handleCopy}>
+            {copied ? '✅ Copied!' : '📋 Copy Link'}
+          </button>
+        </div>
+
+        <p className="ar-qr-footer-note">
+          🔒 This link is unique to this order. The rider's GPS will appear on your Live Map once they open it.
+        </p>
+      </div>
+    </div>
   );
 };
 
@@ -131,7 +221,6 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
   const [isFullscreen, setIsFullscreen] = useState(fullscreen);
   const [sidebarWidth, setSidebarWidth] = useState(0);
 
-  // ── Measure sidebar width dynamically so fullscreen map never overlaps it ──
   useEffect(() => {
     const measure = () => {
       const sidebar = document.querySelector('.admin-sidebar') ||
@@ -142,9 +231,7 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
                       document.querySelector('nav.sidebar') ||
                       document.querySelector('[class*="sidebar"]') ||
                       document.querySelector('aside');
-      if (sidebar) {
-        setSidebarWidth(sidebar.getBoundingClientRect().width);
-      }
+      if (sidebar) setSidebarWidth(sidebar.getBoundingClientRect().width);
     };
     measure();
     window.addEventListener('resize', measure);
@@ -157,32 +244,22 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
   const hasLoc       = !!(location?.lat && location?.lng && location.lat !== 0 && location.lng !== 0);
   const hasLastKnown = !!(location?.lastKnownLat && location?.lastKnownLng);
 
-  // ── FIX 1: Lock body scroll + hide mobile burger when map opens ──
   useEffect(() => {
     const scrollY = window.scrollY;
-
-    // Lock background scroll — saves Y so it restores correctly on mobile
     document.body.classList.add('ar-map-open');
     document.body.style.top = `-${scrollY}px`;
-
-    // Hide mobile burger toggle
     const burger = document.querySelector('.mobile-menu-toggle');
     if (burger) burger.style.display = 'none';
-
     return () => {
-      // Restore body scroll
       document.body.classList.remove('ar-map-open');
       document.body.style.top = '';
       document.body.style.position = '';
       window.scrollTo(0, scrollY);
-
-      // Restore burger
       const burgerEl = document.querySelector('.mobile-menu-toggle');
       if (burgerEl) burgerEl.style.display = '';
     };
   }, []);
 
-  // ── Load Leaflet ──
   useEffect(() => {
     if (window.L) { setLeafletReady(true); return; }
     const link = document.createElement('link');
@@ -195,24 +272,19 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
     document.head.appendChild(script);
   }, []);
 
-  // ── Init map ──
   useEffect(() => {
     if (!leafletReady || !mapRef.current || mapObjRef.current) return;
     const L = window.L;
-
     if (mapRef.current._leaflet_id) {
       try { L.map(mapRef.current).remove(); } catch {}
       delete mapRef.current._leaflet_id;
     }
-
     const map = L.map(mapRef.current, { zoomControl: true });
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors', maxZoom: 19,
     }).addTo(map);
-
     const destLat = order?.addressLat || null;
     const destLng = order?.addressLng || null;
-
     if (destLat && destLng) {
       map.setView([destLat, destLng], 15);
       const destIcon = L.divIcon({
@@ -225,18 +297,15 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
     } else {
       map.setView([14.5995, 120.9842], 12);
     }
-
     mapObjRef.current = map;
     setTimeout(() => { try { map.invalidateSize(); } catch {} }, 150);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leafletReady]);
 
-  // ── Invalidate size on fullscreen toggle ──
   useEffect(() => {
     if (mapObjRef.current) setTimeout(() => { try { mapObjRef.current.invalidateSize(); } catch {} }, 150);
   }, [isFullscreen]);
 
-  // ── Invalidate size on visibility change ──
   useEffect(() => {
     const handleVisibility = () => {
       if (document.visibilityState === 'visible' && mapObjRef.current)
@@ -260,13 +329,11 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
   const drawRoute = (lat, lng, destLat, destLng, dashed = false) => {
     if (routeAbortRef.current) { routeAbortRef.current.abort(); routeAbortRef.current = null; }
     if (routeTimerRef.current) clearTimeout(routeTimerRef.current);
-
     routeTimerRef.current = setTimeout(async () => {
       if (!mapObjRef.current || !window.L) return;
       const L   = window.L;
       const map = mapObjRef.current;
       clearRoute();
-
       if (dashed) {
         try {
           routeLineRef.current = L.polyline([[lat, lng], [destLat, destLng]], {
@@ -276,10 +343,8 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
         } catch {}
         return;
       }
-
       const controller = new AbortController();
       routeAbortRef.current = controller;
-
       try {
         const url  = `https://router.project-osrm.org/route/v1/bike/${lng},${lat};${destLng},${destLat}?overview=full&geometries=geojson`;
         const res  = await fetch(url, { signal: controller.signal });
@@ -310,26 +375,18 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
     }, 600);
   };
 
-  // ── React to every Convex location update ──
   useEffect(() => {
     if (!mapObjRef.current || !window.L) return;
     const L       = window.L;
     const map     = mapObjRef.current;
     const destLat = order?.addressLat;
     const destLng = order?.addressLng;
-
     if (isLive && hasLoc) {
       const { lat, lng, accuracy, updatedAt } = location;
-
       const prev = lastPlottedRef.current;
       if (prev.lat === lat && prev.lng === lng) return;
       lastPlottedRef.current = { lat, lng };
-
-      if (lastKnownMarkerRef.current) {
-        try { lastKnownMarkerRef.current.remove(); } catch {}
-        lastKnownMarkerRef.current = null;
-      }
-
+      if (lastKnownMarkerRef.current) { try { lastKnownMarkerRef.current.remove(); } catch {} lastKnownMarkerRef.current = null; }
       if (!markerRef.current) {
         const riderIcon = L.divIcon({
           html: `<div style="width:40px;height:40px;background:linear-gradient(135deg,#6a0dad,#9b30ff);border-radius:50%;border:3px solid white;box-shadow:0 3px 14px rgba(106,13,173,0.55);display:flex;align-items:center;justify-content:center;font-size:20px;">🛵</div>`,
@@ -340,7 +397,6 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
       } else {
         try { markerRef.current.setLatLng([lat, lng]); } catch {}
       }
-
       try {
         markerRef.current.setOpacity(1);
         markerRef.current.setPopupContent(
@@ -350,7 +406,6 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
            <small>${new Date(updatedAt).toLocaleTimeString()}</small>`
         );
       } catch {}
-
       if (circleRef.current) { try { circleRef.current.remove(); } catch {} circleRef.current = null; }
       if (accuracy) {
         try {
@@ -359,23 +414,18 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
           }).addTo(map);
         } catch {}
       }
-
       if (destLat && destLng) {
         drawRoute(lat, lng, destLat, destLng, false);
       } else {
         try { map.flyTo([lat, lng], Math.max(map.getZoom(), 16), { animate: true, duration: 1 }); } catch {}
       }
-
       setLastUpdate(new Date(updatedAt));
       return;
     }
-
     if (!isLive && hasLastKnown) {
       const { lastKnownLat, lastKnownLng, lastKnownAt, lastKnownAddress } = location;
-
       if (markerRef.current) { try { markerRef.current.setOpacity(0); } catch {} }
       if (circleRef.current) { try { circleRef.current.remove(); } catch {} circleRef.current = null; }
-
       const ghostIcon = L.divIcon({
         className: '',
         html: `<div style="position:relative;width:40px;height:40px;">
@@ -384,11 +434,9 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
         </div>`,
         iconSize: [40, 40], iconAnchor: [20, 20], popupAnchor: [0, -24],
       });
-
       const lastTimeStr = lastKnownAt
         ? new Date(lastKnownAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })
         : '';
-
       if (!lastKnownMarkerRef.current) {
         try {
           lastKnownMarkerRef.current = L.marker([lastKnownLat, lastKnownLng], { icon: ghostIcon })
@@ -407,19 +455,16 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
           lastKnownMarkerRef.current.setIcon(ghostIcon);
         } catch {}
       }
-
       if (destLat && destLng) {
         drawRoute(lastKnownLat, lastKnownLng, destLat, destLng, true);
       } else {
         try { map.panTo([lastKnownLat, lastKnownLng], { animate: true, duration: 0.8 }); } catch {}
       }
-
       if (lastKnownAt) setLastUpdate(new Date(lastKnownAt));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location, isLive, hasLoc, hasLastKnown]);
 
-  // ── Cleanup on unmount ──
   useEffect(() => () => {
     if (routeAbortRef.current) { routeAbortRef.current.abort(); routeAbortRef.current = null; }
     if (routeTimerRef.current) { clearTimeout(routeTimerRef.current); routeTimerRef.current = null; }
@@ -444,14 +489,7 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
     : 'ar-modal-overlay ar-map-overlay';
 
   const fullscreenStyle = isFullscreen && sidebarWidth > 0
-    ? {
-        display: 'flex', flexDirection: 'column',
-        height: '100dvh', maxHeight: '100dvh',
-        position: 'fixed', top: 0,
-        left: sidebarWidth,
-        width: `calc(100vw - ${sidebarWidth}px)`,
-        maxWidth: `calc(100vw - ${sidebarWidth}px)`,
-      }
+    ? { display: 'flex', flexDirection: 'column', height: '100dvh', maxHeight: '100dvh', position: 'fixed', top: 0, left: sidebarWidth, width: `calc(100vw - ${sidebarWidth}px)`, maxWidth: `calc(100vw - ${sidebarWidth}px)` }
     : isFullscreen
     ? { display: 'flex', flexDirection: 'column', height: '100dvh', maxHeight: '100dvh' }
     : {};
@@ -488,20 +526,13 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
             <button className="ar-modal-close ar-modal-close--map" onClick={onClose}>✕</button>
           </div>
         </div>
-
-        <div
-          ref={mapRef}
-          className="ar-map-container"
-          style={isFullscreen ? { flex: '1 1 auto', height: 'auto', minHeight: 0 } : {}}
-        />
-
+        <div ref={mapRef} className="ar-map-container" style={isFullscreen ? { flex: '1 1 auto', height: 'auto', minHeight: 0 } : {}} />
         {!location && (
           <div className="ar-map-waiting-overlay" style={{ flexShrink: 0 }}>
             <span className="ar-gps-live-dot" style={{ background: '#f59e0b' }} />
             <span>Waiting for rider to open their link and share GPS…</span>
           </div>
         )}
-
         {!isLive && hasLastKnown && (
           <div className="ar-map-offline-bar">
             <span style={{ fontSize: 14 }}>⚠️</span>
@@ -512,7 +543,6 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
             </span>
           </div>
         )}
-
         {isLive && hasLoc && (
           <div className="ar-map-info-bar" style={{ flexShrink: 0 }}>
             <span>🛵 {order.riderInfo?.name || 'Rider'}</span>
@@ -521,7 +551,6 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
             <span style={{ color: '#e53e3e', fontWeight: 700 }}>━━ Route</span>
           </div>
         )}
-
         <div className="ar-map-link-row" style={{ flexShrink: 0 }}>
           <code className="ar-map-link-code">{getRiderLink(orderId)}</code>
           <button className="ar-map-copy-btn" onClick={() => navigator.clipboard.writeText(getRiderLink(orderId))}>
@@ -639,6 +668,7 @@ const ActiveOrderCard = ({
   copiedLink, collapsed, notifying, notified,
   onSaveRider, onSaveGps,
   onCopyLink, onToggleCollapse, onShareOrder, onOpenMap, onNotifyCustomer,
+  onOpenQR,
 }) => {
   const { orderId } = order;
   const [ri, setRi] = useState({
@@ -799,16 +829,35 @@ const ActiveOrderCard = ({
           <div className="ar-section ar-section-full">
             <div className="ar-section-title">📍 GPS Tracking</div>
             <div className="ar-tracking-compact">
+              {/* Rider link row with QR button */}
               <div className="ar-tl-row">
                 <span className="ar-tl-badge">🛵</span>
                 <div className="ar-tl-url">{riderLink}</div>
+                <button
+                  className="ar-tl-qr"
+                  title="Show QR Code"
+                  onClick={() => onOpenQR(orderId)}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+                    <rect x="3" y="14" width="7" height="7" rx="1"/>
+                    <rect x="14" y="14" width="3" height="3" rx="0.5"/>
+                    <rect x="18" y="14" width="3" height="3" rx="0.5"/>
+                    <rect x="14" y="18" width="3" height="3" rx="0.5"/>
+                    <rect x="18" y="18" width="3" height="3" rx="0.5"/>
+                  </svg>
+                  QR
+                </button>
                 <button className="ar-tl-copy" onClick={() => onCopyLink(orderId)}>{copiedLink ? '✅' : '📋'}</button>
               </div>
+
+              {/* Customer link row */}
               <div className="ar-tl-row">
                 <span className="ar-tl-badge">👤</span>
                 <div className="ar-tl-url">{custLink}</div>
                 <button className="ar-tl-copy ar-tl-copy--green" onClick={copyCust}>{copiedCust ? '✅' : '📋'}</button>
               </div>
+
               <div className="ar-map-btn-row">
                 <button className="ar-track-map-btn" onClick={() => onOpenMap(order, false)}>🗺️ Live Map</button>
                 <button className="ar-track-map-btn ar-track-map-btn--full" onClick={() => onOpenMap(order, true)}>⛶ Full Map</button>
@@ -875,6 +924,7 @@ const AdminRiders = () => {
   const [removeTarget,  setRemoveTarget]  = useState(null);
   const [mapOrder,      setMapOrder]      = useState(null);
   const [mapFullscreen, setMapFullscreen] = useState(false);
+  const [qrOrderId,     setQrOrderId]     = useState(null); // ← NEW
 
   const [collapsed,       setCollapsed]       = useState({});
   const [hiddenCompleted, setHiddenCompleted] = useState([]);
@@ -981,6 +1031,7 @@ const AdminRiders = () => {
                   onCopyLink={handleCopyLink}            onToggleCollapse={handleToggleCollapse}
                   onShareOrder={setShareOrder}           onOpenMap={openMap}
                   onNotifyCustomer={handleNotifyCustomer}
+                  onOpenQR={setQrOrderId}
                 />
               ))}
             </div>
@@ -1002,6 +1053,14 @@ const AdminRiders = () => {
           orderId={mapOrder.orderId} order={mapOrder}
           onClose={() => { setMapOrder(null); setMapFullscreen(false); }}
           fullscreen={mapFullscreen}
+        />
+      )}
+
+      {/* QR Modal */}
+      {qrOrderId && (
+        <QRModal
+          orderId={qrOrderId}
+          onClose={() => setQrOrderId(null)}
         />
       )}
     </div>
