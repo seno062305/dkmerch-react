@@ -1,0 +1,140 @@
+/* ══════════════════════════════════════════
+   LOGOUT BACKUP MODAL
+══════════════════════════════════════════ */
+
+.lo-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  backdrop-filter: blur(3px);
+}
+
+.lo-modal {
+  background: white;
+  border-radius: 20px;
+  padding: 36px 32px;
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.25);
+  animation: loModalIn 0.2s ease;
+}
+
+@keyframes loModalIn {
+  from { opacity: 0; transform: scale(0.95) translateY(10px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.lo-modal-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #6a0dad, #9b30ff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  color: white;
+  margin: 0 auto 20px;
+  box-shadow: 0 6px 20px rgba(106, 13, 173, 0.35);
+}
+
+.lo-modal-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #1f2937;
+  margin: 0 0 10px;
+}
+
+.lo-modal-desc {
+  font-size: 14px;
+  color: #6b7280;
+  line-height: 1.6;
+  margin: 0 0 28px;
+}
+
+.lo-modal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lo-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 13px 20px;
+  border-radius: 12px;
+  border: none;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  width: 100%;
+}
+
+.lo-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* Backup & Logout — primary purple */
+.lo-btn--backup {
+  background: linear-gradient(135deg, #6a0dad, #9b30ff);
+  color: white;
+  box-shadow: 0 4px 14px rgba(106, 13, 173, 0.3);
+}
+.lo-btn--backup:hover:not(:disabled) {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(106, 13, 173, 0.4);
+}
+
+/* Logout without backup — outlined red */
+.lo-btn--skip {
+  background: white;
+  color: #dc2626;
+  border: 1.5px solid #fca5a5;
+}
+.lo-btn--skip:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: #dc2626;
+}
+
+/* Cancel — light gray */
+.lo-btn--cancel {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+.lo-btn--cancel:hover:not(:disabled) {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+/* Spinner inside logout button */
+.lo-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2.5px solid rgba(255, 255, 255, 0.35);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: loSpin 0.7s linear infinite;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+@keyframes loSpin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 480px) {
+  .lo-modal { padding: 28px 20px; }
+  .lo-modal-title { font-size: 17px; }
+}

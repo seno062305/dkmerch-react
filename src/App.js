@@ -4,6 +4,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavig
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { useCart, useRemoveFromCart, useCartCount } from './context/cartUtils';
 import { useWishlist, useWishlistCount } from './context/wishlistUtils';
+import { BackupProvider } from './context/BackupContext';
 
 import Header from './components/Header';
 import Footer from './components/Footer';
@@ -18,7 +19,7 @@ import Settings from './pages/Settings';
 import PromoRedirect from './pages/PromoRedirect';
 import MyPreOrders from './pages/MyPreOrders';
 import RiderTrack from './pages/RiderTrack';
-import VerifyEmail from './pages/VerifyEmail'; // ✅ NEW
+import VerifyEmail from './pages/VerifyEmail';
 
 import LoginModal from './components/LoginModal';
 import CartModal from './components/CartModal';
@@ -56,7 +57,7 @@ const StartupRedirect = ({ children }) => {
         path.startsWith('/promo') ||
         path.startsWith('/order-success') ||
         path.startsWith('/track-order') ||
-        path.startsWith('/verify-email'); // ✅ exempt verify-email from redirect
+        path.startsWith('/verify-email');
       if (role === 'admin' && !path.startsWith('/admin') && !isExempt) {
         navigate('/admin', { replace: true });
       }
@@ -150,7 +151,7 @@ function AppContent() {
   const isAdminRoute      = location.pathname.startsWith('/admin');
   const isPromoRoute      = location.pathname.startsWith('/promo');
   const isRiderTrackRoute = location.pathname.startsWith('/rider-track');
-  const isVerifyRoute     = location.pathname.startsWith('/verify-email'); // ✅ NEW
+  const isVerifyRoute     = location.pathname.startsWith('/verify-email');
   const hideHeaderFooter  = isAdminRoute || isPromoRoute || isRiderTrackRoute || isVerifyRoute;
   const showChatBot       = !isAdminRoute && !isPromoRoute && !isRiderTrackRoute && !isVerifyRoute;
 
@@ -178,13 +179,18 @@ function AppContent() {
           <Route path="/order-success" element={<OrderSuccess />} />
           <Route path="/promo/:code"   element={<PromoRedirect />} />
           <Route path="/rider-track/:orderId" element={<RiderTrack />} />
-          <Route path="/verify-email"  element={<VerifyEmail />} /> {/* ✅ NEW */}
+          <Route path="/verify-email"  element={<VerifyEmail />} />
 
           <Route path="/my-preorders" element={
             <ProtectedRoute><MyPreOrders /></ProtectedRoute>
           } />
 
-          <Route path="/admin" element={<AdminLayout />}>
+          {/* ── Admin routes wrapped in BackupProvider ── */}
+          <Route path="/admin" element={
+            <BackupProvider>
+              <AdminLayout />
+            </BackupProvider>
+          }>
             <Route index                element={<AdminDashboard />} />
             <Route path="products"      element={<AdminProducts />} />
             <Route path="inventory"     element={<AdminInventory />} />

@@ -2,9 +2,10 @@
 import React, { useState, useRef } from 'react';
 import { useMutation, useConvex } from 'convex/react';
 import { api } from '../../convex/_generated/api';
+import { useBackup } from '../context/BackupContext';
 import './AdminBackup.css';
 
-const TABLES = [
+export const TABLES = [
   { key: 'users',              label: 'Users',               icon: 'fas fa-users',          query: api.backup.getAllUsers,              importMutation: api.backup.importUsers },
   { key: 'orders',             label: 'Orders',              icon: 'fas fa-shopping-bag',   query: api.backup.getAllOrders,             importMutation: api.backup.importOrders },
   { key: 'products',           label: 'Products',            icon: 'fas fa-box',            query: api.backup.getAllProducts,           importMutation: api.backup.importProducts },
@@ -77,7 +78,7 @@ const generateTableTs = (tableKey, data) => {
   ].join('\n');
 };
 
-const generateAllTs = (allData, now) => {
+export const generateAllTs = (allData, now) => {
   const sections = Object.entries(allData).map(([key, data]) => {
     if (!Array.isArray(data) || data.length === 0)
       return `// ${key}: 0 records\nexport const ${key}: unknown[] = [];\n`;
@@ -104,7 +105,7 @@ const generateAllTs = (allData, now) => {
   ].join('\n');
 };
 
-const downloadTs = (content, filename) => {
+export const downloadTs = (content, filename) => {
   const blob = new Blob([content], { type: 'text/plain' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
@@ -242,16 +243,12 @@ const ImportTab = () => {
   const handleFile = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setFileName(file.name);
-    setParsed(null); setParseErr(''); setStatus({}); setCounts({}); setConfirm(false);
+    setFileName(file.name); setParsed(null); setParseErr(''); setStatus({}); setCounts({}); setConfirm(false);
     const reader = new FileReader();
     reader.onload = (ev) => {
       try {
         const data = parseBackupTs(ev.target.result);
-        if (Object.keys(data).length === 0) {
-          setParseErr('No recognizable table data found. Make sure it is a DKMerch backup .ts file.');
-          return;
-        }
+        if (Object.keys(data).length === 0) { setParseErr('No recognizable table data found. Make sure it is a DKMerch backup .ts file.'); return; }
         setParsed(data);
         const c = {};
         for (const [k, v] of Object.entries(data)) c[k] = v.length;
@@ -335,14 +332,12 @@ const ImportTab = () => {
               );
             })}
           </div>
-
           {doneCount > 0 && (
             <div className="ab-import-summary">
               <i className="fas fa-check-circle"></i>
               {doneCount} table{doneCount > 1 ? 's' : ''} imported successfully{errorCount > 0 && ` · ${errorCount} failed`}
             </div>
           )}
-
           {!importing && doneCount === 0 && (
             !confirm ? (
               <div className="ab-import-warning">
@@ -359,7 +354,6 @@ const ImportTab = () => {
               </button>
             )
           )}
-
           {importing && (
             <div className="ab-import-progress">
               <span className="ab-spinner ab-spinner--purple"></span>
@@ -372,34 +366,30 @@ const ImportTab = () => {
   );
 };
 
-// ── Backup Tab ────────────────────────────────────────────────────────────────
+// ── Backup Tab — uses BackupContext so data persists across tab switches ──────
 const BackupTab = () => {
   const convex = useConvex();
-  const [allData,     setAllData]     = useState({});
-  const [loadStatus,  setLoadStatus]  = useState({});
-  const [modalTable,  setModalTable]  = useState(null);
+  const { allData, loadStatus, lastFetched, updateTable, setTableStatus, resetAll, setLastFetched } = useBackup();
+  const [modalTable, setModalTable] = useState(null);
   const [downloading, setDownloading] = useState(false);
-  const [lastFetched, setLastFetched] = useState(null);
 
   const loadedKeys   = Object.keys(allData);
-  const allLoaded    = loadedKeys.length === TABLES.length;
+  const allLoaded    = loadedKeys.length === TABLES.length && Object.values(loadStatus).every(s => s === 'done');
   const isLoading    = Object.values(loadStatus).some(s => s === 'loading');
   const neverFetched = loadedKeys.length === 0 && !isLoading;
   const totalRecords = Object.values(allData).reduce((s, d) => s + (Array.isArray(d) ? d.length : 0), 0);
 
   const handleFetchAll = async () => {
-    setAllData({});
-    setLoadStatus(Object.fromEntries(TABLES.map(t => [t.key, 'loading'])));
+    resetAll(TABLES.map(t => t.key));
 
     await Promise.all(
       TABLES.map(async (t) => {
         try {
           const data = await convex.query(t.query);
-          setAllData(prev => ({ ...prev, [t.key]: data }));
-          setLoadStatus(prev => ({ ...prev, [t.key]: 'done' }));
+          updateTable(t.key, data);
         } catch (err) {
           console.error(`Failed to fetch ${t.key}:`, err);
-          setLoadStatus(prev => ({ ...prev, [t.key]: 'error' }));
+          setTableStatus(t.key, 'error');
         }
       })
     );
@@ -420,7 +410,6 @@ const BackupTab = () => {
 
   return (
     <>
-      {/* Controls */}
       <div className="ab-controls">
         <button className={`ab-fetch-btn ${isLoading ? 'loading' : ''}`} onClick={handleFetchAll} disabled={isLoading}>
           {isLoading
@@ -428,7 +417,6 @@ const BackupTab = () => {
             : <><i className="fas fa-sync-alt"></i> {neverFetched ? 'Load All Tables' : 'Refresh All Tables'}</>
           }
         </button>
-
         {allLoaded && (
           <button className={`ab-download-all-btn ${downloading ? 'loading' : ''}`} onClick={handleDownloadAll} disabled={downloading}>
             {downloading
@@ -443,7 +431,6 @@ const BackupTab = () => {
         <p className="ab-last-fetched"><i className="fas fa-clock"></i> Last fetched: {lastFetched}</p>
       )}
 
-      {/* Empty state */}
       {neverFetched && (
         <div className="ab-empty-state">
           <div className="ab-empty-icon"><i className="fas fa-database"></i></div>
@@ -452,7 +439,6 @@ const BackupTab = () => {
         </div>
       )}
 
-      {/* Summary */}
       {!neverFetched && (
         <div className="ab-summary">
           <div className="ab-stat">
@@ -475,14 +461,12 @@ const BackupTab = () => {
         </div>
       )}
 
-      {/* Table Cards */}
       {!neverFetched && (
         <div className="ab-cards">
           {TABLES.map(t => {
-            const s    = loadStatus[t.key] || 'idle';
-            const data = allData[t.key];
+            const s     = loadStatus[t.key] || 'idle';
+            const data  = allData[t.key];
             const count = Array.isArray(data) ? data.length : null;
-
             return (
               <div
                 key={t.key}
@@ -504,11 +488,8 @@ const BackupTab = () => {
                     {s === 'loading' && <span className="ab-spinner"></span>}
                     {s === 'done' && (
                       <>
-                        <button
-                          className="ab-dl-btn"
-                          title="Download .ts"
-                          onClick={e => { e.stopPropagation(); downloadTs(generateTableTs(t.key, data), `${t.key}.ts`); }}
-                        >
+                        <button className="ab-dl-btn" title="Download .ts"
+                          onClick={e => { e.stopPropagation(); downloadTs(generateTableTs(t.key, data), `${t.key}.ts`); }}>
                           <i className="fas fa-download"></i>
                         </button>
                         <span className="ab-view-btn"><i className="fas fa-table"></i> View</span>
@@ -537,7 +518,6 @@ const BackupTab = () => {
 // ── Main ──────────────────────────────────────────────────────────────────────
 const AdminBackup = () => {
   const [activeTab, setActiveTab] = useState('backup');
-
   const now = new Date().toLocaleString('en-PH', {
     month: 'long', day: 'numeric', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
