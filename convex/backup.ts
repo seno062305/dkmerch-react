@@ -1,48 +1,48 @@
 // convex/backup.ts
 // ─────────────────────────────────────────────────────────────────────────────
 // Backup query functions — expose all table data for the backup script.
-// These use internalQuery so only your Deploy Key can call them.
+// Uses regular query (not internalQuery) so the Deploy Key can call via HTTP API.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { internalQuery } from './_generated/server';
+import { query } from './_generated/server';
 
-export const getAllUsers = internalQuery({
+export const getAllUsers = query({
   handler: async (ctx) => {
     return await ctx.db.query('users').collect();
   },
 });
 
-export const getAllOrders = internalQuery({
+export const getAllOrders = query({
   handler: async (ctx) => {
     return await ctx.db.query('orders').collect();
   },
 });
 
-export const getAllProducts = internalQuery({
+export const getAllProducts = query({
   handler: async (ctx) => {
     return await ctx.db.query('products').collect();
   },
 });
 
-export const getAllPromos = internalQuery({
+export const getAllPromos = query({
   handler: async (ctx) => {
     return await ctx.db.query('promos').collect();
   },
 });
 
-export const getAllPreOrderRequests = internalQuery({
+export const getAllPreOrderRequests = query({
   handler: async (ctx) => {
     return await ctx.db.query('preOrderRequests').collect();
   },
 });
 
-export const getAllPickupRequests = internalQuery({
+export const getAllPickupRequests = query({
   handler: async (ctx) => {
     return await ctx.db.query('pickupRequests').collect();
   },
 });
 
-export const getAllRiderLocations = internalQuery({
+export const getAllRiderLocations = query({
   handler: async (ctx) => {
     return await ctx.db.query('riderLocations').collect();
   },

@@ -18,13 +18,13 @@ if (!CONVEX_URL || !DEPLOY_KEY) {
 
 // ── Tables to back up ───────────────────────────────────────────────────────
 const TABLES = [
-  { table: 'users',            fn: 'internal.backup.getAllUsers' },
-  { table: 'orders',           fn: 'internal.backup.getAllOrders' },
-  { table: 'products',         fn: 'internal.backup.getAllProducts' },
-  { table: 'promos',           fn: 'internal.backup.getAllPromos' },
-  { table: 'preOrderRequests', fn: 'internal.backup.getAllPreOrderRequests' },
-  { table: 'pickupRequests',   fn: 'internal.backup.getAllPickupRequests' },
-  { table: 'riderLocations',   fn: 'internal.backup.getAllRiderLocations' },
+  { table: 'users',            fn: 'backup:getAllUsers' },
+  { table: 'orders',           fn: 'backup:getAllOrders' },
+  { table: 'products',         fn: 'backup:getAllProducts' },
+  { table: 'promos',           fn: 'backup:getAllPromos' },
+  { table: 'preOrderRequests', fn: 'backup:getAllPreOrderRequests' },
+  { table: 'pickupRequests',   fn: 'backup:getAllPickupRequests' },
+  { table: 'riderLocations',   fn: 'backup:getAllRiderLocations' },
 ];
 
 // ── Helper: call a Convex query via HTTP API ─────────────────────────────────
