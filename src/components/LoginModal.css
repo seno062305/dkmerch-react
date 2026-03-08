@@ -642,3 +642,65 @@ body.login-modal-open {
   .forgot-code-row { flex-direction: column; }
   .send-code-btn { padding: 12px; width: 100%; text-align: center; }
 }
+
+/* ══════════════════════════════════════
+   RATE LIMIT / LOCKOUT STYLES
+   Paste at the end of LoginModal.css
+   ══════════════════════════════════════ */
+
+/* Lockout banner — orange/amber tone to distinguish from regular error */
+.error-banner.lockout-banner {
+  background: linear-gradient(135deg, #fff7ed, #fed7aa);
+  border-color: #fdba74;
+}
+
+.error-banner.lockout-banner svg {
+  color: #ea580c;
+}
+
+.error-banner.lockout-banner span {
+  color: #9a3412;
+}
+
+/* Attempts warning — yellow, less severe */
+.login-attempts-warning {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  animation: fadeIn 0.3s ease;
+}
+
+.login-attempts-warning svg {
+  width: 18px;
+  height: 18px;
+  color: #d97706;
+  flex-shrink: 0;
+}
+
+.login-attempts-warning span {
+  font-size: 13px;
+  font-weight: 600;
+  color: #92400e;
+}
+
+/* Locked submit button — grey, countdown visible */
+.login-submit-btn.locked-out {
+  background: #9ca3af !important;
+  box-shadow: none !important;
+  cursor: not-allowed;
+  transform: none !important;
+  letter-spacing: 0.3px;
+}
+
+/* Disabled inputs during lockout */
+.form-input:disabled {
+  background: #f9fafb;
+  color: #9ca3af;
+  cursor: not-allowed;
+  border-color: #e5e7eb;
+}

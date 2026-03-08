@@ -7,6 +7,49 @@ import { useNavigate } from "react-router-dom";
 import { useMutation, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
 
+// ── Rate limit helpers (per-browser via sessionStorage) ──────────────────────
+const RL_KEY_ATTEMPTS = "dkmerch_login_attempts";
+const RL_KEY_LOCKOUT  = "dkmerch_login_lockout_until";
+const BASE_LOCKOUT    = 60;   // seconds after 5th fail
+const EXTRA_PER_FAIL  = 30;   // added seconds for each fail after 5th
+
+function getRLState() {
+  const attempts   = parseInt(sessionStorage.getItem(RL_KEY_ATTEMPTS) || "0", 10);
+  const lockoutEnd = parseInt(sessionStorage.getItem(RL_KEY_LOCKOUT)  || "0", 10);
+  return { attempts, lockoutEnd };
+}
+
+function recordFailedAttempt() {
+  let { attempts } = getRLState();
+  attempts += 1;
+  sessionStorage.setItem(RL_KEY_ATTEMPTS, attempts);
+
+  let lockoutSecs = 0;
+  if (attempts >= 5) {
+    // 5th fail → 60s, 6th → 90s, 7th → 120s, ...
+    lockoutSecs = BASE_LOCKOUT + Math.max(0, attempts - 5) * EXTRA_PER_FAIL;
+  }
+
+  if (lockoutSecs > 0) {
+    const until = Date.now() + lockoutSecs * 1000;
+    sessionStorage.setItem(RL_KEY_LOCKOUT, until);
+  }
+
+  return { attempts, lockoutSecs };
+}
+
+function resetRLState() {
+  sessionStorage.removeItem(RL_KEY_ATTEMPTS);
+  sessionStorage.removeItem(RL_KEY_LOCKOUT);
+}
+
+function getRemainingLockout() {
+  const { lockoutEnd } = getRLState();
+  if (!lockoutEnd) return 0;
+  return Math.max(0, Math.ceil((lockoutEnd - Date.now()) / 1000));
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 const LoginModal = ({ onClose, onLoginSuccess }) => {
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -18,6 +61,10 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // ── Rate limit state ──
+  const [loginCooldown, setLoginCooldown]     = useState(0);
+  const [loginAttempts, setLoginAttempts]     = useState(0);
 
   const [forgotEmail, setForgotEmail] = useState("");
   const [verificationCode, setVerificationCode] = useState("");
@@ -40,6 +87,23 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
 
   const resetPasswordByEmail = useMutation(api.users.resetPasswordByEmail);
   const sendPasswordResetCode = useAction(api.sendEmail.sendPasswordResetCode);
+
+  // ── On mount: restore any existing lockout from sessionStorage ──
+  useEffect(() => {
+    const remaining = getRemainingLockout();
+    const { attempts } = getRLState();
+    if (remaining > 0) {
+      setLoginCooldown(remaining);
+      setLoginAttempts(attempts);
+    }
+  }, []);
+
+  // ── Tick down login cooldown ──
+  useEffect(() => {
+    if (loginCooldown <= 0) return;
+    const t = setTimeout(() => setLoginCooldown(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [loginCooldown]);
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -100,6 +164,16 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
   const accentGradient = "linear-gradient(135deg, #ec4899, #f472b6)";
   const accentShadow   = "rgba(236,72,153,0.3)";
 
+  // ── Format cooldown nicely: "1:30" or "45s" ──
+  const formatCooldown = (secs) => {
+    if (secs >= 60) {
+      const m = Math.floor(secs / 60);
+      const s = secs % 60;
+      return s > 0 ? `${m}m ${s}s` : `${m}m`;
+    }
+    return `${secs}s`;
+  };
+
   const PwToggleIcon = ({ show }) => show ? (
     <svg viewBox="0 0 20 20" fill="currentColor">
       <path fillRule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 9.958 0 00-4.512 1.074l-1.78-1.781zm4.261 4.26l1.514 1.515a2.003 2.003 0 012.45 2.45l1.514 1.514a4 4 0 00-5.478-5.478z" clipRule="evenodd" />
@@ -141,13 +215,46 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+
+    // ── Block if still locked out ──
+    const remaining = getRemainingLockout();
+    if (remaining > 0) {
+      setLoginCooldown(remaining);
+      setError(`Too many failed attempts. Please wait ${formatCooldown(remaining)}.`);
+      return;
+    }
+
     setIsLoading(true);
     try {
       const result = await login(formData.email, formData.password, "user");
       if (!result.success) {
-        setError(result.message);
+        // Record failed attempt
+        const { attempts, lockoutSecs } = recordFailedAttempt();
+        setLoginAttempts(attempts);
+
+        if (lockoutSecs > 0) {
+          setLoginCooldown(lockoutSecs);
+          setError(
+            attempts === 5
+              ? `Too many failed attempts. Please wait ${formatCooldown(lockoutSecs)} before trying again.`
+              : `Account temporarily locked. Please wait ${formatCooldown(lockoutSecs)}.`
+          );
+        } else {
+          const remaining = 5 - attempts;
+          setError(
+            remaining > 0
+              ? `${result.message} (${remaining} attempt${remaining !== 1 ? "s" : ""} left before lockout)`
+              : result.message
+          );
+        }
         return;
       }
+
+      // ── Success: clear rate limit ──
+      resetRLState();
+      setLoginAttempts(0);
+      setLoginCooldown(0);
+
       if (onLoginSuccess) {
         onLoginSuccess(result.role);
       } else {
@@ -163,7 +270,7 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
-    if (error) setError("");
+    if (error && loginCooldown <= 0) setError("");
   };
 
   const handleSwitchToRegister = () => {
@@ -249,6 +356,9 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
   };
 
   if (showRegister) return <RegisterModal onClose={handleRegisterSuccess} />;
+
+  // Is the login button currently locked?
+  const isLockedOut = loginCooldown > 0;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -457,7 +567,20 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
             </div>
 
             <form onSubmit={handleSubmit} className="login-form">
-              {error && (
+              {/* ── Lockout warning banner ── */}
+              {isLockedOut && (
+                <div className="error-banner lockout-banner">
+                  <svg viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                  </svg>
+                  <span>
+                    Too many failed attempts. Try again in{" "}
+                    <strong>{formatCooldown(loginCooldown)}</strong>
+                  </span>
+                </div>
+              )}
+
+              {error && !isLockedOut && (
                 <div className="error-banner">
                   <svg viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
@@ -480,6 +603,7 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
                     value={formData.email}
                     onChange={handleChange}
                     required autoComplete="username"
+                    disabled={isLockedOut}
                   />
                 </div>
               </div>
@@ -497,6 +621,7 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
                     value={formData.password}
                     onChange={handleChange}
                     required autoComplete="current-password"
+                    disabled={isLockedOut}
                   />
                   <button type="button" className="password-toggle" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? "Hide password" : "Show password"}>
                     <PwToggleIcon show={showPassword} />
@@ -504,14 +629,39 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
                 </div>
               </div>
 
+              {/* Attempts warning (before lockout) */}
+              {!isLockedOut && loginAttempts >= 3 && loginAttempts < 5 && (
+                <div className="login-attempts-warning">
+                  <svg viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                  <span>Warning: {5 - loginAttempts} attempt{5 - loginAttempts !== 1 ? "s" : ""} left before temporary lockout</span>
+                </div>
+              )}
+
               <div className="forgot-password-wrapper">
                 <button type="button" className="forgot-password-link" style={{ color: accentColor }} onClick={() => setView("forgot")}>
                   Forgot Password?
                 </button>
               </div>
 
-              <button type="submit" className="login-submit-btn" style={{ background: accentGradient, boxShadow: `0 4px 12px ${accentShadow}` }} disabled={isLoading}>
-                {isLoading ? (
+              <button
+                type="submit"
+                className={`login-submit-btn ${isLockedOut ? "locked-out" : ""}`}
+                style={{
+                  background: isLockedOut ? "#9ca3af" : accentGradient,
+                  boxShadow: isLockedOut ? "none" : `0 4px 12px ${accentShadow}`
+                }}
+                disabled={isLoading || isLockedOut}
+              >
+                {isLockedOut ? (
+                  <>
+                    <svg viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                    </svg>
+                    Locked — {formatCooldown(loginCooldown)}
+                  </>
+                ) : isLoading ? (
                   <>
                     <svg className="spinner" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
