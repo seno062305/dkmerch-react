@@ -924,3 +924,122 @@ export const sendRiderOnTheWayEmail = internalAction({
     });
   },
 });
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SMS via Semaphore (Philippines)
+// Docs: https://semaphore.co/docs
+//
+// Setup:
+//   1. Sign up at https://semaphore.co
+//   2. Get your API key from the dashboard
+//   3. Add to Convex env vars: SEMAPHORE_API_KEY=your_key_here
+//   4. Optional: Add SEMAPHORE_SENDER_NAME=DKMerch (max 11 chars, needs approval)
+//      — defaults to "DKMerch" if not set
+//
+// Only two SMS actions are exposed:
+//   • sendSmsOtp        — registration / login OTP fallback
+//   • sendRiderOtpSms   — delivery OTP sent when rider is on the way
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── BASE SMS (internal) ───────────────────────────────────────────────────────
+
+export const sendSms = internalAction({
+  args: {
+    to: v.string(),   // PH mobile number: 09XXXXXXXXX or +639XXXXXXXXX
+    message: v.string(),
+  },
+  handler: async (
+    _ctx,
+    { to, message }: { to: string; message: string }
+  ): Promise<{ success: boolean; message?: string; id?: string }> => {
+    const SEMAPHORE_API_KEY = process.env.SEMAPHORE_API_KEY;
+
+    if (!SEMAPHORE_API_KEY) {
+      console.error("SEMAPHORE_API_KEY not set.");
+      return { success: false, message: "SMS service not configured." };
+    }
+
+    // Normalize to 639XXXXXXXXX format that Semaphore expects
+    let number = to.replace(/[\s\-]/g, "");
+    if (number.startsWith("09")) {
+      number = "63" + number.slice(1);
+    } else if (number.startsWith("+63")) {
+      number = number.slice(1); // strip the +
+    }
+    // else assume already in 639XXXXXXXXX format
+
+    const senderName = process.env.SEMAPHORE_SENDER_NAME || "DKMerch";
+
+    const body = new URLSearchParams({
+      apikey:      SEMAPHORE_API_KEY,
+      number,
+      message,
+      sendername: senderName,
+    });
+
+    const response = await fetch("https://api.semaphore.co/api/v4/messages", {
+      method:  "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body:    body.toString(),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || (Array.isArray(data) && data[0]?.status === "Failed")) {
+      console.error("Semaphore SMS error:", data);
+      return { success: false, message: "Failed to send SMS." };
+    }
+
+    const msgId = Array.isArray(data) ? String(data[0]?.message_id ?? "") : "";
+    console.log(`SMS sent to ${number} — ID: ${msgId}`);
+    return { success: true, id: msgId };
+  },
+});
+
+// ── REGISTRATION / LOGIN OTP SMS ──────────────────────────────────────────────
+// Call this as a fallback when the customer has no data / email unreachable.
+// Your frontend should call sendRegistrationOTP (email) first, then call this
+// only if the user requests "Resend via SMS" or email delivery fails.
+
+export const sendSmsOtp = action({
+  args: {
+    to:   v.string(), // PH mobile: 09XXXXXXXXX
+    name: v.string(),
+    otp:  v.string(),
+  },
+  handler: async (
+    ctx,
+    { to, name, otp }: { to: string; name: string; otp: string }
+  ): Promise<{ success: boolean; message?: string; id?: string }> => {
+    const message =
+      `[DKMerch] Hi ${name}! Your verification code is: ${otp}. ` +
+      `Valid for 3 minutes. Do NOT share this with anyone.`;
+
+    return await ctx.runAction(internal.sendEmail.sendSms, { to, message });
+  },
+});
+
+// ── DELIVERY OTP SMS → CUSTOMER (rider is on the way) ────────────────────────
+// Triggered alongside sendRiderOnTheWayEmail so the customer gets the delivery
+// OTP via SMS even if they have no internet / can't open email.
+
+export const sendRiderOtpSms = internalAction({
+  args: {
+    to:      v.string(), // customer PH mobile: 09XXXXXXXXX
+    name:    v.string(),
+    orderId: v.string(),
+    otp:     v.string(),
+  },
+  handler: async (
+    ctx,
+    { to, name, orderId, otp }: { to: string; name: string; orderId: string; otp: string }
+  ): Promise<{ success: boolean; message?: string; id?: string }> => {
+    const shortId = orderId.slice(-8).toUpperCase();
+    const message =
+      `[DKMerch] Hi ${name}! Your rider is on the way for Order #${shortId}. ` +
+      `Delivery OTP: ${otp}. Give this code to your rider upon arrival. ` +
+      `Do NOT share with anyone else.`;
+
+    return await ctx.runAction(internal.sendEmail.sendSms, { to, message });
+  },
+});
