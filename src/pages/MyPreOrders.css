@@ -115,6 +115,7 @@
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 20px;
+  align-items: stretch;
 }
 
 /* ── Card ── */
@@ -125,6 +126,8 @@
   border: 1.5px solid #e5e7eb;
   position: relative;
   transition: box-shadow 0.25s, transform 0.25s;
+  display: flex;
+  flex-direction: column;
 }
 
 .mpo-card:hover {
@@ -204,6 +207,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 .mpo-card-image img {
@@ -221,6 +225,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex: 1;
 }
 
 .mpo-card-name {
@@ -278,7 +283,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-top: 4px;
+  margin-top: auto;
 }
 
 .mpo-btn-cart {
@@ -400,7 +405,7 @@
   .mpo-card-name { font-size: 11px; -webkit-line-clamp: 2; }
   .mpo-card-price { font-size: 12px; }
   .mpo-status-badge { font-size: 9px; padding: 3px 7px; top: 6px; right: 6px; }
-  .mpo-release-badge { display: none; } /* hide on very small screens to save space */
+  .mpo-release-badge { display: none; }
   .mpo-card-meta { display: none; }
   .mpo-tabs { gap: 2px; }
   .mpo-tab { padding: 8px 10px; font-size: 12px; }

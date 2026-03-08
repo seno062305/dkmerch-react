@@ -1,13 +1,14 @@
 // src/pages/VerifyEmail.js
 import React, { useEffect, useState } from "react";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import "./VerifyEmail.css";
 
+const HOMEPAGE = "https://dkmerchwebsite.vercel.app";
+
 const VerifyEmail = () => {
   const [params] = useSearchParams();
-  const navigate = useNavigate();
   const verifyEmail = useMutation(api.users.verifyEmailAndCreateUser);
 
   const [status, setStatus] = useState("verifying"); // "verifying" | "success" | "expired" | "error"
@@ -43,27 +44,28 @@ const VerifyEmail = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Countdown redirect on success
+  // Countdown + redirect on success
   useEffect(() => {
     if (status !== "success") return;
     if (countdown <= 0) {
-      navigate("/", { replace: true });
+      window.location.href = HOMEPAGE;
       return;
     }
     const t = setTimeout(() => setCountdown(c => c - 1), 1000);
     return () => clearTimeout(t);
-  }, [status, countdown, navigate]);
+  }, [status, countdown]);
 
   return (
     <div className="verify-email-page">
       <div className="verify-email-card">
-        {/* DKMerch Logo/Brand */}
+
+        {/* Brand Header */}
         <div className="verify-email-brand">
           <div className="verify-email-logo">DKMerch</div>
           <div className="verify-email-tagline">K-Pop Paradise</div>
         </div>
 
-        {/* Status Content */}
+        {/* Verifying */}
         {status === "verifying" && (
           <div className="verify-email-body">
             <div className="verify-spinner-wrapper">
@@ -74,6 +76,7 @@ const VerifyEmail = () => {
           </div>
         )}
 
+        {/* Success */}
         {status === "success" && (
           <div className="verify-email-body verify-success">
             <div className="verify-icon-circle verify-icon-success">
@@ -84,7 +87,7 @@ const VerifyEmail = () => {
             <h2 className="verify-email-title">Email Verified! 🎉</h2>
             <p className="verify-email-subtitle">{message}</p>
             <div className="verify-redirect-notice">
-              Redirecting to homepage in <strong>{countdown}s</strong>...
+              Redirecting to DKMerch in <strong>{countdown}s</strong>...
             </div>
             <div className="verify-progress-bar">
               <div
@@ -94,13 +97,14 @@ const VerifyEmail = () => {
             </div>
             <button
               className="verify-btn verify-btn-primary"
-              onClick={() => navigate("/", { replace: true })}
+              onClick={() => { window.location.href = HOMEPAGE; }}
             >
-              Go to Homepage Now →
+              Go to DKMerch Now →
             </button>
           </div>
         )}
 
+        {/* Expired */}
         {status === "expired" && (
           <div className="verify-email-body verify-warning">
             <div className="verify-icon-circle verify-icon-warning">
@@ -117,13 +121,14 @@ const VerifyEmail = () => {
             </div>
             <button
               className="verify-btn verify-btn-primary"
-              onClick={() => navigate("/", { replace: true })}
+              onClick={() => { window.location.href = HOMEPAGE; }}
             >
-              Back to Homepage
+              Back to DKMerch
             </button>
           </div>
         )}
 
+        {/* Error */}
         {status === "error" && (
           <div className="verify-email-body verify-error">
             <div className="verify-icon-circle verify-icon-error">
@@ -138,9 +143,9 @@ const VerifyEmail = () => {
             </div>
             <button
               className="verify-btn verify-btn-primary"
-              onClick={() => navigate("/", { replace: true })}
+              onClick={() => { window.location.href = HOMEPAGE; }}
             >
-              Back to Homepage
+              Back to DKMerch
             </button>
           </div>
         )}

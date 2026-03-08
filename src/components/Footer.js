@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import './Footer.css';
 
 const Footer = () => {
@@ -14,27 +14,12 @@ const Footer = () => {
     { icon: 'tiktok', url: '#', label: 'TikTok' }
   ];
 
-  // Handle navigation with scroll to top
   const handleNavClick = (e, path) => {
     e.preventDefault();
     navigate(path);
     setTimeout(() => {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }, 50);
-  };
-
-  // Handle navigation to help page with section
-  const handleHelpSectionClick = (e, section) => {
-    e.preventDefault();
-    navigate('/help');
-    setTimeout(() => {
-      const element = document.getElementById(section);
-      if (element) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      } else {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      }
-    }, 100);
   };
 
   const quickLinks = [
@@ -64,7 +49,7 @@ const Footer = () => {
             <ul className="footer-links">
               {quickLinks.map((link, index) => (
                 <li key={index}>
-                  <a 
+                  <a
                     href={link.path}
                     onClick={(e) => handleNavClick(e, link.path)}
                   >
@@ -79,7 +64,7 @@ const Footer = () => {
             <h4>Customer Service</h4>
             <ul className="footer-links">
               <li>
-                <a 
+                <a
                   href="/track-order"
                   onClick={(e) => handleNavClick(e, '/track-order')}
                 >
@@ -87,27 +72,19 @@ const Footer = () => {
                 </a>
               </li>
               <li>
-                <a 
-                  href="/help#shipping"
-                  onClick={(e) => handleHelpSectionClick(e, 'shipping')}
+                <a
+                  href="/terms-and-conditions"
+                  onClick={(e) => handleNavClick(e, '/terms-and-conditions')}
                 >
-                  Shipping Info
+                  Terms and Conditions
                 </a>
               </li>
               <li>
-                <a 
-                  href="/help#returns"
-                  onClick={(e) => handleHelpSectionClick(e, 'returns')}
+                <a
+                  href="/privacy-policy"
+                  onClick={(e) => handleNavClick(e, '/privacy-policy')}
                 >
-                  Returns
-                </a>
-              </li>
-              <li>
-                <a 
-                  href="/help#faq"
-                  onClick={(e) => handleHelpSectionClick(e, 'faq')}
-                >
-                  FAQ
+                  Privacy Policy
                 </a>
               </li>
             </ul>
@@ -117,8 +94,8 @@ const Footer = () => {
             <h4>Contact Us</h4>
             <div className="contact-info">
               <p><i className="fas fa-phone"></i> +63 912 345 6789</p>
-              <p><i className="fas fa-envelope"></i> support@dkmerch.com</p>
-              <p><i className="fas fa-clock"></i> Mon-Sat: 9AM-6PM</p>
+              <p><i className="fas fa-envelope"></i> dkmerchtest@gmail.com</p>
+              <p><i className="fas fa-clock"></i> Mon-Sat: 9AM-6PM PST</p>
             </div>
           </div>
         </div>

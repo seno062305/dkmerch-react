@@ -20,6 +20,8 @@ import PromoRedirect from './pages/PromoRedirect';
 import MyPreOrders from './pages/MyPreOrders';
 import RiderTrack from './pages/RiderTrack';
 import VerifyEmail from './pages/VerifyEmail';
+import TermsAndConditions from './pages/TermsAndConditions';
+import PrivacyPolicy from './pages/PrivacyPolicy';
 
 import LoginModal from './components/LoginModal';
 import CartModal from './components/CartModal';
@@ -29,7 +31,7 @@ import WishlistPage from './components/WishlistPage';
 import AdminLayout from './admin/AdminLayout';
 import AdminDashboard from './admin/AdminDashboard';
 import AdminProducts from './admin/AdminProducts';
-import AdminInventory from './admin/AdminInventory';
+import AdminItemList from './admin/AdminItemList';
 import AdminOrders from './admin/AdminOrders';
 import AdminPromos from './admin/AdminPromos';
 import AdminSalesReports from './admin/AdminSalesReports';
@@ -180,6 +182,8 @@ function AppContent() {
           <Route path="/promo/:code"   element={<PromoRedirect />} />
           <Route path="/rider-track/:orderId" element={<RiderTrack />} />
           <Route path="/verify-email"  element={<VerifyEmail />} />
+          <Route path="/terms-and-conditions" element={<TermsAndConditions />} />
+          <Route path="/privacy-policy"       element={<PrivacyPolicy />} />
 
           <Route path="/my-preorders" element={
             <ProtectedRoute><MyPreOrders /></ProtectedRoute>
@@ -193,7 +197,7 @@ function AppContent() {
           }>
             <Route index                element={<AdminDashboard />} />
             <Route path="products"      element={<AdminProducts />} />
-            <Route path="inventory"     element={<AdminInventory />} />
+            <Route path="inventory"     element={<AdminItemList />} />
             <Route path="orders"        element={<AdminOrders />} />
             <Route path="promos"        element={<AdminPromos />} />
             <Route path="sales-reports" element={<AdminSalesReports />} />

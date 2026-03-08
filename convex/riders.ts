@@ -1,5 +1,5 @@
 // convex/riders.ts
-import { query, mutation } from "./_generated/server";
+import { query, mutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 
 const genSessionId = () =>
@@ -321,10 +321,6 @@ export const stopRiderTracking = mutation({
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // RIDER LINK SESSION
-//
-// NEW LOGIC: Lock only after 5 unique active sessions.
-// A session is "active" if it heartbeated within 2 minutes.
-// This prevents false locks from tab switches / minimizing.
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 const MAX_CONCURRENT_SESSIONS = 5;
@@ -348,7 +344,6 @@ export const claimRiderLinkSession = mutation({
     const sessions: Record<string, { at: number; deviceInfo: string }> =
       (order.riderLinkSessions as any) ?? {};
 
-    // ── 1. Prune expired sessions (inactive > 2 min) ──
     const activeSessions: Record<string, { at: number; deviceInfo: string }> = {};
     for (const [sid, data] of Object.entries(sessions)) {
       if (now - data.at < SESSION_TIMEOUT_MS) {
@@ -356,13 +351,9 @@ export const claimRiderLinkSession = mutation({
       }
     }
 
-    // ── 2. If this session already exists → just refresh its heartbeat ──
     const isReturning = !!activeSessions[sessionId];
-
-    // ── 3. Count unique OTHER sessions ──
     const otherSessions = Object.entries(activeSessions).filter(([sid]) => sid !== sessionId);
 
-    // ── 4. Lock only when >= MAX_CONCURRENT_SESSIONS others are active ──
     if (!isReturning && otherSessions.length >= MAX_CONCURRENT_SESSIONS) {
       return {
         allowed:        false,
@@ -372,7 +363,6 @@ export const claimRiderLinkSession = mutation({
       };
     }
 
-    // ── 5. Register / refresh this session ──
     activeSessions[sessionId] = {
       at:         now,
       deviceInfo: deviceInfo ?? "Unknown device",
@@ -380,11 +370,10 @@ export const claimRiderLinkSession = mutation({
 
     await db.patch(order._id, {
       riderLinkSessions:   activeSessions,
-      riderLinkSessionAt:  now,            // keep for legacy compat
+      riderLinkSessionAt:  now,
       riderLinkDeviceInfo: deviceInfo ?? "Unknown device",
     });
 
-    // ── 6. Admin notification ──
     const isNew = !isReturning;
     if (isNew) {
       const riderName = order.riderInfo?.name || "Rider";
@@ -420,9 +409,7 @@ export const heartbeatRiderLinkSession = mutation({
     const sessions: Record<string, { at: number; deviceInfo: string }> =
       (order.riderLinkSessions as any) ?? {};
 
-    // Only heartbeat if this session is registered
     if (!sessions[sessionId]) {
-      // Session was pruned (inactive too long) — let frontend re-claim
       return { success: false, reason: "session_expired" };
     }
 
@@ -456,12 +443,9 @@ export const releaseRiderLinkSession = mutation({
   },
 });
 
-// ── i-paste ito sa DULO ng convex/riders.ts ──
-
-import { internalQuery } from "./_generated/server";
-
+// ── Get all approved rider emails (used by sendEmail for new order blast) ──
 export const getAllApprovedRiderEmails = internalQuery({
-  handler: async ({ db }): Promise<{ name: string; email: string }[]> => {
+  handler: async ({ db }): Promise<{ fullName: string; email: string }[]> => {
     const riders = await db
       .query("riderApplications")
       .withIndex("by_status", q => q.eq("status", "approved"))
@@ -469,6 +453,6 @@ export const getAllApprovedRiderEmails = internalQuery({
 
     return riders
       .filter(r => !!r.email)
-      .map(r => ({ name: r.fullName, email: r.email }));
+      .map(r => ({ fullName: r.fullName, email: r.email }));
   },
 });

@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import './AdminInventory.css';
+import './AdminItemList.css';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useUpdateProduct } from '../utils/productStorage';
 
-const AdminInventory = () => {
+const AdminItemList = () => {
   const products = useQuery(api.products.getAllProductsAdmin) || [];
   const updateProduct = useUpdateProduct();
 
@@ -246,4 +246,4 @@ const AdminInventory = () => {
   );
 };
 
-export default AdminInventory;
+export default AdminItemList;

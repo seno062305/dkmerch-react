@@ -23,16 +23,18 @@ export default defineSchema({
     .index("by_email", ["email"])
     .index("by_username", ["username"]),
 
-  // ✅ NEW: Temporary table for unverified registrations
-  // Users only move to `users` table AFTER clicking the email verification link
+  // Temporary table for unverified registrations
+  // Users only move to `users` table AFTER OTP verification
   pendingUsers: defineTable({
     name: v.string(),
     username: v.string(),
     email: v.string(),
     password: v.string(),
-    token: v.string(),        // UUID verification token sent via email
-    expiresAt: v.number(),    // Unix timestamp — expires in 24 hours
+    token: v.string(),           // UUID verification token (for email link — kept for compatibility)
+    expiresAt: v.number(),       // Token expiry — 24 hours
     createdAt: v.number(),
+    otp: v.optional(v.string()),           // 6-digit OTP for in-modal verification
+    otpExpiresAt: v.optional(v.number()),  // OTP expiry — 10 minutes
   })
     .index("by_token", ["token"])
     .index("by_email", ["email"]),

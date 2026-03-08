@@ -131,7 +131,7 @@ const AdminSidebar = ({ onLinkClick, onClose }) => {
           <i className="fas fa-box"></i><span>Products</span>
         </NavLink>
         <NavLink to="/admin/inventory" className="admin-nav-link" onClick={handleNavClick}>
-          <i className="fas fa-warehouse"></i><span>Inventory</span>
+          <i className="fas fa-warehouse"></i><span>Item List</span>
         </NavLink>
         <NavLink to="/admin/orders" className="admin-nav-link" onClick={handleNavClick}>
           <i className="fas fa-shopping-bag"></i><span>Orders</span>
