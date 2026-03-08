@@ -172,7 +172,6 @@ const ProductModal = ({ editingId, initialForm, onClose, onSubmit, submitting })
                   <option value="albums">Albums</option>
                   <option value="photocards">Photocards</option>
                   <option value="lightsticks">Lightsticks</option>
-                  <option value="apparel">Apparel</option>
                   <option value="accessories">Accessories</option>
                 </select>
               </div>
@@ -449,7 +448,6 @@ const StockManagement = ({ products, updateProduct }) => {
           <option value="albums">Albums</option>
           <option value="photocards">Photocards</option>
           <option value="lightsticks">Lightsticks</option>
-          <option value="apparel">Apparel</option>
           <option value="accessories">Accessories</option>
         </select>
       </div>
@@ -535,7 +533,6 @@ const StockManagement = ({ products, updateProduct }) => {
                               {stockError && <span className="stock-inline-err">{stockError}</span>}
                             </div>
                           ) : (
-                            // ✅ Stock column: number only, NO edit icon here
                             <strong className={product.stock === 0 ? 'stock-zero' : product.stock <= 10 ? 'stock-low' : ''}>
                               {product.stock}
                             </strong>
@@ -543,7 +540,6 @@ const StockManagement = ({ products, updateProduct }) => {
                         </td>
                         <td><span className={`status-badge ${status.cls}`}>{status.label}</span></td>
                         <td>
-                          {/* ✅ Edit button only in Actions column */}
                           <div className="action-buttons">
                             <button className="edit-stock-btn" onClick={() => startEdit(product._id, product.stock)}>
                               <i className="fas fa-edit"></i> Edit
@@ -732,7 +728,6 @@ const AdminProducts = () => {
                 <option value="albums">Albums</option>
                 <option value="photocards">Photocards</option>
                 <option value="lightsticks">Lightsticks</option>
-                <option value="apparel">Apparel</option>
                 <option value="accessories">Accessories</option>
               </select>
             </div>
@@ -756,9 +751,6 @@ const AdminProducts = () => {
                         {product.isPreOrder && released  && <span className="badge released"><i className="fas fa-check-circle"></i> Released</span>}
                         {product.isPreOrder && !released && <span className="badge pre-order"><i className="fas fa-clock"></i> Pre-Order</span>}
                         {product.isSale && !product.isPreOrder && <span className="badge sale"><i className="fas fa-tag"></i> Sale</span>}
-                      </div>
-                      <div className={`card-stock-badge ${product.stock === 0 ? 'out' : product.stock <= 10 ? 'low' : 'ok'}`}>
-                        <i className="fas fa-box"></i> {product.stock}
                       </div>
                     </div>
                     <div className="product-details">

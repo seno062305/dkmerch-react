@@ -81,7 +81,7 @@ const Collections = () => {
     }
   }, [searchParams]);
 
-  const categories = ['all', 'albums', 'photocards', 'lightsticks', 'apparel', 'accessories'];
+  const categories = ['all', 'albums', 'photocards', 'lightsticks', 'accessories'];
   const groups = ['all', 'BTS', 'BLACKPINK', 'TWICE', 'SEVENTEEN', 'STRAY KIDS', 'EXO', 'RED VELVET', 'NEWJEANS'];
 
   const filteredProducts = (products || []).filter(product => {
