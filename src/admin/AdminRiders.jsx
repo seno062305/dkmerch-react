@@ -53,7 +53,6 @@ const QRModal = ({ orderId, onClose }) => {
   const shortId   = orderId?.slice(-8).toUpperCase();
 
   const handleDownload = () => {
-    // Convert SVG → canvas → PNG download
     const svg = svgRef.current?.querySelector('svg');
     if (!svg) return;
     const svgData    = new XMLSerializer().serializeToString(svg);
@@ -829,7 +828,6 @@ const ActiveOrderCard = ({
           <div className="ar-section ar-section-full">
             <div className="ar-section-title">📍 GPS Tracking</div>
             <div className="ar-tracking-compact">
-              {/* Rider link row with QR button */}
               <div className="ar-tl-row">
                 <span className="ar-tl-badge">🛵</span>
                 <div className="ar-tl-url">{riderLink}</div>
@@ -851,7 +849,6 @@ const ActiveOrderCard = ({
                 <button className="ar-tl-copy" onClick={() => onCopyLink(orderId)}>{copiedLink ? '✅' : '📋'}</button>
               </div>
 
-              {/* Customer link row */}
               <div className="ar-tl-row">
                 <span className="ar-tl-badge">👤</span>
                 <div className="ar-tl-url">{custLink}</div>
@@ -924,7 +921,7 @@ const AdminRiders = () => {
   const [removeTarget,  setRemoveTarget]  = useState(null);
   const [mapOrder,      setMapOrder]      = useState(null);
   const [mapFullscreen, setMapFullscreen] = useState(false);
-  const [qrOrderId,     setQrOrderId]     = useState(null); // ← NEW
+  const [qrOrderId,     setQrOrderId]     = useState(null);
 
   const [collapsed,       setCollapsed]       = useState({});
   const [hiddenCompleted, setHiddenCompleted] = useState([]);
@@ -982,6 +979,7 @@ const AdminRiders = () => {
     setTimeout(() => setCopiedLink(p => ({ ...p, [orderId]: false })), 2000);
   };
 
+  // ── FIXED: now passes customerPhone so SMS is sent ──
   const handleNotifyCustomer = async (order, ri) => {
     const { orderId } = order;
     if (!ri.name?.trim() || !ri.phone?.trim()) { alert('Please enter rider name and phone first.'); return; }
@@ -989,7 +987,14 @@ const AdminRiders = () => {
     setNotifying(p => ({ ...p, [orderId]: true }));
     try {
       await updateFields({ orderId, riderInfo: { name: ri.name, phone: ri.phone, plate: ri.plate || '' } });
-      await notifyMutation({ orderId, riderName: ri.name, riderPhone: ri.phone, riderPlate: ri.plate || undefined, customerEmail: order.email });
+      await notifyMutation({
+        orderId,
+        riderName:     ri.name,
+        riderPhone:    ri.phone,
+        riderPlate:    ri.plate || undefined,
+        customerEmail: order.email,
+        customerPhone: order.phone || undefined, // ← sends SMS OTP to customer's phone
+      });
       setNotified(p => ({ ...p, [orderId]: true }));
       setTimeout(() => setNotified(p => ({ ...p, [orderId]: false })), 4000);
     } catch (e) { console.error('Notify error:', e); alert('Failed to notify customer. Please try again.'); }
@@ -1056,7 +1061,6 @@ const AdminRiders = () => {
         />
       )}
 
-      {/* QR Modal */}
       {qrOrderId && (
         <QRModal
           orderId={qrOrderId}

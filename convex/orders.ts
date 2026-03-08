@@ -389,7 +389,7 @@ export const resolveRefund = mutation({
   },
 });
 
-// ─── NEW: NOTIFY CUSTOMER OUT FOR DELIVERY ────────────────────────────────────
+// ─── NOTIFY CUSTOMER OUT FOR DELIVERY ────────────────────────────────────────
 
 export const notifyCustomerOutForDelivery = mutation({
   args: {
@@ -398,8 +398,9 @@ export const notifyCustomerOutForDelivery = mutation({
     riderPhone:    v.string(),
     riderPlate:    v.optional(v.string()),
     customerEmail: v.string(),
+    customerPhone: v.optional(v.string()),
   },
-  handler: async ({ db, scheduler }, { orderId, riderName, riderPhone, riderPlate, customerEmail }) => {
+  handler: async ({ db, scheduler }, { orderId, riderName, riderPhone, riderPlate, customerEmail, customerPhone }) => {
     const order = await db.query("orders")
       .withIndex("by_orderId", q => q.eq("orderId", orderId))
       .first();
@@ -416,16 +417,29 @@ export const notifyCustomerOutForDelivery = mutation({
       deliveryOtp:      otp,
     });
 
+    const customerName = order.customerName || 'Customer';
+
     // Send email to customer
     await scheduler.runAfter(0, internal.sendEmail.sendRiderOnTheWayEmail, {
       to:           customerEmail,
-      customerName: order.customerName || 'Customer',
+      customerName,
       orderId:      order.orderId,
       riderName,
       riderPhone,
       riderPlate,
       otp,
     });
+
+    // Send SMS to customer (fallback if no internet/email)
+    const phone = customerPhone || (order as any).phone;
+    if (phone) {
+      await scheduler.runAfter(0, internal.sendEmail.sendRiderOtpSms, {
+        to:      phone,
+        name:    customerName,
+        orderId: order.orderId,
+        otp,
+      });
+    }
 
     return { success: true, otp };
   },
