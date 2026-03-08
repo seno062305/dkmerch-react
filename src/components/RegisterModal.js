@@ -1,5 +1,5 @@
 // src/components/RegisterModal.js
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import "./RegisterModal.css";
 import { useAuth } from "../context/AuthContext";
 import { useMutation, useAction } from "convex/react";
@@ -8,7 +8,7 @@ import { api } from "../../convex/_generated/api";
 const RegisterModal = ({ onClose }) => {
   const { register } = useAuth();
 
-  const [view, setView] = useState("register"); // "register" | "forgot" | "verify_pending"
+  const [view, setView] = useState("register"); // "register" | "otp" | "forgot"
 
   const [formData, setFormData] = useState({
     name: "", username: "", email: "", password: "", confirmPassword: ""
@@ -23,11 +23,16 @@ const RegisterModal = ({ onClose }) => {
     hasNumber: false, hasSymbol: false
   });
 
-  // ── Email verification state ──────────────────────
-  const [pendingEmail, setPendingEmail] = useState(""); // email that's awaiting verification
-  const [resendLoading, setResendLoading] = useState(false);
-  const [resendMsg, setResendMsg] = useState("");
+  // ── OTP state ─────────────────────────────────────
+  const [otpDigits, setOtpDigits] = useState(["", "", "", "", "", ""]);
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpError, setOtpError] = useState("");
+  const [otpSuccess, setOtpSuccess] = useState("");
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [pendingEmail, setPendingEmail] = useState("");
+  const [pendingName, setPendingName] = useState("");
+  const otpRefs = useRef([]);
 
   // ── Forgot password state ─────────────────────────
   const [forgotEmail, setForgotEmail] = useState("");
@@ -51,14 +56,15 @@ const RegisterModal = ({ onClose }) => {
 
   // ── Convex mutations / actions ────────────────────
   const registerPendingUser = useMutation(api.users.registerPendingUser);
+  const verifyOtpAndCreateUser = useMutation(api.users.verifyOtpAndCreateUser);
+  const resendOtpMutation = useMutation(api.users.resendOtp);
   const resetPasswordByEmail = useMutation(api.users.resetPasswordByEmail);
   const sendPasswordResetCode = useAction(api.sendEmail.sendPasswordResetCode);
-  const sendVerificationEmail = useAction(api.sendEmail.sendVerificationEmail);
+  const sendRegistrationOTP = useAction(api.sendEmail.sendRegistrationOTP);
 
-  // ── VALIDATION RULES ──────────────────────────────
+  // ── VALIDATION ───────────────────────────────────
   const gmailRegex = /^[a-zA-Z0-9._%+-]{1,25}@gmail\.com$/i;
   const isValidEmail = (email) => gmailRegex.test(email);
-
   const MAX_NAME_LENGTH = 20;
   const MAX_USERNAME_LENGTH = 10;
 
@@ -106,6 +112,13 @@ const RegisterModal = ({ onClose }) => {
     return () => clearTimeout(t);
   }, [resendCooldown]);
 
+  // Auto-focus first OTP input when entering OTP view
+  useEffect(() => {
+    if (view === "otp") {
+      setTimeout(() => otpRefs.current[0]?.focus(), 100);
+    }
+  }, [view]);
+
   // ── HELPERS ──────────────────────────────────────
   const isPasswordValid = () => Object.values(passwordValidation).every(v => v === true);
   const isNewPwValid = () => Object.values(newPwValidation).every(v => v === true);
@@ -126,7 +139,6 @@ const RegisterModal = ({ onClose }) => {
   const passwordsMatch = formData.confirmPassword && formData.password === formData.confirmPassword;
   const newPasswordsMatch = confirmNewPassword && newPassword === confirmNewPassword;
 
-  // Get browser fingerprint (lightweight)
   const getFingerprint = () => {
     return btoa([
       navigator.userAgent,
@@ -175,7 +187,113 @@ const RegisterModal = ({ onClose }) => {
     </div>
   );
 
-  // ── REGISTER HANDLERS ────────────────────────────
+  // ── OTP INPUT HANDLERS ───────────────────────────
+  const handleOtpChange = (index, value) => {
+    const cleaned = value.replace(/\D/g, "").slice(-1);
+    const newDigits = [...otpDigits];
+    newDigits[index] = cleaned;
+    setOtpDigits(newDigits);
+    setOtpError("");
+
+    if (cleaned && index < 5) {
+      otpRefs.current[index + 1]?.focus();
+    }
+
+    if (cleaned && index === 5) {
+      const fullOtp = [...newDigits.slice(0, 5), cleaned].join("");
+      if (fullOtp.length === 6) {
+        handleVerifyOtp(fullOtp);
+      }
+    }
+  };
+
+  const handleOtpKeyDown = (index, e) => {
+    if (e.key === "Backspace") {
+      if (otpDigits[index]) {
+        const newDigits = [...otpDigits];
+        newDigits[index] = "";
+        setOtpDigits(newDigits);
+      } else if (index > 0) {
+        otpRefs.current[index - 1]?.focus();
+      }
+    } else if (e.key === "ArrowLeft" && index > 0) {
+      otpRefs.current[index - 1]?.focus();
+    } else if (e.key === "ArrowRight" && index < 5) {
+      otpRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleOtpPaste = (e) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+    if (!pasted) return;
+    const newDigits = [...otpDigits];
+    for (let i = 0; i < 6; i++) {
+      newDigits[i] = pasted[i] || "";
+    }
+    setOtpDigits(newDigits);
+    if (pasted.length === 6) {
+      handleVerifyOtp(pasted);
+    } else {
+      otpRefs.current[Math.min(pasted.length, 5)]?.focus();
+    }
+  };
+
+  const handleVerifyOtp = async (otpValue) => {
+    const otp = otpValue || otpDigits.join("");
+    if (otp.length !== 6) {
+      setOtpError("Please enter the complete 6-digit code.");
+      return;
+    }
+    setOtpLoading(true);
+    setOtpError("");
+    try {
+      const result = await verifyOtpAndCreateUser({ email: pendingEmail, otp });
+      if (result.success) {
+        setOtpSuccess("✅ Email verified! Your account is ready.");
+        setTimeout(() => onClose(), 1500);
+      } else {
+        setOtpError(result.message || "Incorrect code. Please try again.");
+        if (result.expired) {
+          setOtpDigits(["", "", "", "", "", ""]);
+        }
+      }
+    } catch {
+      setOtpError("Verification failed. Please try again.");
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0 || resendLoading) return;
+    setResendLoading(true);
+    setOtpError("");
+    setOtpSuccess("");
+    try {
+      const result = await resendOtpMutation({ email: pendingEmail });
+      if (result.success) {
+        // Send the NEW otp from result — old OTP is already invalidated in DB
+        await sendRegistrationOTP({
+          to: pendingEmail,
+          name: pendingName,
+          otp: result.otp,
+        });
+        setOtpDigits(["", "", "", "", "", ""]);
+        setOtpSuccess("✅ New code sent! Check your inbox.");
+        setResendCooldown(60); // ← 60 second cooldown
+        setTimeout(() => otpRefs.current[0]?.focus(), 100);
+      } else {
+        setOtpError(result.message || "Failed to resend. Please try again.");
+      }
+    } catch {
+      setOtpError("Failed to resend OTP. Please try again.");
+    } finally {
+      setResendLoading(false);
+    }
+  };
+
+  // ── REGISTER SUBMIT ──────────────────────────────
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
@@ -195,44 +313,26 @@ const RegisterModal = ({ onClose }) => {
 
   const validateForm = () => {
     const newErrors = {};
+    if (!formData.name.trim()) newErrors.name = "Name is required";
+    else if (formData.name.length > MAX_NAME_LENGTH) newErrors.name = `Name must be at most ${MAX_NAME_LENGTH} characters`;
 
-    if (!formData.name.trim()) {
-      newErrors.name = "Name is required";
-    } else if (formData.name.length > MAX_NAME_LENGTH) {
-      newErrors.name = `Name must be at most ${MAX_NAME_LENGTH} characters`;
-    }
+    if (!formData.username.trim()) newErrors.username = "Username is required";
+    else if (formData.username.length < 3) newErrors.username = "Username must be at least 3 characters";
+    else if (formData.username.length > MAX_USERNAME_LENGTH) newErrors.username = `Username must be at most ${MAX_USERNAME_LENGTH} characters`;
+    else if (!/^[a-zA-Z0-9_]+$/.test(formData.username)) newErrors.username = "Letters, numbers, and underscores only";
 
-    if (!formData.username.trim()) {
-      newErrors.username = "Username is required";
-    } else if (formData.username.length < 3) {
-      newErrors.username = "Username must be at least 3 characters";
-    } else if (formData.username.length > MAX_USERNAME_LENGTH) {
-      newErrors.username = `Username must be at most ${MAX_USERNAME_LENGTH} characters`;
-    } else if (!/^[a-zA-Z0-9_]+$/.test(formData.username)) {
-      newErrors.username = "Letters, numbers, and underscores only";
-    }
+    if (!formData.email.trim()) newErrors.email = "Email is required";
+    else if (!isValidEmail(formData.email)) newErrors.email = "Email must be a Gmail address with up to 25 characters before @gmail.com";
 
-    if (!formData.email.trim()) {
-      newErrors.email = "Email is required";
-    } else if (!isValidEmail(formData.email)) {
-      newErrors.email = "Email must be a Gmail address with up to 25 characters before @gmail.com";
-    }
+    if (!formData.password) newErrors.password = "Password is required";
+    else if (!isPasswordValid()) newErrors.password = "Password does not meet all requirements";
 
-    if (!formData.password) {
-      newErrors.password = "Password is required";
-    } else if (!isPasswordValid()) {
-      newErrors.password = "Password does not meet all requirements";
-    }
-
-    if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = "Passwords do not match";
-    }
+    if (formData.password !== formData.confirmPassword) newErrors.confirmPassword = "Passwords do not match";
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  // ── ✅ UPDATED: handleSubmit — now uses email verification flow
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateForm()) return;
@@ -240,8 +340,6 @@ const RegisterModal = ({ onClose }) => {
 
     try {
       const fingerprint = getFingerprint();
-
-      // Step 1: Save to pendingUsers table (NOT users table yet)
       const result = await registerPendingUser({
         name: formData.name,
         username: formData.username,
@@ -251,29 +349,25 @@ const RegisterModal = ({ onClose }) => {
       });
 
       if (!result.success) {
-        if (result.rateLimited) {
-          setErrors({ submit: result.message });
-        } else {
-          setErrors({ submit: result.message });
-        }
+        setErrors({ submit: result.message });
         return;
       }
 
-      // Step 2: Send verification email with the token
-      const emailResult = await sendVerificationEmail({
+      // Send OTP email
+      await sendRegistrationOTP({
         to: formData.email,
         name: formData.name,
-        token: result.token,
+        otp: result.otp,
       });
 
-      if (!emailResult?.success) {
-        setErrors({ submit: "Account created but failed to send verification email. Please contact support." });
-        return;
-      }
-
-      // Step 3: Show the "check your email" screen
+      // Switch to OTP view
       setPendingEmail(formData.email);
-      setView("verify_pending");
+      setPendingName(formData.name);
+      setOtpDigits(["", "", "", "", "", ""]);
+      setOtpError("");
+      setOtpSuccess("");
+      setResendCooldown(60); // ← 60 second cooldown after first send
+      setView("otp");
 
     } catch (err) {
       setErrors({ submit: "Registration failed. Please try again." });
@@ -282,41 +376,7 @@ const RegisterModal = ({ onClose }) => {
     }
   };
 
-  // ── ✅ NEW: Resend verification email
-  const handleResendVerification = async () => {
-    if (resendCooldown > 0 || resendLoading) return;
-    setResendLoading(true);
-    setResendMsg("");
-
-    try {
-      // Re-register with same data (registerPendingUser will replace old pending record)
-      const result = await registerPendingUser({
-        name: formData.name,
-        username: formData.username,
-        email: pendingEmail,
-        password: formData.password,
-        fingerprint: getFingerprint(),
-      });
-
-      if (result.success) {
-        await sendVerificationEmail({
-          to: pendingEmail,
-          name: formData.name,
-          token: result.token,
-        });
-        setResendMsg("✅ Verification email resent! Check your inbox.");
-        setResendCooldown(60);
-      } else {
-        setResendMsg(`❌ ${result.message}`);
-      }
-    } catch {
-      setResendMsg("❌ Failed to resend. Please try again.");
-    } finally {
-      setResendLoading(false);
-    }
-  };
-
-  // ── FORGOT PASSWORD HANDLERS ──────────────────────
+  // ── FORGOT PASSWORD ──────────────────────────────
   const handleSendCode = async () => {
     if (passwordCooldown > 0) return;
     if (!forgotEmail.trim() || !/\S+@\S+\.\S+/.test(forgotEmail)) {
@@ -357,7 +417,6 @@ const RegisterModal = ({ onClose }) => {
   const handleResetPassword = async (e) => {
     e.preventDefault();
     setResetMsg("");
-
     if (!sentCode) { setResetMsg("❌ Please request a verification code first."); return; }
     if (verificationCode !== sentCode) { setResetMsg("❌ Invalid verification code."); return; }
     if (!isNewPwValid()) { setResetMsg("❌ Password does not meet all requirements."); return; }
@@ -365,10 +424,7 @@ const RegisterModal = ({ onClose }) => {
 
     setResetLoading(true);
     try {
-      const result = await resetPasswordByEmail({
-        email: forgotEmail,
-        newPassword: newPassword,
-      });
+      const result = await resetPasswordByEmail({ email: forgotEmail, newPassword });
       if (result?.success) {
         setResetMsg("✅ Password reset successful! You can now log in.");
         setTimeout(() => onClose(), 1500);
@@ -393,131 +449,197 @@ const RegisterModal = ({ onClose }) => {
           </svg>
         </button>
 
-        {/* ── ✅ NEW: Verify Pending View ── */}
-        {view === "verify_pending" ? (
+        {/* ══ OTP VERIFICATION VIEW ══ */}
+        {view === "otp" ? (
           <>
             <div className="register-modal-header">
               <div className="register-icon" style={{ background: "linear-gradient(135deg, #fc1268, #9c27b0)" }}>
                 <svg viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+                  <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
                 </svg>
               </div>
-              <h2>Check Your Email!</h2>
-              <p className="register-subtitle">We sent a verification link to your inbox</p>
+              <h2>Verify Your Email</h2>
+              <p className="register-subtitle">Enter the 6-digit code we sent to your inbox</p>
             </div>
 
-            <div style={{ padding: "0 8px 24px" }}>
+            <div style={{ padding: "0 32px 36px" }}>
+
               {/* Email display */}
               <div style={{
                 background: "linear-gradient(135deg, #fff0f6, #f5f3ff)",
-                border: "2px solid #ffd6e7",
+                border: "1.5px solid #ffd6e7",
                 borderRadius: "12px",
-                padding: "20px",
+                padding: "14px 20px",
                 textAlign: "center",
-                marginBottom: "20px"
+                marginBottom: "24px"
               }}>
-                <div style={{ fontSize: "40px", marginBottom: "8px" }}>✉️</div>
-                <p style={{ color: "#374151", fontSize: "14px", margin: "0 0 6px" }}>
-                  Verification email sent to:
-                </p>
-                <p style={{
-                  color: "#fc1268",
-                  fontWeight: "700",
-                  fontSize: "15px",
-                  margin: "0",
-                  fontFamily: "monospace"
-                }}>
+                <p style={{ color: "#6b7280", fontSize: "13px", margin: "0 0 4px" }}>Code sent to:</p>
+                <p style={{ color: "#fc1268", fontWeight: "700", fontSize: "15px", margin: 0, fontFamily: "monospace" }}>
                   {pendingEmail}
                 </p>
               </div>
 
-              {/* Instructions */}
+              {/* OTP Input Boxes */}
               <div style={{
-                background: "#f9fafb",
-                borderRadius: "10px",
-                border: "1px solid #e5e7eb",
-                padding: "16px 18px",
+                display: "flex",
+                gap: "10px",
+                justifyContent: "center",
                 marginBottom: "20px"
               }}>
-                <p style={{ color: "#374151", fontSize: "13px", margin: "0 0 10px", fontWeight: "600" }}>
-                  What to do next:
-                </p>
-                <ol style={{ color: "#6b7280", fontSize: "13px", margin: "0", paddingLeft: "18px", lineHeight: "1.8" }}>
-                  <li>Open your Gmail inbox</li>
-                  <li>Find the email from <strong>DKMerch</strong></li>
-                  <li>Click the <strong>"Verify My Email"</strong> button</li>
-                  <li>You'll be redirected to complete your account setup</li>
-                </ol>
+                {otpDigits.map((digit, index) => (
+                  <input
+                    key={index}
+                    ref={el => otpRefs.current[index] = el}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={digit}
+                    onChange={e => handleOtpChange(index, e.target.value)}
+                    onKeyDown={e => handleOtpKeyDown(index, e)}
+                    onPaste={index === 0 ? handleOtpPaste : undefined}
+                    style={{
+                      width: "48px",
+                      height: "56px",
+                      textAlign: "center",
+                      fontSize: "22px",
+                      fontWeight: "700",
+                      border: `2px solid ${otpError ? "#dc2626" : digit ? "#fc1268" : "#e5e7eb"}`,
+                      borderRadius: "12px",
+                      outline: "none",
+                      background: digit ? "linear-gradient(135deg, #fff0f6, #f5f3ff)" : "white",
+                      color: "#1f2937",
+                      transition: "all 0.15s ease",
+                      caretColor: "#fc1268",
+                    }}
+                    disabled={otpLoading}
+                  />
+                ))}
               </div>
 
-              {/* Warning */}
+              {/* Error / Success */}
+              {otpError && (
+                <div style={{
+                  background: "#fef2f2",
+                  border: "1px solid #fecaca",
+                  borderRadius: "10px",
+                  padding: "12px 16px",
+                  marginBottom: "16px",
+                  color: "#dc2626",
+                  fontSize: "13px",
+                  fontWeight: "600",
+                  textAlign: "center"
+                }}>
+                  ❌ {otpError}
+                </div>
+              )}
+              {otpSuccess && (
+                <div style={{
+                  background: "#f0fdf4",
+                  border: "1px solid #bbf7d0",
+                  borderRadius: "10px",
+                  padding: "12px 16px",
+                  marginBottom: "16px",
+                  color: "#15803d",
+                  fontSize: "13px",
+                  fontWeight: "600",
+                  textAlign: "center"
+                }}>
+                  {otpSuccess}
+                </div>
+              )}
+
+              {/* Verify Button */}
+              <button
+                type="button"
+                onClick={() => handleVerifyOtp()}
+                disabled={otpLoading || otpDigits.join("").length !== 6}
+                style={{
+                  width: "100%",
+                  padding: "14px",
+                  background: otpDigits.join("").length === 6
+                    ? "linear-gradient(135deg, #fc1268, #9c27b0)"
+                    : "linear-gradient(135deg, #d1d5db, #9ca3af)",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "12px",
+                  fontSize: "15px",
+                  fontWeight: "700",
+                  cursor: otpDigits.join("").length === 6 ? "pointer" : "not-allowed",
+                  marginBottom: "16px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "8px",
+                  transition: "all 0.2s",
+                  boxShadow: otpDigits.join("").length === 6 ? "0 4px 12px rgba(252,18,104,0.3)" : "none",
+                }}
+              >
+                {otpLoading ? (
+                  <>
+                    <svg style={{ width: 18, height: 18, animation: "spin 1s linear infinite" }} viewBox="0 0 24 24">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" style={{ opacity: 0.25 }} />
+                      <path fill="currentColor" style={{ opacity: 0.75 }} d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Verifying...
+                  </>
+                ) : "✅ Verify Email"}
+              </button>
+
+              {/* Resend */}
+              <div style={{ textAlign: "center" }}>
+                <p style={{ color: "#6b7280", fontSize: "13px", margin: "0 0 8px" }}>
+                  Didn't receive the code?
+                </p>
+                <button
+                  type="button"
+                  onClick={handleResendOtp}
+                  disabled={resendCooldown > 0 || resendLoading}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: resendCooldown > 0 ? "#9ca3af" : "#fc1268",
+                    fontWeight: "700",
+                    fontSize: "14px",
+                    cursor: resendCooldown > 0 ? "not-allowed" : "pointer",
+                    padding: "4px 0",
+                    marginBottom: "16px",
+                  }}
+                >
+                  {resendLoading
+                    ? "Sending..."
+                    : resendCooldown > 0
+                    ? `Resend in ${resendCooldown}s`
+                    : "📨 Resend Code"}
+                </button>
+
+                <br />
+                <button
+                  type="button"
+                  onClick={() => setView("register")}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "#9ca3af",
+                    fontSize: "13px",
+                    cursor: "pointer"
+                  }}
+                >
+                  ← Back to Register
+                </button>
+              </div>
+
+              {/* Expiry note */}
               <div style={{
                 background: "#fffbeb",
                 border: "1px solid #fde68a",
                 borderRadius: "10px",
                 padding: "12px 16px",
-                marginBottom: "20px"
+                marginTop: "20px"
               }}>
-                <p style={{ color: "#92400e", fontSize: "12px", margin: "0" }}>
-                  ⏱ The verification link expires in <strong>24 hours</strong>.
-                  Check your spam folder if you don't see it.
+                <p style={{ color: "#92400e", fontSize: "12px", margin: 0 }}>
+                  ⏱ Code expires in <strong>3 minutes</strong>. Check your spam folder if you don't see it.
                 </p>
               </div>
-
-              {/* Resend button */}
-              {resendMsg && (
-                <div style={{
-                  textAlign: "center",
-                  marginBottom: "12px",
-                  fontSize: "13px",
-                  color: resendMsg.startsWith("✅") ? "#16a34a" : "#dc2626"
-                }}>
-                  {resendMsg}
-                </div>
-              )}
-
-              <button
-                type="button"
-                onClick={handleResendVerification}
-                disabled={resendCooldown > 0 || resendLoading}
-                style={{
-                  width: "100%",
-                  padding: "12px",
-                  borderRadius: "10px",
-                  border: "2px solid #fc1268",
-                  background: "transparent",
-                  color: "#fc1268",
-                  fontWeight: "700",
-                  fontSize: "14px",
-                  cursor: resendCooldown > 0 || resendLoading ? "not-allowed" : "pointer",
-                  opacity: resendCooldown > 0 || resendLoading ? 0.6 : 1,
-                  marginBottom: "12px",
-                  transition: "all 0.2s"
-                }}
-              >
-                {resendLoading
-                  ? "Sending..."
-                  : resendCooldown > 0
-                  ? `Resend available in ${resendCooldown}s`
-                  : "📨 Resend Verification Email"}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setView("register")}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  borderRadius: "10px",
-                  border: "none",
-                  background: "transparent",
-                  color: "#9ca3af",
-                  fontSize: "13px",
-                  cursor: "pointer"
-                }}
-              >
-                ← Back to Register
-              </button>
             </div>
           </>
 
@@ -542,10 +664,8 @@ const RegisterModal = ({ onClose }) => {
                     <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
                   </svg>
                   <input
-                    type="email"
-                    placeholder="Enter your registered email"
-                    className="form-input"
-                    value={forgotEmail}
+                    type="email" placeholder="Enter your registered email"
+                    className="form-input" value={forgotEmail}
                     onChange={(e) => { setForgotEmail(e.target.value); setCodeMsg(""); }}
                     required
                   />
@@ -560,21 +680,17 @@ const RegisterModal = ({ onClose }) => {
                       <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
                     </svg>
                     <input
-                      type="text"
-                      placeholder="Enter 6-digit code"
-                      className="form-input"
+                      type="text" placeholder="Enter 6-digit code" className="form-input"
                       value={verificationCode}
                       onChange={(e) => {
                         const digits = e.target.value.replace(/\D/g, "");
                         if (digits.length <= 6) setVerificationCode(digits);
                       }}
-                      maxLength="6"
-                      required
+                      maxLength="6" required
                     />
                   </div>
                   <button
-                    type="button"
-                    className="send-code-btn"
+                    type="button" className="send-code-btn"
                     onClick={handleSendCode}
                     disabled={passwordCooldown > 0 || sendingCode}
                   >
@@ -662,15 +778,14 @@ const RegisterModal = ({ onClose }) => {
               )}
 
               <button
-                type="submit"
-                className="register-submit-btn"
+                type="submit" className="register-submit-btn"
                 disabled={!isNewPwValid() || !newPasswordsMatch || !sentCode || resetLoading}
               >
                 {resetLoading ? (
                   <>
                     <svg className="spinner" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" style={{ opacity: 0.25 }} />
+                      <path fill="currentColor" style={{ opacity: 0.75 }} d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
                     Resetting...
                   </>
@@ -696,6 +811,7 @@ const RegisterModal = ({ onClose }) => {
           </>
 
         ) : (
+          /* ══ REGISTER VIEW ══ */
           <>
             <div className="register-modal-header">
               <div className="register-icon">
@@ -717,7 +833,6 @@ const RegisterModal = ({ onClose }) => {
                 </div>
               )}
 
-              {/* Full Name */}
               <div className="input-group">
                 <label htmlFor="name">Full Name</label>
                 <div className="input-wrapper">
@@ -728,16 +843,13 @@ const RegisterModal = ({ onClose }) => {
                     type="text" id="name" name="name"
                     placeholder="Enter your full name"
                     className={`form-input ${errors.name ? "error" : ""}`}
-                    value={formData.name}
-                    onChange={handleChange}
-                    maxLength={MAX_NAME_LENGTH}
-                    required
+                    value={formData.name} onChange={handleChange}
+                    maxLength={MAX_NAME_LENGTH} required
                   />
                 </div>
                 {errors.name && <span className="error-text">{errors.name}</span>}
               </div>
 
-              {/* Username */}
               <div className="input-group">
                 <label htmlFor="username">Username</label>
                 <div className="input-wrapper">
@@ -748,16 +860,13 @@ const RegisterModal = ({ onClose }) => {
                     type="text" id="username" name="username"
                     placeholder="Choose a username"
                     className={`form-input ${errors.username ? "error" : ""}`}
-                    value={formData.username}
-                    onChange={handleChange}
-                    maxLength={MAX_USERNAME_LENGTH}
-                    required
+                    value={formData.username} onChange={handleChange}
+                    maxLength={MAX_USERNAME_LENGTH} required
                   />
                 </div>
                 {errors.username && <span className="error-text">{errors.username}</span>}
               </div>
 
-              {/* Email */}
               <div className="input-group">
                 <label htmlFor="email">Email Address</label>
                 <div className="input-wrapper">
@@ -769,16 +878,13 @@ const RegisterModal = ({ onClose }) => {
                     type="email" id="email" name="email"
                     placeholder="Enter your Gmail (max 25 chars before @)"
                     className={`form-input ${errors.email ? "error" : ""}`}
-                    value={formData.email}
-                    onChange={handleChange}
-                    onBlur={handleEmailBlur}
-                    required
+                    value={formData.email} onChange={handleChange}
+                    onBlur={handleEmailBlur} required
                   />
                 </div>
                 {errors.email && <span className="error-text">{errors.email}</span>}
               </div>
 
-              {/* Password */}
               <div className="input-group">
                 <label htmlFor="password">Password</label>
                 <div className="input-wrapper">
@@ -789,11 +895,9 @@ const RegisterModal = ({ onClose }) => {
                     type={showPassword ? "text" : "password"} id="password" name="password"
                     placeholder="Create a strong password"
                     className={`form-input password-input ${errors.password ? "error" : ""} ${isPasswordValid() && formData.password ? "valid" : ""}`}
-                    value={formData.password}
-                    onChange={handleChange}
+                    value={formData.password} onChange={handleChange}
                     onFocus={() => setPasswordFocused(true)}
-                    onBlur={() => setPasswordFocused(false)}
-                    required
+                    onBlur={() => setPasswordFocused(false)} required
                   />
                   <button type="button" className="password-toggle" onClick={() => setShowPassword(p => !p)}>
                     <PwToggleIcon show={showPassword} />
@@ -819,7 +923,6 @@ const RegisterModal = ({ onClose }) => {
                 )}
               </div>
 
-              {/* Confirm Password */}
               <div className="input-group">
                 <label htmlFor="confirmPassword">Confirm Password</label>
                 <div className="input-wrapper">
@@ -830,9 +933,7 @@ const RegisterModal = ({ onClose }) => {
                     type={showConfirmPassword ? "text" : "password"} id="confirmPassword"
                     name="confirmPassword" placeholder="Confirm your password"
                     className={`form-input password-input ${errors.confirmPassword ? "error" : ""} ${passwordsMatch ? "valid" : ""}`}
-                    value={formData.confirmPassword}
-                    onChange={handleChange}
-                    required
+                    value={formData.confirmPassword} onChange={handleChange} required
                   />
                   <button type="button" className="password-toggle" onClick={() => setShowConfirmPassword(p => !p)}>
                     <PwToggleIcon show={showConfirmPassword} />
@@ -860,10 +961,10 @@ const RegisterModal = ({ onClose }) => {
                 {isLoading ? (
                   <>
                     <svg className="spinner" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" style={{ opacity: 0.25 }} />
+                      <path fill="currentColor" style={{ opacity: 0.75 }} d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
-                    Creating Account...
+                    Sending Code...
                   </>
                 ) : (
                   <>

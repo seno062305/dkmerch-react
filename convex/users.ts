@@ -98,9 +98,7 @@ export const loginUser = mutation({
   },
 });
 
-// ── ✅ NEW: Step 1 — Register to pending table only (NOT yet in users table)
-// Called when user submits the registration form.
-// User is NOT saved to users table yet — only after email verification.
+// ── Step 1 — Register to pending table only (NOT yet in users table)
 export const registerPendingUser = mutation({
   args: {
     name: v.string(),
@@ -112,7 +110,7 @@ export const registerPendingUser = mutation({
   handler: async ({ db }, args) => {
     const nowMs = Date.now();
 
-    // ── Check if email already exists in users (verified accounts)
+    // Check if email already exists in users (verified accounts)
     const existingUser = await db
       .query("users")
       .withIndex("by_email", q => q.eq("email", args.email))
@@ -121,7 +119,7 @@ export const registerPendingUser = mutation({
       return { success: false, message: "Email already registered." };
     }
 
-    // ── Check if username already exists
+    // Check if username already exists
     const existingUsername = await db
       .query("users")
       .withIndex("by_username", q => q.eq("username", args.username))
@@ -130,7 +128,7 @@ export const registerPendingUser = mutation({
       return { success: false, message: "Username already taken." };
     }
 
-    // ── Rate limit check via fingerprint
+    // Rate limit check via fingerprint
     if (args.fingerprint) {
       const windowStart = nowMs - RATE_LIMIT_WINDOW_MS;
       const recentAttempts = await db
@@ -154,7 +152,7 @@ export const registerPendingUser = mutation({
       }
     }
 
-    // ── If there's already a pending entry for this email, delete it (allow resend)
+    // If there's already a pending entry for this email, delete it (allow resend)
     const existingPending = await db
       .query("pendingUsers")
       .withIndex("by_email", q => q.eq("email", args.email))
@@ -163,9 +161,13 @@ export const registerPendingUser = mutation({
       await db.delete(existingPending._id);
     }
 
-    // ── Generate a secure UUID token
+    // Generate a secure UUID token (for email link verification — kept for compatibility)
     const token = crypto.randomUUID();
-    const expiresAt = nowMs + 1000 * 60 * 60 * 24; // 24 hours from now
+    const expiresAt = nowMs + 1000 * 60 * 60 * 24; // 24 hours
+
+    // Generate 6-digit OTP — expires in 3 minutes
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpiresAt = nowMs + 1000 * 60 * 3; // ← 3 minutes
 
     await db.insert("pendingUsers", {
       name: args.name,
@@ -175,34 +177,43 @@ export const registerPendingUser = mutation({
       token,
       expiresAt,
       createdAt: nowMs,
+      otp,
+      otpExpiresAt,
     });
 
-    return { success: true, token };
+    return { success: true, token, otp };
   },
 });
 
-// ── ✅ NEW: Step 2 — Verify token from email link, move user to real users table
-// Called when user clicks the verification link in their email.
-export const verifyEmailAndCreateUser = mutation({
-  args: { token: v.string() },
-  handler: async ({ db }, { token }) => {
-    // Find pending record by token
+// ── Step 2A — Verify OTP entered in modal, then create user immediately
+export const verifyOtpAndCreateUser = mutation({
+  args: {
+    email: v.string(),
+    otp: v.string(),
+  },
+  handler: async ({ db }, { email, otp }) => {
     const pending = await db
       .query("pendingUsers")
-      .withIndex("by_token", q => q.eq("token", token))
+      .withIndex("by_email", q => q.eq("email", email))
       .first();
 
     if (!pending) {
-      return { success: false, message: "Invalid verification link. Please register again." };
+      return { success: false, message: "No pending registration found. Please register again." };
     }
 
-    // Check if token has expired
-    if (Date.now() > pending.expiresAt) {
-      await db.delete(pending._id);
-      return { success: false, message: "Verification link has expired. Please register again.", expired: true };
+    if (!pending.otp || !pending.otpExpiresAt) {
+      return { success: false, message: "OTP not found. Please request a new code." };
     }
 
-    // Double-check that email hasn't been registered by someone else in the meantime
+    if (Date.now() > pending.otpExpiresAt) {
+      return { success: false, message: "OTP has expired. Please request a new code.", expired: true };
+    }
+
+    if (pending.otp !== otp) {
+      return { success: false, message: "Incorrect OTP. Please try again." };
+    }
+
+    // Double-check email not already registered
     const alreadyExists = await db
       .query("users")
       .withIndex("by_email", q => q.eq("email", pending.email))
@@ -212,7 +223,7 @@ export const verifyEmailAndCreateUser = mutation({
       return { success: false, message: "This email has already been registered." };
     }
 
-    // ✅ NOW save to real users table
+    // Save to real users table
     const userId = await db.insert("users", {
       name: pending.name,
       username: pending.username,
@@ -223,14 +234,80 @@ export const verifyEmailAndCreateUser = mutation({
       registeredAt: new Date().toISOString(),
     });
 
-    // 🗑️ Clean up pending record
+    // Clean up pending record
     await db.delete(pending._id);
 
     return { success: true, userId };
   },
 });
 
-// ── ✅ NEW: Check if an email is still pending verification (for UI feedback)
+// ── Resend OTP — generates a BRAND NEW OTP, immediately invalidates the old one
+export const resendOtp = mutation({
+  args: { email: v.string() },
+  handler: async ({ db }, { email }) => {
+    const pending = await db
+      .query("pendingUsers")
+      .withIndex("by_email", q => q.eq("email", email))
+      .first();
+
+    if (!pending) {
+      return { success: false, message: "No pending registration found. Please register again." };
+    }
+
+    const nowMs = Date.now();
+    // Generate fresh OTP — old OTP is overwritten and no longer valid
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpiresAt = nowMs + 1000 * 60 * 3; // ← 3 minutes from now
+
+    await db.patch(pending._id, { otp, otpExpiresAt });
+
+    return { success: true, otp };
+  },
+});
+
+// ── Step 2B — Verify token from email link (original flow — kept for compatibility)
+export const verifyEmailAndCreateUser = mutation({
+  args: { token: v.string() },
+  handler: async ({ db }, { token }) => {
+    const pending = await db
+      .query("pendingUsers")
+      .withIndex("by_token", q => q.eq("token", token))
+      .first();
+
+    if (!pending) {
+      return { success: false, message: "Invalid verification link. Please register again." };
+    }
+
+    if (Date.now() > pending.expiresAt) {
+      await db.delete(pending._id);
+      return { success: false, message: "Verification link has expired. Please register again.", expired: true };
+    }
+
+    const alreadyExists = await db
+      .query("users")
+      .withIndex("by_email", q => q.eq("email", pending.email))
+      .first();
+    if (alreadyExists) {
+      await db.delete(pending._id);
+      return { success: false, message: "This email has already been registered." };
+    }
+
+    const userId = await db.insert("users", {
+      name: pending.name,
+      username: pending.username,
+      email: pending.email,
+      password: pending.password,
+      role: "user",
+      status: "active",
+      registeredAt: new Date().toISOString(),
+    });
+
+    await db.delete(pending._id);
+
+    return { success: true, userId };
+  },
+});
+
 export const checkPendingVerification = query({
   args: { email: v.string() },
   handler: async ({ db }, { email }) => {
@@ -244,8 +321,6 @@ export const checkPendingVerification = query({
   },
 });
 
-// ── ✅ NEW: Cron cleanup — called by convex/crons.ts every 6 hours
-// Deletes all expired pending registrations to keep the pendingUsers table clean
 export const cleanupExpiredPendingUsers = internalMutation({
   args: {},
   handler: async ({ db }) => {
@@ -259,7 +334,6 @@ export const cleanupExpiredPendingUsers = internalMutation({
   },
 });
 
-// ── EXISTING: createUser kept for backward compatibility (admin-created users etc.)
 export const createUser = mutation({
   args: {
     name: v.string(),
