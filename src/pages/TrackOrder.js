@@ -422,28 +422,17 @@ const TrackOrder = () => {
   const allAvailableOrders = [...orders, ...emailOrders];
   const selectedOrder = selectedOrderId ? allAvailableOrders.find(o => o._id === selectedOrderId) || null : null;
 
-  // ── Direct lookup via QR scan (works for guests, always fetch if orderIdParam exists) ──
   const directOrder = useQuery(
     api.orders.getOrderById,
     orderIdParam ? { orderId: orderIdParam } : 'skip'
   );
 
-  // ✅ FIX: Simplified QR redirect — no ref needed, runs whenever directOrder or orders load
   useEffect(() => {
     if (!orderIdParam) return;
-    if (selectedOrderId || qrOrder) return; // already handled
-
-    // First check if it's in the user's own orders
+    if (selectedOrderId || qrOrder) return;
     const found = [...orders, ...emailOrders].find(o => o.orderId === orderIdParam);
-    if (found) {
-      setSelectedOrderId(found._id);
-      return;
-    }
-
-    // Fallback: use directOrder from Convex (works for QR scan guests)
-    if (directOrder) {
-      setQrOrder(directOrder);
-    }
+    if (found) { setSelectedOrderId(found._id); return; }
+    if (directOrder) { setQrOrder(directOrder); }
   }, [orderIdParam, orders, emailOrders, directOrder, selectedOrderId, qrOrder]);
 
   const handleCloseModal = useCallback(() => setSelectedOrderId(null), []);
@@ -637,7 +626,7 @@ const TrackOrder = () => {
     );
   };
 
-const Lightbox = () => {
+  const Lightbox = () => {
     const images = lightboxData?.images || [];
     const index = lightboxData?.index || 0;
     const hasMultiple = images.length > 1;
@@ -667,7 +656,7 @@ const Lightbox = () => {
     );
   };
 
-  // ─── QR SCAN VIEW — show order modal immediately, no login needed ──────────
+  // ─── QR SCAN VIEW ──────────────────────────────────────────────────────────
   if (orderIdParam && qrOrder && !isAuthenticated) {
     return (
       <main className="trackorder-main">
@@ -790,11 +779,17 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
   const refundAmount     = (order.finalTotal ?? order.total ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2 });
   const { canRefund, hoursLeft, minsLeft, expired } = getRefundWindow(order);
 
-  useEffect(() => { document.body.style.overflow = 'hidden'; return () => { document.body.style.overflow = ''; }; }, []);
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = ''; };
+  }, []);
+
   useEffect(() => { if (order.deliveryOtp) setLocalOtp(order.deliveryOtp); }, [order.deliveryOtp]);
+
   useEffect(() => {
     const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', handleKey); return () => window.removeEventListener('keydown', handleKey);
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
   }, [onClose]);
 
   const getProductById = (id) => products.find(p => p._id === id || p.id === id);
@@ -821,8 +816,18 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
 
   return (
     <div className="tracking-modal-overlay" onClick={onClose}>
+      {/* ✅ FIX: Close button is OUTSIDE .tracking-result so it stays fixed at top-right
+           regardless of scroll position inside the modal */}
       <div className="tracking-modal" onClick={e => e.stopPropagation()}>
-        <button className="modal-close-btn" onClick={onClose} type="button"><i className="fas fa-times"></i></button>
+        <button
+          className="modal-close-btn"
+          onClick={(e) => { e.stopPropagation(); onClose(); }}
+          type="button"
+          aria-label="Close"
+        >
+          <i className="fas fa-times"></i>
+        </button>
+
         <div className="tracking-result">
 
           <div className="result-header">
@@ -891,7 +896,6 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
             </div>
           )}
 
-          {/* OTP — logged-in only, NOT shown to guest QR scanners */}
           {!isGuest && isOutForDelivery && (
             <div className="customer-otp-section">
               {!localOtp ? (
