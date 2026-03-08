@@ -9,26 +9,35 @@ import { useMutation, useQuery, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import './Checkout.css';
 
-// ─── SHIPPING CONFIG ──────────────────────────────────────────────────────────
-// ✅ Change these to your actual store coordinates
+// ─── STORE COORDINATES ────────────────────────────────────────────────────────
 const STORE_LAT = 14.5995;
 const STORE_LNG = 120.9842;
 
-const SHIPPING_TIERS = [
-  { maxKm: 5,        fee: 10  },
-  { maxKm: 10,       fee: 20  },
-  { maxKm: 20,       fee: 30 },
-  { maxKm: 40,       fee: 40 },
-  { maxKm: 70,       fee: 50 },
-  { maxKm: 120,      fee: 60 },
-  { maxKm: Infinity, fee: 70 },
-];
+// ─── LALAMOVE-STYLE SHIPPING CONFIG ──────────────────────────────────────────
+const LALAMOVE_CONFIG = {
+  baseFare:          49,
+  freeKm:            2,
+  ratePerKm:         10,
+  maxReasonableKm:   25,
+  extraItemFee:      10,
+  heavySurcharge:    50,
+  heavyThresholdKg:  10,
+  categoryWeights: {
+    albums:       0.3,
+    photocards:   0.05,
+    lightsticks:  0.5,
+    apparel:      0.25,
+    accessories:  0.15,
+    default:      0.2,
+  },
+};
 
+// ─── HAVERSINE DISTANCE ───────────────────────────────────────────────────────
 function getDistanceKm(lat1, lng1, lat2, lng2) {
-  const R = 6371;
+  const R    = 6371;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLng = ((lng2 - lng1) * Math.PI) / 180;
-  const a =
+  const a    =
     Math.sin(dLat / 2) ** 2 +
     Math.cos((lat1 * Math.PI) / 180) *
     Math.cos((lat2 * Math.PI) / 180) *
@@ -36,11 +45,61 @@ function getDistanceKm(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function calcShippingByDistance(lat, lng) {
+// ─── LALAMOVE SHIPPING CALCULATOR ────────────────────────────────────────────
+function calcLalamoveShipping(lat, lng, cartItems = [], products = []) {
   if (!lat || !lng) return null;
-  const km = getDistanceKm(STORE_LAT, STORE_LNG, lat, lng);
-  const tier = SHIPPING_TIERS.find(t => km <= t.maxKm);
-  return { fee: tier?.fee ?? 300, km: Math.round(km * 10) / 10 };
+
+  const cfg = LALAMOVE_CONFIG;
+  const km  = Math.round(getDistanceKm(STORE_LAT, STORE_LNG, lat, lng) * 10) / 10;
+
+  let fee = cfg.baseFare;
+  const chargeableKm = Math.max(0, km - cfg.freeKm);
+  fee += Math.ceil(chargeableKm) * cfg.ratePerKm;
+
+  const totalQty = cartItems.reduce((sum, item) => sum + (item.qty ?? item.quantity ?? 1), 0);
+  if (totalQty > 1) fee += (totalQty - 1) * cfg.extraItemFee;
+
+  let totalWeightKg = 0;
+  cartItems.forEach(item => {
+    const product  = products.find(p =>
+      p._id?.toString() === (item.productId || item.id)?.toString()
+    );
+    const category = product?.category || 'default';
+    const weight   = cfg.categoryWeights[category] ?? cfg.categoryWeights.default;
+    totalWeightKg += weight * (item.qty ?? item.quantity ?? 1);
+  });
+  if (totalWeightKg > cfg.heavyThresholdKg) fee += cfg.heavySurcharge;
+
+  const outOfCoverage = km > cfg.maxReasonableKm;
+
+  const breakdown = [];
+  breakdown.push({ label: 'Base fare', amount: cfg.baseFare });
+  if (chargeableKm > 0) {
+    breakdown.push({
+      label:  `Distance (${km} km − ${cfg.freeKm} km free = ${Math.ceil(chargeableKm)} km × ₱${cfg.ratePerKm})`,
+      amount: Math.ceil(chargeableKm) * cfg.ratePerKm,
+    });
+  } else {
+    breakdown.push({ label: `Distance (${km} km — within free ${cfg.freeKm} km)`, amount: 0 });
+  }
+  if (totalQty > 1) {
+    breakdown.push({
+      label:  `Extra items (${totalQty - 1} item${totalQty > 2 ? 's' : ''} × ₱${cfg.extraItemFee})`,
+      amount: (totalQty - 1) * cfg.extraItemFee,
+    });
+  }
+  if (totalWeightKg > cfg.heavyThresholdKg) {
+    breakdown.push({ label: `Heavy load surcharge (${totalWeightKg.toFixed(1)} kg)`, amount: cfg.heavySurcharge });
+  }
+
+  return {
+    fee: Math.round(fee),
+    km,
+    totalQty,
+    totalWeightKg: Math.round(totalWeightKg * 10) / 10,
+    breakdown,
+    outOfCoverage,
+  };
 }
 
 // ─── ADDRESS MAP PICKER ───────────────────────────────────────────────────────
@@ -121,7 +180,7 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) 
   useEffect(() => {
     if (!mapVisible || mapInstanceRef.current || !mapRef.current || !leafletReady) return;
     try {
-      const L = window.L;
+      const L        = window.L;
       const startLat  = savedCoords?.lat ?? 14.5995;
       const startLng  = savedCoords?.lng ?? 120.9842;
       const startZoom = savedCoords ? 17 : 13;
@@ -334,6 +393,59 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) 
   );
 };
 
+// ─── SHIPPING BREAKDOWN DISPLAY ───────────────────────────────────────────────
+const ShippingBreakdown = ({ shippingInfo }) => {
+  const [expanded, setExpanded] = useState(false);
+  if (!shippingInfo) return null;
+  return (
+    <div className="shipping-breakdown-wrap">
+      <div className="shipping-breakdown-header" onClick={() => setExpanded(v => !v)}>
+        <div className="shipping-breakdown-main">
+          <i className="fas fa-motorcycle" style={{ color: '#fc1268' }}></i>
+          <div>
+            <span className="shipping-fee-label">Estimated Shipping Fee</span>
+            <strong className="shipping-fee-amount">₱{shippingInfo.fee.toLocaleString()}</strong>
+          </div>
+        </div>
+        <div className="shipping-breakdown-meta">
+          <span>{shippingInfo.km} km from store</span>
+          <span className="shipping-breakdown-toggle">
+            {expanded ? 'Hide' : 'See breakdown'} <i className={`fas fa-chevron-${expanded ? 'up' : 'down'}`}></i>
+          </span>
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="shipping-breakdown-details">
+          {shippingInfo.breakdown.map((row, i) => (
+            <div key={i} className="shipping-breakdown-row">
+              <span>{row.label}</span>
+              <span className={row.amount === 0 ? 'shipping-free-label' : ''}>
+                {row.amount === 0 ? 'FREE' : `+₱${row.amount}`}
+              </span>
+            </div>
+          ))}
+          <div className="shipping-breakdown-total">
+            <span>Total Shipping</span>
+            <strong>₱{shippingInfo.fee.toLocaleString()}</strong>
+          </div>
+          <div className="shipping-breakdown-note">
+            <i className="fas fa-info-circle"></i>
+            Rates based on Lalamove motorcycle delivery. Actual fee may vary slightly.
+          </div>
+        </div>
+      )}
+
+      {shippingInfo.outOfCoverage && (
+        <div className="shipping-out-of-coverage">
+          <i className="fas fa-exclamation-triangle"></i>
+          Your location is {shippingInfo.km} km away — delivery may take longer or require special arrangement.
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ─── MAIN CHECKOUT ────────────────────────────────────────────────────────────
 const Checkout = () => {
   const navigate  = useNavigate();
@@ -374,8 +486,9 @@ const Checkout = () => {
   const [addressCoords, setAddressCoords] = useState(null);
   const [savedCoords, setSavedCoords]     = useState(null);
 
-  // ✅ Distance-based shipping — only computed once coords are available
-  const shippingInfo = addressCoords ? calcShippingByDistance(addressCoords.lat, addressCoords.lng) : null;
+  const shippingInfo = addressCoords
+    ? calcLalamoveShipping(addressCoords.lat, addressCoords.lng, cartItems, products)
+    : null;
   const shippingFee  = shippingInfo?.fee ?? 0;
 
   useEffect(() => {
@@ -461,8 +574,7 @@ const Checkout = () => {
 
   const handleAddressSelect = ({ address, lat, lng, city, zipCode }) => {
     setFormData(prev => ({
-      ...prev,
-      address,
+      ...prev, address,
       city:    city    || prev.city,
       zipCode: zipCode || prev.zipCode,
     }));
@@ -519,10 +631,11 @@ const Checkout = () => {
       return;
     }
     if (products.length === 0) {
-      setLoading(false);
       showNotification('Products are still loading. Please wait a moment and try again.', 'warning');
       return;
     }
+
+    // ── Stock validation ──────────────────────────────────────────────────
     for (const item of cartItems) {
       const product = getProductById(item.productId || item.id);
       if (!product) continue;
@@ -531,14 +644,13 @@ const Checkout = () => {
         return;
       }
     }
+
     setLoading(true);
+
     try {
-      for (const item of cartItems) {
-        const product = getProductById(item.productId || item.id);
-        if (product) await updateProduct({ id: product._id, stock: product.stock - getQty(item) });
-      }
       const orderId  = `DK-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
-      const shipping = shippingFee; // ✅ distance-based
+      const shipping = shippingFee;
+
       const orderItems = cartItems.map(item => {
         const product = getProductById(item.productId || item.id);
         return {
@@ -551,10 +663,12 @@ const Checkout = () => {
           releaseDate: product?.releaseDate || null,
         };
       });
+
       const originalSubtotal = cartItems.reduce((total, item) => {
         const product = getProductById(item.productId || item.id);
         return total + (product?.price ?? 0) * getQty(item);
       }, 0);
+
       const promoItem = cartItems.find(i => i.promoCode);
 
       const addressParts = [savedAddress.address];
@@ -562,6 +676,7 @@ const Checkout = () => {
       if (savedAddress.zipCode) addressParts.push(savedAddress.zipCode);
       const shippingAddressStr = addressParts.join(', ');
 
+      // ── STEP 1: Create order FIRST so savePaymentLink can find it ──────────
       await createOrder({
         orderId,
         email:           savedContact.email,
@@ -585,20 +700,13 @@ const Checkout = () => {
         notes:           formData.notes || '',
         paymentStatus:   'pending',
       });
-      if (addressCoords) {
-        try {
-          await saveProfile({
-            userId: user?._id || user?.id,
-            fullName: savedContact.fullName, email: savedContact.email, phone: savedContact.phone,
-            address: savedAddress.address, city: savedAddress.city, zipCode: savedAddress.zipCode,
-            addressLat: addressCoords.lat, addressLng: addressCoords.lng,
-          });
-        } catch { }
-      }
+
+      // ── STEP 2: Get PayMongo checkout URL (patches the order via savePaymentLink) ─
       let paymentLinkUrl;
       try {
         const result = await createPaymentLink({
-          orderId, amount: finalTotal,
+          orderId,
+          amount:        finalTotal,
           description:   `DKMerch Order ${orderId}${promoItem ? ` (Promo: ${promoItem.promoCode})` : ''}`,
           customerName:  savedContact.fullName,
           customerEmail: savedContact.email,
@@ -611,6 +719,37 @@ const Checkout = () => {
         showNotification('Payment setup failed. Please try again or contact support.', 'error');
         return;
       }
+
+      // ── STEP 3: Deduct stock ──────────────────────────────────────────────
+      for (const item of cartItems) {
+        const product = getProductById(item.productId || item.id);
+        if (product) {
+          try {
+            await updateProduct({ id: product._id, stock: product.stock - getQty(item) });
+          } catch (stockErr) {
+            console.warn('Stock update failed for', product.name, stockErr);
+          }
+        }
+      }
+
+      // ── STEP 4: Save coords to profile (non-critical) ─────────────────────
+      if (addressCoords) {
+        try {
+          await saveProfile({
+            userId:   user?._id || user?.id,
+            fullName: savedContact.fullName,
+            email:    savedContact.email,
+            phone:    savedContact.phone,
+            address:  savedAddress.address,
+            city:     savedAddress.city,
+            zipCode:  savedAddress.zipCode,
+            addressLat: addressCoords.lat,
+            addressLng: addressCoords.lng,
+          });
+        } catch { /* non-critical */ }
+      }
+
+      // ── STEP 5: Send confirmation email (non-critical) ────────────────────
       try {
         await sendOrderConfirmation({
           to:   savedContact.email,
@@ -622,13 +761,15 @@ const Checkout = () => {
           discountAmount:     totalDiscount > 0 ? totalDiscount : undefined,
           finalTotal,
           shippingFee:        shipping,
-          shippingDistanceKm: shippingInfo?.km, // ✅ pass distance to email
+          shippingDistanceKm: shippingInfo?.km,
         });
       } catch (emailErr) { console.warn('Email failed:', emailErr); }
+
+      // ── STEP 6: Clear cart → redirect directly to PayMongo ───────────────
       await clearCart();
       setLoading(false);
-      showNotification('Order created! Redirecting to payment... 💳', 'success');
-      setTimeout(() => { window.location.href = paymentLinkUrl; }, 1500);
+      window.location.href = paymentLinkUrl;
+
     } catch (error) {
       setLoading(false);
       showNotification('Error placing order. Please try again.', 'error');
@@ -732,21 +873,14 @@ const Checkout = () => {
                       <span className="info-label"><i className="fas fa-map-marker-alt"></i> Street Address</span>
                       <span className="info-value">{savedAddress.address || <span className="info-missing">Not set — click Edit</span>}</span>
                     </div>
-                    {/* ✅ Show shipping fee after address is saved */}
                     {shippingInfo && (
-                      <div className="info-display-item info-display-full" style={{ background: '#f0fdf4', borderColor: '#86efac' }}>
-                        <span className="info-label" style={{ color: '#16a34a' }}><i className="fas fa-truck"></i> Shipping Fee</span>
-                        <span className="info-value" style={{ color: '#15803d' }}>
-                          <strong>₱{shippingInfo.fee.toLocaleString()}</strong>
-                          <span style={{ fontSize: '12px', color: '#4ade80', marginLeft: '8px', fontWeight: 500 }}>
-                            (~{shippingInfo.km} km from store)
-                          </span>
-                        </span>
+                      <div className="info-display-item info-display-full" style={{ padding: 0, background: 'transparent', border: 'none' }}>
+                        <ShippingBreakdown shippingInfo={shippingInfo} />
                       </div>
                     )}
                     {!shippingInfo && isAddressComplete() && (
                       <div className="info-display-item info-display-full" style={{ background: '#fffbeb', borderColor: '#fde68a' }}>
-                        <span className="info-label" style={{ color: '#92400e' }}><i className="fas fa-truck"></i> Shipping Fee</span>
+                        <span className="info-label" style={{ color: '#92400e' }}><i className="fas fa-motorcycle"></i> Shipping Fee</span>
                         <span className="info-value" style={{ fontSize: '13px', color: '#78350f' }}>
                           <i className="fas fa-map-marker-alt" style={{ color: '#f59e0b', marginRight: '6px' }}></i>
                           Pin your location on the map to compute shipping fee
@@ -774,26 +908,11 @@ const Checkout = () => {
                         savedCoords={savedCoords}
                       />
                     </div>
-                    {/* ✅ Live shipping preview while editing */}
                     {addressCoords && (() => {
-                      const preview = calcShippingByDistance(addressCoords.lat, addressCoords.lng);
+                      const preview = calcLalamoveShipping(addressCoords.lat, addressCoords.lng, cartItems, products);
                       return preview ? (
                         <div className="form-group full-width">
-                          <div style={{
-                            display: 'flex', alignItems: 'center', gap: '10px',
-                            background: '#f0fdf4', border: '1.5px solid #86efac',
-                            borderRadius: '10px', padding: '12px 16px',
-                          }}>
-                            <i className="fas fa-truck" style={{ color: '#16a34a', fontSize: '16px' }}></i>
-                            <div>
-                              <div style={{ fontWeight: 700, color: '#15803d', fontSize: '14px' }}>
-                                Estimated Shipping: ₱{preview.fee.toLocaleString()}
-                              </div>
-                              <div style={{ fontSize: '12px', color: '#4ade80', marginTop: '2px' }}>
-                                ~{preview.km} km from store · Save address to confirm
-                              </div>
-                            </div>
-                          </div>
+                          <ShippingBreakdown shippingInfo={preview} />
                         </div>
                       ) : null;
                     })()}
@@ -878,15 +997,13 @@ const Checkout = () => {
                     <span>Subtotal</span>
                     <span>₱{subtotal.toLocaleString()}</span>
                   </div>
-
-                  {/* ✅ Shipping row — shows "Set address first" until coords are available */}
                   <div className="summary-row">
                     <span>
-                      <i className="fas fa-truck" style={{ marginRight: '6px', color: '#6c63ff' }}></i>
+                      <i className="fas fa-motorcycle" style={{ marginRight: '6px', color: '#fc1268' }}></i>
                       Shipping
                       {shippingInfo && (
                         <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 400, marginLeft: '4px' }}>
-                          (~{shippingInfo.km} km)
+                          (~{shippingInfo.km} km · {shippingInfo.totalQty} item{shippingInfo.totalQty > 1 ? 's' : ''})
                         </span>
                       )}
                     </span>
@@ -900,14 +1017,12 @@ const Checkout = () => {
                       }
                     </span>
                   </div>
-
                   {totalDiscount > 0 && (
                     <div className="summary-row promo-discount-row">
                       <span><i className="fas fa-tag" style={{ marginRight: '6px', color: '#ec4899' }}></i>Promo Discount</span>
                       <span className="promo-discount-amount">−₱{totalDiscount.toLocaleString()}</span>
                     </div>
                   )}
-
                   <div className="summary-row total">
                     <span>Total</span>
                     <span>
@@ -917,7 +1032,6 @@ const Checkout = () => {
                       }
                     </span>
                   </div>
-
                   {totalDiscount > 0 && (
                     <div className="promo-savings-checkout">
                       <i className="fas fa-piggy-bank"></i>
