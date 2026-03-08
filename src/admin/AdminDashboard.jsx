@@ -17,7 +17,6 @@ import './AdminDashboard.css';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend);
 
-// ✅ Orders that count as "sales" — paid via PayMongo or delivered
 const isSaleOrder = (o) => {
   const status = (o.status || '').toLowerCase();
   const orderStatus = (o.orderStatus || '').toLowerCase();
@@ -34,19 +33,64 @@ const isSaleOrder = (o) => {
   );
 };
 
+const isCompleted = (o) =>
+  ['completed', 'delivered'].includes((o.status || o.orderStatus || '').toLowerCase());
+
+// ══════════════════════════════════════════════════════════════════════════
+//  STAT DETAIL MODAL
+// ══════════════════════════════════════════════════════════════════════════
+const StatModal = ({ data, onClose }) => {
+  if (!data) return null;
+  return (
+    <div className="stat-modal-overlay" onClick={onClose}>
+      <div className="stat-modal-card" onClick={e => e.stopPropagation()}>
+        <div className="stat-modal-header">
+          <div className="stat-modal-icon" style={{ background: data.iconBg }}>
+            <i className={data.icon} style={{ color: data.iconColor }}></i>
+          </div>
+          <div>
+            <h3>{data.title}</h3>
+            <p className="stat-modal-value">{data.value}</p>
+          </div>
+          <button className="stat-modal-close" onClick={onClose}>
+            <i className="fas fa-times"></i>
+          </button>
+        </div>
+        <div className="stat-modal-body">
+          <p className="stat-modal-explanation">{data.explanation}</p>
+          {data.breakdown && (
+            <div className="stat-modal-breakdown">
+              {data.breakdown.map((item, i) => (
+                <div key={i} className="breakdown-row">
+                  <span className="breakdown-label">{item.label}</span>
+                  <span className="breakdown-val" style={{ color: item.color || '#1a1f36' }}>{item.value}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ══════════════════════════════════════════════════════════════════════════
+//  MAIN
+// ══════════════════════════════════════════════════════════════════════════
 const AdminDashboard = () => {
   const [timeRange, setTimeRange] = useState('daily');
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [showProductModal, setShowProductModal] = useState(false);
+  const [statModal, setStatModal] = useState(null);
 
-  const allOrders   = useQuery(api.orders.getAllOrders)    ?? [];
-  const allUsers    = useQuery(api.users.getAllUsers)      ?? [];
+  const allOrders   = useQuery(api.orders.getAllOrders)     ?? [];
+  const allUsers    = useQuery(api.users.getAllUsers)       ?? [];
   const allProducts = useQuery(api.products.getAllProducts) ?? [];
 
   useEffect(() => {
-    document.body.style.overflow = showProductModal ? 'hidden' : 'unset';
+    document.body.style.overflow = (showProductModal || statModal) ? 'hidden' : 'unset';
     return () => { document.body.style.overflow = 'unset'; };
-  }, [showProductModal]);
+  }, [showProductModal, statModal]);
 
   const validOrders = useMemo(() =>
     allOrders.filter(o => o.orderId && o.items?.length > 0),
@@ -55,8 +99,8 @@ const AdminDashboard = () => {
 
   // ── STATS ─────────────────────────────────────────────────────────────────
   const stats = useMemo(() => {
-    // ✅ Count paid + delivered + completed as sales
     const saleOrders = validOrders.filter(isSaleOrder);
+    const completedOrders = validOrders.filter(isCompleted);
     const pendingOrders = validOrders.filter(o => {
       const status = (o.status || '').toLowerCase();
       const orderStatus = (o.orderStatus || '').toLowerCase();
@@ -67,34 +111,106 @@ const AdminDashboard = () => {
         (orderStatus === 'pending' || status === 'pending')
       );
     });
-    const totalSales = saleOrders.reduce((sum, o) => sum + (o.total || 0), 0);
+
+    // Inventory costing = sum of (stock × price) per product
+    const inventoryCosting = allProducts.reduce((sum, p) =>
+      sum + ((p.stock ?? 0) * (p.price ?? 0)), 0
+    );
+
     const lowStockProducts = allProducts.filter(p => (p.stock ?? 0) < 10);
     const regularUsers = allUsers.filter(u => u.role !== 'admin');
 
     return {
-      totalSales,
+      inventoryCosting,
       totalOrders: validOrders.length,
       pendingOrders: pendingOrders.length,
       saleOrders: saleOrders.length,
+      completedOrders: completedOrders.length,
       totalUsers: regularUsers.length,
       totalProducts: allProducts.length,
       lowStockProducts: lowStockProducts.length,
+      outOfStock: allProducts.filter(p => (p.stock ?? 0) === 0).length,
     };
   }, [validOrders, allUsers, allProducts]);
 
+  // ── OPEN STAT MODAL ───────────────────────────────────────────────────────
+  const openStatModal = (type) => {
+    if (type === 'inventory') {
+      setStatModal({
+        title: 'Inventory Costing',
+        value: `₱${stats.inventoryCosting.toLocaleString()}`,
+        icon: 'fas fa-boxes',
+        iconBg: '#fff0eb',
+        iconColor: '#ee4d2d',
+        explanation: 'Total estimated value of all current stock. Computed by multiplying each product\'s current stock quantity by its selling price, then summing all products.',
+        breakdown: [
+          { label: 'Total Products',     value: stats.totalProducts },
+          { label: 'Low Stock Items',    value: stats.lowStockProducts,  color: '#d97706' },
+          { label: 'Out of Stock Items', value: stats.outOfStock,        color: '#dc2626' },
+          { label: 'Total Inventory Value', value: `₱${stats.inventoryCosting.toLocaleString()}`, color: '#ee4d2d' },
+        ],
+      });
+    } else if (type === 'orders') {
+      setStatModal({
+        title: 'Total Orders',
+        value: stats.totalOrders,
+        icon: 'fas fa-shopping-cart',
+        iconBg: '#eff6ff',
+        iconColor: '#3b82f6',
+        explanation: 'Total number of all orders placed in the system, regardless of status (pending, paid, completed, cancelled, etc.).',
+        breakdown: [
+          { label: 'All Orders',       value: stats.totalOrders },
+          { label: 'Pending Orders',   value: stats.pendingOrders,    color: '#d97706' },
+          { label: 'Paid Orders',      value: stats.saleOrders,       color: '#2563eb' },
+          { label: 'Completed Orders', value: stats.completedOrders,  color: '#16a34a' },
+        ],
+      });
+    } else if (type === 'completed') {
+      setStatModal({
+        title: 'Completed Orders',
+        value: stats.completedOrders,
+        icon: 'fas fa-check-circle',
+        iconBg: '#f0fdf4',
+        iconColor: '#16a34a',
+        explanation: 'Orders with status "Completed" or "Delivered". These are orders that have been fully processed and received by the customer.',
+        breakdown: [
+          { label: 'Completed / Delivered', value: stats.completedOrders, color: '#16a34a' },
+          { label: 'Out of Total Orders',   value: stats.totalOrders },
+          { label: 'Completion Rate',
+            value: stats.totalOrders
+              ? `${((stats.completedOrders / stats.totalOrders) * 100).toFixed(1)}%`
+              : '0%',
+            color: '#16a34a'
+          },
+        ],
+      });
+    } else if (type === 'products') {
+      setStatModal({
+        title: 'Total Products',
+        value: stats.totalProducts,
+        icon: 'fas fa-box',
+        iconBg: '#fdf4ff',
+        iconColor: '#a855f7',
+        explanation: 'Total number of active products in the catalog. Low stock means the item has fewer than 10 units remaining.',
+        breakdown: [
+          { label: 'Total Products',     value: stats.totalProducts },
+          { label: 'Low Stock (< 10)',   value: stats.lowStockProducts,  color: '#d97706' },
+          { label: 'Out of Stock',       value: stats.outOfStock,        color: '#dc2626' },
+          { label: 'Healthy Stock',      value: stats.totalProducts - stats.lowStockProducts, color: '#16a34a' },
+        ],
+      });
+    }
+  };
+
   // ── SALES CHART DATA ──────────────────────────────────────────────────────
   const salesData = useMemo(() => {
-    // ✅ Use all paid/completed orders for chart
     const saleOrders = validOrders.filter(isSaleOrder);
-
     const salesByDate = {};
     saleOrders.forEach(order => {
-      const date = new Date(order._creationTime);
-      const dateKey = date.toISOString().split('T')[0];
+      const dateKey = new Date(order._creationTime).toISOString().split('T')[0];
       salesByDate[dateKey] = (salesByDate[dateKey] || 0) + (order.total || 0);
     });
 
-    // Daily — last 7 days
     const daily = [];
     for (let i = 6; i >= 0; i--) {
       const date = new Date();
@@ -106,7 +222,6 @@ const AdminDashboard = () => {
       });
     }
 
-    // Weekly — last 4 weeks
     const weekly = [];
     for (let i = 3; i >= 0; i--) {
       const endDate = new Date();
@@ -120,7 +235,6 @@ const AdminDashboard = () => {
       weekly.push({ date: `Week ${4 - i}`, sales: weekSales });
     }
 
-    // Monthly — last 6 months
     const monthly = [];
     for (let i = 5; i >= 0; i--) {
       const date = new Date();
@@ -140,9 +254,7 @@ const AdminDashboard = () => {
 
   // ── TOP PRODUCTS ──────────────────────────────────────────────────────────
   const topProducts = useMemo(() => {
-    // ✅ Count from all paid/completed orders
     const saleOrders = validOrders.filter(isSaleOrder);
-
     const productSales = {};
     saleOrders.forEach(order => {
       order.items.forEach(item => {
@@ -163,7 +275,6 @@ const AdminDashboard = () => {
         productSales[pid].revenue += (item.price || 0) * (item.quantity || 1);
       });
     });
-
     return Object.entries(productSales)
       .map(([id, data]) => ({ id, ...data }))
       .sort((a, b) => b.quantity - a.quantity)
@@ -229,39 +340,52 @@ const AdminDashboard = () => {
 
   return (
     <div className="admin-dashboard">
+
       {/* Stats Cards */}
       <div className="stats-grid">
-        <div className="stat-card sales">
-          <div className="stat-icon"><i className="fas fa-peso-sign"></i></div>
+
+        {/* Inventory Costing (was Total Sales) */}
+        <div className="stat-card sales clickable-card" onClick={() => openStatModal('inventory')}>
+          <div className="stat-icon"><i className="fas fa-boxes"></i></div>
           <div className="stat-details">
-            <h3>Total Sales</h3>
-            <p className="stat-value">₱{stats.totalSales.toLocaleString()}</p>
-            <span className="stat-label">From {stats.saleOrders} paid orders</span>
+            <h3>Inventory Costing</h3>
+            <p className="stat-value">₱{stats.inventoryCosting.toLocaleString()}</p>
+            <span className="stat-label">{stats.totalProducts} products tracked</span>
           </div>
+          <div className="card-click-hint"><i className="fas fa-info-circle"></i></div>
         </div>
-        <div className="stat-card orders">
+
+        {/* Total Orders */}
+        <div className="stat-card orders clickable-card" onClick={() => openStatModal('orders')}>
           <div className="stat-icon"><i className="fas fa-shopping-cart"></i></div>
           <div className="stat-details">
             <h3>Total Orders</h3>
             <p className="stat-value">{stats.totalOrders}</p>
             <span className="stat-label">{stats.pendingOrders} pending orders</span>
           </div>
+          <div className="card-click-hint"><i className="fas fa-info-circle"></i></div>
         </div>
-        <div className="stat-card users">
-          <div className="stat-icon"><i className="fas fa-users"></i></div>
+
+        {/* Completed Orders (was Registered Users) */}
+        <div className="stat-card users clickable-card" onClick={() => openStatModal('completed')}>
+          <div className="stat-icon"><i className="fas fa-check-circle"></i></div>
           <div className="stat-details">
-            <h3>Registered Users</h3>
-            <p className="stat-value">{stats.totalUsers}</p>
-            <span className="stat-label">Active customers</span>
+            <h3>Completed Orders</h3>
+            <p className="stat-value">{stats.completedOrders}</p>
+            <span className="stat-label">{stats.totalUsers} registered users</span>
           </div>
+          <div className="card-click-hint"><i className="fas fa-info-circle"></i></div>
         </div>
-        <div className="stat-card products">
+
+        {/* Total Products */}
+        <div className="stat-card products clickable-card" onClick={() => openStatModal('products')}>
           <div className="stat-icon"><i className="fas fa-box"></i></div>
           <div className="stat-details">
             <h3>Total Products</h3>
             <p className="stat-value">{stats.totalProducts}</p>
             <span className="stat-label warn">{stats.lowStockProducts} low stock items</span>
           </div>
+          <div className="card-click-hint"><i className="fas fa-info-circle"></i></div>
         </div>
       </div>
 
@@ -284,7 +408,6 @@ const AdminDashboard = () => {
 
       {/* Bottom Grid */}
       <div className="bottom-grid">
-        {/* Top Products */}
         <div className="data-card top-products">
           <div className="card-header"><i className="fas fa-trophy"></i><h3>Top Selling Products</h3></div>
           <div className="card-body">
@@ -309,7 +432,6 @@ const AdminDashboard = () => {
           </div>
         </div>
 
-        {/* Recent Orders */}
         <div className="data-card recent-orders">
           <div className="card-header"><i className="fas fa-clock"></i><h3>Recent Orders</h3></div>
           <div className="card-body">
@@ -340,7 +462,7 @@ const AdminDashboard = () => {
       {/* Product Modal */}
       {showProductModal && selectedProduct && (
         <div className="product-modal-overlay" onClick={() => { setShowProductModal(false); setSelectedProduct(null); }}>
-          <div className="product-modal-card" onClick={(e) => e.stopPropagation()}>
+          <div className="product-modal-card" onClick={e => e.stopPropagation()}>
             <button className="modal-close-btn" onClick={() => { setShowProductModal(false); setSelectedProduct(null); }}>
               <i className="fas fa-times"></i>
             </button>
@@ -359,6 +481,9 @@ const AdminDashboard = () => {
           </div>
         </div>
       )}
+
+      {/* Stat Detail Modal */}
+      <StatModal data={statModal} onClose={() => setStatModal(null)} />
     </div>
   );
 };
