@@ -10,7 +10,12 @@ export default defineSchema({
     password: v.string(),
     role: v.string(),
     status: v.optional(v.string()),
-    suspendReason: v.optional(v.string()),
+    // ── Suspension fields ✅ NEW ──────────────────
+    suspendReason:  v.optional(v.string()),  // reason key e.g. "privacy_policy"
+    suspendNote:    v.optional(v.string()),  // admin's custom note
+    suspendedAt:    v.optional(v.number()),  // timestamp ms when suspended
+    suspendedUntil: v.optional(v.number()),  // timestamp ms for expiry; undefined = permanent
+    // ─────────────────────────────────────────────
     registeredAt: v.optional(v.string()),
     fullName: v.optional(v.string()),
     phone: v.optional(v.string()),
@@ -34,7 +39,7 @@ export default defineSchema({
     expiresAt: v.number(),       // Token expiry — 24 hours
     createdAt: v.number(),
     otp: v.optional(v.string()),           // 6-digit OTP for in-modal verification
-    otpExpiresAt: v.optional(v.number()),  // OTP expiry — 10 minutes
+    otpExpiresAt: v.optional(v.number()),  // OTP expiry — 3 minutes
   })
     .index("by_token", ["token"])
     .index("by_email", ["email"]),

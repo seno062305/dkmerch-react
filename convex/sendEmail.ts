@@ -925,27 +925,144 @@ export const sendRiderOnTheWayEmail = internalAction({
   },
 });
 
+// ── ACCOUNT SUSPENDED EMAIL → CUSTOMER ✅ NEW ─────────────────────────────────
+
+export const sendSuspensionEmail = internalAction({
+  args: {
+    to: v.string(),
+    name: v.string(),
+    reason: v.string(),
+    note: v.optional(v.string()),
+    suspendedUntil: v.optional(v.number()), // timestamp ms — undefined = permanent
+  },
+  handler: async (ctx, args): Promise<{ success: boolean; message?: string; id?: string }> => {
+    const isPermanent = !args.suspendedUntil;
+
+    const REASON_LABELS: Record<string, string> = {
+      abusive_behavior: "Abusive / Harassing Behavior",
+      spam:             "Spam / Fake Orders",
+      payment_fraud:    "Payment Fraud",
+      privacy_policy:   "Privacy Policy Violation",
+      chargeback_abuse: "Chargeback Abuse",
+      other:            "Policy Violation",
+    };
+
+    const reasonLabel = REASON_LABELS[args.reason] ?? args.reason;
+
+    const untilLabel = args.suspendedUntil
+      ? new Date(args.suspendedUntil).toLocaleDateString("en-US", {
+          weekday: "long", year: "numeric", month: "long", day: "numeric",
+        })
+      : null;
+
+    const durationText = isPermanent
+      ? "This suspension is <strong>permanent</strong>."
+      : `Your account will be automatically restored on <strong>${untilLabel}</strong>.`;
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Account Suspended — DKMerch</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:32px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:white;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+
+        <tr><td style="background:linear-gradient(135deg,#42011e,#fc1268);padding:32px 36px;text-align:center;">
+          <div style="font-size:28px;font-weight:900;color:white;letter-spacing:1px;">DKMerch</div>
+          <div style="color:#ffd6e7;font-size:13px;margin-top:4px;">Your K-Pop Paradise</div>
+        </td></tr>
+
+        <tr><td style="background:${isPermanent ? '#fef2f2' : '#fffbeb'};padding:24px 36px;text-align:center;border-bottom:1px solid ${isPermanent ? '#fecaca' : '#fde68a'};">
+          <div style="font-size:44px;margin-bottom:8px;">${isPermanent ? '🚫' : '⏸️'}</div>
+          <div style="font-size:20px;font-weight:800;color:${isPermanent ? '#7f1d1d' : '#92400e'};">
+            Account ${isPermanent ? 'Permanently Suspended' : 'Temporarily Suspended'}
+          </div>
+          <div style="font-size:13px;color:${isPermanent ? '#991b1b' : '#b45309'};margin-top:6px;">
+            ${isPermanent
+              ? 'Your DKMerch account has been suspended indefinitely.'
+              : `Your account will be restored on ${untilLabel}.`}
+          </div>
+        </td></tr>
+
+        <tr><td style="padding:28px 36px;">
+          <p style="font-size:15px;color:#374151;margin:0 0 16px;">Hi <strong>${args.name}</strong>,</p>
+          <p style="font-size:14px;color:#6b7280;line-height:1.7;margin:0 0 24px;">
+            We regret to inform you that your DKMerch account has been suspended due to a violation of our policies.
+          </p>
+
+          <table width="100%" cellpadding="0" cellspacing="0"
+            style="background:#f9fafb;border-radius:12px;border:1.5px solid #e5e7eb;margin-bottom:24px;">
+            <tr><td style="padding:20px 24px;">
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="font-size:13px;color:#6b7280;padding:6px 0;width:40%;">Reason</td>
+                  <td style="font-size:13px;font-weight:700;color:#dc2626;text-align:right;">${reasonLabel}</td>
+                </tr>
+                <tr>
+                  <td style="font-size:13px;color:#6b7280;padding:6px 0;">Duration</td>
+                  <td style="font-size:13px;font-weight:600;color:#1f2937;text-align:right;">
+                    ${isPermanent
+                      ? '<span style="color:#dc2626;font-weight:700;">Permanent</span>'
+                      : `Until ${untilLabel}`}
+                  </td>
+                </tr>
+                ${args.note ? `
+                <tr>
+                  <td style="font-size:13px;color:#6b7280;padding:6px 0;vertical-align:top;">Note</td>
+                  <td style="font-size:13px;color:#374151;text-align:right;line-height:1.5;">${args.note}</td>
+                </tr>` : ""}
+              </table>
+            </td></tr>
+          </table>
+
+          <div style="background:${isPermanent ? '#fef2f2' : '#eff6ff'};border-radius:10px;border:1.5px solid ${isPermanent ? '#fecaca' : '#bfdbfe'};padding:16px 20px;margin-bottom:24px;">
+            <p style="font-size:13px;color:${isPermanent ? '#991b1b' : '#1e40af'};margin:0;line-height:1.6;">
+              ${durationText}
+              ${isPermanent
+                ? " If you believe this is a mistake, you may contact our support team to appeal this decision."
+                : " Please review our <strong>Terms of Service</strong> and <strong>Privacy Policy</strong> before your account is restored."}
+            </p>
+          </div>
+
+          <div style="background:#f8f9fa;border-radius:10px;border:1px solid #e5e7eb;padding:16px 20px;">
+            <p style="font-size:13px;color:#6b7280;margin:0;line-height:1.6;">
+              📧 For questions or appeals, contact us at
+              <a href="mailto:support@dkmerch.com" style="color:#fc1268;font-weight:600;">support@dkmerch.com</a>
+            </p>
+          </div>
+        </td></tr>
+
+        <tr><td style="background:#fafafa;border-top:1px solid #e5e7eb;padding:20px 36px;text-align:center;">
+          <p style="color:#aaa;font-size:12px;margin:0;">© 2026 DKMerch · K-Pop Paradise · All rights reserved</p>
+        </td></tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+    return await ctx.runAction(internal.sendEmail.sendEmail, {
+      to: args.to,
+      subject: isPermanent
+        ? `🚫 Your DKMerch account has been permanently suspended`
+        : `⏸️ Your DKMerch account has been temporarily suspended`,
+      html,
+    });
+  },
+});
+
 // ══════════════════════════════════════════════════════════════════════════════
 // SMS via Semaphore (Philippines)
-// Docs: https://semaphore.co/docs
-//
-// Setup:
-//   1. Sign up at https://semaphore.co
-//   2. Get your API key from the dashboard
-//   3. Add to Convex env vars: SEMAPHORE_API_KEY=your_key_here
-//   4. Optional: Add SEMAPHORE_SENDER_NAME=DKMerch (max 11 chars, needs approval)
-//      — defaults to "DKMerch" if not set
-//
-// Only two SMS actions are exposed:
-//   • sendSmsOtp        — registration / login OTP fallback
-//   • sendRiderOtpSms   — delivery OTP sent when rider is on the way
 // ══════════════════════════════════════════════════════════════════════════════
-
-// ── BASE SMS (internal) ───────────────────────────────────────────────────────
 
 export const sendSms = internalAction({
   args: {
-    to: v.string(),   // PH mobile number: 09XXXXXXXXX or +639XXXXXXXXX
+    to: v.string(),
     message: v.string(),
   },
   handler: async (
@@ -959,14 +1076,12 @@ export const sendSms = internalAction({
       return { success: false, message: "SMS service not configured." };
     }
 
-    // Normalize to 639XXXXXXXXX format that Semaphore expects
     let number = to.replace(/[\s\-]/g, "");
     if (number.startsWith("09")) {
       number = "63" + number.slice(1);
     } else if (number.startsWith("+63")) {
-      number = number.slice(1); // strip the +
+      number = number.slice(1);
     }
-    // else assume already in 639XXXXXXXXX format
 
     const senderName = process.env.SEMAPHORE_SENDER_NAME || "DKMerch";
 
@@ -996,14 +1111,9 @@ export const sendSms = internalAction({
   },
 });
 
-// ── REGISTRATION / LOGIN OTP SMS ──────────────────────────────────────────────
-// Call this as a fallback when the customer has no data / email unreachable.
-// Your frontend should call sendRegistrationOTP (email) first, then call this
-// only if the user requests "Resend via SMS" or email delivery fails.
-
 export const sendSmsOtp = action({
   args: {
-    to:   v.string(), // PH mobile: 09XXXXXXXXX
+    to:   v.string(),
     name: v.string(),
     otp:  v.string(),
   },
@@ -1019,13 +1129,9 @@ export const sendSmsOtp = action({
   },
 });
 
-// ── DELIVERY OTP SMS → CUSTOMER (rider is on the way) ────────────────────────
-// Triggered alongside sendRiderOnTheWayEmail so the customer gets the delivery
-// OTP via SMS even if they have no internet / can't open email.
-
 export const sendRiderOtpSms = internalAction({
   args: {
-    to:      v.string(), // customer PH mobile: 09XXXXXXXXX
+    to:      v.string(),
     name:    v.string(),
     orderId: v.string(),
     otp:     v.string(),

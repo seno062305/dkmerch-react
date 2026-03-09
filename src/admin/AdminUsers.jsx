@@ -1,8 +1,27 @@
 // src/admin/AdminUsers.jsx
 import React, { useState } from 'react';
 import './AdminUsers.css';
-import { useQuery, useMutation } from 'convex/react';
+import { useQuery, useMutation, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
+
+// ── Suspend reason config ─────────────────────────────────────────────────────
+const SUSPEND_REASONS = [
+  { value: 'abusive_behavior',   label: 'Abusive / Harassing Behavior',  defaultDays: 7,   canPermanent: false },
+  { value: 'spam',               label: 'Spam / Fake Orders',             defaultDays: 3,   canPermanent: false },
+  { value: 'payment_fraud',      label: 'Payment Fraud',                  defaultDays: 30,  canPermanent: true  },
+  { value: 'privacy_policy',     label: 'Privacy Policy Violation',       defaultDays: null, canPermanent: true, forcePermanent: true },
+  { value: 'chargeback_abuse',   label: 'Chargeback Abuse',               defaultDays: 14,  canPermanent: true  },
+  { value: 'other',              label: 'Other',                          defaultDays: 1,   canPermanent: true  },
+];
+
+const DURATION_OPTIONS = [
+  { label: '1 Day',    days: 1    },
+  { label: '3 Days',   days: 3    },
+  { label: '7 Days',   days: 7    },
+  { label: '14 Days',  days: 14   },
+  { label: '30 Days',  days: 30   },
+  { label: 'Permanent', days: null },
+];
 
 const AdminUsers = () => {
   const [activeTab, setActiveTab] = useState('users');
@@ -11,26 +30,34 @@ const AdminUsers = () => {
   const users  = useQuery(api.users.getAllUsers) ?? [];
   const riders = useQuery(api.riders.getAllRiders) ?? [];
 
-  const updateUserProfileMutation = useMutation(api.users.updateUserProfile);
+  const suspendUserMutation       = useMutation(api.users.suspendUser);
+  const unsuspendUserMutation     = useMutation(api.users.unsuspendUser);
   const deleteUserMutation        = useMutation(api.users.deleteUser);
-  const activateUserMutation      = useMutation(api.users.activateUser);   // ✅ NEW
+  const activateUserMutation      = useMutation(api.users.activateUser);
   const updateRiderMutation       = useMutation(api.riders.updateRider);
   const deleteRiderMutation       = useMutation(api.riders.deleteRider);
   const updateRiderStatusMutation = useMutation(api.riders.updateRiderStatus);
+  const sendSuspensionEmailAction = useAction(api.sendEmail.sendSuspensionEmail);
 
   // ─── USERS STATE ───
   const [searchTerm, setSearchTerm]         = useState('');
   const [filterStatus, setFilterStatus]     = useState('all');
-  const [editingUser, setEditingUser]       = useState(null);
-  const [formData, setFormData]             = useState({ name: '', username: '', email: '', password: '', role: 'user', status: 'active' });
-  const [showEditModal, setShowEditModal]   = useState(false);
-  const [showSuspendConfirm, setShowSuspendConfirm] = useState(false);
-  const [userToSuspend, setUserToSuspend]   = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm]   = useState(false);
   const [userToDelete, setUserToDelete]     = useState(null);
-  const [showPassword, setShowPassword]     = useState(false);
 
-  // ✅ NEW: Activate confirm state
+  // ✅ NEW Suspend modal state
+  const [showSuspendModal, setShowSuspendModal]     = useState(false);
+  const [userToSuspend, setUserToSuspend]           = useState(null);
+  const [suspendReason, setSuspendReason]           = useState('');
+  const [suspendDays, setSuspendDays]               = useState(null); // null = permanent
+  const [suspendNote, setSuspendNote]               = useState('');
+  const [suspendLoading, setSuspendLoading]         = useState(false);
+
+  // Unsuspend confirm
+  const [showUnsuspendConfirm, setShowUnsuspendConfirm] = useState(false);
+  const [userToUnsuspend, setUserToUnsuspend]           = useState(null);
+
+  // ✅ Activate confirm state
   const [showActivateConfirm, setShowActivateConfirm] = useState(false);
   const [userToActivate, setUserToActivate]           = useState(null);
 
@@ -47,11 +74,10 @@ const AdminUsers = () => {
 
   const showNotification = (message, type) => {
     setNotification({ show: true, message, type });
-    setTimeout(() => setNotification({ show: false, message: '', type: '' }), 3000);
+    setTimeout(() => setNotification({ show: false, message: '', type: '' }), 3500);
   };
 
   // ─── FILTERED DATA ───
-  // ✅ Pending users — status === 'pending_activation'
   const pendingUsers  = users.filter(u => u.status === 'pending_activation');
   const regularUsers  = users.filter(u => u.status !== 'pending_activation');
 
@@ -78,56 +104,87 @@ const AdminUsers = () => {
       r.phone?.includes(riderSearch) || r.vehicleType?.toLowerCase().includes(q);
   });
 
-  // ─── PASSWORD VALIDATION ───
-  const validatePassword = (pw) => {
-    const errors = [];
-    if (pw.length < 8) errors.push('At least 8 characters');
-    if (!/[A-Z]/.test(pw)) errors.push('One uppercase letter');
-    if (!/[a-z]/.test(pw)) errors.push('One lowercase letter');
-    if (!/[0-9]/.test(pw)) errors.push('One number');
-    if (!/[!@#$%^&*(),.?":{}|<>]/.test(pw)) errors.push('One special character');
-    return errors;
+  // ─── SUSPEND MODAL HELPERS ───────────────────────────────────────────────────
+  const openSuspendModal = (user) => {
+    setUserToSuspend(user);
+    setSuspendReason('');
+    setSuspendDays(null);
+    setSuspendNote('');
+    setShowSuspendModal(true);
   };
 
-  // ─── USER ACTIONS ───
-  const handleEdit = (user) => {
-    setEditingUser(user);
-    setFormData({ name: user.name, username: user.username, email: user.email, password: user.password, role: user.role, status: user.status || 'active' });
-    setShowPassword(false);
-    setShowEditModal(true);
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (validatePassword(formData.password).length > 0) { showNotification('Please meet all password requirements', 'error'); return; }
-    try {
-      await updateUserProfileMutation({ id: editingUser._id, ...formData });
-      const auth = JSON.parse(localStorage.getItem('authUser'));
-      if (auth && auth._id === editingUser._id) {
-        localStorage.setItem('authUser', JSON.stringify({ ...auth, ...formData }));
-      }
-      setShowEditModal(false);
-      showNotification('User updated successfully', 'success');
-    } catch {
-      showNotification('Failed to update user', 'error');
+  const handleReasonChange = (value) => {
+    setSuspendReason(value);
+    const cfg = SUSPEND_REASONS.find(r => r.value === value);
+    if (!cfg) return;
+    if (cfg.forcePermanent) {
+      setSuspendDays(null); // permanent
+    } else {
+      setSuspendDays(cfg.defaultDays);
     }
   };
 
-  const confirmSuspend = async () => {
-    if (!userToSuspend) return;
-    const newStatus = (userToSuspend.status || 'active') === 'active' ? 'suspended' : 'active';
+  const handleConfirmSuspend = async () => {
+    if (!userToSuspend || !suspendReason) return;
+    setSuspendLoading(true);
     try {
-      await updateUserProfileMutation({ id: userToSuspend._id, status: newStatus });
-      if (newStatus === 'suspended') {
-        const auth = JSON.parse(localStorage.getItem('authUser'));
-        if (auth && auth._id === userToSuspend._id) { localStorage.removeItem('authUser'); window.location.href = '/'; }
+      const result = await suspendUserMutation({
+        id: userToSuspend._id,
+        reason: suspendReason,
+        note: suspendNote || undefined,
+        durationDays: suspendDays ?? undefined,
+      });
+
+      // Send suspension notification email (fire and forget)
+      if (userToSuspend.email && userToSuspend.email !== 'admin') {
+        sendSuspensionEmailAction({
+          to: userToSuspend.email,
+          name: userToSuspend.name,
+          reason: suspendReason,
+          note: suspendNote || undefined,
+          suspendedUntil: suspendDays
+            ? Date.now() + suspendDays * 24 * 60 * 60 * 1000
+            : undefined,
+        }).catch(err => console.error('Suspension email failed:', err));
       }
-      showNotification(`User ${newStatus === 'suspended' ? 'suspended' : 'activated'} successfully`, 'success');
-    } catch { showNotification('Failed to update user', 'error'); }
-    setShowSuspendConfirm(false);
-    setUserToSuspend(null);
+
+      // Force logout if current user
+      const auth = JSON.parse(localStorage.getItem('authUser') || 'null');
+      if (auth && auth._id === userToSuspend._id) {
+        localStorage.removeItem('authUser');
+        window.location.href = '/';
+      }
+
+      const cfg = SUSPEND_REASONS.find(r => r.value === suspendReason);
+      const durationLabel = suspendDays ? `for ${suspendDays} day(s)` : 'permanently';
+      showNotification(
+        `${userToSuspend.name} has been suspended ${durationLabel}.`,
+        'success'
+      );
+
+      setShowSuspendModal(false);
+      setUserToSuspend(null);
+      setSuspendReason('');
+      setSuspendNote('');
+      setSuspendDays(null);
+    } catch {
+      showNotification('Failed to suspend user.', 'error');
+    }
+    setSuspendLoading(false);
   };
 
+  // ─── UNSUSPEND ───────────────────────────────────────────────────────────────
+  const confirmUnsuspend = async () => {
+    if (!userToUnsuspend) return;
+    try {
+      await unsuspendUserMutation({ id: userToUnsuspend._id });
+      showNotification(`${userToUnsuspend.name} has been unsuspended.`, 'success');
+    } catch { showNotification('Failed to unsuspend user.', 'error'); }
+    setShowUnsuspendConfirm(false);
+    setUserToUnsuspend(null);
+  };
+
+  // ─── DELETE ──────────────────────────────────────────────────────────────────
   const confirmDeleteUser = async () => {
     if (!userToDelete) return;
     try {
@@ -138,7 +195,7 @@ const AdminUsers = () => {
     setUserToDelete(null);
   };
 
-  // ✅ NEW: Activate a pending_activation user
+  // ─── ACTIVATE (pending) ──────────────────────────────────────────────────────
   const confirmActivate = async () => {
     if (!userToActivate) return;
     try {
@@ -149,7 +206,7 @@ const AdminUsers = () => {
     setUserToActivate(null);
   };
 
-  // ─── RIDER ACTIONS ───
+  // ─── RIDER ACTIONS ───────────────────────────────────────────────────────────
   const handleEditRider = (rider) => {
     setEditingRider(rider);
     setRiderFormData({ fullName: rider.fullName, email: rider.email, phone: rider.phone, vehicleType: rider.vehicleType || '', status: rider.status });
@@ -175,7 +232,7 @@ const AdminUsers = () => {
     setRiderToDelete(null);
   };
 
-  // ─── HELPERS ───
+  // ─── HELPERS ─────────────────────────────────────────────────────────────────
   const getRoleBadgeClass    = (role)   => role === 'admin' ? 'role-badge admin' : 'role-badge user';
   const getStatusBadgeClass  = (status) => `status-badge ${status || 'active'}`;
   const getRiderStatusBadgeClass = (status) => {
@@ -187,6 +244,18 @@ const AdminUsers = () => {
     return new Date(ts).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
+  const getSuspendUntilLabel = (user) => {
+    if (!user.suspendedUntil) return 'Permanent';
+    const until = new Date(user.suspendedUntil);
+    const now = new Date();
+    const diffDays = Math.ceil((until - now) / (1000 * 60 * 60 * 24));
+    if (diffDays <= 0) return 'Expires soon';
+    return `${diffDays}d left`;
+  };
+
+  const getReasonLabel = (val) =>
+    SUSPEND_REASONS.find(r => r.value === val)?.label || val || '—';
+
   // Stats
   const totalUsers     = regularUsers.length;
   const activeUsers    = regularUsers.filter(u => (u.status || 'active') === 'active').length;
@@ -194,6 +263,9 @@ const AdminUsers = () => {
   const totalRiders    = riders.length;
   const approvedRiders = riders.filter(r => r.status === 'approved').length;
   const pendingRiders  = riders.filter(r => r.status === 'pending').length;
+
+  // Selected reason config
+  const selectedReasonCfg = SUSPEND_REASONS.find(r => r.value === suspendReason);
 
   return (
     <div className="admin-users">
@@ -232,7 +304,6 @@ const AdminUsers = () => {
         <button className={`tab-btn ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>
           <i className="fas fa-user"></i> Users <span className="tab-count">{totalUsers}</span>
         </button>
-        {/* ✅ NEW: Pending Activation tab */}
         <button className={`tab-btn ${activeTab === 'pending' ? 'active' : ''}`} onClick={() => setActiveTab('pending')}>
           <i className="fas fa-user-clock"></i> Pending Activation <span className="tab-count">{pendingUsers.length}</span>
           {pendingUsers.length > 0 && <span className="tab-badge">{pendingUsers.length}</span>}
@@ -278,23 +349,46 @@ const AdminUsers = () => {
                       <td>{user.email}</td>
                       <td><span className={getRoleBadgeClass(user.role)}><i className={`fas ${user.role === 'admin' ? 'fa-shield-alt' : 'fa-user'}`}></i>{user.role}</span></td>
                       <td>
-                        <span className={getStatusBadgeClass(user.status)}>
-                          <i className={`fas ${(user.status || 'active') === 'active' ? 'fa-check-circle' : 'fa-ban'}`}></i>
-                          {(user.status || 'active') === 'active' ? 'Active' : 'Suspended'}
-                        </span>
+                        <div className="status-cell">
+                          <span className={getStatusBadgeClass(user.status)}>
+                            <i className={`fas ${(user.status || 'active') === 'active' ? 'fa-check-circle' : 'fa-ban'}`}></i>
+                            {(user.status || 'active') === 'active' ? 'Active' : 'Suspended'}
+                          </span>
+                          {user.status === 'suspended' && (
+                            <span className="suspend-meta">
+                              <span className="suspend-duration-chip">
+                                <i className="fas fa-clock"></i>
+                                {getSuspendUntilLabel(user)}
+                              </span>
+                              {user.suspendReason && (
+                                <span className="suspend-reason-chip">
+                                  {getReasonLabel(user.suspendReason)}
+                                </span>
+                              )}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="actions-cell">
-                        <button className="btn-edit" onClick={() => handleEdit(user)} title="Edit"><i className="fas fa-edit"></i></button>
                         {user.email !== 'admin' && (
                           <>
-                            <button className={`btn-suspend ${(user.status || 'active') === 'suspended' ? 'btn-activate' : ''}`}
-                              onClick={() => { setUserToSuspend(user); setShowSuspendConfirm(true); }}
-                              title={(user.status || 'active') === 'active' ? 'Suspend' : 'Activate'}>
-                              <i className={`fas ${(user.status || 'active') === 'active' ? 'fa-ban' : 'fa-check-circle'}`}></i>
-                            </button>
-                            <button className="btn-delete" onClick={() => { setUserToDelete(user); setShowDeleteConfirm(true); }} title="Delete">
-                              <i className="fas fa-trash"></i>
-                            </button>
+                            {(user.status || 'active') === 'active' ? (
+                              <button
+                                className="btn-suspend"
+                                onClick={() => openSuspendModal(user)}
+                                title="Suspend"
+                              >
+                                <i className="fas fa-ban"></i>
+                              </button>
+                            ) : (
+                              <button
+                                className="btn-suspend btn-activate"
+                                onClick={() => { setUserToUnsuspend(user); setShowUnsuspendConfirm(true); }}
+                                title="Unsuspend"
+                              >
+                                <i className="fas fa-check-circle"></i>
+                              </button>
+                            )}
                           </>
                         )}
                       </td>
@@ -307,7 +401,7 @@ const AdminUsers = () => {
         </>
       )}
 
-      {/* ═══════ PENDING ACTIVATION TAB ✅ NEW ═══════ */}
+      {/* ═══════ PENDING ACTIVATION TAB ═══════ */}
       {activeTab === 'pending' && (
         <>
           <div className="users-controls">
@@ -319,7 +413,7 @@ const AdminUsers = () => {
             </div>
             <div style={{ color: '#e53e3e', fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
               <i className="fas fa-shield-alt"></i>
-              These accounts were flagged as suspicious (bot/spam registration) and require manual activation.
+              These accounts were flagged as suspicious and require manual activation.
             </div>
           </div>
 
@@ -348,16 +442,12 @@ const AdminUsers = () => {
                         </span>
                       </td>
                       <td className="actions-cell">
-                        {/* Activate */}
-                        <button
-                          className="btn-suspend btn-activate"
-                          title="Activate this account"
-                          onClick={() => { setUserToActivate(user); setShowActivateConfirm(true); }}
-                        >
+                        <button className="btn-suspend btn-activate" title="Activate this account"
+                          onClick={() => { setUserToActivate(user); setShowActivateConfirm(true); }}>
                           <i className="fas fa-check-circle"></i>
                         </button>
-                        {/* Delete */}
-                        <button className="btn-delete" title="Delete" onClick={() => { setUserToDelete(user); setShowDeleteConfirm(true); }}>
+                        <button className="btn-delete" title="Delete"
+                          onClick={() => { setUserToDelete(user); setShowDeleteConfirm(true); }}>
                           <i className="fas fa-trash"></i>
                         </button>
                       </td>
@@ -427,137 +517,140 @@ const AdminUsers = () => {
         </>
       )}
 
-      {/* ═══════ EDIT USER MODAL ═══════ */}
-      {showEditModal && (
-        <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2><i className="fas fa-user-edit"></i> Edit User</h2>
-              <button className="close-btn" onClick={() => setShowEditModal(false)}><i className="fas fa-times"></i></button>
+      {/* ═══════ SUSPEND MODAL ✅ NEW ═══════ */}
+      {showSuspendModal && (
+        <div className="modal-overlay" onClick={() => !suspendLoading && setShowSuspendModal(false)}>
+          <div className="modal-content suspend-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header suspend-modal-header">
+              <h2><i className="fas fa-ban"></i> Suspend Account</h2>
+              <button className="close-btn" onClick={() => !suspendLoading && setShowSuspendModal(false)}>
+                <i className="fas fa-times"></i>
+              </button>
             </div>
-            <form onSubmit={handleSubmit}>
-              {['name', 'username', 'email'].map(field => (
-                <div className="form-group" key={field}>
-                  <label><i className={`fas fa-${field === 'name' ? 'user' : field === 'username' ? 'at' : 'envelope'}`}></i> {field.charAt(0).toUpperCase() + field.slice(1)}</label>
-                  <input type={field === 'email' ? 'email' : 'text'} name={field} value={formData[field]}
-                    onChange={(e) => setFormData(prev => ({ ...prev, [field]: e.target.value }))} required />
-                </div>
-              ))}
-              <div className="form-group">
-                <label><i className="fas fa-lock"></i> Password</label>
-                <div className="password-input-wrapper">
-                  <input type={showPassword ? "text" : "password"} value={formData.password}
-                    onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))} required />
-                  <button type="button" className="toggle-password" onClick={() => setShowPassword(!showPassword)}>
-                    <i className={`fas ${showPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
-                  </button>
-                </div>
-                <div className="password-requirements">
-                  <p className="requirements-title">Password must contain:</p>
-                  <ul>
-                    {[
-                      [formData.password.length >= 8, 'At least 8 characters'],
-                      [/[A-Z]/.test(formData.password), 'One uppercase letter'],
-                      [/[a-z]/.test(formData.password), 'One lowercase letter'],
-                      [/[0-9]/.test(formData.password), 'One number'],
-                      [/[!@#$%^&*(),.?":{}|<>]/.test(formData.password), 'One special character'],
-                    ].map(([valid, label]) => (
-                      <li key={label} className={valid ? 'valid' : ''}>
-                        <i className={`fas ${valid ? 'fa-check-circle' : 'fa-circle'}`}></i> {label}
-                      </li>
-                    ))}
-                  </ul>
+
+            <div className="suspend-modal-body">
+              {/* User info pill */}
+              <div className="suspend-user-pill">
+                <i className="fas fa-user-circle"></i>
+                <div>
+                  <div className="suspend-user-name">{userToSuspend?.name}</div>
+                  <div className="suspend-user-email">{userToSuspend?.email}</div>
                 </div>
               </div>
+
+              {/* Reason */}
               <div className="form-group">
-                <label><i className="fas fa-shield-alt"></i> Role</label>
-                <select value={formData.role} onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value }))}>
-                  <option value="user">User</option>
-                  <option value="admin">Admin</option>
-                </select>
+                <label><i className="fas fa-exclamation-triangle"></i> Reason for Suspension <span className="required-star">*</span></label>
+                <div className="reason-grid">
+                  {SUSPEND_REASONS.map(r => (
+                    <button
+                      key={r.value}
+                      type="button"
+                      className={`reason-chip ${suspendReason === r.value ? 'active' : ''} ${r.forcePermanent ? 'permanent-reason' : ''}`}
+                      onClick={() => handleReasonChange(r.value)}
+                    >
+                      {r.forcePermanent && <i className="fas fa-infinity"></i>}
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="form-group">
-                <label><i className="fas fa-info-circle"></i> Account Status</label>
-                <select value={formData.status} onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value }))}>
-                  <option value="active">Active</option>
-                  <option value="suspended">Suspended</option>
-                </select>
-              </div>
+
+              {/* Duration */}
+              {suspendReason && (
+                <div className="form-group">
+                  <label><i className="fas fa-calendar-alt"></i> Suspension Duration</label>
+                  {selectedReasonCfg?.forcePermanent ? (
+                    <div className="permanent-badge-display">
+                      <i className="fas fa-infinity"></i>
+                      Permanent — Privacy Policy violations result in permanent suspension
+                    </div>
+                  ) : (
+                    <div className="duration-grid">
+                      {DURATION_OPTIONS.filter(d => d.days !== null || selectedReasonCfg?.canPermanent).map(d => (
+                        <button
+                          key={d.label}
+                          type="button"
+                          className={`duration-chip ${suspendDays === d.days ? 'active' : ''} ${d.days === null ? 'permanent-chip' : ''}`}
+                          onClick={() => setSuspendDays(d.days)}
+                        >
+                          {d.days === null && <i className="fas fa-infinity"></i>}
+                          {d.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Note */}
+              {suspendReason && (
+                <div className="form-group">
+                  <label><i className="fas fa-sticky-note"></i> Additional Note <span className="optional-label">(optional)</span></label>
+                  <textarea
+                    className="suspend-note"
+                    placeholder="Add a note for your records or to inform the user..."
+                    value={suspendNote}
+                    onChange={e => setSuspendNote(e.target.value)}
+                    rows={3}
+                  />
+                </div>
+              )}
+
+              {/* Warning box */}
+              {suspendReason && (
+                <div className={`suspend-warning-box ${suspendDays === null ? 'permanent' : 'temporary'}`}>
+                  <i className={`fas ${suspendDays === null ? 'fa-exclamation-circle' : 'fa-info-circle'}`}></i>
+                  <div>
+                    {suspendDays === null
+                      ? <><strong>Permanent suspension</strong> — the user will lose access indefinitely and receive an email notification.</>
+                      : <><strong>{suspendDays}-day suspension</strong> — the account will auto-restore after {suspendDays} day{suspendDays !== 1 ? 's' : ''}. An email notification will be sent.</>
+                    }
+                  </div>
+                </div>
+              )}
+
               <div className="modal-actions">
-                <button type="button" className="btn-cancel" onClick={() => setShowEditModal(false)}>Cancel</button>
-                <button type="submit" className="btn-save"><i className="fas fa-save"></i> Save Changes</button>
+                <button className="btn-cancel" onClick={() => setShowSuspendModal(false)} disabled={suspendLoading}>Cancel</button>
+                <button
+                  className="btn-suspend-confirm"
+                  onClick={handleConfirmSuspend}
+                  disabled={!suspendReason || suspendLoading}
+                >
+                  {suspendLoading
+                    ? <><i className="fas fa-spinner fa-spin"></i> Suspending...</>
+                    : <><i className="fas fa-ban"></i> Suspend Account</>
+                  }
+                </button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}
 
-      {/* ═══════ EDIT RIDER MODAL ═══════ */}
-      {showRiderEditModal && (
-        <div className="modal-overlay" onClick={() => setShowRiderEditModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header rider-modal-header">
-              <h2><i className="fas fa-motorcycle"></i> Edit Rider</h2>
-              <button className="close-btn" onClick={() => setShowRiderEditModal(false)}><i className="fas fa-times"></i></button>
-            </div>
-            <form onSubmit={handleRiderSubmit}>
-              <div className="form-group"><label>Full Name</label><input type="text" value={riderFormData.fullName} onChange={(e) => setRiderFormData(p => ({ ...p, fullName: e.target.value }))} required /></div>
-              <div className="form-group"><label>Email</label><input type="email" value={riderFormData.email} onChange={(e) => setRiderFormData(p => ({ ...p, email: e.target.value }))} required /></div>
-              <div className="form-group"><label>Phone</label><input type="tel" value={riderFormData.phone} onChange={(e) => setRiderFormData(p => ({ ...p, phone: e.target.value }))} required /></div>
-              <div className="form-group">
-                <label>Vehicle Type</label>
-                <select value={riderFormData.vehicleType} onChange={(e) => setRiderFormData(p => ({ ...p, vehicleType: e.target.value }))}>
-                  <option value="">Select vehicle</option>
-                  <option value="motorcycle">Motorcycle</option>
-                  <option value="bicycle">Bicycle</option>
-                  <option value="scooter">Scooter</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label>Application Status</label>
-                <select value={riderFormData.status} onChange={(e) => setRiderFormData(p => ({ ...p, status: e.target.value }))}>
-                  <option value="pending">Pending</option>
-                  <option value="approved">Approved</option>
-                  <option value="rejected">Rejected</option>
-                  <option value="suspended">Suspended</option>
-                </select>
-                <span className="form-hint">Approved riders can access the Rider Dashboard</span>
-              </div>
-              <div className="modal-actions">
-                <button type="button" className="btn-cancel" onClick={() => setShowRiderEditModal(false)}>Cancel</button>
-                <button type="submit" className="btn-save rider-save-btn"><i className="fas fa-save"></i> Save Changes</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ═══════ SUSPEND CONFIRM ═══════ */}
-      {showSuspendConfirm && (
-        <div className="modal-overlay" onClick={() => setShowSuspendConfirm(false)}>
-          <div className="modal-content confirm-modal" onClick={(e) => e.stopPropagation()}>
-            <div className={`confirm-icon ${(userToSuspend?.status || 'active') === 'active' ? 'suspend' : 'activate'}`}>
-              <i className={`fas ${(userToSuspend?.status || 'active') === 'active' ? 'fa-ban' : 'fa-check-circle'}`}></i>
-            </div>
-            <h2>{(userToSuspend?.status || 'active') === 'active' ? 'Suspend User?' : 'Activate User?'}</h2>
-            <p>Are you sure you want to {(userToSuspend?.status || 'active') === 'active' ? 'suspend' : 'activate'} <strong>{userToSuspend?.name}</strong>?</p>
+      {/* ═══════ UNSUSPEND CONFIRM ═══════ */}
+      {showUnsuspendConfirm && (
+        <div className="modal-overlay" onClick={() => setShowUnsuspendConfirm(false)}>
+          <div className="modal-content confirm-modal" onClick={e => e.stopPropagation()}>
+            <div className="confirm-icon activate"><i className="fas fa-check-circle"></i></div>
+            <h2>Unsuspend Account?</h2>
+            <p>Restore access for <strong>{userToUnsuspend?.name}</strong>?</p>
+            <p className="success-text">They will be able to log in immediately.</p>
             <div className="modal-actions">
-              <button className="btn-cancel" onClick={() => setShowSuspendConfirm(false)}>Cancel</button>
-              <button className={`${(userToSuspend?.status || 'active') === 'active' ? 'btn-suspend-confirm' : 'btn-activate-confirm'}`} onClick={confirmSuspend}>
-                {(userToSuspend?.status || 'active') === 'active' ? 'Suspend' : 'Activate'}
+              <button className="btn-cancel" onClick={() => setShowUnsuspendConfirm(false)}>Cancel</button>
+              <button className="btn-activate-confirm" onClick={confirmUnsuspend}>
+                <i className="fas fa-check-circle"></i> Unsuspend
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ═══════ ACTIVATE CONFIRM ✅ NEW ═══════ */}
+      {/* ═══════ ACTIVATE CONFIRM ═══════ */}
       {showActivateConfirm && (
         <div className="modal-overlay" onClick={() => setShowActivateConfirm(false)}>
-          <div className="modal-content confirm-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="confirm-icon activate">
-              <i className="fas fa-user-check"></i>
-            </div>
+          <div className="modal-content confirm-modal" onClick={e => e.stopPropagation()}>
+            <div className="confirm-icon activate"><i className="fas fa-user-check"></i></div>
             <h2>Activate Account?</h2>
             <p>Activate <strong>{userToActivate?.name}</strong>'s account?</p>
             <p className="success-text">They will be able to log in immediately after activation.</p>
@@ -574,7 +667,7 @@ const AdminUsers = () => {
       {/* ═══════ DELETE USER CONFIRM ═══════ */}
       {showDeleteConfirm && (
         <div className="modal-overlay" onClick={() => setShowDeleteConfirm(false)}>
-          <div className="modal-content confirm-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content confirm-modal" onClick={e => e.stopPropagation()}>
             <div className="confirm-icon suspend"><i className="fas fa-trash"></i></div>
             <h2>Delete User?</h2>
             <p>Permanently delete <strong>{userToDelete?.name}</strong>?</p>
@@ -587,10 +680,52 @@ const AdminUsers = () => {
         </div>
       )}
 
+      {/* ═══════ EDIT RIDER MODAL ═══════ */}
+      {showRiderEditModal && (
+        <div className="modal-overlay" onClick={() => setShowRiderEditModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <div className="modal-header rider-modal-header">
+              <h2><i className="fas fa-motorcycle"></i> Edit Rider</h2>
+              <button className="close-btn" onClick={() => setShowRiderEditModal(false)}><i className="fas fa-times"></i></button>
+            </div>
+            <form onSubmit={handleRiderSubmit}>
+              <div style={{ padding: '24px' }}>
+                <div className="form-group"><label>Full Name</label><input type="text" value={riderFormData.fullName} onChange={e => setRiderFormData(p => ({ ...p, fullName: e.target.value }))} required /></div>
+                <div className="form-group"><label>Email</label><input type="email" value={riderFormData.email} onChange={e => setRiderFormData(p => ({ ...p, email: e.target.value }))} required /></div>
+                <div className="form-group"><label>Phone</label><input type="tel" value={riderFormData.phone} onChange={e => setRiderFormData(p => ({ ...p, phone: e.target.value }))} required /></div>
+                <div className="form-group">
+                  <label>Vehicle Type</label>
+                  <select value={riderFormData.vehicleType} onChange={e => setRiderFormData(p => ({ ...p, vehicleType: e.target.value }))}>
+                    <option value="">Select vehicle</option>
+                    <option value="motorcycle">Motorcycle</option>
+                    <option value="bicycle">Bicycle</option>
+                    <option value="scooter">Scooter</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Application Status</label>
+                  <select value={riderFormData.status} onChange={e => setRiderFormData(p => ({ ...p, status: e.target.value }))}>
+                    <option value="pending">Pending</option>
+                    <option value="approved">Approved</option>
+                    <option value="rejected">Rejected</option>
+                    <option value="suspended">Suspended</option>
+                  </select>
+                  <span className="form-hint">Approved riders can access the Rider Dashboard</span>
+                </div>
+                <div className="modal-actions">
+                  <button type="button" className="btn-cancel" onClick={() => setShowRiderEditModal(false)}>Cancel</button>
+                  <button type="submit" className="btn-save rider-save-btn"><i className="fas fa-save"></i> Save Changes</button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* ═══════ DELETE RIDER CONFIRM ═══════ */}
       {showRiderDeleteConfirm && (
         <div className="modal-overlay" onClick={() => setShowRiderDeleteConfirm(false)}>
-          <div className="modal-content confirm-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content confirm-modal" onClick={e => e.stopPropagation()}>
             <div className="confirm-icon suspend"><i className="fas fa-trash"></i></div>
             <h2>Delete Rider?</h2>
             <p>Permanently delete rider <strong>{riderToDelete?.fullName}</strong>?</p>

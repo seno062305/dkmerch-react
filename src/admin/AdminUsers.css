@@ -36,7 +36,7 @@
 .notification.error   { background: linear-gradient(135deg, #dc3545, #fd7e14); color: white; }
 .notification i { font-size: 20px; }
 
-/* Header Section — column layout to prevent any overlap */
+/* Header Section */
 .users-header {
   background: white;
   padding: 24px 28px 20px;
@@ -61,7 +61,7 @@
 .header-left h1 i { color: #fc1268; font-size: 24px; }
 .subtitle { color: #718096; margin: 0; font-size: 14px; }
 
-/* Stats Cards — flex row, wraps cleanly, no overlap */
+/* Stats Cards */
 .users-stats {
   display: flex;
   flex-wrap: wrap;
@@ -284,8 +284,6 @@
   border-color: transparent;
 }
 
-.filter-btn i { font-size: 13px; }
-
 /* Table Container */
 .users-table-container {
   background: white;
@@ -336,6 +334,48 @@
 }
 
 .user-name i { color: #fc1268; font-size: 16px; }
+
+/* Status cell with chips */
+.status-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.suspend-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.suspend-duration-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #fff3cd;
+  color: #856404;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 20px;
+  border: 1px solid #ffc107;
+}
+
+.suspend-reason-chip {
+  display: inline-flex;
+  align-items: center;
+  background: #fde8ea;
+  color: #842029;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 20px;
+  border: 1px solid #f5c2c7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
 
 /* Role Badge */
 .role-badge {
@@ -433,7 +473,7 @@
   z-index: 1000;
   animation: fadeIn 0.3s ease;
   backdrop-filter: blur(4px);
-  padding: 20px;
+  padding: 16px;
   box-sizing: border-box;
 }
 
@@ -445,7 +485,7 @@
   max-width: 500px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
   animation: slideUp 0.3s ease;
-  max-height: 90vh;
+  max-height: 92vh;
   overflow-y: auto;
 }
 
@@ -521,62 +561,6 @@
   box-shadow: 0 0 0 3px rgba(252, 18, 104, 0.1);
 }
 
-.password-input-wrapper { position: relative; }
-.password-input-wrapper input { padding-right: 44px; }
-
-.toggle-password {
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  background: none;
-  border: none;
-  color: #718096;
-  cursor: pointer;
-  padding: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: color 0.3s ease;
-}
-
-.toggle-password:hover { color: #fc1268; }
-.toggle-password i { font-size: 15px; }
-
-/* Password Requirements */
-.password-requirements {
-  margin-top: 10px;
-  padding: 12px;
-  background: #f7fafc;
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
-}
-
-.password-requirements.rider-pw-req { background: #f5f3ff; border-color: #ede9fe; }
-
-.requirements-title { font-size: 12px; font-weight: 600; color: #4a5568; margin: 0 0 8px 0; }
-
-.password-requirements ul {
-  list-style: none;
-  padding: 0; margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.password-requirements li {
-  font-size: 12px;
-  color: #718096;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  transition: color 0.3s ease;
-}
-
-.password-requirements li i { font-size: 13px; color: #cbd5e0; transition: color 0.3s ease; }
-.password-requirements li.valid { color: #28a745; font-weight: 500; }
-.password-requirements li.valid i { color: #28a745; }
-
 .form-hint { display: block; margin-top: 6px; font-size: 12px; color: #718096; font-style: italic; }
 
 .btn-save.rider-save-btn { background: linear-gradient(135deg, #7c3aed, #a855f7); }
@@ -612,7 +596,8 @@
 .btn-save:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4); }
 
 .btn-suspend-confirm { background: linear-gradient(135deg, #dc3545, #fd7e14); color: white; }
-.btn-suspend-confirm:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4); }
+.btn-suspend-confirm:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4); }
+.btn-suspend-confirm:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .btn-activate-confirm { background: linear-gradient(135deg, #28a745, #20c997); color: white; }
 .btn-activate-confirm:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(40, 167, 69, 0.4); }
@@ -640,6 +625,185 @@
 .confirm-modal .success-text { color: #28a745; font-weight: 600; font-size: 13px; margin-bottom: 20px; }
 .confirm-modal .modal-actions { border-top: none; padding-top: 0; justify-content: center; }
 
+/* ══════════════════════════════════════════════════
+   SUSPEND MODAL — NEW STYLES
+══════════════════════════════════════════════════ */
+
+.suspend-modal { max-width: 520px; }
+
+.suspend-modal-header {
+  background: linear-gradient(135deg, #dc3545, #b91c1c) !important;
+}
+
+.suspend-modal-body { padding: 24px; }
+
+/* User pill at top */
+.suspend-user-pill {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #f8f9fa;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 24px;
+}
+
+.suspend-user-pill > i { font-size: 32px; color: #fc1268; flex-shrink: 0; }
+.suspend-user-name { font-weight: 700; color: #1a1f36; font-size: 15px; }
+.suspend-user-email { font-size: 12px; color: #718096; margin-top: 2px; }
+
+/* Required / optional labels */
+.required-star { color: #dc3545; margin-left: 2px; }
+.optional-label { font-size: 11px; font-weight: 400; color: #a0aec0; margin-left: 4px; }
+
+/* Reason grid */
+.reason-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.reason-chip {
+  padding: 10px 12px;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  background: white;
+  font-size: 12px;
+  font-weight: 600;
+  color: #4a5568;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.3;
+}
+
+.reason-chip:hover { border-color: #dc3545; color: #dc3545; background: #fef2f2; }
+
+.reason-chip.active {
+  background: linear-gradient(135deg, #dc3545, #b91c1c);
+  border-color: transparent;
+  color: white;
+  box-shadow: 0 3px 10px rgba(220, 53, 69, 0.3);
+}
+
+.reason-chip.permanent-reason { border-color: #7c3aed; color: #7c3aed; }
+.reason-chip.permanent-reason:hover { background: #f5f3ff; border-color: #7c3aed; }
+.reason-chip.permanent-reason.active {
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  border-color: transparent;
+  color: white;
+  box-shadow: 0 3px 10px rgba(124, 58, 237, 0.3);
+}
+
+.reason-chip i { font-size: 11px; flex-shrink: 0; }
+
+/* Duration grid */
+.duration-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.duration-chip {
+  padding: 8px 14px;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  background: white;
+  font-size: 12px;
+  font-weight: 600;
+  color: #4a5568;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.duration-chip:hover { border-color: #fc1268; color: #fc1268; }
+
+.duration-chip.active {
+  background: linear-gradient(135deg, #fc1268, #9c27b0);
+  border-color: transparent;
+  color: white;
+  box-shadow: 0 3px 10px rgba(252, 18, 104, 0.3);
+}
+
+.duration-chip.permanent-chip { border-color: #7c3aed; color: #7c3aed; }
+.duration-chip.permanent-chip:hover { background: #f5f3ff; }
+.duration-chip.permanent-chip.active {
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  border-color: transparent;
+  color: white;
+  box-shadow: 0 3px 10px rgba(124, 58, 237, 0.3);
+}
+
+/* Permanent badge for forced-permanent reasons */
+.permanent-badge-display {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(135deg, #f5f3ff, #ede9fe);
+  border: 2px solid #c4b5fd;
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #5b21b6;
+}
+
+.permanent-badge-display i { font-size: 18px; color: #7c3aed; }
+
+/* Suspend note textarea */
+.suspend-note {
+  width: 100%;
+  padding: 11px 14px;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  transition: all 0.3s ease;
+  box-sizing: border-box;
+  color: #4a5568;
+  line-height: 1.5;
+}
+
+.suspend-note:focus {
+  outline: none;
+  border-color: #dc3545;
+  box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.1);
+}
+
+/* Warning box */
+.suspend-warning-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border-radius: 10px;
+  padding: 14px 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  margin-top: 4px;
+}
+
+.suspend-warning-box.temporary {
+  background: #eff6ff;
+  border: 1.5px solid #bfdbfe;
+  color: #1e40af;
+}
+
+.suspend-warning-box.permanent {
+  background: #fef2f2;
+  border: 1.5px solid #fecaca;
+  color: #991b1b;
+}
+
+.suspend-warning-box i { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+
 /* ══════════════════════════
    RESPONSIVE
 ══════════════════════════ */
@@ -659,7 +823,6 @@
   .stat-number { font-size: 20px; }
   .stat-label  { font-size: 11px; }
 
-  /* Tab switcher */
   .tab-switcher { width: 100%; }
   .tab-btn { flex: 1; justify-content: center; padding: 9px 10px; font-size: 13px; }
 
@@ -678,13 +841,25 @@
   .users-table th,
   .users-table td { padding: 11px 12px; font-size: 12px; }
 
-  .modal-content form { padding: 18px; }
-  .modal-header { padding: 18px 20px; }
+  .modal-overlay { padding: 0; align-items: flex-end; }
+  .modal-content { border-radius: 20px 20px 0 0; max-width: 100%; max-height: 94vh; }
+  .modal-header { padding: 16px 18px; border-radius: 20px 20px 0 0; }
   .modal-header h2 { font-size: 17px; }
+  .modal-content form { padding: 16px; }
+  .suspend-modal-body { padding: 16px; }
 
-  .confirm-modal { padding: 28px 20px; }
+  .reason-grid { grid-template-columns: 1fr; }
+
+  .modal-actions { flex-direction: row; gap: 8px; padding-top: 14px; }
+  .btn-cancel, .btn-save, .btn-suspend-confirm, .btn-activate-confirm {
+    flex: 1; padding: 11px 10px; font-size: 13px; justify-content: center;
+  }
+
+  .confirm-modal { max-width: 100%; padding: 28px 20px; border-radius: 20px 20px 0 0; }
   .confirm-icon { width: 60px; height: 60px; font-size: 26px; }
   .confirm-modal h2 { font-size: 19px; }
+  .confirm-modal .modal-actions { flex-direction: row; gap: 8px; border-top: 1px solid #eee; padding-top: 14px; }
+  .confirm-modal .modal-actions button { flex: 1; justify-content: center; }
 }
 
 @media (max-width: 480px) {
@@ -694,7 +869,6 @@
   .header-left h1 { font-size: 17px; gap: 8px; }
   .header-left h1 i { font-size: 18px; }
 
-  /* Switch to 2-col grid on very small screens */
   .users-stats {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -711,141 +885,17 @@
   .tab-count { display: none; }
 
   .filter-btn { padding: 7px 10px; font-size: 11px; }
-  .filter-btn i { font-size: 11px; }
-
-  .modal-overlay { padding: 0; align-items: flex-end; }
-  .modal-content { border-radius: 16px 16px 0 0; max-height: 92vh; }
-  .modal-content form { padding: 14px; }
-  .modal-header { padding: 14px 16px; }
-  .modal-header h2 { font-size: 15px; }
-
-  .btn-cancel, .btn-save, .btn-suspend-confirm, .btn-activate-confirm {
-    padding: 10px 14px; font-size: 13px;
-  }
-
-  .confirm-modal .modal-actions { flex-direction: column; }
-  .confirm-modal .modal-actions button { width: 100%; justify-content: center; }
 
   .users-table { min-width: 580px; }
-  .users-table th,
-  .users-table td { padding: 9px 8px; font-size: 11px; }
+  .users-table th, .users-table td { padding: 9px 8px; font-size: 11px; }
 
   .actions-cell { gap: 4px; }
   .btn-edit, .btn-suspend, .btn-delete { padding: 6px 8px; font-size: 12px; }
-}
 
-/* ── ADD/REPLACE THESE RESPONSIVE STYLES AT BOTTOM OF AdminUsers.css ── */
-
-/* Base modal overlay — ensure correct centering */
-.modal-overlay {
-  position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  animation: fadeIn 0.3s ease;
-  backdrop-filter: blur(4px);
-  padding: 16px;
-  box-sizing: border-box;
-}
-
-.modal-content {
-  background: white;
-  border-radius: 16px;
-  padding: 0;
-  width: 100%;
-  max-width: 500px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-  animation: slideUp 0.3s ease;
-  max-height: 92vh;
-  overflow-y: auto;
-}
-
-/* ══════════════════════════
-   RESPONSIVE — Users Modals
-══════════════════════════ */
-
-@media (max-width: 768px) {
-  .modal-overlay {
-    padding: 0;
-    align-items: flex-end;
-  }
-
-  .modal-content {
-    border-radius: 20px 20px 0 0;
-    max-width: 100%;
-    max-height: 94vh;
-  }
-
-  .modal-header {
-    padding: 16px 18px;
-    border-radius: 20px 20px 0 0;
-  }
-
-  .modal-header h2 { font-size: 17px; }
-
-  .modal-content form { padding: 16px; }
-
-  .form-group { margin-bottom: 16px; }
-  .form-group label { font-size: 13px; }
-  .form-group input,
-  .form-group select { padding: 10px 12px; font-size: 13px; }
-
-  .modal-actions {
-    flex-direction: row;
-    gap: 8px;
-    padding-top: 14px;
-  }
-
-  .btn-cancel, .btn-save,
-  .btn-suspend-confirm, .btn-activate-confirm {
-    flex: 1;
-    padding: 11px 10px;
-    font-size: 13px;
-    justify-content: center;
-  }
-
-  /* Confirm modal — also bottom sheet */
-  .confirm-modal {
-    max-width: 100%;
-    padding: 28px 20px;
-    border-radius: 20px 20px 0 0;
-  }
-
-  .confirm-modal .modal-actions {
-    flex-direction: row;
-    gap: 8px;
-    border-top: 1px solid #eee;
-    padding-top: 14px;
-  }
-
-  .confirm-modal .modal-actions button {
-    flex: 1;
-    justify-content: center;
-  }
-}
-
-@media (max-width: 480px) {
-  .modal-content form { padding: 14px; }
-  .modal-header { padding: 14px 16px; }
-  .modal-header h2 { font-size: 15px; }
-
-  .form-group input,
-  .form-group select { font-size: 12px; padding: 9px 10px; }
-
-  .password-requirements { padding: 10px; }
-  .password-requirements li { font-size: 11px; }
-
-  .btn-cancel, .btn-save,
-  .btn-suspend-confirm, .btn-activate-confirm {
-    padding: 10px 8px;
-    font-size: 12px;
-  }
-
-  .confirm-modal { padding: 24px 16px; }
-  .confirm-icon  { width: 56px; height: 56px; font-size: 24px; }
-  .confirm-modal h2 { font-size: 17px; }
-  .confirm-modal p  { font-size: 13px; }
+  .suspend-modal-body { padding: 14px; }
+  .suspend-user-pill { padding: 10px 12px; }
+  .suspend-user-pill > i { font-size: 26px; }
+  .suspend-user-name { font-size: 13px; }
+  .duration-chip { padding: 7px 10px; font-size: 11px; }
+  .reason-chip { padding: 8px 10px; font-size: 11px; }
 }

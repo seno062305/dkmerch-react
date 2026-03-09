@@ -86,8 +86,29 @@ export const loginUser = mutation({
     const user = byEmail || byUsername;
 
     if (user && user.password === password) {
+      // ── Auto-unsuspend if suspension has expired ──
+      if (user.status === "suspended" && user.suspendedUntil) {
+        if (Date.now() >= user.suspendedUntil) {
+          await db.patch(user._id, {
+            status: "active",
+            suspendedUntil: undefined,
+            suspendedAt: undefined,
+            suspendReason: undefined,
+            suspendNote: undefined,
+          });
+          return { success: true, user: { ...user, status: "active" } };
+        }
+      }
+
       if (user.status === "suspended") {
-        return { success: false, user: null, message: "Your account has been suspended. Please contact support." };
+        const isPermanent = !user.suspendedUntil;
+        const until = user.suspendedUntil
+          ? new Date(user.suspendedUntil).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+          : null;
+        const msg = isPermanent
+          ? "Your account has been permanently suspended. Please contact support."
+          : `Your account is suspended until ${until}. Please contact support.`;
+        return { success: false, user: null, message: msg };
       }
       if (user.status === "pending_activation") {
         return { success: false, user: null, message: "Your account is pending activation by an administrator." };
@@ -110,7 +131,6 @@ export const registerPendingUser = mutation({
   handler: async ({ db }, args) => {
     const nowMs = Date.now();
 
-    // Check if email already exists in users (verified accounts)
     const existingUser = await db
       .query("users")
       .withIndex("by_email", q => q.eq("email", args.email))
@@ -119,7 +139,6 @@ export const registerPendingUser = mutation({
       return { success: false, message: "Email already registered." };
     }
 
-    // Check if username already exists
     const existingUsername = await db
       .query("users")
       .withIndex("by_username", q => q.eq("username", args.username))
@@ -128,7 +147,6 @@ export const registerPendingUser = mutation({
       return { success: false, message: "Username already taken." };
     }
 
-    // Rate limit check via fingerprint
     if (args.fingerprint) {
       const windowStart = nowMs - RATE_LIMIT_WINDOW_MS;
       const recentAttempts = await db
@@ -152,7 +170,6 @@ export const registerPendingUser = mutation({
       }
     }
 
-    // If there's already a pending entry for this email, delete it (allow resend)
     const existingPending = await db
       .query("pendingUsers")
       .withIndex("by_email", q => q.eq("email", args.email))
@@ -161,13 +178,11 @@ export const registerPendingUser = mutation({
       await db.delete(existingPending._id);
     }
 
-    // Generate a secure UUID token (for email link verification — kept for compatibility)
     const token = crypto.randomUUID();
-    const expiresAt = nowMs + 1000 * 60 * 60 * 24; // 24 hours
+    const expiresAt = nowMs + 1000 * 60 * 60 * 24;
 
-    // Generate 6-digit OTP — expires in 3 minutes
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const otpExpiresAt = nowMs + 1000 * 60 * 3; // ← 3 minutes
+    const otpExpiresAt = nowMs + 1000 * 60 * 3;
 
     await db.insert("pendingUsers", {
       name: args.name,
@@ -185,7 +200,6 @@ export const registerPendingUser = mutation({
   },
 });
 
-// ── Step 2A — Verify OTP entered in modal, then create user immediately
 export const verifyOtpAndCreateUser = mutation({
   args: {
     email: v.string(),
@@ -213,7 +227,6 @@ export const verifyOtpAndCreateUser = mutation({
       return { success: false, message: "Incorrect OTP. Please try again." };
     }
 
-    // Double-check email not already registered
     const alreadyExists = await db
       .query("users")
       .withIndex("by_email", q => q.eq("email", pending.email))
@@ -223,7 +236,6 @@ export const verifyOtpAndCreateUser = mutation({
       return { success: false, message: "This email has already been registered." };
     }
 
-    // Save to real users table
     const userId = await db.insert("users", {
       name: pending.name,
       username: pending.username,
@@ -234,14 +246,12 @@ export const verifyOtpAndCreateUser = mutation({
       registeredAt: new Date().toISOString(),
     });
 
-    // Clean up pending record
     await db.delete(pending._id);
 
     return { success: true, userId };
   },
 });
 
-// ── Resend OTP — generates a BRAND NEW OTP, immediately invalidates the old one
 export const resendOtp = mutation({
   args: { email: v.string() },
   handler: async ({ db }, { email }) => {
@@ -255,9 +265,8 @@ export const resendOtp = mutation({
     }
 
     const nowMs = Date.now();
-    // Generate fresh OTP — old OTP is overwritten and no longer valid
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const otpExpiresAt = nowMs + 1000 * 60 * 3; // ← 3 minutes from now
+    const otpExpiresAt = nowMs + 1000 * 60 * 3;
 
     await db.patch(pending._id, { otp, otpExpiresAt });
 
@@ -265,7 +274,6 @@ export const resendOtp = mutation({
   },
 });
 
-// ── Step 2B — Verify token from email link (original flow — kept for compatibility)
 export const verifyEmailAndCreateUser = mutation({
   args: { token: v.string() },
   handler: async ({ db }, { token }) => {
@@ -331,6 +339,28 @@ export const cleanupExpiredPendingUsers = internalMutation({
       await db.delete(record._id);
     }
     return { deleted: expired.length };
+  },
+});
+
+// ── Auto-unsuspend expired temporary suspensions (called by cron) ─────────────
+export const autoUnsuspendExpired = internalMutation({
+  args: {},
+  handler: async ({ db }) => {
+    const now = Date.now();
+    const users = await db.query("users").collect();
+    const toUnsuspend = users.filter(
+      u => u.status === "suspended" && u.suspendedUntil && u.suspendedUntil <= now
+    );
+    for (const user of toUnsuspend) {
+      await db.patch(user._id, {
+        status: "active",
+        suspendedUntil: undefined,
+        suspendedAt: undefined,
+        suspendReason: undefined,
+        suspendNote: undefined,
+      });
+    }
+    return { unsuspended: toUnsuspend.length };
   },
 });
 
@@ -407,6 +437,51 @@ export const activateUser = mutation({
   args: { id: v.id("users") },
   handler: async ({ db }, { id }) => {
     await db.patch(id, { status: "active", suspendReason: undefined });
+    return { success: true };
+  },
+});
+
+// ── NEW: Suspend user with reason, duration, and note ────────────────────────
+export const suspendUser = mutation({
+  args: {
+    id: v.id("users"),
+    reason: v.string(),       // e.g. "spam", "abusive", "privacy_policy", etc.
+    note: v.optional(v.string()),
+    durationDays: v.optional(v.number()), // undefined = permanent
+  },
+  handler: async ({ db }, { id, reason, note, durationDays }) => {
+    const now = Date.now();
+    const suspendedUntil = durationDays ? now + durationDays * 24 * 60 * 60 * 1000 : undefined;
+
+    await db.patch(id, {
+      status: "suspended",
+      suspendReason: reason,
+      suspendNote: note ?? undefined,
+      suspendedAt: now,
+      suspendedUntil: suspendedUntil ?? undefined,
+    });
+
+    const user = await db.get(id);
+    return {
+      success: true,
+      userEmail: user?.email,
+      userName: user?.name,
+      suspendedUntil: suspendedUntil ?? null,
+    };
+  },
+});
+
+// ── NEW: Unsuspend (activate) user ───────────────────────────────────────────
+export const unsuspendUser = mutation({
+  args: { id: v.id("users") },
+  handler: async ({ db }, { id }) => {
+    await db.patch(id, {
+      status: "active",
+      suspendReason: undefined,
+      suspendNote: undefined,
+      suspendedAt: undefined,
+      suspendedUntil: undefined,
+    });
     return { success: true };
   },
 });
