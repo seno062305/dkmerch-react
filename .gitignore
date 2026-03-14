@@ -6,5 +6,8 @@ src/convex_generated
 
 .vercel
 
-
 dkmerch-react.git/public/images/*.exe
+
+# Large files — hindi kailangan sa deployment
+scripts/*.apk
+scripts/*.pdf
