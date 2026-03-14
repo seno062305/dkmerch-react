@@ -9,7 +9,7 @@ header {
 
 .main-header { background: white; padding: 1rem 0; }
 
-/* ✅ Three-column layout: logo flush left | nav center | actions flush right */
+/* Three-column layout: logo flush left | nav center | actions flush right */
 .header-inner {
   width: 100%;
   padding: 0 2rem;
@@ -28,7 +28,7 @@ header {
   text-decoration: none;
   color: inherit;
   flex-shrink: 0;
-  justify-self: start;   /* flush left */
+  justify-self: start;
 }
 
 .logo img { height: 50px; width: auto; border-radius: 8px; }
@@ -95,13 +95,16 @@ header {
 /* Mobile nav header — hidden on desktop */
 .mobile-nav-header { display: none; }
 
+/* Rider item in nav — hidden on desktop, shown only in mobile sidebar */
+.mobile-nav-rider-item { display: none; }
+
 /* ── Header Actions (right) ── */
 .header-actions {
   display: flex;
   align-items: center;
   gap: 1.25rem;
   flex-shrink: 0;
-  justify-self: end;   /* flush right */
+  justify-self: end;
 }
 
 .header-action-item {
@@ -128,7 +131,7 @@ header {
 .favorites-btn:hover { color: #a86800 !important; }
 .favorites-btn:hover i { transform: scale(1.2) rotate(-5deg); color: #f5a623; }
 
-/* ✅ Icon wrapper */
+/* Icon wrapper */
 .icon-wrapper {
   position: relative;
   display: inline-flex;
@@ -159,6 +162,31 @@ header {
 }
 
 .cart-count { background: #9c27b0; }
+
+/* ── 🛵 Rider icon-only button — desktop header ── */
+.header-rider-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #7c3aed;
+  font-size: 1.3rem;
+  transition: all 0.2s ease;
+  padding: 0.25rem;
+  border-radius: 8px;
+  -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
+}
+
+.header-rider-icon-btn:hover {
+  color: #6d28d9;
+  background: #f5f0ff;
+  transform: translateY(-2px);
+}
 
 /* Account Dropdown */
 .account-dropdown-wrapper { position: relative; }
@@ -453,11 +481,22 @@ header {
   .mobile-menu-toggle { display: flex; order: 10; }
   .mobile-overlay { display: block; }
 
+  /* Keep rider nav item hidden on mobile too */
+  .mobile-nav-rider-item { display: none; }
+
   .header-actions { gap: 0.75rem; }
 
   .header-action-item { padding: 0.4rem; flex-direction: column; gap: 0; }
   .header-action-item > span:not(.icon-wrapper) { display: none; }
   .header-action-item i { font-size: 1.35rem; }
+
+  /* Show rider icon on mobile — icon only, no label */
+  .header-rider-icon-btn {
+    display: flex;
+    width: 34px;
+    height: 34px;
+    font-size: 1.2rem;
+  }
 
   .icon-wrapper { width: 1.8rem; height: 1.8rem; overflow: visible; }
 
@@ -567,3 +606,33 @@ header {
   0%, 100% { background: rgba(252, 18, 104, 0.08); }
   50%       { background: rgba(252, 18, 104, 0.18); }
 }
+
+/* ── Mobile nav rider item (inside sidebar drawer) ── */
+.mobile-nav-rider-item {
+  border-bottom: 1px solid #f0f0f0;
+  padding: 0;
+}
+
+.mobile-nav-rider-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  width: 100%;
+  background: linear-gradient(135deg, #f5f0ff, #faf5ff);
+  border: none;
+  border-left: 3px solid #7c3aed;
+  color: #7c3aed;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-nav-rider-btn:hover {
+  background: linear-gradient(135deg, #ede9fe, #f5f0ff);
+}
+
+.mobile-nav-rider-btn i { font-size: 1.1rem; }

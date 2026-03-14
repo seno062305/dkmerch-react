@@ -1,0 +1,36 @@
+{
+  "date": "2026-03-08",
+  "timestamp": "2026-03-08T01:04:43.966Z",
+  "tables": {
+    "users": {
+      "count": 5,
+      "status": "ok"
+    },
+    "orders": {
+      "count": 3,
+      "status": "ok"
+    },
+    "products": {
+      "count": 22,
+      "status": "ok"
+    },
+    "promos": {
+      "count": 5,
+      "status": "ok"
+    },
+    "preOrderRequests": {
+      "count": 3,
+      "status": "ok"
+    },
+    "pickupRequests": {
+      "count": 6,
+      "status": "ok"
+    },
+    "riderLocations": {
+      "count": 3,
+      "status": "ok"
+    }
+  },
+  "totalRecords": 47,
+  "status": "success"
+}

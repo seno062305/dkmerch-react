@@ -8,6 +8,8 @@ import { useNotification } from '../context/NotificationContext';
 import ProductModal from '../components/ProductModal';
 import './Collections.css';
 
+const MAX_WISHLIST = 10;
+
 const Collections = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -18,8 +20,6 @@ const Collections = () => {
   const [selectedGroup, setSelectedGroup] = useState('all');
   const [highlightedProductId, setHighlightedProductId] = useState(null);
   const [selectedProduct, setSelectedProduct] = useState(null);
-
-  // Dropdown open states
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
   const [groupDropdownOpen, setGroupDropdownOpen] = useState(false);
 
@@ -27,11 +27,9 @@ const Collections = () => {
   const groupRef = useRef(null);
 
   const products = useQuery(api.products.getCollectionProducts) || [];
-
   const wishlistItems = useWishlist();
   const addToCartMutation = useAddToCart();
   const toggleWishlistMutation = useToggleWishlist();
-
   const activePromos = useQuery(api.promos.getActivePromos) || [];
   const activePromo = activePromos[0] || null;
 
@@ -44,15 +42,10 @@ const Collections = () => {
     return product.kpopGroup?.trim().toUpperCase() === activePromo.name.trim().toUpperCase();
   };
 
-  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (categoryRef.current && !categoryRef.current.contains(e.target)) {
-        setCategoryDropdownOpen(false);
-      }
-      if (groupRef.current && !groupRef.current.contains(e.target)) {
-        setGroupDropdownOpen(false);
-      }
+      if (categoryRef.current && !categoryRef.current.contains(e.target)) setCategoryDropdownOpen(false);
+      if (groupRef.current && !groupRef.current.contains(e.target)) setGroupDropdownOpen(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -84,12 +77,17 @@ const Collections = () => {
   const categories = ['all', 'albums', 'photocards', 'lightsticks', 'accessories'];
   const groups = ['all', 'BTS', 'BLACKPINK', 'TWICE', 'SEVENTEEN', 'STRAY KIDS', 'EXO', 'RED VELVET', 'NEWJEANS'];
 
-  const filteredProducts = (products || []).filter(product => {
-    const categoryMatch = selectedCategory === 'all' || product.category === selectedCategory;
-    const groupMatch = selectedGroup === 'all' || product.kpopGroup === selectedGroup;
-    return categoryMatch && groupMatch;
-  });
+  const filteredProducts = (products || [])
+    .filter(product => {
+      const categoryMatch = selectedCategory === 'all' || product.category === selectedCategory;
+      const groupMatch = selectedGroup === 'all' || product.kpopGroup === selectedGroup;
+      return categoryMatch && groupMatch;
+    })
+    .sort((a, b) => (b._creationTime || 0) - (a._creationTime || 0));
 
+  // ── Add to Cart ──
+  // NOTE: No window.confirm here — ProductModal already handles confirmation.
+  // This is only called via ProductModal's onAddToCart prop.
   const handleAddToCart = (product) => {
     if (product.stock === 0 && !product.isPreOrder) {
       showNotification('Product is out of stock', 'error');
@@ -99,11 +97,48 @@ const Collections = () => {
     showNotification(`${product.name} added to cart!`, 'success');
   };
 
-  const handleAddToWishlist = (product) => {
+  const handleCardWishlist = (e, product) => {
+    e.stopPropagation();
+
     const pid = product._id || product.id;
+    const alreadyWishlisted = isWishlisted(pid);
+
+    if (!alreadyWishlisted && wishlistItems.length >= MAX_WISHLIST) {
+      showNotification(`Favorites limit reached (max ${MAX_WISHLIST}). Remove an item first.`, 'error');
+      return;
+    }
+
+    const msg = alreadyWishlisted
+      ? `Remove "${product.name}" from Favorites?`
+      : `Add "${product.name}" to Favorites?`;
+
+    if (!window.confirm(msg)) return;
+
     toggleWishlistMutation(product);
     showNotification(
-      isWishlisted(pid) ? `${product.name} removed from wishlist!` : `${product.name} added to wishlist!`,
+      alreadyWishlisted ? `${product.name} removed from favorites!` : `${product.name} added to favorites!`,
+      'success'
+    );
+  };
+
+  // ── Wishlist from ProductModal ──
+  const handleAddToWishlist = (product) => {
+    const pid = product._id || product.id;
+    const alreadyWishlisted = isWishlisted(pid);
+
+    if (!alreadyWishlisted && wishlistItems.length >= MAX_WISHLIST) {
+      showNotification(`Favorites limit reached (max ${MAX_WISHLIST}). Remove an item first.`, 'error');
+      return;
+    }
+
+    const msg = alreadyWishlisted
+      ? `Remove "${product.name}" from Favorites?`
+      : `Add "${product.name}" to Favorites?`;
+    if (!window.confirm(msg)) return;
+
+    toggleWishlistMutation(product);
+    showNotification(
+      alreadyWishlisted ? `${product.name} removed from favorites!` : `${product.name} added to favorites!`,
       'success'
     );
   };
@@ -129,40 +164,24 @@ const Collections = () => {
       <div className="collections-filters">
         <div className="filters-single-line">
 
-          {/* CATEGORY FILTER */}
           <div className="filter-group">
             <label>CATEGORY:</label>
-
-            {/* Desktop: buttons */}
             <div className="filter-buttons desktop-only">
               {categories.map(cat => (
-                <button
-                  key={cat}
-                  className={`filter-btn ${selectedCategory === cat ? 'active' : ''}`}
-                  onClick={() => setSelectedCategory(cat)}
-                >
+                <button key={cat} className={`filter-btn ${selectedCategory === cat ? 'active' : ''}`} onClick={() => setSelectedCategory(cat)}>
                   {cat}
                 </button>
               ))}
             </div>
-
-            {/* Mobile: dropdown */}
             <div className="filter-dropdown mobile-only" ref={categoryRef}>
-              <button
-                className="filter-dropdown-toggle"
-                onClick={() => { setCategoryDropdownOpen(o => !o); setGroupDropdownOpen(false); }}
-              >
+              <button className="filter-dropdown-toggle" onClick={() => { setCategoryDropdownOpen(o => !o); setGroupDropdownOpen(false); }}>
                 <span>{selectedCategory}</span>
                 <i className={`fas fa-chevron-down ${categoryDropdownOpen ? 'open' : ''}`}></i>
               </button>
               {categoryDropdownOpen && (
                 <div className="filter-dropdown-menu">
                   {categories.map(cat => (
-                    <button
-                      key={cat}
-                      className={`filter-dropdown-item ${selectedCategory === cat ? 'active' : ''}`}
-                      onClick={() => { setSelectedCategory(cat); setCategoryDropdownOpen(false); }}
-                    >
+                    <button key={cat} className={`filter-dropdown-item ${selectedCategory === cat ? 'active' : ''}`} onClick={() => { setSelectedCategory(cat); setCategoryDropdownOpen(false); }}>
                       {cat}
                       {selectedCategory === cat && <i className="fas fa-check"></i>}
                     </button>
@@ -174,37 +193,23 @@ const Collections = () => {
 
           <div className="filter-divider" />
 
-          {/* GROUP FILTER */}
           <div className="filter-group">
             <label>GROUP:</label>
-
-            {/* Desktop: buttons */}
             <div className="filter-buttons desktop-only">
               {groups.map(group => (
-                <button
-                  key={group}
-                  className={`filter-btn ${selectedGroup === group ? 'active' : ''}`}
-                  onClick={() => setSelectedGroup(group)}
-                >
+                <button key={group} className={`filter-btn ${selectedGroup === group ? 'active' : ''}`} onClick={() => setSelectedGroup(group)}>
                   {group}
-                  {activePromo && activePromo.isActive &&
-                    group.toUpperCase() === activePromo.name?.toUpperCase() && (
+                  {activePromo && activePromo.isActive && group.toUpperCase() === activePromo.name?.toUpperCase() && (
                     <span className="filter-promo-dot" title={`${activePromo.discount}% off!`}>●</span>
                   )}
                 </button>
               ))}
             </div>
-
-            {/* Mobile: dropdown */}
             <div className="filter-dropdown mobile-only" ref={groupRef}>
-              <button
-                className="filter-dropdown-toggle"
-                onClick={() => { setGroupDropdownOpen(o => !o); setCategoryDropdownOpen(false); }}
-              >
+              <button className="filter-dropdown-toggle" onClick={() => { setGroupDropdownOpen(o => !o); setCategoryDropdownOpen(false); }}>
                 <span>
                   {selectedGroup}
-                  {activePromo && activePromo.isActive &&
-                    selectedGroup.toUpperCase() === activePromo.name?.toUpperCase() && (
+                  {activePromo && activePromo.isActive && selectedGroup.toUpperCase() === activePromo.name?.toUpperCase() && (
                     <span className="filter-promo-dot">●</span>
                   )}
                 </span>
@@ -213,15 +218,10 @@ const Collections = () => {
               {groupDropdownOpen && (
                 <div className="filter-dropdown-menu">
                   {groups.map(group => (
-                    <button
-                      key={group}
-                      className={`filter-dropdown-item ${selectedGroup === group ? 'active' : ''}`}
-                      onClick={() => { setSelectedGroup(group); setGroupDropdownOpen(false); }}
-                    >
+                    <button key={group} className={`filter-dropdown-item ${selectedGroup === group ? 'active' : ''}`} onClick={() => { setSelectedGroup(group); setGroupDropdownOpen(false); }}>
                       <span>
                         {group}
-                        {activePromo && activePromo.isActive &&
-                          group.toUpperCase() === activePromo.name?.toUpperCase() && (
+                        {activePromo && activePromo.isActive && group.toUpperCase() === activePromo.name?.toUpperCase() && (
                           <span className="filter-promo-dot">●</span>
                         )}
                       </span>
@@ -259,6 +259,7 @@ const Collections = () => {
           {filteredProducts.map(product => {
             const pid = product._id || product.id;
             const hasPromo = isPromoProduct(product);
+            const wishlisted = isWishlisted(pid);
             return (
               <div
                 key={pid}
@@ -269,12 +270,19 @@ const Collections = () => {
                 {product.isSale && !product.isPreOrder && (
                   <div className="collection-sale-badge">SALE</div>
                 )}
-
                 {hasPromo && (
                   <div className="collection-promo-badge">
                     <i className="fas fa-tag"></i> {activePromo.discount}% OFF
                   </div>
                 )}
+
+                <button
+                  className={`collection-card-fav ${wishlisted ? 'active' : ''}`}
+                  onClick={(e) => handleCardWishlist(e, product)}
+                  title={wishlisted ? 'Remove from favorites' : 'Add to favorites'}
+                >
+                  <i className="fas fa-star"></i>
+                </button>
 
                 <div className="collection-card-img">
                   <img src={product.image} alt={product.name} />

@@ -28,7 +28,6 @@ import CartModal from './components/CartModal';
 import ProductModal from './components/ProductModal';
 import WishlistPage from './components/WishlistPage';
 
-
 import AdminLayout from './admin/AdminLayout';
 import AdminDashboard from './admin/AdminDashboard';
 import AdminProducts from './admin/AdminProducts';
@@ -42,6 +41,9 @@ import AdminBackup from './admin/AdminBackup';
 import Checkout from './pages/Checkout';
 import OrderSuccess from './pages/OrderSuccess';
 
+// 🛵 Rider Dashboard
+import RiderDashboard from './pages/RiderDashboard';
+
 import './App.css';
 
 // ─── STARTUP REDIRECT ─────────────────────────────────────────────────────────
@@ -51,25 +53,30 @@ const StartupRedirect = ({ children }) => {
   const navigate = useNavigate();
   const [redirectDone, setRedirectDone] = useState(false);
 
-useEffect(() => {
-  if (!isReady) return;
-  if (isAuthenticated && role) {
-    const path = location.pathname;
-    const isExempt =
-      path.startsWith('/rider-track') ||
-      path.startsWith('/promo') ||
-      path.startsWith('/order-success') ||
-      path.startsWith('/track-order') ||
-      path.startsWith('/verify-email');
+  useEffect(() => {
+    if (!isReady) return;
+    if (isAuthenticated && role) {
+      const path = location.pathname;
+      const isExempt =
+        path.startsWith('/rider-track') ||
+        path.startsWith('/rider') ||
+        path.startsWith('/promo') ||
+        path.startsWith('/order-success') ||
+        path.startsWith('/track-order') ||
+        path.startsWith('/verify-email');
 
-    // ✅ I-redirect sa /admin ONLY if nandoon sa root "/" lang
-    if (role === 'admin' && path === '/' && !isExempt) {
-      navigate('/admin', { replace: true });
+      if (role === 'admin' && path === '/' && !isExempt) {
+        navigate('/admin', { replace: true });
+      }
+
+      // Auto-redirect rider role to /rider dashboard
+      if (role === 'rider' && path === '/' && !isExempt) {
+        navigate('/rider', { replace: true });
+      }
     }
-  }
-  setRedirectDone(true);
-// eslint-disable-next-line react-hooks/exhaustive-deps
-}, [isReady]);
+    setRedirectDone(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady]);
 
   if (!isReady || !redirectDone) {
     return (
@@ -121,6 +128,28 @@ const ProtectedRoute = ({ children }) => {
   return children;
 };
 
+// ─── RIDER PROTECTED ROUTE ────────────────────────────────────────────────────
+// Only allows users with role === 'rider' (approved riders set via AuthContext)
+const RiderRoute = ({ children }) => {
+  const { isAuthenticated, role, isReady } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!isReady) return;
+    if (!isAuthenticated) {
+      window.dispatchEvent(new Event('openLoginModal'));
+      navigate('/', { replace: true });
+    }
+  }, [isReady, isAuthenticated, navigate]);
+
+  if (!isReady) return null;
+  if (!isAuthenticated) return null;
+
+  // Even if role isn't 'rider' yet, let RiderDashboard handle the
+  // "pending approval" state — it already shows a pending screen
+  return children;
+};
+
 // ─── APP CONTENT ──────────────────────────────────────────────────────────────
 function AppContent() {
   const location = useLocation();
@@ -150,15 +179,19 @@ function AppContent() {
       navigate(redirect, { replace: true });
       return;
     }
-    if (loginRole === 'admin') navigate('/admin', { replace: true });
+    if (loginRole === 'admin')  navigate('/admin',  { replace: true });
+    if (loginRole === 'rider')  navigate('/rider',  { replace: true });
   };
 
   const isAdminRoute      = location.pathname.startsWith('/admin');
   const isPromoRoute      = location.pathname.startsWith('/promo');
   const isRiderTrackRoute = location.pathname.startsWith('/rider-track');
+  const isRiderDashRoute  = location.pathname.startsWith('/rider');
   const isVerifyRoute     = location.pathname.startsWith('/verify-email');
-  const hideHeaderFooter  = isAdminRoute || isPromoRoute || isRiderTrackRoute || isVerifyRoute;
-  const showChatBot       = !isAdminRoute && !isPromoRoute && !isRiderTrackRoute && !isVerifyRoute;
+
+  // Hide header/footer for admin, promo, rider-track, rider dashboard, verify
+  const hideHeaderFooter  = isAdminRoute || isPromoRoute || isRiderTrackRoute || isRiderDashRoute || isVerifyRoute;
+  const showChatBot       = !isAdminRoute && !isPromoRoute && !isRiderTrackRoute && !isRiderDashRoute && !isVerifyRoute;
 
   return (
     <StartupRedirect>
@@ -172,6 +205,7 @@ function AppContent() {
         )}
 
         <Routes>
+          {/* ── Public routes ── */}
           <Route path="/" element={<Home onProductClick={(p) => { setCurrentProduct(p); setShowProductModal(true); }} />} />
           <Route path="/collections" element={<Collections onProductClick={(p) => { setCurrentProduct(p); setShowProductModal(true); }} />} />
           <Route path="/preorder"      element={<PreOrder />} />
@@ -192,6 +226,11 @@ function AppContent() {
             <ProtectedRoute><MyPreOrders /></ProtectedRoute>
           } />
 
+          {/* 🛵 Rider Dashboard route */}
+          <Route path="/rider" element={
+            <RiderRoute><RiderDashboard /></RiderRoute>
+          } />
+
           {/* ── Admin routes wrapped in BackupProvider ── */}
           <Route path="/admin" element={
             <BackupProvider>
@@ -208,8 +247,6 @@ function AppContent() {
             <Route path="riders"        element={<AdminRiders />} />
             <Route path="backup"        element={<AdminBackup />} />
           </Route>
-
-          <Route path="/rider" element={<Navigate to="/" replace />} />
         </Routes>
 
         {!hideHeaderFooter && <Footer />}

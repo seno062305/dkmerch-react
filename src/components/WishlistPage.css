@@ -7,7 +7,6 @@
   background: #f8f6f6 !important;
   background-image: none !important;
   border-bottom: 1px solid #f0f0f0;
-  
 }
 
 .wishlist-main .page-title {
@@ -41,6 +40,45 @@
 .wishlist-count-bar i {
   color: #f5a623;
   font-size: 13px;
+}
+
+/* ✅ x/10 slot indicator */
+.wishlist-slot-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.wishlist-slot-count {
+  font-size: 12px;
+  font-weight: 700;
+  color: #888;
+  background: #f3f4f6;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 20px;
+  padding: 2px 10px;
+  transition: all 0.2s;
+}
+
+.wishlist-slot-count.full {
+  color: #dc2626;
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.wishlist-slot-full-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #dc2626;
+}
+
+/* ✅ Limit note inside count bar */
+.wishlist-limit-note {
+  font-size: 12px;
+  font-weight: 400;
+  color: #999;
+  margin-left: 2px;
 }
 
 /* ✅ Reuse TrackOrder grid & card styles */

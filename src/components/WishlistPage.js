@@ -5,6 +5,8 @@ import { useWishlist, useRemoveFromWishlist } from '../context/wishlistUtils';
 import { useAddToCart } from '../context/cartUtils';
 import { useNotification } from '../context/NotificationContext';
 
+const MAX_WISHLIST = 10;
+
 const WishlistPage = () => {
   const navigate = useNavigate();
   const { showNotification } = useNotification();
@@ -14,6 +16,10 @@ const WishlistPage = () => {
   const removeFromWishlist = useRemoveFromWishlist();
   const addToCart = useAddToCart();
 
+  // ✅ Convex already returns desc order (latest first) — just limit to 10
+  const displayItems = (wishlistItems || []).slice(0, MAX_WISHLIST);
+  const count = displayItems.length;
+
   const handleRemoveFromWishlist = (productId, productName) => {
     if (window.confirm(`Remove "${productName}" from your favorites?`)) {
       removeFromWishlist(productId);
@@ -22,6 +28,7 @@ const WishlistPage = () => {
   };
 
   const handleAddToCart = (item) => {
+    if (!window.confirm(`Add "${item.name}" to cart?\n\nPrice: ₱${item.price?.toLocaleString()}`)) return;
     addToCart({
       id: item.productId,
       _id: item.productId,
@@ -41,7 +48,6 @@ const WishlistPage = () => {
 
   return (
     <main className="wishlist-main">
-      {/* ✅ Matches TrackOrder page-header style */}
       <div className="page-header">
         <div className="container">
           <h1 className="page-title">My Favorites</h1>
@@ -51,7 +57,7 @@ const WishlistPage = () => {
 
       <div className="container">
         <section className="wishlist-page">
-          {wishlistItems.length === 0 ? (
+          {count === 0 ? (
             <div className="orders-empty">
               <i className="fas fa-star"></i>
               <h3>No favorites yet</h3>
@@ -62,17 +68,23 @@ const WishlistPage = () => {
             </div>
           ) : (
             <>
-              {/* Count bar */}
+              {/* ✅ Count bar with x/10 indicator */}
               <div className="wishlist-count-bar">
                 <i className="fas fa-star"></i>
-                <span>{wishlistItems.length} favorite{wishlistItems.length !== 1 ? 's' : ''}</span>
+                <span>{count} favorite{count !== 1 ? 's' : ''}</span>
+                <span className="wishlist-slot-indicator">
+                  <span className={`wishlist-slot-count ${count >= MAX_WISHLIST ? 'full' : ''}`}>
+                    {count}/{MAX_WISHLIST}
+                  </span>
+                  {count >= MAX_WISHLIST && (
+                    <span className="wishlist-slot-full-label">Limit reached</span>
+                  )}
+                </span>
               </div>
 
-              {/* ✅ Same grid as TrackOrder orders-grid */}
               <div className="orders-grid">
-                {wishlistItems.map(item => (
+                {displayItems.map(item => (
                   <div key={item.productId} className="order-card">
-                    {/* ✅ Clickable image with zoom overlay */}
                     <div
                       className="order-card-img"
                       onClick={() => item.image && setLightboxImg(item.image)}
@@ -87,13 +99,11 @@ const WishlistPage = () => {
                           <i className="fas fa-search-plus"></i>
                         </div>
                       )}
-                      {/* ✅ Star badge top-left instead of status */}
                       <span className="wishlist-star-badge">
                         <i className="fas fa-star"></i>
                       </span>
                     </div>
 
-                    {/* Card info */}
                     <div className="order-card-info">
                       <p className="order-card-name" style={{ minHeight: 'unset', marginBottom: '6px' }}>
                         {item.name}
@@ -132,7 +142,6 @@ const WishlistPage = () => {
         </section>
       </div>
 
-      {/* Lightbox */}
       {lightboxImg && (
         <div className="order-lightbox" onClick={() => setLightboxImg(null)}>
           <button className="lightbox-close" onClick={() => setLightboxImg(null)}>

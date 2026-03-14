@@ -229,9 +229,6 @@ export default function DKMerchChatBot() {
     return () => clearTimeout(t);
   }, []);
 
-  // ✅ REMOVED: all document.body.style.overflow manipulation
-  // Page can now scroll freely even when chatbot is open
-
   const handleOption = (option) => {
     if (option.id) {
       setMessages(prev => [
@@ -282,8 +279,8 @@ export default function DKMerchChatBot() {
 
   return (
     <>
-      {/* ── Floating Button ── */}
-      <div style={{ position: "fixed", bottom: 24, right: 24, zIndex: 9999 }}>
+      {/* ── Floating Button — always on top of everything ── */}
+      <div style={{ position: "fixed", bottom: 24, right: 24, zIndex: 10050 }}>
         {!open && showPulse && (
           <div style={{
             position: "absolute", inset: -6,
@@ -296,7 +293,6 @@ export default function DKMerchChatBot() {
           onClick={() => {
             const willOpen = !open;
             setOpen(willOpen);
-            // ✅ No body overflow changes — page stays scrollable
             if (!willOpen) {
               setMessages([]);
               setHasGreeted(false);
@@ -325,10 +321,10 @@ export default function DKMerchChatBot() {
         </button>
       </div>
 
-      {/* ── Chat Window ── */}
+      {/* ── Chat Window — above CartModal (z-index: 9999) and its content (10000) ── */}
       {open && (
         <div style={{
-          position: "fixed", bottom: 92, right: 24, zIndex: 9998,
+          position: "fixed", bottom: 92, right: 24, zIndex: 10049,
           width: 360, maxWidth: "calc(100vw - 48px)",
           background: "#fff",
           borderRadius: 20,

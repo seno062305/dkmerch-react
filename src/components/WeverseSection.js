@@ -7,13 +7,14 @@ import { useNotification } from '../context/NotificationContext';
 import LoginModal from './LoginModal';
 import './WeverseSection.css';
 
+const MAX_WISHLIST = 10;
+
 const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
   const { showNotification } = useNotification();
 
-  // ✅ Use collection products (includes released pre-orders + regular)
   const products = useCollectionProducts();
   const wishlistItems = useWishlist();
   const toggleWishlist = useToggleWishlist();
@@ -21,9 +22,6 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
   const isWishlisted = (productId) =>
     wishlistItems.some(item => item.productId === productId);
 
-  // ✅ Filter: only sale/discounted products
-  // Sort: newest first (_creationTime descending) so latest added sale item shows first
-  // Limit: max 5 cards
   const saleProducts = (products || [])
     .filter(p =>
       p.isSale === true ||
@@ -38,26 +36,38 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
     return product.kpopGroup?.trim().toUpperCase() === activePromo.name.trim().toUpperCase();
   };
 
+  // ✅ KEY FIX: stopPropagation first (blocks card onClick immediately),
+  // THEN show confirm. This matches how PreOrder's button works.
   const handleWishlistClick = (e, product) => {
     e.stopPropagation();
+
     if (!isAuthenticated) {
       setShowLoginModal(true);
       showNotification('Please login to add to favorites', 'error');
       return;
     }
+
     const pid = product._id || product.id;
+    const alreadyWishlisted = isWishlisted(pid);
+
+    if (!alreadyWishlisted && wishlistItems.length >= MAX_WISHLIST) {
+      showNotification(`Favorites limit reached (max ${MAX_WISHLIST}). Remove an item first.`, 'error');
+      return;
+    }
+
+    const msg = alreadyWishlisted
+      ? `Remove "${product.name}" from Favorites?`
+      : `Add "${product.name}" to Favorites?`;
+
+    if (!window.confirm(msg)) return;
+
     toggleWishlist(product);
     showNotification(
-      isWishlisted(pid) ? 'Removed from favorites' : 'Added to favorites',
+      alreadyWishlisted ? `${product.name} removed from favorites!` : `${product.name} added to favorites!`,
       'success'
     );
   };
 
-  const handleProductClick = (product) => {
-    if (onProductClick) onProductClick(product);
-  };
-
-  // ✅ If no sale products, don't render the section at all
   if (!saleProducts || saleProducts.length === 0) return null;
 
   const displayPromo = highlightPromo || activePromo;
@@ -94,8 +104,7 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
               product.originalPrice && Number(product.originalPrice) > Number(product.price)
                 ? Math.round(
                     ((Number(product.originalPrice) - Number(product.price)) /
-                      Number(product.originalPrice)) *
-                      100
+                      Number(product.originalPrice)) * 100
                   )
                 : null;
 
@@ -103,18 +112,16 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
               <div
                 key={pid}
                 className={`wv-card ${hasPromo ? 'wv-card-promo' : ''}`}
-                onClick={() => handleProductClick(product)}
+                onClick={() => onProductClick && onProductClick(product)}
               >
-                {discountPct && (
-                  <div className="wv-sale-badge">-{discountPct}%</div>
-                )}
-
+                {discountPct && <div className="wv-sale-badge">-{discountPct}%</div>}
                 {hasPromo && (
                   <div className="wv-promo-badge">
                     <i className="fas fa-tag"></i> {activePromo.discount}% OFF
                   </div>
                 )}
 
+                {/* ✅ Star button — stopPropagation runs SYNCHRONOUSLY before confirm */}
                 <button
                   className={`wv-card-fav ${isWishlisted(pid) ? 'active' : ''}`}
                   onClick={(e) => handleWishlistClick(e, product)}
@@ -154,7 +161,7 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
 
         <div className="wv-see-all-row">
           <button className="wv-see-all" onClick={() => navigate('/collections')}>
-            See All Sale Items
+            See All Items
           </button>
         </div>
       </section>

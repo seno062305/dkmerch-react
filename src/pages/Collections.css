@@ -8,7 +8,7 @@
 .collections-header {
   background: #ffffff;
   color: #1a1f36;
-  padding: 50px 40px;
+  padding: 5px 40px;
   text-align: center;
   border-bottom: 0px solid #eee;
 }
@@ -228,6 +228,43 @@
   text-transform: uppercase;
 }
 
+/* ✅ Star / Wishlist button — matches WeverseSection wv-card-fav style */
+.collection-card-fav {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 6;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: all 0.2s ease;
+  color: #ccc;
+  font-size: 15px;
+}
+
+.collection-card-fav:hover {
+  background: white;
+  color: #f5a623;
+  transform: scale(1.15);
+  box-shadow: 0 4px 12px rgba(245, 166, 35, 0.3);
+}
+
+.collection-card-fav.active {
+  color: #f5a623;
+  background: white;
+}
+
+.collection-card-fav.active:hover {
+  color: #e09000;
+}
+
 .collection-card-img {
   width: 100%;
   aspect-ratio: 1 / 1;
@@ -418,7 +455,6 @@
   .desktop-only { display: none !important; }
   .mobile-only  { display: flex !important; }
 
-  /* Two dropdowns side by side — override the 992px column layout */
   .filters-single-line {
     flex-direction: row !important;
     align-items: flex-start !important;
@@ -433,19 +469,14 @@
     align-items: flex-start !important;
     gap: 6px !important;
     flex: 1 1 0 !important;
-    width: auto !important;       /* override the 992px width:100% */
+    width: auto !important;
     min-width: 0 !important;
     max-width: calc(50% - 4px) !important;
     box-sizing: border-box;
   }
 
-  .filter-group label {
-    font-size: 11px;
-  }
-
-  .filter-divider {
-    display: none !important;
-  }
+  .filter-group label { font-size: 11px; }
+  .filter-divider { display: none !important; }
 
   .filter-dropdown {
     width: 100%;
@@ -466,6 +497,15 @@
     min-width: 0;
     box-sizing: border-box;
   }
+
+  /* Smaller star button on mobile */
+  .collection-card-fav {
+    width: 28px;
+    height: 28px;
+    font-size: 13px;
+    top: 8px;
+    right: 8px;
+  }
 }
 
 @media (max-width: 576px) {
@@ -480,4 +520,12 @@
   .collection-promo-badge { font-size: 10px; padding: 3px 8px; }
   .collections-promo-banner { font-size: 12px; padding: 8px 14px; }
   .collection-promo-hint { display: none; }
+
+  .collection-card-fav {
+    width: 24px;
+    height: 24px;
+    font-size: 11px;
+    top: 6px;
+    right: 6px;
+  }
 }

@@ -1,0 +1,88 @@
+/* ─────────────────────────────────────────────
+   RiderLoginModal.css — purple overrides
+   Import AFTER LoginModal.css
+   ───────────────────────────────────────────── */
+
+/* Purple title gradient */
+.rider-login-title {
+  margin: 0 0 8px 0;
+  font-size: 28px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Purple focus ring */
+.rider-form-input:focus {
+  border-color: #7c3aed !important;
+  box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.12) !important;
+}
+
+/* Purple links */
+.rider-signup-link  { color: #7c3aed !important; }
+.rider-signup-link:hover { color: #6d28d9 !important; }
+.rider-forgot-link  { color: #7c3aed !important; }
+.rider-forgot-link:hover { color: #6d28d9 !important; text-decoration: underline; }
+
+/* Send code button — purple */
+.rider-send-code-btn {
+  background: linear-gradient(135deg, #7c3aed, #a855f7) !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 12px !important;
+  padding: 0 18px !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  transition: all 0.2s !important;
+  flex-shrink: 0 !important;
+}
+.rider-send-code-btn:hover:not(:disabled) {
+  opacity: 0.9 !important;
+  transform: translateY(-1px) !important;
+}
+.rider-send-code-btn:disabled {
+  background: #d1d5db !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+}
+
+/* ── Password hint box ── */
+.rider-pw-hint-box {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 8px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  animation: riderFadeIn 0.2s ease;
+}
+.rider-pw-hint-box.valid   { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+.rider-pw-hint-box.partial { background: #fef9c3; color: #854d0e; border: 1px solid #fde68a; }
+.rider-pw-hint-box.invalid { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+.rider-pw-hint-icon { font-size: 13px; flex-shrink: 0; }
+
+/* ── Password rules ── */
+.rider-pw-rules-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 8px 12px;
+  background: #f5f3ff;
+  border: 1px solid #ede9fe;
+  border-radius: 8px;
+  animation: riderFadeIn 0.2s ease;
+}
+.rider-pw-rule { font-size: 12px; color: #6b7280; line-height: 1.4; }
+.rider-pw-rule.ok { color: #16a34a; font-weight: 600; }
+
+@keyframes riderFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}

@@ -21,7 +21,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
   const [hideProductModal, setHideProductModal] = useState(false);
   const [appliedPromo, setAppliedPromo]         = useState(null);
   const [showLightbox, setShowLightbox]         = useState(false);
-  const [cartToast, setCartToast]               = useState(false); // ← NEW
+  const [cartToast, setCartToast]               = useState(false);
 
   const productId = product._id || product.id || '';
 
@@ -111,12 +111,12 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
     }
   };
 
-  // ── Show cart success toast briefly ──
   const triggerCartToast = () => {
     setCartToast(true);
     setTimeout(() => setCartToast(false), 2200);
   };
 
+  // ── Add to Cart — with confirmation ──
   const handleAddToCartClick = () => {
     if (!isAuthenticated) {
       showNotification('Please login to add to cart', 'error');
@@ -124,10 +124,15 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
       setShowLoginModal(true);
       return;
     }
+    const priceDisplay = appliedPromo
+      ? `₱${discountedPrice.toLocaleString()} (${appliedPromo.discount}% off)`
+      : `₱${product.price.toLocaleString()}`;
+    if (!window.confirm(`Add "${product.name}" to cart?\n\nPrice: ${priceDisplay}`)) return;
     onAddToCart({ ...product, appliedPromo, finalPrice: discountedPrice });
     triggerCartToast();
   };
 
+  // ── Pre-Order — with confirmation ──
   const handlePreOrderClick = () => {
     if (!isAuthenticated) {
       showNotification('Please login to pre-order', 'error');
@@ -135,10 +140,14 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
       setShowLoginModal(true);
       return;
     }
+    if (!window.confirm(`Pre-order "${product.name}"?\n\nPrice: ₱${product.price.toLocaleString()}\n\nYou'll be notified via email when this item is available.`)) return;
     onAddToCart({ ...product, appliedPromo, finalPrice: discountedPrice });
     triggerCartToast();
   };
 
+  // ✅ FIX: Removed window.confirm from here.
+  // The confirmation is handled by the CALLER (Collections/WeverseSection/Home).
+  // Having confirm here AND in the caller caused double confirmation.
   const handleWishlistClick = () => {
     if (!isAuthenticated) {
       showNotification('Please login to add to favorites', 'error');
@@ -146,6 +155,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
       setShowLoginModal(true);
       return;
     }
+    // Directly call onAddToWishlist — caller already has confirm
     onAddToWishlist(product);
   };
 
@@ -161,7 +171,6 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
       <div className="product-modal-overlay" onClick={onClose}>
         <div className="product-modal-content" onClick={(e) => e.stopPropagation()}>
 
-          {/* ── Cart success toast ── */}
           {cartToast && (
             <div className="modal-cart-toast">
               <i className="fas fa-check-circle"></i>
@@ -169,14 +178,13 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
             </div>
           )}
 
-          {/* ── X button — upper right corner of modal ── */}
           <button className="modal-close" onClick={onClose}>
             <i className="fas fa-times"></i>
           </button>
 
           <div className="modal-grid">
 
-            {/* ── LEFT: Image ── */}
+            {/* LEFT: Image */}
             <div className="modal-image-section">
               {product.isPreOrder && !isReleased && <div className="pre-order-badge">PRE-ORDER</div>}
               {product.isSale && !product.isPreOrder && <div className="sale-badge">SALE</div>}
@@ -196,7 +204,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
               </div>
             </div>
 
-            {/* ── RIGHT: Details ── */}
+            {/* RIGHT: Details */}
             <div className="modal-details-section">
               <div className="modal-product-info">
                 <div className="product-group">{product.kpopGroup}</div>
@@ -286,7 +294,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
                 )}
               </div>
 
-              {/* ── Review Section ── */}
+              {/* Review Section */}
               <div className="review-section">
                 <h3><i className="fas fa-star"></i> {hasUserReviewed ? 'Update Review' : 'Rate & Review'}</h3>
 

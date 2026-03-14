@@ -456,3 +456,40 @@ export const getAllApprovedRiderEmails = internalQuery({
       .map(r => ({ fullName: r.fullName, email: r.email }));
   },
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADD THIS TO convex/riders.ts
+// Required by RiderLoginModal forgot password flow
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const resetRiderPasswordByEmail = mutation({
+  args: {
+    email:       v.string(),
+    newPassword: v.string(),
+  },
+  handler: async ({ db }, { email, newPassword }) => {
+    const rider = await db
+      .query("riderApplications")
+      .withIndex("by_email", q => q.eq("email", email))
+      .first();
+
+    if (!rider) {
+      return { success: false, message: "No rider account found with that email." };
+    }
+
+    if (rider.status === "rejected") {
+      return { success: false, message: "This rider account has been rejected." };
+    }
+
+    // Validate @rider password format
+    if (!newPassword.startsWith("@rider")) {
+      return { success: false, message: "Password must start with @rider." };
+    }
+    if (newPassword.length < 7 || newPassword.length > 10) {
+      return { success: false, message: "Password must be 7–10 characters." };
+    }
+
+    await db.patch(rider._id, { password: newPassword });
+    return { success: true };
+  },
+});

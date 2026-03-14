@@ -2,7 +2,6 @@
 import React, { useState } from 'react';
 import './PreOrder.css';
 import { usePreOrderProducts } from '../utils/productStorage';
-import { useToggleWishlist } from '../context/wishlistUtils';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { useMutation, useQuery } from 'convex/react';
@@ -41,23 +40,28 @@ const PreOrder = () => {
 
   const { isAuthenticated, user } = useAuth();
   const { showNotification } = useNotification();
-  const toggleWishlist = useToggleWishlist();
   const placePreOrder = useMutation(api.preOrderRequests.placePreOrder);
 
   const preOrderProducts = usePreOrderProducts();
   const groups = ['all', ...new Set(preOrderProducts.map(p => p.kpopGroup).filter(Boolean))];
-  const filteredProducts = selectedGroup === 'all'
+
+  // ✅ Sort: latest added first
+  const filteredProducts = (selectedGroup === 'all'
     ? preOrderProducts
-    : preOrderProducts.filter(p => p.kpopGroup === selectedGroup);
+    : preOrderProducts.filter(p => p.kpopGroup === selectedGroup)
+  ).slice().sort((a, b) => (b._creationTime || 0) - (a._creationTime || 0));
 
   const handleRequireLogin = () => {
     setSelectedProduct(null);
     setShowLoginModal(true);
   };
 
-  // ✅ Pre-order → goes to preOrderRequests table, NOT cart
+  // ── Pre-Order — with confirmation ──
   const handlePreOrder = async (product) => {
     if (!isAuthenticated) { handleRequireLogin(); return; }
+    if (!window.confirm(
+      `Pre-order "${product.name}"?\n\nPrice: ₱${product.price?.toLocaleString()}\n\nYou'll be notified via email when this item is available to purchase.`
+    )) return;
     setLoadingId(product._id);
     try {
       const result = await placePreOrder({
@@ -79,25 +83,8 @@ const PreOrder = () => {
     }
   };
 
-  const handleAddToWishlist = async (product) => {
-    if (!isAuthenticated) { handleRequireLogin(); return; }
-    try {
-      await toggleWishlist(product);
-      showNotification(`${product.name} added to wishlist!`, 'success');
-    } catch {
-      showNotification('Failed to add to wishlist', 'error');
-    }
-  };
-
   return (
     <main className="preorder-main">
-      <div className="page-header">
-        <div className="container">
-          <h1 className="page-title">Pre-Order Items</h1>
-          <p className="page-description">Be the first to get upcoming releases from your favorite K-Pop groups</p>
-        </div>
-      </div>
-
       <section className="preorder-page">
         <div className="preorder-filter-bar">
           <h3>Filter by Group:</h3>
@@ -140,7 +127,6 @@ const PreOrder = () => {
         )}
       </section>
 
-      {/* ── Inline Pre-Order Modal ── */}
       {selectedProduct && (
         <PreOrderModal
           product={selectedProduct}
@@ -150,7 +136,6 @@ const PreOrder = () => {
           onClose={() => setSelectedProduct(null)}
           onPreOrder={handlePreOrder}
           onRequireLogin={handleRequireLogin}
-          onAddToWishlist={handleAddToWishlist}
           fmtDateTime={fmtDateTime}
         />
       )}
@@ -163,9 +148,8 @@ const PreOrder = () => {
 // ── Card ───────────────────────────────────────────────────────────────────
 const PreOrderCard = ({
   product, userId, isAuthenticated, loadingId,
-  onPreOrder, onOpenModal, fmtDateTime, fmtDate, fmt12
+  onPreOrder, onOpenModal, fmtDateTime
 }) => {
-  // ✅ FIX: Pass releaseTime so same product with new time = new pre-order allowed
   const isPreOrdered = useQuery(
     api.preOrderRequests.isProductPreOrdered,
     isAuthenticated && userId
@@ -187,7 +171,6 @@ const PreOrderCard = ({
         <div className="product-group">{product.kpopGroup}</div>
         <h3 className="product-name">{product.name}</h3>
 
-        {/* ✅ Release date + time on card */}
         {releaseLabel && (
           <div className="release-date-badge">
             <i className="fas fa-calendar-alt"></i>
@@ -232,12 +215,11 @@ const PreOrderCard = ({
   );
 };
 
-// ── Modal ──────────────────────────────────────────────────────────────────
+// ── Modal — no Add to Wishlist button ──────────────────────────────────────
 const PreOrderModal = ({
   product, userId, isAuthenticated, loadingId,
-  onClose, onPreOrder, onRequireLogin, onAddToWishlist, fmtDateTime
+  onClose, onPreOrder, onRequireLogin, fmtDateTime
 }) => {
-  // ✅ FIX: Pass releaseTime here too
   const isPreOrdered = useQuery(
     api.preOrderRequests.isProductPreOrdered,
     isAuthenticated && userId
@@ -280,6 +262,7 @@ const PreOrderModal = ({
             <span>{product.stock > 0 ? `${product.stock} slots remaining` : 'Out of stock'}</span>
           </div>
 
+          {/* ✅ Pre-Order button only — Add to Wishlist removed */}
           <div className="preorder-modal-actions">
             <button
               className={`btn ${isPreOrdered ? 'btn-preordered' : 'btn-primary'}`}
@@ -296,17 +279,6 @@ const PreOrderModal = ({
                   ? <><i className="fas fa-spinner fa-spin"></i> Processing...</>
                   : <><i className="fas fa-clock"></i> Pre-Order Now</>
               }
-            </button>
-
-            <button
-              className="btn btn-outline"
-              style={{ width: '100%' }}
-              onClick={() => {
-                if (!isAuthenticated) { onRequireLogin(); return; }
-                onAddToWishlist(product);
-              }}
-            >
-              <i className="fas fa-star"></i> Add to Wishlist
             </button>
           </div>
 

@@ -21,7 +21,6 @@ function toUtcMs(dateStr, timeStr) {
 
 function pickActivePromo(promos, nowMs) {
   if (!promos || promos.length === 0) return null;
-
   const valid = promos.filter(p => {
     if (!p.isActive) return false;
     const startMs = toUtcMs(p.startDate, p.startTime || '00:00');
@@ -30,9 +29,7 @@ function pickActivePromo(promos, nowMs) {
     if (endMs   && nowMs > endMs)   return false;
     return true;
   });
-
   if (valid.length === 0) return null;
-
   return valid.sort((a, b) => {
     const aEnd = toUtcMs(a.endDate, a.endTime || '23:59') ?? Infinity;
     const bEnd = toUtcMs(b.endDate, b.endTime || '23:59') ?? Infinity;
@@ -47,12 +44,9 @@ function isPromoExpired(promo, nowMs) {
   return nowMs > endMs;
 }
 
-// ✅ STRICT: only count orders that are actually delivered/completed
-// Same exact logic as AdminDashboard top selling computation
 const isSaleOrder = (o) => {
   const status      = (o.status      || '').toLowerCase().trim();
   const orderStatus = (o.orderStatus || '').toLowerCase().trim();
-
   return (
     status      === 'delivered'  ||
     status      === 'completed'  ||
@@ -69,7 +63,6 @@ const ExpiredPromoModal = ({ promo, onClose }) => {
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     return `${months[mo - 1]} ${day}, ${y}`;
   };
-
   const fmt12 = (t) => {
     if (!t) return '';
     const [h, m] = t.split(':').map(Number);
@@ -86,44 +79,29 @@ const ExpiredPromoModal = ({ promo, onClose }) => {
       zIndex: 9999, padding: '20px',
     }}>
       <div style={{
-        background: 'white',
-        borderRadius: '20px',
-        padding: '40px 32px',
-        maxWidth: '400px',
-        width: '100%',
-        textAlign: 'center',
+        background: 'white', borderRadius: '20px', padding: '40px 32px',
+        maxWidth: '400px', width: '100%', textAlign: 'center',
         boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
         animation: 'slideUp 0.3s ease',
       }}>
         <div style={{ fontSize: '56px', marginBottom: '12px' }}>⏰</div>
-        <h2 style={{
-          fontSize: '22px', fontWeight: 800,
-          color: '#1a1a1a', margin: '0 0 8px',
-        }}>
+        <h2 style={{ fontSize: '22px', fontWeight: 800, color: '#1a1a1a', margin: '0 0 8px' }}>
           Promo Code Expired
         </h2>
         <p style={{ color: '#666', fontSize: '14px', margin: '0 0 20px', lineHeight: 1.6 }}>
           Sorry, the promo code{' '}
           <span style={{
-            fontFamily: 'Courier New, monospace',
-            fontWeight: 800, color: '#ec4899',
-            background: '#fdf2f8', padding: '2px 8px',
-            borderRadius: '4px', letterSpacing: '1px',
+            fontFamily: 'Courier New, monospace', fontWeight: 800, color: '#ec4899',
+            background: '#fdf2f8', padding: '2px 8px', borderRadius: '4px', letterSpacing: '1px',
           }}>
             {promo?.code}
           </span>{' '}
           is no longer valid.
         </p>
-
         {promo?.endDate && (
           <div style={{
-            background: '#fff9f9',
-            border: '1.5px solid #fecaca',
-            borderRadius: '10px',
-            padding: '12px 16px',
-            marginBottom: '24px',
-            fontSize: '13px',
-            color: '#dc2626',
+            background: '#fff9f9', border: '1.5px solid #fecaca', borderRadius: '10px',
+            padding: '12px 16px', marginBottom: '24px', fontSize: '13px', color: '#dc2626',
           }}>
             ❌ Expired on{' '}
             <strong>
@@ -132,23 +110,16 @@ const ExpiredPromoModal = ({ promo, onClose }) => {
             </strong>
           </div>
         )}
-
         <p style={{ color: '#888', fontSize: '13px', margin: '0 0 24px' }}>
           Check your inbox for newer promos from DKMerch! 💌
         </p>
-
         <button
           onClick={onClose}
           style={{
-            width: '100%',
-            padding: '13px',
+            width: '100%', padding: '13px',
             background: 'linear-gradient(135deg, #fc1268, #ec4899)',
-            color: 'white',
-            border: 'none',
-            borderRadius: '10px',
-            fontSize: '15px',
-            fontWeight: 700,
-            cursor: 'pointer',
+            color: 'white', border: 'none', borderRadius: '10px',
+            fontSize: '15px', fontWeight: 700, cursor: 'pointer',
           }}
         >
           Browse Products Anyway 🛍️
@@ -171,10 +142,8 @@ const Home = () => {
   const wishlistItems          = useWishlist();
 
   const allPromos = useQuery(api.promos.getAllPromos) || [];
-  // ✅ Fetch all orders from Convex to compute real sales counts
   const allOrders = useQuery(api.orders.getAllOrders) ?? [];
 
-  // Re-check every 10 seconds
   useEffect(() => {
     const id = setInterval(() => setNowMs(Date.now()), 10000);
     return () => clearInterval(id);
@@ -182,47 +151,30 @@ const Home = () => {
 
   const activePromo = pickActivePromo(allPromos, nowMs);
 
-  // ✅ Compute salesCount per product — ONLY from delivered/completed orders
-  // Tries all possible product ID fields that Convex might store on order items
   const productSalesMap = useMemo(() => {
     if (!allOrders || allOrders.length === 0) return {};
-
     const map = {};
     const saleOrders = allOrders.filter(isSaleOrder);
-
     saleOrders.forEach(order => {
       (order.items || []).forEach(item => {
-        // ✅ Try every possible field name for product ID on order items
-        const pid =
-          item.productId ||   // some schemas store as productId
-          item._id       ||   // Convex document id
-          item.id;            // plain id field
-
+        const pid = item.productId || item._id || item.id;
         if (!pid) return;
         map[pid] = (map[pid] || 0) + (Number(item.quantity) || 1);
       });
     });
-
     return map;
   }, [allOrders]);
 
-  // ── Handle ?promo=CODE in URL (from email Shop Now link) ──
   useEffect(() => {
     if (allPromos.length === 0) return;
-
     const params = new URLSearchParams(location.search);
     const urlPromoCode = params.get('promo');
     if (!urlPromoCode) return;
-
-    const matchedPromo = allPromos.find(
-      p => p.code.toUpperCase() === urlPromoCode.toUpperCase()
-    );
-
+    const matchedPromo = allPromos.find(p => p.code.toUpperCase() === urlPromoCode.toUpperCase());
     if (!matchedPromo) {
       showNotification(`Promo code "${urlPromoCode}" not found.`, 'error');
       return;
     }
-
     if (isPromoExpired(matchedPromo, Date.now())) {
       setExpiredPromo(matchedPromo);
       setTimeout(() => {
@@ -231,20 +183,15 @@ const Home = () => {
       }, 600);
       return;
     }
-
     const startMs = toUtcMs(matchedPromo.startDate, matchedPromo.startTime || '00:00');
     if (startMs && Date.now() < startMs) {
       showNotification(`Promo "${urlPromoCode}" hasn't started yet. Stay tuned!`, 'info');
       return;
     }
-
     setHighlightPromo(matchedPromo);
-
     setTimeout(() => {
       const section = document.getElementById('collections');
-      if (section) {
-        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
+      if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 600);
   }, [allPromos, location.search]);
 
@@ -293,10 +240,11 @@ const Home = () => {
       }
     : null;
 
-  const carouselSlides = promoSlide
-    ? [promoSlide, ...staticSlides]
-    : staticSlides;
+  const carouselSlides = promoSlide ? [promoSlide, ...staticSlides] : staticSlides;
 
+  // ── Add to Cart ──
+  // NOTE: No window.confirm here — ProductModal already handles confirmation.
+  // This is only called via ProductModal's onAddToCart prop.
   const handleAddToCart = (product) => {
     if (product.stock === 0 && !product.isPreOrder) {
       showNotification('Product is out of stock', 'error');
@@ -306,11 +254,17 @@ const Home = () => {
     showNotification(`${product.name} added to cart!`, 'success');
   };
 
+  // ── Add to Wishlist — with confirmation ──
   const handleAddToWishlist = (product) => {
     const pid = product._id || product.id;
+    const alreadyWishlisted = isWishlisted(pid);
+    const msg = alreadyWishlisted
+      ? `Remove "${product.name}" from Favorites?`
+      : `Add "${product.name}" to Favorites?`;
+    if (!window.confirm(msg)) return;
     toggleWishlistMutation(product);
     showNotification(
-      isWishlisted(pid)
+      alreadyWishlisted
         ? `${product.name} removed from wishlist!`
         : `${product.name} added to wishlist!`,
       'success'
@@ -320,10 +274,7 @@ const Home = () => {
   return (
     <div className="home-page">
       {expiredPromo && (
-        <ExpiredPromoModal
-          promo={expiredPromo}
-          onClose={() => setExpiredPromo(null)}
-        />
+        <ExpiredPromoModal promo={expiredPromo} onClose={() => setExpiredPromo(null)} />
       )}
 
       <HeroCarousel slides={carouselSlides} />

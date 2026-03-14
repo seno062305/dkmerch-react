@@ -1,3 +1,7 @@
+.preorder-main {
+  min-height: 60vh;
+}
+
 .preorder-page {
   padding: 0 0 80px;
 }
@@ -5,7 +9,7 @@
 /* ── Filter Bar ── */
 .preorder-filter-bar {
   background: #f8f9fa;
-  padding: 30px 40px;
+  padding: 20px 40px;
   border-bottom: 2px solid #eee;
   margin-bottom: 0;
 }
@@ -334,7 +338,7 @@
 }
 
 @media (max-width: 768px) {
-  .preorder-filter-bar { padding: 20px; }
+  .preorder-filter-bar { padding: 16px 20px; }
   .preorder-grid { grid-template-columns: repeat(3, 1fr); }
   .preorder-image { padding: 10px; }
   .preorder-info { padding: 10px; }
@@ -352,7 +356,7 @@
 }
 
 @media (max-width: 576px) {
-  .preorder-filter-bar { padding: 14px; }
+  .preorder-filter-bar { padding: 12px 14px; }
   .filter-btn { padding: 6px 12px; font-size: 11px; }
   .preorder-grid { grid-template-columns: repeat(3, 1fr); }
   .preorder-image { padding: 6px; }
