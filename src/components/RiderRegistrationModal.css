@@ -623,3 +623,43 @@
   .rider-col-left  { padding: 18px 18px 18px 24px; }
   .rider-col-right { padding: 18px 24px 18px 18px; }
 }
+
+/* ══════════════════════════════════════════
+   ADD THESE STYLES TO RiderRegistrationModal.css
+   (i-paste sa dulo ng file)
+══════════════════════════════════════════ */
+
+/* ── VEHICLE FIXED (Motorcycle only) ── */
+.rider-vehicle-fixed {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  background: #f5f3ff;
+  border: 1.5px solid #c4b5fd;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #5b21b6;
+  cursor: default;
+  user-select: none;
+}
+
+.rider-vehicle-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.rider-vehicle-label {
+  color: #5b21b6;
+  font-weight: 700;
+}
+
+/* ── FORMAT HINT ── */
+.field-format-hint {
+  font-size: 10.5px;
+  color: #9ca3af;
+  margin-top: 2px;
+  font-style: italic;
+  letter-spacing: 0.2px;
+}

@@ -194,6 +194,55 @@ const CropModal = ({ imageSrc, onCropDone, onCancel }) => {
 };
 
 // ─────────────────────────────────────────────
+// FORMAT HELPERS
+// ─────────────────────────────────────────────
+
+/**
+ * Plate format: ABC 1234
+ * - 3 uppercase letters + space + 4 digits
+ * - Blocks letters in the number portion
+ */
+const formatPlateNumber = (raw) => {
+  // Strip everything except letters and digits
+  const cleaned = raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const letters = cleaned.replace(/[^A-Z]/g, '').slice(0, 3);
+  const numbers = cleaned.replace(/[^0-9]/g, '').slice(0, 4);
+  if (letters.length === 0) return '';
+  if (letters.length < 3) return letters;
+  if (numbers.length === 0) return letters;
+  return `${letters} ${numbers}`;
+};
+
+/**
+ * License format: N01-23-456789
+ * - 1 letter + 2 digits - 2 digits - 6 digits
+ * Total: 13 chars (with dashes)
+ */
+const formatLicenseNumber = (raw) => {
+  const cleaned = raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  // Part 1: 1 letter
+  const letter = cleaned.slice(0, 1).replace(/[^A-Z]/g, '');
+  if (!letter) return '';
+  // Part 2: up to 2 digits after the letter
+  const rest = cleaned.slice(1).replace(/[^0-9]/g, '');
+  const p2 = rest.slice(0, 2);
+  const p3 = rest.slice(2, 4);
+  const p4 = rest.slice(4, 10);
+
+  let result = letter;
+  if (p2.length > 0) result += p2;
+  if (p2.length === 2) {
+    result = `${letter}${p2}`;
+    if (p3.length > 0) result += `-${p3}`;
+    if (p3.length === 2 && p4.length > 0) result += `-${p4}`;
+  }
+  return result;
+};
+
+const PLATE_REGEX = /^[A-Z]{3} \d{4}$/;
+const LICENSE_REGEX = /^[A-Z]\d{2}-\d{2}-\d{6}$/;
+
+// ─────────────────────────────────────────────
 // MAIN COMPONENT
 // ─────────────────────────────────────────────
 const RiderRegistrationModal = ({ onClose }) => {
@@ -201,7 +250,8 @@ const RiderRegistrationModal = ({ onClose }) => {
 
   const [form, setForm] = useState({
     fullName: '', email: '', phone: '', address: '',
-    vehicleType: '', plateNumber: '', licenseNumber: '',
+    vehicleType: 'motorcycle', // ← fixed to motorcycle
+    plateNumber: '', licenseNumber: '',
     password: '', confirmPassword: '',
   });
 
@@ -240,14 +290,70 @@ const RiderRegistrationModal = ({ onClose }) => {
     return 'invalid';
   };
 
+  // ── PLATE NUMBER KEY HANDLER ──
+  // Blocks typing letters once 3 letters are already entered (the number section)
+  const handlePlateKeyDown = (e) => {
+    const { value } = e.target;
+    const letters = value.replace(/[^A-Z]/g, '');
+    const isLetter = /^[a-zA-Z]$/.test(e.key);
+    const isDigit = /^[0-9]$/.test(e.key);
+    const allowedKeys = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'];
+
+    if (allowedKeys.includes(e.key)) return;
+
+    // If 3 letters already typed, block additional letters
+    if (letters.length >= 3 && isLetter) {
+      e.preventDefault();
+      return;
+    }
+
+    // If still in the letters section (less than 3 letters), block digits
+    if (letters.length < 3 && isDigit) {
+      e.preventDefault();
+      return;
+    }
+  };
+
+  // ── LICENSE NUMBER KEY HANDLER ──
+  // Allows only: 1 letter at start, then digits only
+  const handleLicenseKeyDown = (e) => {
+    const { value } = e.target;
+    const allowedKeys = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'];
+    if (allowedKeys.includes(e.key)) return;
+
+    const cleaned = value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const isLetter = /^[a-zA-Z]$/.test(e.key);
+    const isDigit = /^[0-9]$/.test(e.key);
+
+    // First char must be a letter
+    if (cleaned.length === 0 && !isLetter) { e.preventDefault(); return; }
+    // After first char, only digits allowed
+    if (cleaned.length >= 1 && isLetter) { e.preventDefault(); return; }
+    // Max raw digits = 10 (1 letter + 10 digits = full license)
+    if (cleaned.length >= 11) { e.preventDefault(); return; }
+    // Must be letter or digit
+    if (!isLetter && !isDigit) { e.preventDefault(); return; }
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     const next = { ...form };
-    if (name === 'phone') next.phone = value.replace(/\D/g, '').slice(0, 11);
-    else if (name === 'plateNumber') next.plateNumber = value.toUpperCase().slice(0, 8);
-    else if (name === 'licenseNumber') next.licenseNumber = value.toUpperCase().slice(0, 20);
-    else if (name === 'password') next.password = value.slice(0, 10);
-    else next[name] = value;
+
+    if (name === 'phone') {
+      next.phone = value.replace(/\D/g, '').slice(0, 11);
+    } else if (name === 'plateNumber') {
+      next.plateNumber = formatPlateNumber(value);
+    } else if (name === 'licenseNumber') {
+      next.licenseNumber = formatLicenseNumber(value);
+    } else if (name === 'password') {
+      next.password = value.slice(0, 10);
+    } else if (name === 'vehicleType') {
+      // vehicleType is fixed to motorcycle, ignore changes
+      return;
+    } else {
+      next[name] = value;
+    }
+
     setForm(next);
     setErrors(prev => ({ ...prev, [name]: '' }));
   };
@@ -322,23 +428,39 @@ const RiderRegistrationModal = ({ onClose }) => {
     const e = {};
     if (!form.fullName.trim()) e.fullName = 'Full name is required.';
     else if (form.fullName.trim().length < 3) e.fullName = 'At least 3 characters.';
+
     if (!form.email.trim()) e.email = 'Email is required.';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Enter a valid email.';
+
     if (!form.phone.trim()) e.phone = 'Phone is required.';
     else if (form.phone.length !== 11) e.phone = 'Must be exactly 11 digits.';
     else if (!form.phone.startsWith('09')) e.phone = 'Must start with 09.';
+
     if (!form.address.trim()) e.address = 'Address is required.';
     else if (form.address.trim().length < 10) e.address = 'Please enter a complete address.';
-    if (!form.vehicleType) e.vehicleType = 'Select a vehicle type.';
-    if (!form.plateNumber.trim()) e.plateNumber = 'Plate number is required.';
-    else if (form.plateNumber.trim().length < 5) e.plateNumber = 'Enter a valid plate number.';
-    if (!form.licenseNumber.trim()) e.licenseNumber = 'License number is required.';
-    else if (form.licenseNumber.trim().length < 6) e.licenseNumber = 'License number too short.';
-    if (!photos.riderPhoto) e.riderPhoto = 'Please upload your selfie.';
+
+    // Vehicle type is always motorcycle — no validation needed
+
+    if (!form.plateNumber.trim()) {
+      e.plateNumber = 'Plate number is required.';
+    } else if (!PLATE_REGEX.test(form.plateNumber)) {
+      e.plateNumber = 'Format must be ABC 1234 (3 letters + 4 numbers).';
+    }
+
+    if (!form.licenseNumber.trim()) {
+      e.licenseNumber = 'License number is required.';
+    } else if (!LICENSE_REGEX.test(form.licenseNumber)) {
+      e.licenseNumber = 'Format must be N01-23-456789 (e.g. A12-34-567890).';
+    }
+
+    // selfie is optional — no validation
+
     const pwErrs = validateRiderPassword(form.password);
     if (pwErrs.length) e.password = pwErrs[0];
+
     if (!form.confirmPassword) e.confirmPassword = 'Please confirm your password.';
     else if (form.password !== form.confirmPassword) e.confirmPassword = 'Passwords do not match.';
+
     return e;
   };
 
@@ -435,30 +557,49 @@ const RiderRegistrationModal = ({ onClose }) => {
                   </div>
 
                   <div className="rider-form-row">
+                    {/* ── VEHICLE TYPE: Fixed to Motorcycle ── */}
                     <div className="rider-form-group">
                       <label>Vehicle Type</label>
-                      <select name="vehicleType" value={form.vehicleType} onChange={handleChange}
-                        className={errors.vehicleType ? 'input-error' : ''}>
-                        <option value="">Select</option>
-                        <option value="motorcycle">Motorcycle</option>
-                        <option value="bicycle">Bicycle</option>
-                      </select>
-                      {errors.vehicleType && <span className="error-msg">⚠ {errors.vehicleType}</span>}
+                      <div className="rider-vehicle-fixed">
+                        <span className="rider-vehicle-icon">🛵</span>
+                        <span className="rider-vehicle-label">Motorcycle</span>
+                      </div>
                     </div>
+
+                    {/* ── PLATE NUMBER: ABC 1234 format ── */}
                     <div className="rider-form-group">
                       <label>Plate Number</label>
-                      <input name="plateNumber" type="text" placeholder="ABC 1234"
-                        value={form.plateNumber} onChange={handleChange} maxLength={8}
-                        className={errors.plateNumber ? 'input-error' : ''} />
+                      <input
+                        name="plateNumber"
+                        type="text"
+                        placeholder="ABC 1234"
+                        value={form.plateNumber}
+                        onChange={handleChange}
+                        onKeyDown={handlePlateKeyDown}
+                        maxLength={8}
+                        autoComplete="off"
+                        className={errors.plateNumber ? 'input-error' : ''}
+                      />
+                      <span className="field-format-hint">Format: ABC 1234</span>
                       {errors.plateNumber && <span className="error-msg">⚠ {errors.plateNumber}</span>}
                     </div>
                   </div>
 
+                  {/* ── LICENSE NUMBER: N01-23-456789 format ── */}
                   <div className="rider-form-group">
                     <label>Driver's License Number</label>
-                    <input name="licenseNumber" type="text" placeholder="e.g. N01-23-456789"
-                      value={form.licenseNumber} onChange={handleChange} maxLength={20}
-                      className={errors.licenseNumber ? 'input-error' : ''} />
+                    <input
+                      name="licenseNumber"
+                      type="text"
+                      placeholder="N01-23-456789"
+                      value={form.licenseNumber}
+                      onChange={handleChange}
+                      onKeyDown={handleLicenseKeyDown}
+                      maxLength={13}
+                      autoComplete="off"
+                      className={errors.licenseNumber ? 'input-error' : ''}
+                    />
+                    <span className="field-format-hint">Format: A00-00-000000 (1 letter + 10 digits)</span>
                     {errors.licenseNumber && <span className="error-msg">⚠ {errors.licenseNumber}</span>}
                   </div>
 
@@ -513,11 +654,11 @@ const RiderRegistrationModal = ({ onClose }) => {
                 {/* ══ RIGHT: Photos & IDs ══ */}
                 <div className="rider-col-right">
                   <div className="col-section-label">Identity Verification</div>
-                  <p className="col-section-hint">Selfie is required. Valid IDs are optional for now.</p>
+                  <p className="col-section-hint">All photos are optional for now.</p>
 
                   {/* SELFIE */}
                   <div className="rider-form-group">
-                    <label>🤳 Selfie <span className="required-tag">Required</span></label>
+                    <label>🤳 Selfie <span className="optional-tag">Optional</span></label>
                     <div className="selfie-guidelines">
                       <div className="selfie-guidelines-title">📋 Photo Requirements</div>
                       <div className="selfie-guideline-item guideline-required">
