@@ -40,7 +40,7 @@ const validateForm = (form) => {
   else if (isNaN(Number(form.price)) || Number(form.price) <= 0)
     err.price = 'Price must be a positive number.';
 
-  if (form.originalPrice !== '' && form.originalPrice !== null) {
+  if (form.isSale && form.originalPrice !== '' && form.originalPrice !== null) {
     if (isNaN(Number(form.originalPrice)) || Number(form.originalPrice) <= 0)
       err.originalPrice = 'Original price must be a positive number.';
     else if (Number(form.originalPrice) < Number(form.price))
@@ -84,7 +84,7 @@ const formatReleaseDateTime = (dateStr, timeStr) => {
 //  PRODUCT MODAL (Add / Edit)
 // ══════════════════════════════════════════════════════════════════════════
 const ProductModal = ({ editingId, initialForm, onClose, onSubmit, submitting }) => {
-  const [form, setForm]   = useState(initialForm);
+  const [form, setForm]     = useState(initialForm);
   const [errors, setErrors] = useState({});
   const fileInputRef = useRef(null);
   const today = new Date().toISOString().split('T')[0];
@@ -94,6 +94,8 @@ const ProductModal = ({ editingId, initialForm, onClose, onSubmit, submitting })
     setForm(prev => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value,
+      // Clear originalPrice when isSale is unchecked
+      ...(name === 'isSale' && !checked ? { originalPrice: '' } : {}),
       ...(name === 'isPreOrder' && !checked ? { releaseDate: '', releaseTime: '' } : {}),
     }));
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
@@ -198,10 +200,25 @@ const ProductModal = ({ editingId, initialForm, onClose, onSubmit, submitting })
                 {errors.price && <span className="field-error"><i className="fas fa-exclamation-circle"></i> {errors.price}</span>}
               </div>
 
-              {/* Original Price */}
-              <div className={`form-group${errors.originalPrice ? ' has-error' : ''}`}>
-                <label><i className="fas fa-strikethrough"></i> Original Price <span className="opt">(optional)</span></label>
-                <input type="number" name="originalPrice" placeholder="0.00" value={form.originalPrice} onChange={handleChange} min="0" step="0.01" />
+              {/* Original Price — only enabled when isSale is checked */}
+              <div className={`form-group${errors.originalPrice ? ' has-error' : ''}${!form.isSale ? ' field-disabled' : ''}`}>
+                <label>
+                  <i className="fas fa-strikethrough"></i> Original Price
+                  {form.isSale
+                    ? <span className="opt">(optional)</span>
+                    : <span className="opt">— enable "On Sale" first</span>
+                  }
+                </label>
+                <input
+                  type="number"
+                  name="originalPrice"
+                  placeholder="0.00"
+                  value={form.originalPrice}
+                  onChange={handleChange}
+                  min="0"
+                  step="0.01"
+                  disabled={!form.isSale}
+                />
                 {errors.originalPrice && <span className="field-error"><i className="fas fa-exclamation-circle"></i> {errors.originalPrice}</span>}
               </div>
 
@@ -573,7 +590,7 @@ const AdminProducts = () => {
   const [editingId,       setEditingId]       = useState(null);
   const [modalForm,       setModalForm]       = useState(emptyForm);
   const [submitting,      setSubmitting]      = useState(false);
-  const [activeView,      setActiveView]      = useState('products'); // 'products' | 'stock'
+  const [activeView,      setActiveView]      = useState('products');
   const [searchTerm,      setSearchTerm]      = useState('');
   const [filterCategory,  setFilterCategory]  = useState('all');
   const [successMsg,      setSuccessMsg]      = useState('');
@@ -616,7 +633,7 @@ const AdminProducts = () => {
       category:      form.category,
       kpopGroup:     form.kpopGroup,
       price:         Number(form.price),
-      originalPrice: form.originalPrice ? Number(form.originalPrice) : Number(form.price),
+      originalPrice: form.isSale && form.originalPrice ? Number(form.originalPrice) : Number(form.price),
       stock:         Number(form.stock || 0),
       image:         form.image.trim(),
       description:   form.description.trim() || '',

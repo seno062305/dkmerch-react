@@ -71,7 +71,7 @@
 }
 .add-product-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(238, 77, 45, 0.45); }
 
-/* ── VIEW TOGGLE ───────────────────────────── */
+/* ── VIEW TOGGLE — plain white, no gradient ── */
 .view-toggle {
   display: flex;
   gap: 0;
@@ -100,10 +100,13 @@
 }
 .view-btn:hover:not(.active) { background: #f8fafc; color: #1a1f36; }
 .view-btn.active {
-  background: linear-gradient(135deg, #ee4d2d, #d93f1f);
-  color: white;
-  box-shadow: 0 4px 12px rgba(238, 77, 45, 0.3);
+  background: white;
+  color: #1a1f36;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.10);
+  border: 1px solid #e2e8f0;
 }
+
+/* low-pill: colored number only, neutral container */
 .low-pill {
   display: inline-flex;
   align-items: center;
@@ -116,7 +119,6 @@
   padding: 2px 8px;
   min-width: 20px;
 }
-.view-btn.active .low-pill { background: rgba(255,255,255,0.28); color: white; }
 
 /* ══════════════════════════════════════════
    PRODUCT CATALOG
@@ -318,7 +320,7 @@
 .stat-info h3 { font-size: 26px; font-weight: 700; color: #1a1f36; margin: 0; }
 .stat-info p  { font-size: 13px; color: #64748b; margin: 3px 0 0; }
 
-/* Stock tabs */
+/* Stock tabs — plain white, colored number only */
 .stock-tabs {
   display: flex;
   border-bottom: 2px solid #e2e8f0;
@@ -342,8 +344,8 @@
   position: relative; bottom: -2px;
   white-space: nowrap;
 }
-.tab-btn:hover { color: #1a1f36; background: rgba(238,77,45,0.04); }
-.tab-btn.active { color: #ee4d2d; border-bottom-color: #ee4d2d; background: rgba(238,77,45,0.06); }
+.tab-btn:hover { color: #1a1f36; background: #f8fafc; }
+.tab-btn.active { color: #1a1f36; border-bottom-color: #ee4d2d; background: transparent; }
 
 /* Stock filters */
 .stock-filters {
@@ -516,12 +518,15 @@
 }
 .pm-close:hover { background: #e2e8f0; color: #1a1f36; }
 
-/* Modal Body */
+/* Modal Body — scrollable, no visible scrollbar */
 .pm-body {
   overflow-y: auto;
   padding: 24px 28px;
   flex: 1;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
+.pm-body::-webkit-scrollbar { display: none; }
 
 /* Form */
 .form-grid {
@@ -559,6 +564,18 @@
   border-color: #ee4d2d;
   box-shadow: 0 0 0 3px rgba(238,77,45,0.1);
 }
+
+/* Disabled field (original price when isSale is off) */
+.field-disabled input,
+.field-disabled input:disabled {
+  background: #f8fafc;
+  color: #94a3b8;
+  cursor: not-allowed;
+  border-color: #e2e8f0;
+  opacity: 0.6;
+}
+.field-disabled label { color: #94a3b8; }
+.field-disabled label i { color: #cbd5e1; }
 
 /* Input error state */
 .form-group.has-error input,
@@ -670,7 +687,6 @@
   .list-header { flex-direction: column; align-items: stretch; }
   .list-filters { flex-direction: column; max-width: 100%; }
 
-  /* 3 cards per row on mobile */
   .product-grid { grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
   .product-details { padding: 8px; }
   .product-header h3 { font-size: 11px; }
@@ -684,7 +700,6 @@
 
   .stock-filters { flex-direction: column; }
 
-  /* modal slides up from bottom on mobile */
   .pm-overlay { align-items: flex-end; padding: 0; }
   .pm-modal { max-width: 100%; max-height: 96vh; border-radius: 18px 18px 0 0; }
   .pm-header { padding: 18px 20px 14px; }
