@@ -1,8 +1,8 @@
 // src/admin/AdminRiders.jsx
-// ── MERGED: Applications + ID Cards (Doc12) + Delivery Management (Doc14) ──
+// ── MERGED: Applications + ID Cards + Delivery Management ──
 import React, { useState, useRef, useEffect } from 'react';
 import './AdminRiders.css';
-import { useQuery, useMutation } from 'convex/react';
+import { useQuery, useMutation, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { QRCodeSVG } from 'qrcode.react';
 
@@ -19,8 +19,18 @@ const timeAgo = (ts) => {
   return `${Math.floor(diff / 3600)}h ago`;
 };
 
+// ── Reject reason config ──────────────────────────────────────────────────────
+const REJECT_REASONS = [
+  { value: 'incomplete_documents', label: 'Incomplete Documents',     hint: 'Missing required IDs or photos' },
+  { value: 'invalid_license',      label: 'Invalid License',          hint: 'License number is invalid or unverifiable' },
+  { value: 'invalid_plate',        label: 'Invalid Plate Number',     hint: 'Plate number cannot be verified' },
+  { value: 'failed_verification',  label: 'Failed Identity Check',    hint: 'Could not verify applicant identity' },
+  { value: 'area_unavailable',     label: 'Area Not Covered',         hint: 'Delivery area not yet available' },
+  { value: 'other',                label: 'Other Reason',             hint: 'Specify in the note below' },
+];
+
 // ─────────────────────────────────────────────────────────────
-// SECTION 1: Rider Applications (from Doc12)
+// SECTION 1: Rider Applications
 // ─────────────────────────────────────────────────────────────
 
 const RiderIdCardModal = ({ rider, onClose }) => {
@@ -91,7 +101,7 @@ const RiderIdCardModal = ({ rider, onClose }) => {
   );
 };
 
-const ApplicationDetailModal = ({ app, onClose, onApprove, onReject }) => {
+const ApplicationDetailModal = ({ app, onClose, onApprove, onRejectWithReason }) => {
   const [viewImg, setViewImg] = useState(null);
   return (
     <div className="id-card-overlay" onClick={onClose}>
@@ -123,7 +133,7 @@ const ApplicationDetailModal = ({ app, onClose, onApprove, onReject }) => {
         </div>
         <div className="app-detail-actions">
           <button className="riders-btn approve" onClick={() => { onClose(); onApprove(app); }}>✅ Approve</button>
-          <button className="riders-btn reject" onClick={() => { onClose(); onReject(app._id, app.fullName); }}>❌ Reject</button>
+          <button className="riders-btn reject" onClick={() => { onClose(); onRejectWithReason(app); }}>❌ Reject</button>
         </div>
       </div>
       {viewImg && (
@@ -136,8 +146,88 @@ const ApplicationDetailModal = ({ app, onClose, onApprove, onReject }) => {
   );
 };
 
+// ── Reject Application Modal ──────────────────────────────────────────────────
+const RejectApplicationModal = ({ app, onConfirm, onClose }) => {
+  const [reason, setReason] = useState('');
+  const [note,   setNote]   = useState('');
+
+  return (
+    <div className="id-card-overlay" onClick={onClose}>
+      <div className="app-detail-modal" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
+        <button className="id-card-close" onClick={onClose}>✕</button>
+        <h3 className="app-detail-title" style={{ color: '#dc2626' }}>❌ Reject Application</h3>
+
+        {/* Applicant pill */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#f9fafb', border: '1.5px solid #e5e7eb', borderRadius: 12, padding: '12px 16px', marginBottom: 20 }}>
+          <i className="fas fa-motorcycle" style={{ fontSize: 28, color: '#7c3aed' }}></i>
+          <div>
+            <div style={{ fontWeight: 700, color: '#1a1f36', fontSize: 15 }}>{app.fullName}</div>
+            <div style={{ fontSize: 12, color: '#6b7280' }}>{app.email}</div>
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, color: '#374151', marginBottom: 8, fontSize: 13 }}>
+            <i className="fas fa-exclamation-triangle" style={{ color: '#dc2626' }}></i>
+            Reason for Rejection <span style={{ color: '#dc2626' }}>*</span>
+          </label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {REJECT_REASONS.map(r => (
+              <button key={r.value} type="button"
+                onClick={() => setReason(r.value)}
+                style={{
+                  padding: '10px 12px', border: `2px solid ${reason === r.value ? 'transparent' : '#e2e8f0'}`,
+                  borderRadius: 10, background: reason === r.value ? 'linear-gradient(135deg,#dc2626,#b91c1c)' : 'white',
+                  color: reason === r.value ? 'white' : '#4a5568',
+                  cursor: 'pointer', textAlign: 'left', transition: 'all 0.2s',
+                  display: 'flex', flexDirection: 'column', gap: 2,
+                  boxShadow: reason === r.value ? '0 3px 10px rgba(220,38,38,0.3)' : 'none',
+                }}>
+                <span style={{ fontWeight: 700, fontSize: 12 }}>{r.label}</span>
+                <span style={{ fontSize: 10, opacity: 0.75 }}>{r.hint}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, color: '#374151', marginBottom: 8, fontSize: 13 }}>
+            <i className="fas fa-sticky-note" style={{ color: '#6b7280' }}></i>
+            Additional Note <span style={{ fontSize: 11, fontWeight: 400, color: '#9ca3af' }}>(optional)</span>
+          </label>
+          <textarea
+            style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: 10, fontSize: 13, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box', outline: 'none' }}
+            placeholder="e.g. Please resubmit with a clearer photo of your license..."
+            value={note} onChange={e => setNote(e.target.value)} rows={2}
+          />
+        </div>
+
+        {/* Email notice */}
+        {reason && (
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, background: '#fffbeb', border: '1.5px solid #fde68a', borderRadius: 10, padding: '12px 14px', marginBottom: 20, fontSize: 13, color: '#92400e' }}>
+            <i className="fas fa-envelope" style={{ marginTop: 2, flexShrink: 0 }}></i>
+            <span>An email notification will be sent to <strong>{app.email}</strong> with the rejection reason.</span>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', borderTop: '1px solid #e2e8f0', paddingTop: 16 }}>
+          <button onClick={onClose}
+            style={{ padding: '10px 20px', background: '#e2e8f0', color: '#4a5568', border: 'none', borderRadius: 10, fontWeight: 600, cursor: 'pointer', fontSize: 14 }}>
+            Cancel
+          </button>
+          <button onClick={() => reason && onConfirm(app._id, app.fullName, reason, note)}
+            disabled={!reason}
+            style={{ padding: '10px 20px', background: reason ? 'linear-gradient(135deg,#dc2626,#b91c1c)' : '#e2e8f0', color: reason ? 'white' : '#9ca3af', border: 'none', borderRadius: 10, fontWeight: 700, cursor: reason ? 'pointer' : 'not-allowed', fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <i className="fas fa-times-circle"></i> Confirm Rejection
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ─────────────────────────────────────────────────────────────
-// SECTION 2: Delivery Management helpers (from Doc14)
+// SECTION 2: Delivery Management helpers
 // ─────────────────────────────────────────────────────────────
 
 const StatusBadge = ({ order }) => {
@@ -472,7 +562,6 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
   }, []);
 
   const lastKnownTimeStr = location?.lastKnownAt ? new Date(location.lastKnownAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }) : null;
-
   const overlayClass = isFullscreen ? 'ar-modal-overlay ar-map-overlay ar-overlay--full' : 'ar-modal-overlay ar-map-overlay';
 
   return (
@@ -572,7 +661,6 @@ const RemoveConfirmModal = ({ order, onConfirm, onClose }) => (
   </div>
 );
 
-// ── Plate validation ──
 const PLATE_REGEX = /^[A-Z]{3}\d{4}$/;
 const formatPlateInput = (raw) => {
   const upper = raw.toUpperCase();
@@ -591,8 +679,8 @@ const ActiveOrderCard = ({
   onShareOrder, onOpenMap, onNotifyCustomer, onOpenQR,
 }) => {
   const { orderId } = order;
-  const [ri, setRi]       = useState({ name: order.riderInfo?.name || '', phone: order.riderInfo?.phone || '', plate: order.riderInfo?.plate || '' });
-  const [gps, setGps]     = useState(order.riderGpsLink || '');
+  const [ri, setRi]         = useState({ name: order.riderInfo?.name || '', phone: order.riderInfo?.phone || '', plate: order.riderInfo?.plate || '' });
+  const [gps, setGps]       = useState(order.riderGpsLink || '');
   const [errors, setErrors] = useState({});
 
   useEffect(() => { setRi({ name: order.riderInfo?.name || '', phone: order.riderInfo?.phone || '', plate: order.riderInfo?.plate || '' }); }, [order.riderInfo?.name, order.riderInfo?.phone, order.riderInfo?.plate]);
@@ -782,14 +870,13 @@ const CompletedOrderCard = ({ order, onRemove }) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// MAIN COMPONENT — All tabs combined
+// MAIN COMPONENT
 // ─────────────────────────────────────────────────────────────
 const AdminRiders = () => {
-  // ── Applications state (Doc12) ──
   const [selectedApp,    setSelectedApp]    = useState(null);
   const [approvedRider,  setApprovedRider]  = useState(null);
+  const [rejectTarget,   setRejectTarget]   = useState(null); // rider to reject with reason modal
 
-  // ── Delivery state (Doc14) ──
   const [shareOrder,    setShareOrder]    = useState(null);
   const [removeTarget,  setRemoveTarget]  = useState(null);
   const [mapOrder,      setMapOrder]      = useState(null);
@@ -805,15 +892,12 @@ const AdminRiders = () => {
   const [notifying,     setNotifying]     = useState({});
   const [notified,      setNotified]      = useState({});
 
-  // ── Tab: "applications" | "approved" | "pickups" | "all-pickups" | "delivery" | "completed" ──
   const [tab, setTab] = useState('applications');
 
-  // ── Queries ──
   const allRiders         = useQuery(api.riders.getAllRiders)                ?? [];
   const allPickupRequests = useQuery(api.pickupRequests.getAllPickupRequests) ?? [];
   const allOrders         = useQuery(api.orders.getAllOrders)                 ?? [];
 
-  // ── Mutations ──
   const approveRiderMutation      = useMutation(api.riders.approveRider);
   const updateRiderStatusMutation = useMutation(api.riders.updateRiderStatus);
   const deleteRiderMutation       = useMutation(api.riders.deleteRider);
@@ -822,7 +906,10 @@ const AdminRiders = () => {
   const updateFields              = useMutation(api.orders.updateOrderFields);
   const notifyMutation            = useMutation(api.orders.notifyCustomerOutForDelivery);
 
-  // ── Derived data ──
+  // ── Email actions ──
+  const sendRiderApprovedEmailAction  = useAction(api.sendEmail.sendRiderApprovedEmail);
+  const sendRiderRejectedEmailAction  = useAction(api.sendEmail.sendRiderRejectedEmail);
+
   const applications   = allRiders.filter(r => r.status === 'pending');
   const approvedRiders = allRiders.filter(r => r.status === 'approved');
   const pendingPickups = allPickupRequests.filter(p => p.status === 'pending');
@@ -839,20 +926,53 @@ const AdminRiders = () => {
     .filter(o => !hiddenCompleted.includes(o._id))
     .sort((a, b) => (b.deliveryConfirmedAt || b._creationTime || 0) - (a.deliveryConfirmedAt || a._creationTime || 0));
 
-  // ── Application handlers (Doc12) ──
+  // ── Approve rider + send email ────────────────────────────────────────────
   const handleApproveRider = async (app) => {
     const confirmed = window.confirm(`Approve "${app.fullName}" as a rider?\n\nEmail: ${app.email}\nVehicle: ${app.vehicleType || 'N/A'}`);
     if (!confirmed) return;
     try {
       const result = await approveRiderMutation({ id: app._id });
+      // Send approval email (non-blocking)
+      try {
+        await sendRiderApprovedEmailAction({
+          to:          app.email,
+          riderName:   app.fullName,
+          dkRiderId:   result.dkRiderId,
+          email:       app.email,
+          vehicleType: app.vehicleType,
+          plateNumber: app.plateNumber,
+        });
+      } catch (emailErr) {
+        console.error('Approval email failed (non-critical):', emailErr);
+      }
       setApprovedRider({ ...app, dkRiderId: result.dkRiderId, dkRiderIdGeneratedAt: new Date().toISOString() });
     } catch (err) { console.error(err); alert('Failed to approve rider.'); }
   };
 
-  const handleRejectRider = async (id, name) => {
-    const confirmed = window.confirm(`Reject and remove the application of "${name}"?\n\nThis cannot be undone.`);
-    if (!confirmed) return;
-    try { await deleteRiderMutation({ id }); } catch (err) { console.error(err); }
+  // ── Reject rider with reason + send email ─────────────────────────────────
+  const handleRejectWithReason = (app) => {
+    setRejectTarget(app);
+  };
+
+  const handleConfirmReject = async (id, name, reason, note) => {
+    try {
+      await deleteRiderMutation({ id });
+      // Send rejection email (non-blocking)
+      const app = allRiders.find(r => r._id === id);
+      if (app?.email) {
+        try {
+          await sendRiderRejectedEmailAction({
+            to:        app.email,
+            riderName: app.fullName,
+            reason,
+            note:      note || undefined,
+          });
+        } catch (emailErr) {
+          console.error('Rejection email failed (non-critical):', emailErr);
+        }
+      }
+      setRejectTarget(null);
+    } catch (err) { console.error(err); alert('Failed to reject rider.'); }
   };
 
   const handleRevokeRider = async (id, name) => {
@@ -872,7 +992,6 @@ const AdminRiders = () => {
     try { await rejectPickupMutation({ requestId }); } catch (err) { console.error(err); }
   };
 
-  // ── Delivery handlers (Doc14) ──
   const handleSaveRider = async (orderId, ri) => {
     setSavingRider(p => ({ ...p, [orderId]: true }));
     try { await updateFields({ orderId, riderInfo: { name: ri.name || '', phone: ri.phone || '', plate: ri.plate || '' } }); setSavedRider(p => ({ ...p, [orderId]: true })); setTimeout(() => setSavedRider(p => ({ ...p, [orderId]: false })), 2000); }
@@ -920,7 +1039,6 @@ const AdminRiders = () => {
       </div>
 
       <div className="riders-tabs">
-        {/* Applications tabs */}
         <button className={`riders-tab-btn ${tab === 'applications' ? 'active' : ''}`} onClick={() => setTab('applications')}>
           Pending Applications
           {applications.length > 0 && <span className="riders-tab-badge">{applications.length}</span>}
@@ -935,7 +1053,6 @@ const AdminRiders = () => {
         <button className={`riders-tab-btn ${tab === 'all-pickups' ? 'active' : ''}`} onClick={() => setTab('all-pickups')}>
           All Pickups ({allPickupRequests.length})
         </button>
-        {/* Delivery tabs */}
         <button className={`riders-tab-btn ${tab === 'delivery' ? 'active' : ''}`} onClick={() => setTab('delivery')}>
           📦 Active Delivery {activeOrders.length > 0 && <span className="riders-tab-badge">{activeOrders.length}</span>}
         </button>
@@ -966,7 +1083,7 @@ const AdminRiders = () => {
                     <td className="riders-actions">
                       <button className="riders-btn view" onClick={() => setSelectedApp(app)}>👁 View</button>
                       <button className="riders-btn approve" onClick={() => handleApproveRider(app)}>✅ Approve</button>
-                      <button className="riders-btn reject" onClick={() => handleRejectRider(app._id, app.fullName)}>❌ Reject</button>
+                      <button className="riders-btn reject" onClick={() => handleRejectWithReason(app)}>❌ Reject</button>
                     </td>
                   </tr>
                 ))}
@@ -1090,8 +1207,9 @@ const AdminRiders = () => {
       )}
 
       {/* ─── MODALS ─── */}
-      {selectedApp   && <ApplicationDetailModal app={selectedApp} onClose={() => setSelectedApp(null)} onApprove={handleApproveRider} onReject={handleRejectRider} />}
+      {selectedApp   && <ApplicationDetailModal app={selectedApp} onClose={() => setSelectedApp(null)} onApprove={handleApproveRider} onRejectWithReason={handleRejectWithReason} />}
       {approvedRider && <RiderIdCardModal rider={approvedRider} onClose={() => setApprovedRider(null)} />}
+      {rejectTarget  && <RejectApplicationModal app={rejectTarget} onConfirm={handleConfirmReject} onClose={() => setRejectTarget(null)} />}
       {shareOrder    && <ShareModal order={shareOrder} onClose={() => setShareOrder(null)} />}
       {removeTarget  && <RemoveConfirmModal order={removeTarget} onConfirm={confirmRemove} onClose={() => setRemoveTarget(null)} />}
       {mapOrder      && <LiveMapModal orderId={mapOrder.orderId} order={mapOrder} onClose={() => { setMapOrder(null); setMapFullscreen(false); }} fullscreen={mapFullscreen} />}

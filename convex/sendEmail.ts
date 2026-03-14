@@ -1034,9 +1034,7 @@ export const sendRiderOtpSms = internalAction({
   },
 });
 
-// ══════════════════════════════════════════════════════════════════════════════
-// NEW: PICKUP APPROVED EMAIL → RIDER
-// ══════════════════════════════════════════════════════════════════════════════
+// ── PICKUP APPROVED EMAIL → RIDER ────────────────────────────────────────────
 
 export const sendPickupApprovedEmail = internalAction({
   args: {
@@ -1107,9 +1105,7 @@ export const sendPickupApprovedEmail = internalAction({
   },
 });
 
-// ══════════════════════════════════════════════════════════════════════════════
-// NEW: PICKUP REJECTED EMAIL → RIDER
-// ══════════════════════════════════════════════════════════════════════════════
+// ── PICKUP REJECTED EMAIL → RIDER ────────────────────────────────────────────
 
 export const sendPickupRejectedEmail = internalAction({
   args: {
@@ -1140,7 +1136,7 @@ export const sendPickupRejectedEmail = internalAction({
         <tr><td style="padding:28px 36px;">
           <p style="font-size:15px;color:#374151;margin:0 0 16px;">Hi <strong>${args.riderName}</strong>,</p>
           <p style="font-size:14px;color:#6b7280;line-height:1.6;margin:0 0 20px;">
-            Unfortunately your pickup request for Order <strong>#${shortId}</strong> was not approved. 
+            Unfortunately your pickup request for Order <strong>#${shortId}</strong> was not approved.
             This usually happens when another rider was selected for the same order.
           </p>
           <div style="background:#fffbeb;border-radius:12px;border:1.5px solid #fde68a;padding:16px 20px;margin-bottom:24px;">
@@ -1164,6 +1160,164 @@ export const sendPickupRejectedEmail = internalAction({
     return await ctx.runAction(internal.sendEmail.sendEmail, {
       to: args.to,
       subject: `❌ Pickup Request Update — Order #${shortId} | DKMerch Rider`,
+      html,
+    });
+  },
+});
+
+// ── RIDER ACCOUNT DELETED EMAIL ───────────────────────────────────────────────
+
+export const sendRiderDeletedEmail = internalAction({
+  args: {
+    to: v.string(),
+    riderName: v.string(),
+    reason: v.string(),
+    note: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<{ success: boolean; message?: string; id?: string }> => {
+    const REASON_LABELS: Record<string, string> = {
+      inactive:             "Account Inactive",
+      policy_violation:     "Policy Violation",
+      request_by_rider:     "Requested by Rider",
+      other:                "Other Reason",
+    };
+    const reasonLabel = REASON_LABELS[args.reason] ?? args.reason;
+
+    const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"/><title>Rider Account Removed - DKMerch</title></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:32px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:white;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+        <tr><td style="background:linear-gradient(135deg,#42011e,#fc1268);padding:32px 36px;text-align:center;">
+          <div style="font-size:28px;font-weight:900;color:white;">🛵 DKMerch Rider</div>
+          <div style="color:#ffd6e7;font-size:13px;margin-top:4px;">Account Notification</div>
+        </td></tr>
+        <tr><td style="background:#fef2f2;padding:20px 36px;text-align:center;border-bottom:1px solid #fecaca;">
+          <div style="font-size:44px;margin-bottom:8px;">🗑️</div>
+          <div style="font-size:22px;font-weight:800;color:#7f1d1d;">Rider Account Removed</div>
+          <div style="font-size:14px;color:#991b1b;margin-top:4px;">Your DKMerch rider account has been deleted.</div>
+        </td></tr>
+        <tr><td style="padding:28px 36px;">
+          <p style="font-size:15px;color:#374151;margin:0 0 16px;">Hi <strong>${args.riderName}</strong>,</p>
+          <p style="font-size:14px;color:#6b7280;line-height:1.6;margin:0 0 24px;">
+            We want to inform you that your DKMerch rider account has been removed from our system.
+          </p>
+          <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border-radius:12px;border:1.5px solid #e5e7eb;margin-bottom:24px;">
+            <tr><td style="padding:20px 24px;">
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="font-size:13px;color:#6b7280;padding:6px 0;">Reason</td>
+                  <td style="font-size:13px;font-weight:700;color:#dc2626;text-align:right;">${reasonLabel}</td>
+                </tr>
+                ${args.note ? `<tr><td style="font-size:13px;color:#6b7280;padding:6px 0;vertical-align:top;">Note</td><td style="font-size:13px;color:#374151;text-align:right;line-height:1.5;">${args.note}</td></tr>` : ""}
+              </table>
+            </td></tr>
+          </table>
+          <div style="background:#f8f9fa;border-radius:10px;border:1px solid #e5e7eb;padding:16px 20px;">
+            <p style="font-size:13px;color:#6b7280;margin:0;line-height:1.6;">
+              📧 For questions or appeals, contact us at
+              <a href="mailto:support@dkmerch.com" style="color:#fc1268;font-weight:600;">support@dkmerch.com</a>
+            </p>
+          </div>
+        </td></tr>
+        <tr><td style="background:#fafafa;border-top:1px solid #e5e7eb;padding:20px 36px;text-align:center;">
+          <div style="font-size:12px;color:#9ca3af;">© 2026 DKMerch · Rider Notification System</div>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+    return await ctx.runAction(internal.sendEmail.sendEmail, {
+      to: args.to,
+      subject: `🗑️ Your DKMerch Rider Account Has Been Removed`,
+      html,
+    });
+  },
+});
+
+// ── RIDER APPLICATION REJECTED EMAIL ─────────────────────────────────────────
+// ✅ FIX: internalAction (hindi action) — tinatawag via scheduler mula sa
+//         rejectRiderApplication mutation sa riders.ts
+
+export const sendRiderRejectedEmail = internalAction({
+  args: {
+    to: v.string(),
+    riderName: v.string(),
+    reason: v.string(),
+    note: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<{ success: boolean; message?: string; id?: string }> => {
+    const REASON_LABELS: Record<string, string> = {
+      incomplete_documents: "Incomplete Documents",
+      invalid_license:      "Invalid Driver's License",
+      invalid_plate:        "Invalid Plate Number",
+      failed_verification:  "Failed Identity Verification",
+      area_unavailable:     "Delivery Area Not Yet Available",
+      other:                "Other Reason",
+    };
+
+    const reasonLabel = REASON_LABELS[args.reason] ?? args.reason;
+
+    const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"/><title>Rider Application Update - DKMerch</title></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:32px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:white;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+        <tr><td style="background:linear-gradient(135deg,#6a0dad,#9b30ff);padding:32px 36px;text-align:center;">
+          <div style="font-size:28px;font-weight:900;color:white;">🛵 DKMerch Rider</div>
+          <div style="color:#e9d5ff;font-size:13px;margin-top:4px;">Application Update</div>
+        </td></tr>
+        <tr><td style="background:#fef2f2;padding:20px 36px;text-align:center;border-bottom:1px solid #fecaca;">
+          <div style="font-size:44px;margin-bottom:8px;">❌</div>
+          <div style="font-size:22px;font-weight:800;color:#7f1d1d;">Application Not Approved</div>
+          <div style="font-size:14px;color:#991b1b;margin-top:4px;">We were unable to approve your rider application at this time.</div>
+        </td></tr>
+        <tr><td style="padding:28px 36px;">
+          <p style="font-size:15px;color:#374151;margin:0 0 16px;">Hi <strong>${args.riderName}</strong>,</p>
+          <p style="font-size:14px;color:#6b7280;line-height:1.6;margin:0 0 20px;">
+            Thank you for applying to be a DKMerch delivery rider. Unfortunately, we were unable to approve your application at this time.
+          </p>
+          <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border-radius:12px;border:1.5px solid #e5e7eb;margin-bottom:24px;">
+            <tr><td style="padding:20px 24px;">
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="font-size:13px;color:#6b7280;padding:5px 0;">Reason</td>
+                  <td style="font-size:13px;font-weight:700;color:#dc2626;text-align:right;">${reasonLabel}</td>
+                </tr>
+                ${args.note ? `<tr><td style="font-size:13px;color:#6b7280;padding:5px 0;vertical-align:top;">Note</td><td style="font-size:13px;color:#374151;text-align:right;line-height:1.5;">${args.note}</td></tr>` : ""}
+              </table>
+            </td></tr>
+          </table>
+          <div style="background:#fffbeb;border-radius:12px;border:1.5px solid #fde68a;padding:16px 20px;margin-bottom:24px;">
+            <div style="font-size:13px;color:#92400e;line-height:1.7;">
+              💡 <strong>You may re-apply</strong> once you've addressed the issue above. Make sure to submit complete and valid documents.
+            </div>
+          </div>
+          <div style="background:#f8f9fa;border-radius:10px;border:1px solid #e5e7eb;padding:16px 20px;">
+            <p style="font-size:13px;color:#6b7280;margin:0;line-height:1.6;">
+              📧 For questions, contact us at
+              <a href="mailto:support@dkmerch.com" style="color:#6a0dad;font-weight:600;">support@dkmerch.com</a>
+            </p>
+          </div>
+        </td></tr>
+        <tr><td style="background:#fafafa;border-top:1px solid #e5e7eb;padding:20px 36px;text-align:center;">
+          <div style="font-size:12px;color:#9ca3af;">© 2026 DKMerch · Rider Notification System</div>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+    return await ctx.runAction(internal.sendEmail.sendEmail, {
+      to: args.to,
+      subject: `❌ DKMerch Rider Application Update — ${reasonLabel}`,
       html,
     });
   },

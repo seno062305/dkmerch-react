@@ -1,5 +1,6 @@
 // convex/riders.ts
 import { query, mutation, internalQuery } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
 
 const genSessionId = () =>
@@ -120,10 +121,59 @@ export const updateRider = mutation({
   },
 });
 
+// ── deleteRider — with reason + optional email (for approved/suspended) ───────
 export const deleteRider = mutation({
-  args: { id: v.id("riderApplications") },
-  handler: async ({ db }, { id }) => {
+  args: {
+    id:        v.id("riderApplications"),
+    reason:    v.optional(v.string()),
+    note:      v.optional(v.string()),
+    sendEmail: v.optional(v.boolean()),
+  },
+  handler: async ({ db, scheduler }, { id, reason, note, sendEmail }) => {
+    const rider = await db.get(id);
+    if (!rider) return { success: false };
+
     await db.delete(id);
+
+    // Only send email for approved/suspended riders when explicitly true
+    if (sendEmail && rider.email && reason) {
+      await scheduler.runAfter(0, internal.sendEmail.sendRiderDeletedEmail, {
+        to:        rider.email,
+        riderName: rider.fullName,
+        reason,
+        note:      note ?? undefined,
+      });
+    }
+
+    return { success: true };
+  },
+});
+
+// ── rejectRiderApplication — deletes application + sends rejection email ──────
+// Called from AdminRiders.jsx via useMutation (NOT useAction)
+// Email is fired via scheduler (non-blocking) so no useAction needed on frontend
+export const rejectRiderApplication = mutation({
+  args: {
+    id:     v.id("riderApplications"),
+    reason: v.string(),
+    note:   v.optional(v.string()),
+  },
+  handler: async ({ db, scheduler }, { id, reason, note }) => {
+    const rider = await db.get(id);
+    if (!rider) return { success: false };
+
+    await db.delete(id);
+
+    // Fire rejection email via scheduler (non-blocking)
+    if (rider.email) {
+      await scheduler.runAfter(0, internal.sendEmail.sendRiderRejectedEmail, {
+        to:        rider.email,
+        riderName: rider.fullName,
+        reason,
+        note:      note ?? undefined,
+      });
+    }
+
     return { success: true };
   },
 });
@@ -458,7 +508,6 @@ export const getAllApprovedRiderEmails = internalQuery({
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ADD THIS TO convex/riders.ts
 // Required by RiderLoginModal forgot password flow
 // ─────────────────────────────────────────────────────────────────────────────
 

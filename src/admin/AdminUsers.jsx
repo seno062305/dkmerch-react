@@ -29,9 +29,16 @@ const DURATION_OPTIONS_OTHER = [
   { label: 'Permanent', days: null },
 ];
 
-// Suspend modal steps
-const STEP_CONFIGURE = 'configure'; // pick reason/duration/note
-const STEP_CONFIRM   = 'confirm';   // final confirmation before executing
+const STEP_CONFIGURE = 'configure';
+const STEP_CONFIRM   = 'confirm';
+
+// ── Rider delete reasons (cleaned up) ────────────────────────────────────────
+const RIDER_DELETE_REASONS = [
+  { value: 'inactive',          label: 'Account Inactive',     hint: 'Rider has been inactive for a long time' },
+  { value: 'policy_violation',  label: 'Policy Violation',     hint: 'Violated DKMerch rider policies' },
+  { value: 'request_by_rider',  label: 'Requested by Rider',   hint: 'Rider requested account removal' },
+  { value: 'other',             label: 'Other Reason',         hint: 'Specify reason in the note field' },
+];
 
 const AdminUsers = () => {
   const [activeTab, setActiveTab] = useState('users');
@@ -44,7 +51,6 @@ const AdminUsers = () => {
   const unsuspendUserMutation = useMutation(api.users.unsuspendUser);
   const deleteUserMutation    = useMutation(api.users.deleteUser);
   const activateUserMutation  = useMutation(api.users.activateUser);
-  const updateRiderMutation   = useMutation(api.riders.updateRider);
   const deleteRiderMutation   = useMutation(api.riders.deleteRider);
 
   // ─── USERS STATE ─────────────────────────────────────────────────────────────
@@ -54,7 +60,6 @@ const AdminUsers = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [userToDelete, setUserToDelete]           = useState(null);
 
-  // Suspend modal — two-step
   const [showSuspendModal, setShowSuspendModal] = useState(false);
   const [suspendStep, setSuspendStep]           = useState(STEP_CONFIGURE);
   const [userToSuspend, setUserToSuspend]       = useState(null);
@@ -72,13 +77,14 @@ const AdminUsers = () => {
   // ─── RIDERS STATE ─────────────────────────────────────────────────────────────
   const [riderSearch, setRiderSearch]             = useState('');
   const [riderFilterStatus, setRiderFilterStatus] = useState('all');
-  const [editingRider, setEditingRider]           = useState(null);
-  const [riderFormData, setRiderFormData]         = useState({ fullName: '', email: '', phone: '', vehicleType: '', status: 'pending' });
-  const [showRiderEditModal, setShowRiderEditModal]         = useState(false);
-  const [showRiderDeleteConfirm, setShowRiderDeleteConfirm] = useState(false);
-  const [riderToDelete, setRiderToDelete]         = useState(null);
 
-  // Notification — 6 seconds display
+  const [showRiderDeleteModal, setShowRiderDeleteModal] = useState(false);
+  const [riderDeleteStep, setRiderDeleteStep]           = useState(STEP_CONFIGURE);
+  const [riderToDelete, setRiderToDelete]               = useState(null);
+  const [riderDeleteReason, setRiderDeleteReason]       = useState('');
+  const [riderDeleteNote, setRiderDeleteNote]           = useState('');
+  const [riderDeleteLoading, setRiderDeleteLoading]     = useState(false);
+
   const [notification, setNotification] = useState({ show: false, message: '', type: '' });
 
   const showNotification = (message, type) => {
@@ -153,13 +159,11 @@ const AdminUsers = () => {
   const getDurationOptions = () =>
     suspendReason === 'other' ? DURATION_OPTIONS_OTHER : DURATION_OPTIONS;
 
-  // Step 1 → Step 2
   const handleProceedToConfirm = () => {
     if (!suspendReason) return;
     setSuspendStep(STEP_CONFIRM);
   };
 
-  // Step 2 → Execute
   const handleConfirmSuspend = async () => {
     if (!userToSuspend || !suspendReason) return;
     setSuspendLoading(true);
@@ -171,7 +175,6 @@ const AdminUsers = () => {
         durationDays: suspendDays ?? undefined,
       });
 
-      // Force-logout if the suspended user is currently logged in
       const auth = JSON.parse(localStorage.getItem('authUser') || 'null');
       if (auth && auth._id === userToSuspend._id) {
         localStorage.removeItem('authUser');
@@ -193,7 +196,6 @@ const AdminUsers = () => {
     setSuspendLoading(false);
   };
 
-  // ─── UNSUSPEND ────────────────────────────────────────────────────────────────
   const confirmUnsuspend = async () => {
     if (!userToUnsuspend) return;
     try {
@@ -206,7 +208,6 @@ const AdminUsers = () => {
     setUserToUnsuspend(null);
   };
 
-  // ─── DELETE ───────────────────────────────────────────────────────────────────
   const confirmDeleteUser = async () => {
     if (!userToDelete) return;
     try {
@@ -219,7 +220,6 @@ const AdminUsers = () => {
     setUserToDelete(null);
   };
 
-  // ─── ACTIVATE ─────────────────────────────────────────────────────────────────
   const confirmActivate = async () => {
     if (!userToActivate) return;
     try {
@@ -232,39 +232,53 @@ const AdminUsers = () => {
     setUserToActivate(null);
   };
 
-  // ─── RIDER ACTIONS ────────────────────────────────────────────────────────────
-  const handleEditRider = (rider) => {
-    setEditingRider(rider);
-    setRiderFormData({ fullName: rider.fullName, email: rider.email, phone: rider.phone, vehicleType: rider.vehicleType || '', status: rider.status });
-    setShowRiderEditModal(true);
+  // ─── RIDER DELETE HELPERS ─────────────────────────────────────────────────────
+  const openRiderDeleteModal = (rider) => {
+    setRiderToDelete(rider);
+    setRiderDeleteReason('');
+    setRiderDeleteNote('');
+    setRiderDeleteStep(STEP_CONFIGURE);
+    setShowRiderDeleteModal(true);
   };
 
-  const handleRiderSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      await updateRiderMutation({ id: editingRider._id, ...riderFormData });
-      setShowRiderEditModal(false);
-      showNotification('Rider updated successfully.', 'success');
-    } catch {
-      showNotification('Failed to update rider.', 'error');
-    }
+  const closeRiderDeleteModal = () => {
+    if (riderDeleteLoading) return;
+    setShowRiderDeleteModal(false);
+    setRiderDeleteStep(STEP_CONFIGURE);
+    setRiderToDelete(null);
+    setRiderDeleteReason('');
+    setRiderDeleteNote('');
   };
+
+  // Email is sent automatically for approved/suspended riders — no toggle needed
+  const willSendEmail = (rider) =>
+    rider && ['approved', 'suspended'].includes(rider.status);
 
   const confirmDeleteRider = async () => {
-    if (!riderToDelete) return;
+    if (!riderToDelete || !riderDeleteReason) return;
+    setRiderDeleteLoading(true);
     try {
-      await deleteRiderMutation({ id: riderToDelete._id });
-      showNotification('Rider deleted successfully.', 'success');
+      await deleteRiderMutation({
+        id:        riderToDelete._id,
+        reason:    riderDeleteReason,
+        note:      riderDeleteNote || undefined,
+        sendEmail: willSendEmail(riderToDelete),
+      });
+      const emailMsg = willSendEmail(riderToDelete) ? ' Email notification sent to rider.' : '';
+      showNotification(`${riderToDelete.fullName}'s account has been deleted.${emailMsg}`, 'success');
+      closeRiderDeleteModal();
     } catch {
       showNotification('Failed to delete rider.', 'error');
     }
-    setShowRiderDeleteConfirm(false);
-    setRiderToDelete(null);
+    setRiderDeleteLoading(false);
   };
 
+  const getSelectedDeleteReasonLabel = () =>
+    RIDER_DELETE_REASONS.find(r => r.value === riderDeleteReason)?.label || riderDeleteReason || '—';
+
   // ─── DISPLAY HELPERS ──────────────────────────────────────────────────────────
-  const getRoleBadgeClass   = (role)   => role === 'admin' ? 'role-badge admin' : 'role-badge user';
-  const getStatusBadgeClass = (status) => `status-badge ${status || 'active'}`;
+  const getRoleBadgeClass        = (role)   => role === 'admin' ? 'role-badge admin' : 'role-badge user';
+  const getStatusBadgeClass      = (status) => `status-badge ${status || 'active'}`;
   const getRiderStatusBadgeClass = (status) => {
     const map = { pending: 'rider-status-badge pending', approved: 'rider-status-badge approved', rejected: 'rider-status-badge rejected', suspended: 'rider-status-badge suspended' };
     return map[status] || 'rider-status-badge pending';
@@ -282,16 +296,13 @@ const AdminUsers = () => {
     return `${diffDays}d left`;
   };
 
-  const getReasonLabel = (val) =>
-    SUSPEND_REASONS.find(r => r.value === val)?.label || val || '—';
-
+  const getReasonLabel  = (val) => SUSPEND_REASONS.find(r => r.value === val)?.label || val || '—';
   const getDurationLabel = () => {
     if (suspendDays === null) return 'Permanent';
     if (suspendDays === 1) return '1 Day';
     return `${suspendDays} Days`;
   };
 
-  // Stats
   const totalUsers     = regularUsers.length;
   const activeUsers    = regularUsers.filter(u => (u.status || 'active') === 'active').length;
   const suspendedUsers = regularUsers.filter(u => u.status === 'suspended').length;
@@ -302,7 +313,6 @@ const AdminUsers = () => {
   return (
     <div className="admin-users">
 
-      {/* ── Notification Toast ── */}
       {notification.show && (
         <div className={`notification ${notification.type}`}>
           <i className={`fas ${notification.type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'}`}></i>
@@ -313,7 +323,6 @@ const AdminUsers = () => {
         </div>
       )}
 
-      {/* ── Header ── */}
       <div className="users-header">
         <div className="header-left">
           <h1><i className="fas fa-users"></i> User Management</h1>
@@ -336,7 +345,6 @@ const AdminUsers = () => {
         </div>
       </div>
 
-      {/* ── Tabs ── */}
       <div className="tab-switcher">
         <button className={`tab-btn ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>
           <i className="fas fa-user"></i> Users <span className="tab-count">{totalUsers}</span>
@@ -369,15 +377,12 @@ const AdminUsers = () => {
               ))}
             </div>
           </div>
-
           <div className="users-table-container">
             {filteredUsers.length === 0 ? (
               <div className="no-users"><i className="fas fa-user-slash"></i><p>No users found</p></div>
             ) : (
               <table className="users-table">
-                <thead>
-                  <tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr>
-                </thead>
+                <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
                 <tbody>
                   {filteredUsers.map(user => (
                     <tr key={user._id}>
@@ -438,7 +443,6 @@ const AdminUsers = () => {
               These accounts were flagged as suspicious and require manual activation.
             </div>
           </div>
-
           <div className="users-table-container">
             {filteredPending.length === 0 ? (
               <div className="no-users">
@@ -447,9 +451,7 @@ const AdminUsers = () => {
               </div>
             ) : (
               <table className="users-table">
-                <thead>
-                  <tr><th>Name</th><th>Username</th><th>Email</th><th>Registered</th><th>Reason</th><th>Actions</th></tr>
-                </thead>
+                <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Registered</th><th>Reason</th><th>Actions</th></tr></thead>
                 <tbody>
                   {filteredPending.map(user => (
                     <tr key={user._id}>
@@ -464,7 +466,7 @@ const AdminUsers = () => {
                         </span>
                       </td>
                       <td className="actions-cell">
-                        <button className="btn-suspend btn-activate" title="Activate this account"
+                        <button className="btn-suspend btn-activate" title="Activate"
                           onClick={() => { setUserToActivate(user); setShowActivateConfirm(true); }}>
                           <i className="fas fa-check-circle"></i>
                         </button>
@@ -500,15 +502,12 @@ const AdminUsers = () => {
               ))}
             </div>
           </div>
-
           <div className="users-table-container">
             {filteredRiders.length === 0 ? (
               <div className="no-users"><i className="fas fa-motorcycle"></i><p>No riders found</p></div>
             ) : (
               <table className="users-table">
-                <thead>
-                  <tr><th>Full Name</th><th>Email</th><th>Phone</th><th>Vehicle</th><th>Status</th><th>Applied</th><th>Actions</th></tr>
-                </thead>
+                <thead><tr><th>Full Name</th><th>Email</th><th>Phone</th><th>Vehicle</th><th>Status</th><th>Applied</th><th>Actions</th></tr></thead>
                 <tbody>
                   {filteredRiders.map(rider => (
                     <tr key={rider._id}>
@@ -527,8 +526,9 @@ const AdminUsers = () => {
                       </td>
                       <td className="date-cell">{formatDate(rider.appliedAt)}</td>
                       <td className="actions-cell">
-                        <button className="btn-edit" onClick={() => handleEditRider(rider)} title="Edit"><i className="fas fa-edit"></i></button>
-                        <button className="btn-delete" onClick={() => { setRiderToDelete(rider); setShowRiderDeleteConfirm(true); }} title="Delete"><i className="fas fa-trash"></i></button>
+                        <button className="btn-delete" onClick={() => openRiderDeleteModal(rider)} title="Delete">
+                          <i className="fas fa-trash"></i>
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -539,25 +539,18 @@ const AdminUsers = () => {
         </>
       )}
 
-      {/* ══════════════════════════════════════════════════════════════════════
-          SUSPEND MODAL — TWO STEPS
-      ══════════════════════════════════════════════════════════════════════ */}
+      {/* ══ SUSPEND MODAL ══════════════════════════════════════════════════════ */}
       {showSuspendModal && (
         <div className="modal-overlay" onClick={closeSuspendModal}>
           <div className="modal-content suspend-modal" onClick={e => e.stopPropagation()}>
 
-            {/* ── STEP 1: Configure ── */}
             {suspendStep === STEP_CONFIGURE && (
               <>
                 <div className="modal-header suspend-modal-header">
                   <h2><i className="fas fa-ban"></i> Suspend Account</h2>
-                  <button className="close-btn" onClick={closeSuspendModal}>
-                    <i className="fas fa-times"></i>
-                  </button>
+                  <button className="close-btn" onClick={closeSuspendModal}><i className="fas fa-times"></i></button>
                 </div>
-
                 <div className="suspend-modal-body">
-                  {/* User pill */}
                   <div className="suspend-user-pill">
                     <i className="fas fa-user-circle"></i>
                     <div>
@@ -565,10 +558,8 @@ const AdminUsers = () => {
                       <div className="suspend-user-email">{userToSuspend?.email}</div>
                     </div>
                   </div>
-
-                  {/* Reason */}
                   <div className="form-group">
-                    <label><i className="fas fa-exclamation-triangle"></i> Reason for Suspension <span className="required-star">*</span></label>
+                    <label><i className="fas fa-exclamation-triangle"></i> Reason <span className="required-star">*</span></label>
                     <div className="reason-grid">
                       {SUSPEND_REASONS.map(r => (
                         <button key={r.value} type="button"
@@ -579,11 +570,9 @@ const AdminUsers = () => {
                       ))}
                     </div>
                   </div>
-
-                  {/* Duration */}
                   {suspendReason && (
                     <div className="form-group">
-                      <label><i className="fas fa-calendar-alt"></i> Suspension Duration</label>
+                      <label><i className="fas fa-calendar-alt"></i> Duration</label>
                       <div className="duration-grid">
                         {getDurationOptions().map(d => (
                           <button key={d.label} type="button"
@@ -596,35 +585,27 @@ const AdminUsers = () => {
                       </div>
                     </div>
                   )}
-
-                  {/* Note */}
                   {suspendReason && (
                     <div className="form-group">
-                      <label><i className="fas fa-sticky-note"></i> Additional Note <span className="optional-label">(optional)</span></label>
-                      <textarea className="suspend-note"
-                        placeholder="Add a note for your records or to inform the user..."
+                      <label><i className="fas fa-sticky-note"></i> Note <span className="optional-label">(optional)</span></label>
+                      <textarea className="suspend-note" placeholder="Add a note..."
                         value={suspendNote} onChange={e => setSuspendNote(e.target.value)} rows={3} />
                     </div>
                   )}
-
-                  {/* Warning banner */}
                   {suspendReason && (
                     <div className={`suspend-warning-box ${suspendDays === null ? 'permanent' : 'temporary'}`}>
                       <i className={`fas ${suspendDays === null ? 'fa-exclamation-circle' : 'fa-info-circle'}`}></i>
                       <div>
                         {suspendDays === null
                           ? <><strong>Permanent suspension</strong> — the user will lose access indefinitely and receive an email notification.</>
-                          : <><strong>{suspendDays}-day suspension</strong> — the account will auto-restore after {suspendDays} day{suspendDays !== 1 ? 's' : ''}. An email notification will be sent.</>
+                          : <><strong>{suspendDays}-day suspension</strong> — auto-restores after {suspendDays} day{suspendDays !== 1 ? 's' : ''}. Email notification will be sent.</>
                         }
                       </div>
                     </div>
                   )}
-
                   <div className="modal-actions">
                     <button className="btn-cancel" onClick={closeSuspendModal}>Cancel</button>
-                    <button className="btn-suspend-confirm"
-                      onClick={handleProceedToConfirm}
-                      disabled={!suspendReason || suspendDays === undefined}>
+                    <button className="btn-suspend-confirm" onClick={handleProceedToConfirm} disabled={!suspendReason || suspendDays === undefined}>
                       <i className="fas fa-arrow-right"></i> Review & Confirm
                     </button>
                   </div>
@@ -632,27 +613,17 @@ const AdminUsers = () => {
               </>
             )}
 
-            {/* ── STEP 2: Final Confirmation ── */}
             {suspendStep === STEP_CONFIRM && (
               <>
                 <div className="modal-header suspend-modal-header">
                   <h2><i className="fas fa-exclamation-triangle"></i> Confirm Suspension</h2>
-                  <button className="close-btn" onClick={closeSuspendModal} disabled={suspendLoading}>
-                    <i className="fas fa-times"></i>
-                  </button>
+                  <button className="close-btn" onClick={closeSuspendModal} disabled={suspendLoading}><i className="fas fa-times"></i></button>
                 </div>
-
                 <div className="suspend-modal-body">
-                  {/* Summary card */}
                   <div className="suspend-confirm-summary">
-                    <div className="suspend-confirm-icon">
-                      <i className="fas fa-ban"></i>
-                    </div>
-                    <p className="suspend-confirm-headline">
-                      You are about to suspend <strong>{userToSuspend?.name}</strong>
-                    </p>
+                    <div className="suspend-confirm-icon"><i className="fas fa-ban"></i></div>
+                    <p className="suspend-confirm-headline">You are about to suspend <strong>{userToSuspend?.name}</strong></p>
                     <p className="suspend-confirm-sub">{userToSuspend?.email}</p>
-
                     <div className="suspend-confirm-details">
                       <div className="suspend-confirm-row">
                         <span className="suspend-confirm-label"><i className="fas fa-exclamation-triangle"></i> Reason</span>
@@ -660,9 +631,7 @@ const AdminUsers = () => {
                       </div>
                       <div className="suspend-confirm-row">
                         <span className="suspend-confirm-label"><i className="fas fa-calendar-alt"></i> Duration</span>
-                        <span className={`suspend-confirm-value ${suspendDays === null ? 'permanent-label' : ''}`}>
-                          {getDurationLabel()}
-                        </span>
+                        <span className={`suspend-confirm-value ${suspendDays === null ? 'permanent-label' : ''}`}>{getDurationLabel()}</span>
                       </div>
                       {suspendNote && (
                         <div className="suspend-confirm-row">
@@ -676,36 +645,26 @@ const AdminUsers = () => {
                       </div>
                     </div>
                   </div>
-
                   <div className={`suspend-final-warning ${suspendDays === null ? 'permanent' : 'temporary'}`}>
                     <i className="fas fa-exclamation-circle"></i>
                     <span>
                       {suspendDays === null
-                        ? 'This is a permanent suspension. The user will not be able to log in until manually unsuspended.'
-                        : `The user's account will be locked for ${suspendDays} day${suspendDays !== 1 ? 's' : ''} and automatically restored afterward.`
+                        ? 'Permanent suspension — cannot log in until manually unsuspended.'
+                        : `Account will be locked for ${suspendDays} day${suspendDays !== 1 ? 's' : ''} and automatically restored afterward.`
                       }
                     </span>
                   </div>
-
                   <div className="modal-actions">
-                    <button className="btn-cancel"
-                      onClick={() => setSuspendStep(STEP_CONFIGURE)}
-                      disabled={suspendLoading}>
+                    <button className="btn-cancel" onClick={() => setSuspendStep(STEP_CONFIGURE)} disabled={suspendLoading}>
                       <i className="fas fa-arrow-left"></i> Go Back
                     </button>
-                    <button className="btn-suspend-confirm"
-                      onClick={handleConfirmSuspend}
-                      disabled={suspendLoading}>
-                      {suspendLoading
-                        ? <><i className="fas fa-spinner fa-spin"></i> Suspending...</>
-                        : <><i className="fas fa-ban"></i> Yes, Suspend Account</>
-                      }
+                    <button className="btn-suspend-confirm" onClick={handleConfirmSuspend} disabled={suspendLoading}>
+                      {suspendLoading ? <><i className="fas fa-spinner fa-spin"></i> Suspending...</> : <><i className="fas fa-ban"></i> Yes, Suspend Account</>}
                     </button>
                   </div>
                 </div>
               </>
             )}
-
           </div>
         </div>
       )}
@@ -720,9 +679,7 @@ const AdminUsers = () => {
             <p className="success-text">They will be able to log in immediately.</p>
             <div className="modal-actions">
               <button className="btn-cancel" onClick={() => setShowUnsuspendConfirm(false)}>Cancel</button>
-              <button className="btn-activate-confirm" onClick={confirmUnsuspend}>
-                <i className="fas fa-check-circle"></i> Unsuspend
-              </button>
+              <button className="btn-activate-confirm" onClick={confirmUnsuspend}><i className="fas fa-check-circle"></i> Unsuspend</button>
             </div>
           </div>
         </div>
@@ -738,9 +695,7 @@ const AdminUsers = () => {
             <p className="success-text">They will be able to log in immediately after activation.</p>
             <div className="modal-actions">
               <button className="btn-cancel" onClick={() => setShowActivateConfirm(false)}>Cancel</button>
-              <button className="btn-activate-confirm" onClick={confirmActivate}>
-                <i className="fas fa-check-circle"></i> Activate
-              </button>
+              <button className="btn-activate-confirm" onClick={confirmActivate}><i className="fas fa-check-circle"></i> Activate</button>
             </div>
           </div>
         </div>
@@ -762,60 +717,137 @@ const AdminUsers = () => {
         </div>
       )}
 
-      {/* ══ EDIT RIDER MODAL ═══════════════════════════════════════════════════ */}
-      {showRiderEditModal && (
-        <div className="modal-overlay" onClick={() => setShowRiderEditModal(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <div className="modal-header rider-modal-header">
-              <h2><i className="fas fa-motorcycle"></i> Edit Rider</h2>
-              <button className="close-btn" onClick={() => setShowRiderEditModal(false)}><i className="fas fa-times"></i></button>
-            </div>
-            <form onSubmit={handleRiderSubmit}>
-              <div style={{ padding: '24px' }}>
-                <div className="form-group"><label>Full Name</label><input type="text" value={riderFormData.fullName} onChange={e => setRiderFormData(p => ({ ...p, fullName: e.target.value }))} required /></div>
-                <div className="form-group"><label>Email</label><input type="email" value={riderFormData.email} onChange={e => setRiderFormData(p => ({ ...p, email: e.target.value }))} required /></div>
-                <div className="form-group"><label>Phone</label><input type="tel" value={riderFormData.phone} onChange={e => setRiderFormData(p => ({ ...p, phone: e.target.value }))} required /></div>
-                <div className="form-group">
-                  <label>Vehicle Type</label>
-                  <select value={riderFormData.vehicleType} onChange={e => setRiderFormData(p => ({ ...p, vehicleType: e.target.value }))}>
-                    <option value="">Select vehicle</option>
-                    <option value="motorcycle">Motorcycle</option>
-                    <option value="bicycle">Bicycle</option>
-                    <option value="scooter">Scooter</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label>Application Status</label>
-                  <select value={riderFormData.status} onChange={e => setRiderFormData(p => ({ ...p, status: e.target.value }))}>
-                    <option value="pending">Pending</option>
-                    <option value="approved">Approved</option>
-                    <option value="rejected">Rejected</option>
-                    <option value="suspended">Suspended</option>
-                  </select>
-                  <span className="form-hint">Approved riders can access the Rider Dashboard</span>
-                </div>
-                <div className="modal-actions">
-                  <button type="button" className="btn-cancel" onClick={() => setShowRiderEditModal(false)}>Cancel</button>
-                  <button type="submit" className="btn-save rider-save-btn"><i className="fas fa-save"></i> Save Changes</button>
-                </div>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* ══════════════════════════════════════════════════════════════════════
+          RIDER DELETE MODAL — TWO STEPS
+      ══════════════════════════════════════════════════════════════════════ */}
+      {showRiderDeleteModal && riderToDelete && (
+        <div className="modal-overlay" onClick={closeRiderDeleteModal}>
+          <div className="modal-content suspend-modal" onClick={e => e.stopPropagation()}>
 
-      {/* ══ DELETE RIDER CONFIRM ═══════════════════════════════════════════════ */}
-      {showRiderDeleteConfirm && (
-        <div className="modal-overlay" onClick={() => setShowRiderDeleteConfirm(false)}>
-          <div className="modal-content confirm-modal" onClick={e => e.stopPropagation()}>
-            <div className="confirm-icon suspend"><i className="fas fa-trash"></i></div>
-            <h2>Delete Rider?</h2>
-            <p>Permanently delete rider <strong>{riderToDelete?.fullName}</strong>?</p>
-            <p className="warning-text">This action cannot be undone.</p>
-            <div className="modal-actions">
-              <button className="btn-cancel" onClick={() => setShowRiderDeleteConfirm(false)}>Cancel</button>
-              <button className="btn-suspend-confirm" onClick={confirmDeleteRider}><i className="fas fa-trash"></i> Delete</button>
-            </div>
+            {riderDeleteStep === STEP_CONFIGURE && (
+              <>
+                <div className="modal-header" style={{ background: 'linear-gradient(135deg,#dc2626,#b91c1c)' }}>
+                  <h2><i className="fas fa-trash"></i> Delete Rider Account</h2>
+                  <button className="close-btn" onClick={closeRiderDeleteModal}><i className="fas fa-times"></i></button>
+                </div>
+                <div className="suspend-modal-body">
+                  <div className="suspend-user-pill">
+                    <i className="fas fa-motorcycle" style={{ color: '#7c3aed', fontSize: 28 }}></i>
+                    <div>
+                      <div className="suspend-user-name">{riderToDelete.fullName}</div>
+                      <div className="suspend-user-email">{riderToDelete.email}</div>
+                      <span className={getRiderStatusBadgeClass(riderToDelete.status)} style={{ fontSize: 10, padding: '2px 8px', marginTop: 4, display: 'inline-flex' }}>
+                        {riderToDelete.status}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label><i className="fas fa-exclamation-triangle"></i> Reason for Deletion <span className="required-star">*</span></label>
+                    <div className="reason-grid">
+                      {RIDER_DELETE_REASONS.map(r => (
+                        <button key={r.value} type="button"
+                          className={`reason-chip ${riderDeleteReason === r.value ? 'active' : ''}`}
+                          onClick={() => setRiderDeleteReason(r.value)}
+                          style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
+                          <span style={{ fontWeight: 700 }}>{r.label}</span>
+                          <span style={{ fontSize: 10, opacity: 0.75, fontWeight: 400 }}>{r.hint}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {riderDeleteReason && (
+                    <div className="form-group">
+                      <label><i className="fas fa-sticky-note"></i> Note <span className="optional-label">(optional)</span></label>
+                      <textarea className="suspend-note" placeholder="Add a note for records..."
+                        value={riderDeleteNote} onChange={e => setRiderDeleteNote(e.target.value)} rows={2} />
+                    </div>
+                  )}
+
+                  {/* Auto email info — no toggle, just informational */}
+                  {riderDeleteReason && willSendEmail(riderToDelete) && (
+                    <div className="suspend-warning-box temporary">
+                      <i className="fas fa-envelope"></i>
+                      <div>
+                        <strong>Email notification will be sent</strong> to <strong>{riderToDelete.email}</strong> informing them of the account deletion.
+                      </div>
+                    </div>
+                  )}
+
+                  {riderDeleteReason && (
+                    <div className="suspend-warning-box permanent" style={{ marginTop: 8 }}>
+                      <i className="fas fa-exclamation-circle"></i>
+                      <div><strong>This action is permanent.</strong> All rider data will be removed and cannot be undone.</div>
+                    </div>
+                  )}
+
+                  <div className="modal-actions">
+                    <button className="btn-cancel" onClick={closeRiderDeleteModal}>Cancel</button>
+                    <button className="btn-suspend-confirm"
+                      style={{ background: 'linear-gradient(135deg,#dc2626,#b91c1c)' }}
+                      onClick={() => riderDeleteReason && setRiderDeleteStep(STEP_CONFIRM)}
+                      disabled={!riderDeleteReason}>
+                      <i className="fas fa-arrow-right"></i> Review & Confirm
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {riderDeleteStep === STEP_CONFIRM && (
+              <>
+                <div className="modal-header" style={{ background: 'linear-gradient(135deg,#dc2626,#b91c1c)' }}>
+                  <h2><i className="fas fa-exclamation-triangle"></i> Confirm Deletion</h2>
+                  <button className="close-btn" onClick={closeRiderDeleteModal} disabled={riderDeleteLoading}><i className="fas fa-times"></i></button>
+                </div>
+                <div className="suspend-modal-body">
+                  <div className="suspend-confirm-summary">
+                    <div className="suspend-confirm-icon" style={{ background: 'linear-gradient(135deg,#dc2626,#b91c1c)' }}>
+                      <i className="fas fa-trash"></i>
+                    </div>
+                    <p className="suspend-confirm-headline">Permanently delete <strong>{riderToDelete.fullName}</strong>?</p>
+                    <p className="suspend-confirm-sub">{riderToDelete.email}</p>
+                    <div className="suspend-confirm-details">
+                      <div className="suspend-confirm-row">
+                        <span className="suspend-confirm-label"><i className="fas fa-exclamation-triangle"></i> Reason</span>
+                        <span className="suspend-confirm-value">{getSelectedDeleteReasonLabel()}</span>
+                      </div>
+                      {riderDeleteNote && (
+                        <div className="suspend-confirm-row">
+                          <span className="suspend-confirm-label"><i className="fas fa-sticky-note"></i> Note</span>
+                          <span className="suspend-confirm-value">{riderDeleteNote}</span>
+                        </div>
+                      )}
+                      <div className="suspend-confirm-row">
+                        <span className="suspend-confirm-label"><i className="fas fa-envelope"></i> Email</span>
+                        <span className="suspend-confirm-value">
+                          {willSendEmail(riderToDelete) ? 'Notification will be sent' : 'No email (pending/rejected)'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="suspend-final-warning permanent">
+                    <i className="fas fa-exclamation-circle"></i>
+                    <span>This is permanent and cannot be undone. All rider data will be deleted.</span>
+                  </div>
+                  <div className="modal-actions">
+                    <button className="btn-cancel" onClick={() => setRiderDeleteStep(STEP_CONFIGURE)} disabled={riderDeleteLoading}>
+                      <i className="fas fa-arrow-left"></i> Go Back
+                    </button>
+                    <button className="btn-suspend-confirm"
+                      style={{ background: 'linear-gradient(135deg,#dc2626,#b91c1c)' }}
+                      onClick={confirmDeleteRider}
+                      disabled={riderDeleteLoading}>
+                      {riderDeleteLoading
+                        ? <><i className="fas fa-spinner fa-spin"></i> Deleting...</>
+                        : <><i className="fas fa-trash"></i> Yes, Delete Account</>
+                      }
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
