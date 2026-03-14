@@ -621,26 +621,11 @@ export const sendRiderNewOrderEmail = internalAction({
           <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border-radius:12px;border:1.5px solid #e5e7eb;margin-bottom:24px;">
             <tr><td style="padding:20px 24px;">
               <table width="100%" cellpadding="0" cellspacing="0">
-                <tr>
-                  <td style="font-size:13px;color:#6b7280;padding:5px 0;">Order ID</td>
-                  <td style="font-size:13px;font-weight:700;color:#fc1268;text-align:right;">#${shortId}</td>
-                </tr>
-                <tr>
-                  <td style="font-size:13px;color:#6b7280;padding:5px 0;">Customer</td>
-                  <td style="font-size:13px;font-weight:600;color:#1f2937;text-align:right;">${args.customerName}</td>
-                </tr>
-                <tr>
-                  <td style="font-size:13px;color:#6b7280;padding:5px 0;">Items</td>
-                  <td style="font-size:13px;font-weight:600;color:#1f2937;text-align:right;">${args.itemCount} item${args.itemCount !== 1 ? "s" : ""}</td>
-                </tr>
-                <tr>
-                  <td style="font-size:13px;color:#6b7280;padding:5px 0;">Order Total</td>
-                  <td style="font-size:14px;font-weight:800;color:#1f2937;text-align:right;">₱${args.total}</td>
-                </tr>
-                <tr>
-                  <td style="font-size:13px;color:#6b7280;padding:5px 0;vertical-align:top;">Delivery Address</td>
-                  <td style="font-size:13px;font-weight:600;color:#1f2937;text-align:right;max-width:260px;">${args.shippingAddress}</td>
-                </tr>
+                <tr><td style="font-size:13px;color:#6b7280;padding:5px 0;">Order ID</td><td style="font-size:13px;font-weight:700;color:#fc1268;text-align:right;">#${shortId}</td></tr>
+                <tr><td style="font-size:13px;color:#6b7280;padding:5px 0;">Customer</td><td style="font-size:13px;font-weight:600;color:#1f2937;text-align:right;">${args.customerName}</td></tr>
+                <tr><td style="font-size:13px;color:#6b7280;padding:5px 0;">Items</td><td style="font-size:13px;font-weight:600;color:#1f2937;text-align:right;">${args.itemCount} item${args.itemCount !== 1 ? "s" : ""}</td></tr>
+                <tr><td style="font-size:13px;color:#6b7280;padding:5px 0;">Order Total</td><td style="font-size:14px;font-weight:800;color:#1f2937;text-align:right;">₱${args.total}</td></tr>
+                <tr><td style="font-size:13px;color:#6b7280;padding:5px 0;vertical-align:top;">Delivery Address</td><td style="font-size:13px;font-weight:600;color:#1f2937;text-align:right;max-width:260px;">${args.shippingAddress}</td></tr>
               </table>
             </td></tr>
           </table>
@@ -713,26 +698,11 @@ export const sendRefundApprovedEmail = internalAction({
           <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border-radius:12px;border:1.5px solid #e5e7eb;margin-bottom:24px;">
             <tr><td style="padding:20px 24px;">
               <table width="100%" cellpadding="0" cellspacing="0">
-                <tr>
-                  <td style="font-size:13px;color:#6b7280;padding:5px 0;">Order ID</td>
-                  <td style="font-size:13px;font-weight:700;color:#fc1268;text-align:right;">#${shortId}</td>
-                </tr>
-                <tr>
-                  <td style="font-size:13px;color:#6b7280;padding:5px 0;">Refund Amount</td>
-                  <td style="font-size:16px;font-weight:800;color:#065f46;text-align:right;">₱${args.refundAmount.toLocaleString("en-PH", { minimumFractionDigits: 2 })}</td>
-                </tr>
-                <tr>
-                  <td style="font-size:13px;color:#6b7280;padding:5px 0;">Sent Via</td>
-                  <td style="font-size:13px;font-weight:600;color:#1f2937;text-align:right;">${methodName}</td>
-                </tr>
-                <tr>
-                  <td style="font-size:13px;color:#6b7280;padding:5px 0;">Account Name</td>
-                  <td style="font-size:13px;font-weight:600;color:#1f2937;text-align:right;">${args.refundAccountName}</td>
-                </tr>
-                <tr>
-                  <td style="font-size:13px;color:#6b7280;padding:5px 0;">Account Number</td>
-                  <td style="font-size:13px;font-weight:600;color:#1f2937;text-align:right;">${args.refundAccountNumber}</td>
-                </tr>
+                <tr><td style="font-size:13px;color:#6b7280;padding:5px 0;">Order ID</td><td style="font-size:13px;font-weight:700;color:#fc1268;text-align:right;">#${shortId}</td></tr>
+                <tr><td style="font-size:13px;color:#6b7280;padding:5px 0;">Refund Amount</td><td style="font-size:16px;font-weight:800;color:#065f46;text-align:right;">₱${args.refundAmount.toLocaleString("en-PH", { minimumFractionDigits: 2 })}</td></tr>
+                <tr><td style="font-size:13px;color:#6b7280;padding:5px 0;">Sent Via</td><td style="font-size:13px;font-weight:600;color:#1f2937;text-align:right;">${methodName}</td></tr>
+                <tr><td style="font-size:13px;color:#6b7280;padding:5px 0;">Account Name</td><td style="font-size:13px;font-weight:600;color:#1f2937;text-align:right;">${args.refundAccountName}</td></tr>
+                <tr><td style="font-size:13px;color:#6b7280;padding:5px 0;">Account Number</td><td style="font-size:13px;font-weight:600;color:#1f2937;text-align:right;">${args.refundAccountNumber}</td></tr>
               </table>
             </td></tr>
           </table>
@@ -843,7 +813,25 @@ export const sendRiderApprovedEmail = action({
         </td></tr>
         <tr><td style="padding:28px 36px;">
           <p style="font-size:15px;color:#374151;margin:0 0 16px;">Hi <strong>${args.riderName}</strong>! 👋</p>
-          <p style="font-size:14px;color:#6b7280;line-height:1.6;margin:0 0 24px;">Your application has been <strong style="color:#059669;">approved</strong>. You can now log in and start accepting deliveries!</p>
+          <p style="font-size:14px;color:#6b7280;line-height:1.6;margin:0 0 20px;">
+            Your application has been <strong style="color:#059669;">approved</strong>. You can now log in and start accepting deliveries!
+          </p>
+          <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border-radius:12px;border:1.5px solid #e5e7eb;margin-bottom:24px;">
+            <tr><td style="padding:20px 24px;">
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr><td style="font-size:13px;color:#6b7280;padding:5px 0;">Rider ID</td><td style="font-size:14px;font-weight:800;color:#6a0dad;text-align:right;">${args.dkRiderId}</td></tr>
+                <tr><td style="font-size:13px;color:#6b7280;padding:5px 0;">Email (login)</td><td style="font-size:13px;font-weight:600;color:#1f2937;text-align:right;">${args.email}</td></tr>
+                ${args.vehicleType ? `<tr><td style="font-size:13px;color:#6b7280;padding:5px 0;">Vehicle</td><td style="font-size:13px;font-weight:600;color:#1f2937;text-align:right;text-transform:capitalize;">${args.vehicleType}</td></tr>` : ""}
+                ${args.plateNumber ? `<tr><td style="font-size:13px;color:#6b7280;padding:5px 0;">Plate No.</td><td style="font-size:13px;font-weight:600;color:#1f2937;text-align:right;">${args.plateNumber}</td></tr>` : ""}
+              </table>
+            </td></tr>
+          </table>
+          <div style="background:#f0fdf4;border-radius:12px;border:1.5px solid #86efac;padding:16px 20px;margin-bottom:24px;">
+            <div style="font-size:13px;color:#166534;line-height:1.7;">
+              ✅ Log in using your email and the password you set during registration.<br/>
+              📦 Accept pickup requests and start earning!
+            </div>
+          </div>
           <div style="text-align:center;margin-bottom:24px;">
             <a href="${riderUrl}" style="display:inline-block;background:linear-gradient(135deg,#6a0dad,#9b30ff);color:white;text-decoration:none;padding:14px 36px;border-radius:10px;font-size:15px;font-weight:700;">Go to Rider Dashboard</a>
           </div>
@@ -925,7 +913,7 @@ export const sendRiderOnTheWayEmail = internalAction({
   },
 });
 
-// ── ACCOUNT SUSPENDED EMAIL → CUSTOMER ✅ NEW ─────────────────────────────────
+// ── ACCOUNT SUSPENDED EMAIL ───────────────────────────────────────────────────
 
 export const sendSuspensionEmail = internalAction({
   args: {
@@ -933,7 +921,7 @@ export const sendSuspensionEmail = internalAction({
     name: v.string(),
     reason: v.string(),
     note: v.optional(v.string()),
-    suspendedUntil: v.optional(v.number()), // timestamp ms — undefined = permanent
+    suspendedUntil: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<{ success: boolean; message?: string; id?: string }> => {
     const isPermanent = !args.suspendedUntil;
@@ -961,85 +949,38 @@ export const sendSuspensionEmail = internalAction({
 
     const html = `<!DOCTYPE html>
 <html>
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Account Suspended — DKMerch</title>
-</head>
+<head><meta charset="utf-8"/><title>Account Suspended — DKMerch</title></head>
 <body style="margin:0;padding:0;background:#f4f4f5;font-family:'Segoe UI',Arial,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:32px 0;">
     <tr><td align="center">
       <table width="560" cellpadding="0" cellspacing="0" style="background:white;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
-
         <tr><td style="background:linear-gradient(135deg,#42011e,#fc1268);padding:32px 36px;text-align:center;">
-          <div style="font-size:28px;font-weight:900;color:white;letter-spacing:1px;">DKMerch</div>
-          <div style="color:#ffd6e7;font-size:13px;margin-top:4px;">Your K-Pop Paradise</div>
+          <div style="font-size:28px;font-weight:900;color:white;">DKMerch</div>
         </td></tr>
-
         <tr><td style="background:${isPermanent ? '#fef2f2' : '#fffbeb'};padding:24px 36px;text-align:center;border-bottom:1px solid ${isPermanent ? '#fecaca' : '#fde68a'};">
           <div style="font-size:44px;margin-bottom:8px;">${isPermanent ? '🚫' : '⏸️'}</div>
-          <div style="font-size:20px;font-weight:800;color:${isPermanent ? '#7f1d1d' : '#92400e'};">
-            Account ${isPermanent ? 'Permanently Suspended' : 'Temporarily Suspended'}
-          </div>
-          <div style="font-size:13px;color:${isPermanent ? '#991b1b' : '#b45309'};margin-top:6px;">
-            ${isPermanent
-              ? 'Your DKMerch account has been suspended indefinitely.'
-              : `Your account will be restored on ${untilLabel}.`}
-          </div>
+          <div style="font-size:20px;font-weight:800;color:${isPermanent ? '#7f1d1d' : '#92400e'};">Account ${isPermanent ? 'Permanently Suspended' : 'Temporarily Suspended'}</div>
         </td></tr>
-
         <tr><td style="padding:28px 36px;">
           <p style="font-size:15px;color:#374151;margin:0 0 16px;">Hi <strong>${args.name}</strong>,</p>
-          <p style="font-size:14px;color:#6b7280;line-height:1.7;margin:0 0 24px;">
-            We regret to inform you that your DKMerch account has been suspended due to a violation of our policies.
-          </p>
-
-          <table width="100%" cellpadding="0" cellspacing="0"
-            style="background:#f9fafb;border-radius:12px;border:1.5px solid #e5e7eb;margin-bottom:24px;">
+          <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border-radius:12px;border:1.5px solid #e5e7eb;margin-bottom:24px;">
             <tr><td style="padding:20px 24px;">
               <table width="100%" cellpadding="0" cellspacing="0">
-                <tr>
-                  <td style="font-size:13px;color:#6b7280;padding:6px 0;width:40%;">Reason</td>
-                  <td style="font-size:13px;font-weight:700;color:#dc2626;text-align:right;">${reasonLabel}</td>
-                </tr>
-                <tr>
-                  <td style="font-size:13px;color:#6b7280;padding:6px 0;">Duration</td>
-                  <td style="font-size:13px;font-weight:600;color:#1f2937;text-align:right;">
-                    ${isPermanent
-                      ? '<span style="color:#dc2626;font-weight:700;">Permanent</span>'
-                      : `Until ${untilLabel}`}
-                  </td>
-                </tr>
-                ${args.note ? `
-                <tr>
-                  <td style="font-size:13px;color:#6b7280;padding:6px 0;vertical-align:top;">Note</td>
-                  <td style="font-size:13px;color:#374151;text-align:right;line-height:1.5;">${args.note}</td>
-                </tr>` : ""}
+                <tr><td style="font-size:13px;color:#6b7280;padding:6px 0;">Reason</td><td style="font-size:13px;font-weight:700;color:#dc2626;text-align:right;">${reasonLabel}</td></tr>
+                <tr><td style="font-size:13px;color:#6b7280;padding:6px 0;">Duration</td><td style="font-size:13px;font-weight:600;color:#1f2937;text-align:right;">${isPermanent ? '<span style="color:#dc2626;font-weight:700;">Permanent</span>' : `Until ${untilLabel}`}</td></tr>
+                ${args.note ? `<tr><td style="font-size:13px;color:#6b7280;padding:6px 0;vertical-align:top;">Note</td><td style="font-size:13px;color:#374151;text-align:right;line-height:1.5;">${args.note}</td></tr>` : ""}
               </table>
             </td></tr>
           </table>
-
-          <div style="background:${isPermanent ? '#fef2f2' : '#eff6ff'};border-radius:10px;border:1.5px solid ${isPermanent ? '#fecaca' : '#bfdbfe'};padding:16px 20px;margin-bottom:24px;">
-            <p style="font-size:13px;color:${isPermanent ? '#991b1b' : '#1e40af'};margin:0;line-height:1.6;">
-              ${durationText}
-              ${isPermanent
-                ? " If you believe this is a mistake, you may contact our support team to appeal this decision."
-                : " Please review our <strong>Terms of Service</strong> and <strong>Privacy Policy</strong> before your account is restored."}
-            </p>
-          </div>
-
           <div style="background:#f8f9fa;border-radius:10px;border:1px solid #e5e7eb;padding:16px 20px;">
             <p style="font-size:13px;color:#6b7280;margin:0;line-height:1.6;">
-              📧 For questions or appeals, contact us at
-              <a href="mailto:support@dkmerch.com" style="color:#fc1268;font-weight:600;">support@dkmerch.com</a>
+              📧 For questions or appeals, contact us at <a href="mailto:support@dkmerch.com" style="color:#fc1268;font-weight:600;">support@dkmerch.com</a>
             </p>
           </div>
         </td></tr>
-
         <tr><td style="background:#fafafa;border-top:1px solid #e5e7eb;padding:20px 36px;text-align:center;">
           <p style="color:#aaa;font-size:12px;margin:0;">© 2026 DKMerch · K-Pop Paradise · All rights reserved</p>
         </td></tr>
-
       </table>
     </td></tr>
   </table>
@@ -1056,96 +997,174 @@ export const sendSuspensionEmail = internalAction({
   },
 });
 
-// ══════════════════════════════════════════════════════════════════════════════
-// SMS via Semaphore (Philippines)
-// ══════════════════════════════════════════════════════════════════════════════
+// ── SMS via Semaphore ─────────────────────────────────────────────────────────
 
 export const sendSms = internalAction({
-  args: {
-    to: v.string(),
-    message: v.string(),
-  },
-  handler: async (
-    _ctx,
-    { to, message }: { to: string; message: string }
-  ): Promise<{ success: boolean; message?: string; id?: string }> => {
+  args: { to: v.string(), message: v.string() },
+  handler: async (_ctx, { to, message }: { to: string; message: string }): Promise<{ success: boolean; message?: string; id?: string }> => {
     const SEMAPHORE_API_KEY = process.env.SEMAPHORE_API_KEY;
-
-    if (!SEMAPHORE_API_KEY) {
-      console.error("SEMAPHORE_API_KEY not set.");
-      return { success: false, message: "SMS service not configured." };
-    }
-
+    if (!SEMAPHORE_API_KEY) return { success: false, message: "SMS service not configured." };
     let number = to.replace(/[\s\-]/g, "");
-    if (number.startsWith("09")) {
-      number = "63" + number.slice(1);
-    } else if (number.startsWith("+63")) {
-      number = number.slice(1);
-    }
-
+    if (number.startsWith("09")) number = "63" + number.slice(1);
+    else if (number.startsWith("+63")) number = number.slice(1);
     const senderName = process.env.SEMAPHORE_SENDER_NAME || "DKMerch";
-
-    const body = new URLSearchParams({
-      apikey:      SEMAPHORE_API_KEY,
-      number,
-      message,
-      sendername: senderName,
-    });
-
-    const response = await fetch("https://api.semaphore.co/api/v4/messages", {
-      method:  "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body:    body.toString(),
-    });
-
+    const body = new URLSearchParams({ apikey: SEMAPHORE_API_KEY, number, message, sendername: senderName });
+    const response = await fetch("https://api.semaphore.co/api/v4/messages", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: body.toString() });
     const data = await response.json();
-
-    if (!response.ok || (Array.isArray(data) && data[0]?.status === "Failed")) {
-      console.error("Semaphore SMS error:", data);
-      return { success: false, message: "Failed to send SMS." };
-    }
-
+    if (!response.ok || (Array.isArray(data) && data[0]?.status === "Failed")) return { success: false, message: "Failed to send SMS." };
     const msgId = Array.isArray(data) ? String(data[0]?.message_id ?? "") : "";
-    console.log(`SMS sent to ${number} — ID: ${msgId}`);
     return { success: true, id: msgId };
   },
 });
 
 export const sendSmsOtp = action({
-  args: {
-    to:   v.string(),
-    name: v.string(),
-    otp:  v.string(),
-  },
-  handler: async (
-    ctx,
-    { to, name, otp }: { to: string; name: string; otp: string }
-  ): Promise<{ success: boolean; message?: string; id?: string }> => {
-    const message =
-      `[DKMerch] Hi ${name}! Your verification code is: ${otp}. ` +
-      `Valid for 3 minutes. Do NOT share this with anyone.`;
-
+  args: { to: v.string(), name: v.string(), otp: v.string() },
+  handler: async (ctx, { to, name, otp }: { to: string; name: string; otp: string }): Promise<{ success: boolean; message?: string; id?: string }> => {
+    const message = `[DKMerch] Hi ${name}! Your verification code is: ${otp}. Valid for 3 minutes. Do NOT share this with anyone.`;
     return await ctx.runAction(internal.sendEmail.sendSms, { to, message });
   },
 });
 
 export const sendRiderOtpSms = internalAction({
-  args: {
-    to:      v.string(),
-    name:    v.string(),
-    orderId: v.string(),
-    otp:     v.string(),
-  },
-  handler: async (
-    ctx,
-    { to, name, orderId, otp }: { to: string; name: string; orderId: string; otp: string }
-  ): Promise<{ success: boolean; message?: string; id?: string }> => {
+  args: { to: v.string(), name: v.string(), orderId: v.string(), otp: v.string() },
+  handler: async (ctx, { to, name, orderId, otp }: { to: string; name: string; orderId: string; otp: string }): Promise<{ success: boolean; message?: string; id?: string }> => {
     const shortId = orderId.slice(-8).toUpperCase();
-    const message =
-      `[DKMerch] Hi ${name}! Your rider is on the way for Order #${shortId}. ` +
-      `Delivery OTP: ${otp}. Give this code to your rider upon arrival. ` +
-      `Do NOT share with anyone else.`;
-
+    const message = `[DKMerch] Hi ${name}! Your rider is on the way for Order #${shortId}. Delivery OTP: ${otp}. Give this code to your rider upon arrival. Do NOT share with anyone else.`;
     return await ctx.runAction(internal.sendEmail.sendSms, { to, message });
+  },
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// NEW: PICKUP APPROVED EMAIL → RIDER
+// ══════════════════════════════════════════════════════════════════════════════
+
+export const sendPickupApprovedEmail = internalAction({
+  args: {
+    to: v.string(),
+    riderName: v.string(),
+    orderId: v.string(),
+    customerName: v.string(),
+    total: v.number(),
+  },
+  handler: async (ctx, args): Promise<{ success: boolean; message?: string; id?: string }> => {
+    const shortId  = args.orderId.slice(-8).toUpperCase();
+    const riderUrl = `${SITE_URL}/rider?tab=my-pickups`;
+
+    const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"/><title>Pickup Approved - DKMerch Rider</title></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:32px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:white;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+        <tr><td style="background:linear-gradient(135deg,#42011e,#fc1268);padding:32px 36px;text-align:center;">
+          <div style="font-size:28px;font-weight:900;color:white;">🛵 DKMerch Rider</div>
+          <div style="color:#ffd6e7;font-size:13px;margin-top:4px;">Pickup Notification</div>
+        </td></tr>
+        <tr><td style="background:#d1fae5;padding:20px 36px;text-align:center;border-bottom:1px solid #a7f3d0;">
+          <div style="font-size:44px;margin-bottom:8px;">✅</div>
+          <div style="font-size:22px;font-weight:800;color:#065f46;">Pickup Request Approved!</div>
+          <div style="font-size:14px;color:#047857;margin-top:4px;">You've been assigned to deliver this order.</div>
+        </td></tr>
+        <tr><td style="padding:28px 36px;">
+          <p style="font-size:15px;color:#374151;margin:0 0 20px;">Hi <strong>${args.riderName}</strong>! 🎉</p>
+          <p style="font-size:14px;color:#6b7280;line-height:1.6;margin:0 0 20px;">
+            Your pickup request has been <strong style="color:#059669;">approved</strong> by the admin. Head to your Rider Dashboard to proceed with the delivery.
+          </p>
+          <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border-radius:12px;border:1.5px solid #e5e7eb;margin-bottom:24px;">
+            <tr><td style="padding:20px 24px;">
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr><td style="font-size:13px;color:#6b7280;padding:5px 0;">Order ID</td><td style="font-size:13px;font-weight:700;color:#fc1268;text-align:right;">#${shortId}</td></tr>
+                <tr><td style="font-size:13px;color:#6b7280;padding:5px 0;">Customer</td><td style="font-size:13px;font-weight:600;color:#1f2937;text-align:right;">${args.customerName}</td></tr>
+                <tr><td style="font-size:13px;color:#6b7280;padding:5px 0;">Order Total</td><td style="font-size:14px;font-weight:800;color:#1f2937;text-align:right;">₱${args.total.toLocaleString()}</td></tr>
+              </table>
+            </td></tr>
+          </table>
+          <div style="background:#eff6ff;border-radius:12px;border:1.5px solid #bfdbfe;padding:16px 20px;margin-bottom:24px;">
+            <div style="font-size:13px;color:#1e40af;line-height:1.7;">
+              📦 Go to <strong>My Pickups</strong> tab → Click <strong>Notify Customer</strong> when you're ready to deliver.<br/>
+              🔐 Ask the customer for their <strong>OTP code</strong> upon arrival to confirm delivery.
+            </div>
+          </div>
+          <div style="text-align:center;margin-bottom:24px;">
+            <a href="${riderUrl}" style="display:inline-block;background:linear-gradient(135deg,#fc1268,#ff4d94);color:white;text-decoration:none;padding:14px 36px;border-radius:10px;font-size:15px;font-weight:700;">Go to My Pickups</a>
+          </div>
+        </td></tr>
+        <tr><td style="background:#fafafa;border-top:1px solid #e5e7eb;padding:20px 36px;text-align:center;">
+          <div style="font-size:12px;color:#9ca3af;">© 2026 DKMerch · Rider Notification System</div>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+    return await ctx.runAction(internal.sendEmail.sendEmail, {
+      to: args.to,
+      subject: `✅ Pickup Approved! — Order #${shortId} is yours | DKMerch Rider`,
+      html,
+    });
+  },
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// NEW: PICKUP REJECTED EMAIL → RIDER
+// ══════════════════════════════════════════════════════════════════════════════
+
+export const sendPickupRejectedEmail = internalAction({
+  args: {
+    to: v.string(),
+    riderName: v.string(),
+    orderId: v.string(),
+  },
+  handler: async (ctx, args): Promise<{ success: boolean; message?: string; id?: string }> => {
+    const shortId  = args.orderId.slice(-8).toUpperCase();
+    const riderUrl = `${SITE_URL}/rider?tab=available`;
+
+    const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"/><title>Pickup Request Update - DKMerch Rider</title></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:32px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:white;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+        <tr><td style="background:linear-gradient(135deg,#42011e,#fc1268);padding:32px 36px;text-align:center;">
+          <div style="font-size:28px;font-weight:900;color:white;">🛵 DKMerch Rider</div>
+          <div style="color:#ffd6e7;font-size:13px;margin-top:4px;">Pickup Notification</div>
+        </td></tr>
+        <tr><td style="background:#fef2f2;padding:20px 36px;text-align:center;border-bottom:1px solid #fecaca;">
+          <div style="font-size:44px;margin-bottom:8px;">❌</div>
+          <div style="font-size:22px;font-weight:800;color:#7f1d1d;">Pickup Request Not Approved</div>
+          <div style="font-size:14px;color:#991b1b;margin-top:4px;">This pickup was assigned to another rider.</div>
+        </td></tr>
+        <tr><td style="padding:28px 36px;">
+          <p style="font-size:15px;color:#374151;margin:0 0 16px;">Hi <strong>${args.riderName}</strong>,</p>
+          <p style="font-size:14px;color:#6b7280;line-height:1.6;margin:0 0 20px;">
+            Unfortunately your pickup request for Order <strong>#${shortId}</strong> was not approved. 
+            This usually happens when another rider was selected for the same order.
+          </p>
+          <div style="background:#fffbeb;border-radius:12px;border:1.5px solid #fde68a;padding:16px 20px;margin-bottom:24px;">
+            <div style="font-size:13px;color:#92400e;line-height:1.7;">
+              💡 Don't worry — check <strong>Available Orders</strong> for new pickup opportunities!
+            </div>
+          </div>
+          <div style="text-align:center;margin-bottom:24px;">
+            <a href="${riderUrl}" style="display:inline-block;background:linear-gradient(135deg,#fc1268,#ff4d94);color:white;text-decoration:none;padding:14px 36px;border-radius:10px;font-size:15px;font-weight:700;">View Available Orders</a>
+          </div>
+        </td></tr>
+        <tr><td style="background:#fafafa;border-top:1px solid #e5e7eb;padding:20px 36px;text-align:center;">
+          <div style="font-size:12px;color:#9ca3af;">© 2026 DKMerch · Rider Notification System</div>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+    return await ctx.runAction(internal.sendEmail.sendEmail, {
+      to: args.to,
+      subject: `❌ Pickup Request Update — Order #${shortId} | DKMerch Rider`,
+      html,
+    });
   },
 });

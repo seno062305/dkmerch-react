@@ -155,7 +155,7 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
               </div>
             </Link>
 
-            {/* CENTER: Nav — NO rider item here */}
+            {/* CENTER: Nav */}
             <nav className={`main-nav ${showMobileMenu ? 'active' : ''}`}>
               <div className="mobile-nav-header">
                 <div className="mobile-nav-brand">
@@ -174,14 +174,14 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
                 <li><Link to="/collections" onClick={closeMobileMenu}>Collections</Link></li>
                 <li><Link to="/preorder" onClick={closeMobileMenu}>Pre-Order</Link></li>
                 <li><Link to="/track-order" onClick={closeMobileMenu}>Track Order</Link></li>
-                {/* Rider — mobile sidebar only, opens modal */}
+                {/* Rider — mobile sidebar */}
                 <li className="mobile-nav-rider-item">
                   <button
                     className="mobile-nav-rider-btn"
                     onClick={() => { closeMobileMenu(); setShowRiderModal(true); }}
                   >
                     <i className="fas fa-motorcycle"></i>
-                    <span>Rider Login</span>
+                    <span>Rider</span>
                   </button>
                 </li>
               </ul>
@@ -190,14 +190,10 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
             {/* RIGHT: Actions */}
             <div className="header-actions">
 
-              {/* 🛵 Icon only — desktop header, no label */}
-              <button
-                className="header-rider-icon-btn"
-                onClick={() => setShowRiderModal(true)}
-                title="Rider Login"
-                aria-label="Rider Login"
-              >
-                <i className="fas fa-motorcycle"></i>
+              {/* 🛵 Rider — same style as Search/Cart/Favorites */}
+              <button className="header-action-item" onClick={() => setShowRiderModal(true)}>
+                <span className="icon-wrapper"><i className="fas fa-motorcycle"></i></span>
+                <span>Rider</span>
               </button>
 
               <button className="header-action-item" onClick={() => setShowSearch(true)}>
@@ -337,7 +333,6 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
         )}
       </header>
 
-      {/* RiderLoginModal — rendered outside <header> so it overlays everything */}
       {showRiderModal && (
         <RiderLoginModal
           onClose={() => setShowRiderModal(false)}

@@ -1,5 +1,6 @@
 // convex/pickupRequests.ts
-import { query, mutation } from "./_generated/server";
+import { query, mutation, action } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
 
 export const getAllPickupRequests = query(async ({ db }) => {
@@ -55,24 +56,60 @@ export const updatePickupStatus = mutation({
   },
 });
 
+// ── APPROVE — patches DB then fires email via action ──────────────────────────
 export const approvePickupRequest = mutation({
   args: { requestId: v.id("pickupRequests") },
-  handler: async ({ db }, { requestId }) => {
+  handler: async ({ db, scheduler }, { requestId }) => {
+    const req = await db.get(requestId);
+    if (!req) return { success: false };
+
     await db.patch(requestId, {
       status: "approved",
       approvedAt: new Date().toISOString(),
     });
+
+    // Fetch the related order to get customer name & total for the email
+    const order = await db
+      .query("orders")
+      .withIndex("by_orderId", q => q.eq("orderId", req.orderId))
+      .first();
+
+    // Fire-and-forget email to the rider
+    if (req.riderEmail) {
+      await scheduler.runAfter(0, internal.sendEmail.sendPickupApprovedEmail, {
+        to:           req.riderEmail,
+        riderName:    req.riderName,
+        orderId:      req.orderId,
+        customerName: req.customerName ?? order?.customerName ?? "Customer",
+        total:        req.total ?? order?.finalTotal ?? order?.total ?? 0,
+      });
+    }
+
     return { success: true };
   },
 });
 
+// ── REJECT — patches DB then fires email via action ───────────────────────────
 export const rejectPickupRequest = mutation({
   args: { requestId: v.id("pickupRequests") },
-  handler: async ({ db }, { requestId }) => {
+  handler: async ({ db, scheduler }, { requestId }) => {
+    const req = await db.get(requestId);
+    if (!req) return { success: false };
+
     await db.patch(requestId, {
       status: "rejected",
       rejectedAt: new Date().toISOString(),
     });
+
+    // Fire-and-forget email to the rider
+    if (req.riderEmail) {
+      await scheduler.runAfter(0, internal.sendEmail.sendPickupRejectedEmail, {
+        to:        req.riderEmail,
+        riderName: req.riderName,
+        orderId:   req.orderId,
+      });
+    }
+
     return { success: true };
   },
 });
