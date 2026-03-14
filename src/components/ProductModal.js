@@ -54,7 +54,17 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
     setAppliedPromo(null);
     setExpandedReviews({});
 
-    const scrollY = window.scrollY;
+    // ✅ FIX: Read scrollY from body.style.top if already fixed,
+    // otherwise read window.scrollY directly.
+    // This prevents jumping to top on close.
+    const getScrollY = () => {
+      const bodyTop = document.body.style.top;
+      if (bodyTop) return Math.abs(parseInt(bodyTop, 10)) || 0;
+      return window.scrollY;
+    };
+
+    const scrollY = getScrollY();
+
     document.body.style.position = 'fixed';
     document.body.style.top = `-${scrollY}px`;
     document.body.style.width = '100%';
@@ -65,7 +75,8 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
       document.body.style.top = '';
       document.body.style.width = '';
       document.body.style.overflow = '';
-      window.scrollTo(0, scrollY);
+      // ✅ Restore exact scroll position — no jump
+      window.scrollTo({ top: scrollY, behavior: 'instant' });
     };
   }, [productId]);
 
