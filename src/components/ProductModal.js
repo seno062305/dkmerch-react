@@ -8,6 +8,8 @@ import LoginModal from './LoginModal';
 import PromoCodeInput from './PromoCodeInput';
 import './ProductModal.css';
 
+const REVIEW_CHAR_LIMIT = 120;
+
 const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
   const { isAuthenticated, user } = useAuth();
   const allPromos = useQuery(api.promos.getAllPromos) ?? [];
@@ -22,6 +24,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
   const [appliedPromo, setAppliedPromo]         = useState(null);
   const [showLightbox, setShowLightbox]         = useState(false);
   const [cartToast, setCartToast]               = useState(false);
+  const [expandedReviews, setExpandedReviews]   = useState({});
 
   const productId = product._id || product.id || '';
 
@@ -49,6 +52,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
     setRating(0);
     setReview('');
     setAppliedPromo(null);
+    setExpandedReviews({});
 
     const scrollY = window.scrollY;
     document.body.style.position = 'fixed';
@@ -116,7 +120,6 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
     setTimeout(() => setCartToast(false), 2200);
   };
 
-  // ── Add to Cart — with confirmation ──
   const handleAddToCartClick = () => {
     if (!isAuthenticated) {
       showNotification('Please login to add to cart', 'error');
@@ -132,7 +135,6 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
     triggerCartToast();
   };
 
-  // ── Pre-Order — with confirmation ──
   const handlePreOrderClick = () => {
     if (!isAuthenticated) {
       showNotification('Please login to pre-order', 'error');
@@ -145,9 +147,6 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
     triggerCartToast();
   };
 
-  // ✅ FIX: Removed window.confirm from here.
-  // The confirmation is handled by the CALLER (Collections/WeverseSection/Home).
-  // Having confirm here AND in the caller caused double confirmation.
   const handleWishlistClick = () => {
     if (!isAuthenticated) {
       showNotification('Please login to add to favorites', 'error');
@@ -155,13 +154,16 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
       setShowLoginModal(true);
       return;
     }
-    // Directly call onAddToWishlist — caller already has confirm
     onAddToWishlist(product);
   };
 
   const handleLoginModalClose = () => {
     setShowLoginModal(false);
     setHideProductModal(false);
+  };
+
+  const toggleExpand = (id) => {
+    setExpandedReviews(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
   if (hideProductModal) return <>{showLoginModal && <LoginModal onClose={handleLoginModalClose} />}</>;
@@ -184,7 +186,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
 
           <div className="modal-grid">
 
-            {/* LEFT: Image */}
+            {/* LEFT: Image + Rating + Reviews */}
             <div className="modal-image-section">
               {product.isPreOrder && !isReleased && <div className="pre-order-badge">PRE-ORDER</div>}
               {product.isSale && !product.isPreOrder && <div className="sale-badge">SALE</div>}
@@ -202,9 +204,76 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
               <div className="modal-img-tap-hint">
                 <i className="fas fa-search-plus"></i> Tap to zoom
               </div>
+
+              {/* ── Average Rating ── */}
+              {convexReviews.length > 0 && (
+                <div className="modal-left-rating">
+                  <div className="modal-left-rating-stars">
+                    {[1,2,3,4,5].map(s => (
+                      <i key={s} className={`fas fa-star ${s <= Math.round(getAverageRating()) ? 'filled' : ''}`}></i>
+                    ))}
+                  </div>
+                  <div className="modal-left-rating-score">{getAverageRating()}</div>
+                  <div className="modal-left-rating-count">
+                    {convexReviews.length} {convexReviews.length === 1 ? 'review' : 'reviews'}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Customer Reviews list ── */}
+              {convexReviews.length > 0 && (
+                <div className="modal-left-reviews">
+                  {convexReviews.slice(0, 3).map(rev => {
+                    const isLong = rev.review.length > REVIEW_CHAR_LIMIT;
+                    const isExpanded = expandedReviews[rev._id];
+                    return (
+                      <div key={rev._id} className="modal-left-review-item">
+                        <div className="modal-left-review-header">
+                          <div className="modal-left-review-user">
+                            <i className="fas fa-user-circle"></i>
+                            <span>{rev.userName}</span>
+                          </div>
+                          <div className="modal-left-review-actions">
+                            <div className="modal-left-review-stars">
+                              {[1,2,3,4,5].map(s => (
+                                <i key={s} className={`fas fa-star ${s <= rev.rating ? 'filled' : ''}`}></i>
+                              ))}
+                            </div>
+                            {isAuthenticated && user?.email === rev.userEmail && (
+                              <button
+                                className="modal-left-review-delete"
+                                onClick={() => handleDeleteReview(rev._id)}
+                                title="Delete your review"
+                              >
+                                <i className="fas fa-trash-alt"></i>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        <p className="modal-left-review-text">
+                          {isLong && !isExpanded
+                            ? rev.review.slice(0, REVIEW_CHAR_LIMIT) + '...'
+                            : rev.review}
+                        </p>
+                        {isLong && (
+                          <button
+                            className="modal-left-review-toggle"
+                            onClick={() => toggleExpand(rev._id)}
+                          >
+                            {isExpanded ? 'See less ▲' : 'See more ▼'}
+                          </button>
+                        )}
+                        <small className="modal-left-review-date">
+                          {new Date(rev.createdAt).toLocaleDateString()}
+                        </small>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
-            {/* RIGHT: Details */}
+            {/* RIGHT: Details + Review Form */}
             <div className="modal-details-section">
               <div className="modal-product-info">
                 <div className="product-group">{product.kpopGroup}</div>
@@ -212,19 +281,6 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
 
                 {product.description && (
                   <p className="product-description">{product.description}</p>
-                )}
-
-                {convexReviews.length > 0 && (
-                  <div className="average-rating">
-                    <div className="stars">
-                      {[1,2,3,4,5].map(s => (
-                        <i key={s} className={`fas fa-star ${s <= Math.round(getAverageRating()) ? 'filled' : ''}`}></i>
-                      ))}
-                    </div>
-                    <span className="rating-text">
-                      {getAverageRating()} ({convexReviews.length} {convexReviews.length === 1 ? 'review' : 'reviews'})
-                    </span>
-                  </div>
                 )}
 
                 <div className="price-section">
@@ -294,7 +350,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
                 )}
               </div>
 
-              {/* Review Section */}
+              {/* Review Form only — list is on the left */}
               <div className="review-section">
                 <h3><i className="fas fa-star"></i> {hasUserReviewed ? 'Update Review' : 'Rate & Review'}</h3>
 
@@ -337,46 +393,6 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
                       {hasUserReviewed ? 'Update Review' : 'Submit Review'}
                     </button>
                   </>
-                )}
-
-                {convexReviews.length > 0 && (
-                  <div className="all-reviews">
-                    <h4>Customer Reviews ({convexReviews.length})</h4>
-                    {convexReviews.slice(0, 3).map(rev => (
-                      <div key={rev._id} className="review-item">
-                        <div className="review-header">
-                          <div className="reviewer-info">
-                            <i className="fas fa-user-circle"></i>
-                            <strong>{rev.userName}</strong>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <div className="review-stars">
-                              {[1,2,3,4,5].map(s => (
-                                <i key={s} className={`fas fa-star ${s <= rev.rating ? 'filled' : ''}`}></i>
-                              ))}
-                            </div>
-                            {isAuthenticated && user?.email === rev.userEmail && (
-                              <button
-                                onClick={() => handleDeleteReview(rev._id)}
-                                style={{
-                                  background: 'none', border: 'none', cursor: 'pointer',
-                                  color: '#dc2626', fontSize: 13, padding: '2px 4px',
-                                  borderRadius: 4, transition: 'background 0.2s'
-                                }}
-                                title="Delete your review"
-                              >
-                                <i className="fas fa-trash-alt"></i>
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                        <p className="review-text">{rev.review}</p>
-                        <small className="review-date">
-                          {new Date(rev.createdAt).toLocaleDateString()}
-                        </small>
-                      </div>
-                    ))}
-                  </div>
                 )}
               </div>
             </div>
