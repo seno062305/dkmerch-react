@@ -10,12 +10,10 @@ export default defineSchema({
     password: v.string(),
     role: v.string(),
     status: v.optional(v.string()),
-    // ── Suspension fields ✅ NEW ──────────────────
-    suspendReason:  v.optional(v.string()),  // reason key e.g. "privacy_policy"
-    suspendNote:    v.optional(v.string()),  // admin's custom note
-    suspendedAt:    v.optional(v.number()),  // timestamp ms when suspended
-    suspendedUntil: v.optional(v.number()),  // timestamp ms for expiry; undefined = permanent
-    // ─────────────────────────────────────────────
+    suspendReason:  v.optional(v.string()),
+    suspendNote:    v.optional(v.string()),
+    suspendedAt:    v.optional(v.number()),
+    suspendedUntil: v.optional(v.number()),
     registeredAt: v.optional(v.string()),
     fullName: v.optional(v.string()),
     phone: v.optional(v.string()),
@@ -28,18 +26,16 @@ export default defineSchema({
     .index("by_email", ["email"])
     .index("by_username", ["username"]),
 
-  // Temporary table for unverified registrations
-  // Users only move to `users` table AFTER OTP verification
   pendingUsers: defineTable({
     name: v.string(),
     username: v.string(),
     email: v.string(),
     password: v.string(),
-    token: v.string(),           // UUID verification token (for email link — kept for compatibility)
-    expiresAt: v.number(),       // Token expiry — 24 hours
+    token: v.string(),
+    expiresAt: v.number(),
     createdAt: v.number(),
-    otp: v.optional(v.string()),           // 6-digit OTP for in-modal verification
-    otpExpiresAt: v.optional(v.number()),  // OTP expiry — 3 minutes
+    otp: v.optional(v.string()),
+    otpExpiresAt: v.optional(v.number()),
   })
     .index("by_token", ["token"])
     .index("by_email", ["email"]),
@@ -273,4 +269,12 @@ export default defineSchema({
     createdAt: v.string(),
     read: v.boolean(),
   }).index("by_read", ["read"]),
+
+  // ── Store / Admin location settings ──────────────────────────────────────
+  settings: defineTable({
+    storeName:    v.optional(v.string()),
+    storeAddress: v.optional(v.string()),
+    storeLat:     v.optional(v.number()),
+    storeLng:     v.optional(v.number()),
+  }),
 });
