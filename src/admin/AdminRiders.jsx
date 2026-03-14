@@ -659,6 +659,30 @@ const RemoveConfirmModal = ({ order, onConfirm, onClose }) => (
   </div>
 );
 
+// ─── PLATE NUMBER HELPERS ─────────────────────────────────────
+// Format: 3 letters + 4 numbers (e.g. ABC1234)
+const PLATE_REGEX = /^[A-Z]{3}\d{4}$/;
+
+/**
+ * Formats raw plate input to AAA0000 pattern as the user types.
+ * - First 3 chars: letters only (auto-capitalized)
+ * - Next 4 chars: digits only
+ * Returns cleaned string (max 7 chars).
+ */
+const formatPlateInput = (raw) => {
+  const upper = raw.toUpperCase();
+  let letters = '';
+  let digits  = '';
+  for (const ch of upper) {
+    if (letters.length < 3 && /[A-Z]/.test(ch)) {
+      letters += ch;
+    } else if (letters.length === 3 && digits.length < 4 && /\d/.test(ch)) {
+      digits += ch;
+    }
+  }
+  return letters + digits;
+};
+
 // ─── ACTIVE ORDER CARD ────────────────────────────────────────
 const ActiveOrderCard = ({
   order,
@@ -696,13 +720,33 @@ const ActiveOrderCard = ({
     setCopiedCust(true); setTimeout(() => setCopiedCust(false), 2000);
   };
 
+  // ── VALIDATION ──────────────────────────────────────────────
   const validate = () => {
     const e = {};
-    if (!ri.name?.trim())                        e.name  = 'Name is required';
-    if (!ri.phone?.trim())                       e.phone = 'Phone is required';
-    else if (!/^09\d{9}$/.test(ri.phone.trim())) e.phone = 'Must be 11 digits starting with 09';
-    if (!ri.plate?.trim())                       e.plate = 'Plate number is required';
-    setErrors(e); return Object.keys(e).length === 0;
+
+    // Name: required, at least 2 chars
+    if (!ri.name?.trim()) {
+      e.name = 'Pangalan ng rider ay required';
+    } else if (ri.name.trim().length < 2) {
+      e.name = 'Minimum 2 characters';
+    }
+
+    // Phone: required, must be 11 digits starting with 09
+    if (!ri.phone?.trim()) {
+      e.phone = 'Phone number ay required';
+    } else if (!/^09\d{9}$/.test(ri.phone.trim())) {
+      e.phone = 'Format: 09XXXXXXXXX (11 digits)';
+    }
+
+    // Plate: required, must be exactly 3 letters + 4 digits
+    if (!ri.plate?.trim()) {
+      e.plate = 'Plate number ay required';
+    } else if (!PLATE_REGEX.test(ri.plate.trim())) {
+      e.plate = 'Format: ABC1234 (3 letters + 4 numbers)';
+    }
+
+    setErrors(e);
+    return Object.keys(e).length === 0;
   };
 
   const handlePhoneChange = (val) => {
@@ -711,12 +755,26 @@ const ActiveOrderCard = ({
     if (errors.phone) setErrors(prev => ({ ...prev, phone: '' }));
   };
 
+  // ── PLATE CHANGE: auto-format + auto-capitalize ──────────────
+  const handlePlateChange = (val) => {
+    const formatted = formatPlateInput(val);
+    setRi(prev => ({ ...prev, plate: formatted }));
+    if (errors.plate) setErrors(prev => ({ ...prev, plate: '' }));
+  };
+
+  // Plate display helper: show ABC·1234 for readability (only in placeholder hint)
+  const plateIsComplete = PLATE_REGEX.test(ri.plate);
+
   const savedRiderInfo    = order.riderInfo || {};
   const hasSavedRiderInfo = !!(
     savedRiderInfo.name?.trim() && savedRiderInfo.phone?.trim() && savedRiderInfo.plate?.trim() &&
-    /^09\d{9}$/.test(savedRiderInfo.phone.trim())
+    /^09\d{9}$/.test(savedRiderInfo.phone.trim()) &&
+    PLATE_REGEX.test(savedRiderInfo.plate.trim())
   );
   const alreadyNotified = (order.orderStatus || '').toLowerCase() === 'out_for_delivery';
+
+  // Lock fields once rider info is saved & valid, or once out for delivery
+  const isRiderLocked = hasSavedRiderInfo || alreadyNotified;
 
   return (
     <div className={`ar-order-card ${collapsed ? 'ar-card-collapsed' : ''}`}>
@@ -754,30 +812,118 @@ const ActiveOrderCard = ({
             </div>
 
             <div className="ar-section">
-              <div className="ar-section-title">🛵 Rider Info</div>
-              <div className="ar-input-compact">
-                <div className="ar-input-field">
-                  <input type="text" placeholder="Name *" value={ri.name}
-                    onChange={e => { setRi(prev => ({ ...prev, name: e.target.value })); if (errors.name) setErrors(prev => ({ ...prev, name: '' })); }}
-                    className={errors.name ? 'ar-input-error' : ''} />
-                  {errors.name && <span className="ar-field-error">{errors.name}</span>}
-                </div>
-                <div className="ar-input-field">
-                  <input type="tel" placeholder="Phone * (09XXXXXXXXX)" value={ri.phone}
-                    onChange={e => handlePhoneChange(e.target.value)} maxLength={11}
-                    className={errors.phone ? 'ar-input-error' : ''} />
-                  {errors.phone ? <span className="ar-field-error">{errors.phone}</span> : <span className="ar-field-hint">{ri.phone.length}/11 digits</span>}
-                </div>
-                <div className="ar-input-field">
-                  <input type="text" placeholder="Plate Number *" value={ri.plate}
-                    onChange={e => { setRi(prev => ({ ...prev, plate: e.target.value.toUpperCase() })); if (errors.plate) setErrors(prev => ({ ...prev, plate: '' })); }}
-                    className={errors.plate ? 'ar-input-error' : ''} />
-                  {errors.plate && <span className="ar-field-error">{errors.plate}</span>}
-                </div>
+              <div className="ar-section-title">
+                🛵 Rider Info
+                {isRiderLocked && (
+                  <span className="ar-rider-locked-badge">🔒 Locked</span>
+                )}
               </div>
-              <button className="ar-save-btn ar-save-btn-sm" onClick={() => { if (validate()) onSaveRider(orderId, ri); }} disabled={savingRider}>
-                {savingRider ? '⏳' : savedRider ? '✅ Saved' : '💾 Save Rider'}
-              </button>
+
+              {/* ── LOCKED VIEW ── */}
+              {isRiderLocked ? (
+                <div className="ar-rider-locked-view">
+                  <div className="ar-rider-locked-row">
+                    <span className="ar-cl">Name</span>
+                    <span className="ar-cv ar-locked-value">{ri.name || '—'}</span>
+                  </div>
+                  <div className="ar-rider-locked-row">
+                    <span className="ar-cl">Phone</span>
+                    <span className="ar-cv ar-locked-value">{ri.phone || '—'}</span>
+                  </div>
+                  <div className="ar-rider-locked-row">
+                    <span className="ar-cl">Plate</span>
+                    <span className="ar-cv ar-locked-plate">{ri.plate || '—'}</span>
+                  </div>
+                  <p className="ar-rider-locked-note">
+                    {alreadyNotified
+                      ? '🚚 Hindi na maaaring baguhin — naka-dispatch na ang order.'
+                      : '✅ Na-save na ang rider info. Hindi na maaaring baguhin.'}
+                  </p>
+                </div>
+              ) : (
+                /* ── EDITABLE VIEW ── */
+                <>
+                  <div className="ar-input-compact">
+
+                    {/* NAME */}
+                    <div className="ar-input-field">
+                      <input
+                        type="text"
+                        placeholder="Pangalan ng Rider *"
+                        value={ri.name}
+                        onChange={e => {
+                          setRi(prev => ({ ...prev, name: e.target.value }));
+                          if (errors.name) setErrors(prev => ({ ...prev, name: '' }));
+                        }}
+                        className={errors.name ? 'ar-input-error' : ''}
+                      />
+                      {errors.name
+                        ? <span className="ar-field-error">⚠ {errors.name}</span>
+                        : ri.name.trim().length >= 2
+                          ? <span className="ar-field-ok">✓ OK</span>
+                          : null
+                      }
+                    </div>
+
+                    {/* PHONE */}
+                    <div className="ar-input-field">
+                      <input
+                        type="tel"
+                        placeholder="Phone * (09XXXXXXXXX)"
+                        value={ri.phone}
+                        onChange={e => handlePhoneChange(e.target.value)}
+                        maxLength={11}
+                        className={errors.phone ? 'ar-input-error' : ''}
+                      />
+                      {errors.phone
+                        ? <span className="ar-field-error">⚠ {errors.phone}</span>
+                        : <span className={`ar-field-hint ${/^09\d{9}$/.test(ri.phone) ? 'ar-field-hint--ok' : ''}`}>
+                            {/^09\d{9}$/.test(ri.phone) ? '✓ Valid number' : `${ri.phone.length}/11 digits`}
+                          </span>
+                      }
+                    </div>
+
+                    {/* PLATE NUMBER */}
+                    <div className="ar-input-field">
+                      <div className="ar-plate-input-wrap">
+                        <input
+                          type="text"
+                          placeholder="Plate * (ABC1234)"
+                          value={ri.plate}
+                          onChange={e => handlePlateChange(e.target.value)}
+                          maxLength={7}
+                          className={`ar-plate-input ${errors.plate ? 'ar-input-error' : ''} ${plateIsComplete ? 'ar-plate-input--valid' : ''}`}
+                          spellCheck={false}
+                          autoCapitalize="characters"
+                        />
+                        <span className={`ar-plate-counter ${plateIsComplete ? 'ar-plate-counter--done' : ''}`}>
+                          {ri.plate.length}/7
+                        </span>
+                      </div>
+                      {errors.plate
+                        ? <span className="ar-field-error">⚠ {errors.plate}</span>
+                        : ri.plate.length > 0
+                          ? plateIsComplete
+                            ? <span className="ar-field-ok">✓ Format tama (3 letters + 4 numbers)</span>
+                            : ri.plate.length < 3
+                              ? <span className="ar-field-hint">Mag-type ng {3 - ri.plate.length} pang letter…</span>
+                              : ri.plate.length === 3
+                                ? <span className="ar-field-hint">Ngayon mag-type ng 4 digits…</span>
+                                : <span className="ar-field-hint">{7 - ri.plate.length} digit/s pa…</span>
+                          : <span className="ar-field-hint">Format: ABC1234 · Auto-caps</span>
+                      }
+                    </div>
+
+                  </div>
+                  <button
+                    className="ar-save-btn ar-save-btn-sm"
+                    onClick={() => { if (validate()) onSaveRider(orderId, ri); }}
+                    disabled={savingRider}
+                  >
+                    {savingRider ? '⏳' : savedRider ? '✅ Saved' : '💾 Save Rider'}
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
@@ -790,11 +936,13 @@ const ActiveOrderCard = ({
                   className={`ar-notify-btn ${notified ? 'ar-notify-btn--done' : ''}`}
                   onClick={() => { if (validate()) onNotifyCustomer(order, ri); }}
                   disabled={notifying || !hasSavedRiderInfo}
-                  title={!hasSavedRiderInfo ? 'Save rider info first before notifying' : ''}
+                  title={!hasSavedRiderInfo ? 'I-save muna ang rider info bago mag-notify' : ''}
                 >
                   {notifying ? '⏳ Sending…' : notified ? '✅ Customer Notified!' : '🔔 Notify Customer (Out for Delivery)'}
                 </button>
-                {!hasSavedRiderInfo && <p className="ar-notify-hint">⚠️ Save rider info first (click 💾 Save Rider) before notifying</p>}
+                {!hasSavedRiderInfo && (
+                  <p className="ar-notify-hint">⚠️ I-save muna ang rider info (💾 Save Rider) bago mag-notify</p>
+                )}
               </>
             )}
 
@@ -940,9 +1088,12 @@ const AdminRiders = () => {
   const activeStatuses    = ['confirmed', 'shipped', 'out_for_delivery', 'processing'];
   const completedStatuses = ['completed', 'delivered'];
 
+  // Sort: newest accepted order first.
+  // Use _creationTime as the primary key (most recently created = top).
+  // out_for_delivery orders stay in their natural position — they were the last ones admin acted on.
   const activeOrders = allOrders
     .filter(o => activeStatuses.includes((o.orderStatus || o.status || '').toLowerCase()))
-    .sort((a, b) => (b.confirmedAt || b._creationTime || 0) - (a.confirmedAt || a._creationTime || 0));
+    .sort((a, b) => (b._creationTime || 0) - (a._creationTime || 0));
 
   const completedOrders = allOrders
     .filter(o => completedStatuses.includes((o.orderStatus || o.status || '').toLowerCase()))
@@ -979,7 +1130,6 @@ const AdminRiders = () => {
     setTimeout(() => setCopiedLink(p => ({ ...p, [orderId]: false })), 2000);
   };
 
-  // ── FIXED: now passes customerPhone so SMS is sent ──
   const handleNotifyCustomer = async (order, ri) => {
     const { orderId } = order;
     if (!ri.name?.trim() || !ri.phone?.trim()) { alert('Please enter rider name and phone first.'); return; }
@@ -993,7 +1143,7 @@ const AdminRiders = () => {
         riderPhone:    ri.phone,
         riderPlate:    ri.plate || undefined,
         customerEmail: order.email,
-        customerPhone: order.phone || undefined, // ← sends SMS OTP to customer's phone
+        customerPhone: order.phone || undefined,
       });
       setNotified(p => ({ ...p, [orderId]: true }));
       setTimeout(() => setNotified(p => ({ ...p, [orderId]: false })), 4000);

@@ -28,10 +28,11 @@ import CartModal from './components/CartModal';
 import ProductModal from './components/ProductModal';
 import WishlistPage from './components/WishlistPage';
 
+
 import AdminLayout from './admin/AdminLayout';
 import AdminDashboard from './admin/AdminDashboard';
 import AdminProducts from './admin/AdminProducts';
-import AdminItemList from './admin/AdminItemList';
+import AdminItemList from './admin/AdminInventory';
 import AdminOrders from './admin/AdminOrders';
 import AdminPromos from './admin/AdminPromos';
 import AdminSalesReports from './admin/AdminSalesReports';
@@ -50,23 +51,25 @@ const StartupRedirect = ({ children }) => {
   const navigate = useNavigate();
   const [redirectDone, setRedirectDone] = useState(false);
 
-  useEffect(() => {
-    if (!isReady) return;
-    if (isAuthenticated && role) {
-      const path = location.pathname;
-      const isExempt =
-        path.startsWith('/rider-track') ||
-        path.startsWith('/promo') ||
-        path.startsWith('/order-success') ||
-        path.startsWith('/track-order') ||
-        path.startsWith('/verify-email');
-      if (role === 'admin' && !path.startsWith('/admin') && !isExempt) {
-        navigate('/admin', { replace: true });
-      }
+useEffect(() => {
+  if (!isReady) return;
+  if (isAuthenticated && role) {
+    const path = location.pathname;
+    const isExempt =
+      path.startsWith('/rider-track') ||
+      path.startsWith('/promo') ||
+      path.startsWith('/order-success') ||
+      path.startsWith('/track-order') ||
+      path.startsWith('/verify-email');
+
+    // ✅ I-redirect sa /admin ONLY if nandoon sa root "/" lang
+    if (role === 'admin' && path === '/' && !isExempt) {
+      navigate('/admin', { replace: true });
     }
-    setRedirectDone(true);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReady]);
+  }
+  setRedirectDone(true);
+// eslint-disable-next-line react-hooks/exhaustive-deps
+}, [isReady]);
 
   if (!isReady || !redirectDone) {
     return (

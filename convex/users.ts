@@ -1,5 +1,6 @@
 // convex/users.ts
 import { query, mutation, internalQuery, internalMutation } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
 
 // ── RATE LIMIT CONFIG ─────────────────────────────
@@ -441,19 +442,21 @@ export const activateUser = mutation({
   },
 });
 
-// ── NEW: Suspend user with reason, duration, and note ────────────────────────
+// ── Suspend user with reason, duration, note — sends email via scheduler ──────
 export const suspendUser = mutation({
   args: {
     id: v.id("users"),
-    reason: v.string(),       // e.g. "spam", "abusive", "privacy_policy", etc.
+    reason: v.string(),
     note: v.optional(v.string()),
     durationDays: v.optional(v.number()), // undefined = permanent
   },
-  handler: async ({ db }, { id, reason, note, durationDays }) => {
+  handler: async (ctx, { id, reason, note, durationDays }) => {
     const now = Date.now();
-    const suspendedUntil = durationDays ? now + durationDays * 24 * 60 * 60 * 1000 : undefined;
+    const suspendedUntil = durationDays
+      ? now + durationDays * 24 * 60 * 60 * 1000
+      : undefined;
 
-    await db.patch(id, {
+    await ctx.db.patch(id, {
       status: "suspended",
       suspendReason: reason,
       suspendNote: note ?? undefined,
@@ -461,7 +464,19 @@ export const suspendUser = mutation({
       suspendedUntil: suspendedUntil ?? undefined,
     });
 
-    const user = await db.get(id);
+    const user = await ctx.db.get(id);
+
+    // Send suspension email server-side — no client useAction needed
+    if (user?.email && user.email !== "admin") {
+      await ctx.scheduler.runAfter(0, internal.sendEmail.sendSuspensionEmail, {
+        to: user.email,
+        name: user.name ?? user.username ?? "User",
+        reason,
+        note: note ?? undefined,
+        suspendedUntil: suspendedUntil ?? undefined,
+      });
+    }
+
     return {
       success: true,
       userEmail: user?.email,
@@ -471,7 +486,7 @@ export const suspendUser = mutation({
   },
 });
 
-// ── NEW: Unsuspend (activate) user ───────────────────────────────────────────
+// ── Unsuspend (restore) user ──────────────────────────────────────────────────
 export const unsuspendUser = mutation({
   args: { id: v.id("users") },
   handler: async ({ db }, { id }) => {

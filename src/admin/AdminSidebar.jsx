@@ -69,7 +69,6 @@ const AdminSidebar = ({ onLinkClick, onClose }) => {
   const handleLogoutWithBackup = async () => {
     setIsBackingUp(true);
     try {
-      // Use already-loaded data if available, otherwise fetch fresh
       let data = allData;
       const alreadyLoaded = Object.keys(data).length === TABLES.length;
 
@@ -91,7 +90,6 @@ const AdminSidebar = ({ onLinkClick, onClose }) => {
       const dateStr = new Date().toISOString().split('T')[0];
       downloadTs(generateAllTs(data, new Date().toISOString()), `dkmerch-backup-${dateStr}.ts`);
 
-      // Small delay so download starts before navigating away
       await new Promise(r => setTimeout(r, 800));
     } catch (err) {
       console.error('Backup failed:', err);
@@ -130,9 +128,7 @@ const AdminSidebar = ({ onLinkClick, onClose }) => {
         <NavLink to="/admin/products" className="admin-nav-link" onClick={handleNavClick}>
           <i className="fas fa-box"></i><span>Products</span>
         </NavLink>
-        <NavLink to="/admin/inventory" className="admin-nav-link" onClick={handleNavClick}>
-          <i className="fas fa-warehouse"></i><span>Item List</span>
-        </NavLink>
+        {/* Item List removed — merged into Products page */}
         <NavLink to="/admin/orders" className="admin-nav-link" onClick={handleNavClick}>
           <i className="fas fa-shopping-bag"></i><span>Orders</span>
           {newOrderCount > 0 && <span className="order-badge">{newOrderCount}</span>}

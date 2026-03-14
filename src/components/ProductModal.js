@@ -17,10 +17,11 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
   const [rating, setRating]           = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
   const [review, setReview]           = useState('');
-  const [showLoginModal, setShowLoginModal]       = useState(false);
-  const [hideProductModal, setHideProductModal]   = useState(false);
-  const [appliedPromo, setAppliedPromo]           = useState(null);
-  const [showLightbox, setShowLightbox]           = useState(false);
+  const [showLoginModal, setShowLoginModal]     = useState(false);
+  const [hideProductModal, setHideProductModal] = useState(false);
+  const [appliedPromo, setAppliedPromo]         = useState(null);
+  const [showLightbox, setShowLightbox]         = useState(false);
+  const [cartToast, setCartToast]               = useState(false); // ← NEW
 
   const productId = product._id || product.id || '';
 
@@ -32,15 +33,9 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
   const submitReviewMutation = useMutation(api.reviews.submitReview);
   const deleteReviewMutation = useMutation(api.reviews.deleteReview);
 
-  // ✅ FIX: A pre-order is "released" (show Add to Cart) if:
-  //   1. It has no isPreOrder flag at all (regular product), OR
-  //   2. It IS a pre-order BUT its releaseDate+releaseTime is already past
   const isReleased = (() => {
-    // Not a pre-order at all → always show Add to Cart
     if (!product.isPreOrder && product.status !== 'preorder') return true;
-    // Pre-order with no release date → still a pre-order
     if (!product.releaseDate) return false;
-    // Pre-order with a release date → check if past
     const rt = product.releaseTime || '00:00';
     const releaseMs = new Date(`${product.releaseDate}T${rt}:00+08:00`).getTime();
     return Date.now() >= releaseMs;
@@ -116,6 +111,12 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
     }
   };
 
+  // ── Show cart success toast briefly ──
+  const triggerCartToast = () => {
+    setCartToast(true);
+    setTimeout(() => setCartToast(false), 2200);
+  };
+
   const handleAddToCartClick = () => {
     if (!isAuthenticated) {
       showNotification('Please login to add to cart', 'error');
@@ -124,6 +125,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
       return;
     }
     onAddToCart({ ...product, appliedPromo, finalPrice: discountedPrice });
+    triggerCartToast();
   };
 
   const handlePreOrderClick = () => {
@@ -134,6 +136,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
       return;
     }
     onAddToCart({ ...product, appliedPromo, finalPrice: discountedPrice });
+    triggerCartToast();
   };
 
   const handleWishlistClick = () => {
@@ -158,6 +161,15 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
       <div className="product-modal-overlay" onClick={onClose}>
         <div className="product-modal-content" onClick={(e) => e.stopPropagation()}>
 
+          {/* ── Cart success toast ── */}
+          {cartToast && (
+            <div className="modal-cart-toast">
+              <i className="fas fa-check-circle"></i>
+              <span>Added to cart!</span>
+            </div>
+          )}
+
+          {/* ── X button — upper right corner of modal ── */}
           <button className="modal-close" onClick={onClose}>
             <i className="fas fa-times"></i>
           </button>
@@ -166,7 +178,6 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
 
             {/* ── LEFT: Image ── */}
             <div className="modal-image-section">
-              {/* ✅ Only show PRE-ORDER badge if it's a pre-order AND not yet released */}
               {product.isPreOrder && !isReleased && <div className="pre-order-badge">PRE-ORDER</div>}
               {product.isSale && !product.isPreOrder && <div className="sale-badge">SALE</div>}
               {appliedPromo && (
@@ -244,7 +255,6 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
                 )}
 
                 <div className="modal-actions">
-                  {/* ✅ Show Pre-Order button ONLY if it's a pre-order AND not yet released */}
                   {product.isPreOrder && !isReleased ? (
                     <>
                       <button className="btn btn-preorder" onClick={handlePreOrderClick} disabled={product.stock === 0}>
