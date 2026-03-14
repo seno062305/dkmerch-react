@@ -71,7 +71,7 @@
 }
 .add-product-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(238, 77, 45, 0.45); }
 
-/* ── VIEW TOGGLE — plain white, no gradient ── */
+/* ── VIEW TOGGLE — plain white only, no color on hover or active ── */
 .view-toggle {
   display: flex;
   gap: 0;
@@ -90,23 +90,18 @@
   padding: 10px 22px;
   border: none;
   border-radius: 8px;
-  background: transparent;
+  background: white;
   font-size: 14px;
   font-weight: 600;
   color: #64748b;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: color 0.2s;
   white-space: nowrap;
 }
-.view-btn:hover:not(.active) { background: #f8fafc; color: #1a1f36; }
-.view-btn.active {
-  background: white;
-  color: #1a1f36;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.10);
-  border: 1px solid #e2e8f0;
-}
+.view-btn:hover { background: white; color: #1a1f36; }
+.view-btn.active { background: white; color: #1a1f36; }
 
-/* low-pill: colored number only, neutral container */
+/* low-pill: colored number only */
 .low-pill {
   display: inline-flex;
   align-items: center;
@@ -320,7 +315,7 @@
 .stat-info h3 { font-size: 26px; font-weight: 700; color: #1a1f36; margin: 0; }
 .stat-info p  { font-size: 13px; color: #64748b; margin: 3px 0 0; }
 
-/* Stock tabs — plain white, colored number only */
+/* Stock tabs — plain white only, no color on hover or active */
 .stock-tabs {
   display: flex;
   border-bottom: 2px solid #e2e8f0;
@@ -331,21 +326,21 @@
 .stock-tabs::-webkit-scrollbar { display: none; }
 
 .tab-btn {
-  background: transparent;
+  background: white;
   border: none;
   padding: 12px 20px;
   font-size: 14px;
   font-weight: 600;
   color: #64748b;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: color 0.2s;
   border-bottom: 3px solid transparent;
   display: flex; align-items: center; gap: 8px;
   position: relative; bottom: -2px;
   white-space: nowrap;
 }
-.tab-btn:hover { color: #1a1f36; background: #f8fafc; }
-.tab-btn.active { color: #1a1f36; border-bottom-color: #ee4d2d; background: transparent; }
+.tab-btn:hover { background: white; color: #1a1f36; }
+.tab-btn.active { background: white; color: #1a1f36; border-bottom-color: #1a1f36; }
 
 /* Stock filters */
 .stock-filters {
@@ -396,6 +391,8 @@
 .stock-display strong { font-size: 15px; color: #1a1f36; min-width: 28px; }
 .stock-display strong.stock-low  { color: #d97706; }
 .stock-display strong.stock-zero { color: #dc2626; }
+.stock-low  { color: #d97706; }
+.stock-zero { color: #dc2626; }
 
 .edit-stock-btn {
   padding: 4px 8px;
@@ -687,6 +684,7 @@
   .list-header { flex-direction: column; align-items: stretch; }
   .list-filters { flex-direction: column; max-width: 100%; }
 
+  /* 3 cards per row on mobile */
   .product-grid { grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
   .product-details { padding: 8px; }
   .product-header h3 { font-size: 11px; }
@@ -700,6 +698,7 @@
 
   .stock-filters { flex-direction: column; }
 
+  /* modal slides up from bottom on mobile */
   .pm-overlay { align-items: flex-end; padding: 0; }
   .pm-modal { max-width: 100%; max-height: 96vh; border-radius: 18px 18px 0 0; }
   .pm-header { padding: 18px 20px 14px; }

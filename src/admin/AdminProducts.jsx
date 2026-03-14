@@ -40,11 +40,14 @@ const validateForm = (form) => {
   else if (isNaN(Number(form.price)) || Number(form.price) <= 0)
     err.price = 'Price must be a positive number.';
 
-  if (form.isSale && form.originalPrice !== '' && form.originalPrice !== null) {
-    if (isNaN(Number(form.originalPrice)) || Number(form.originalPrice) <= 0)
+  // Original price required when isSale is checked
+  if (form.isSale) {
+    if (form.originalPrice === '' || form.originalPrice === null)
+      err.originalPrice = 'Original price is required when item is on sale.';
+    else if (isNaN(Number(form.originalPrice)) || Number(form.originalPrice) <= 0)
       err.originalPrice = 'Original price must be a positive number.';
     else if (Number(form.originalPrice) < Number(form.price))
-      err.originalPrice = 'Original price should be ≥ selling price.';
+      err.originalPrice = 'Original price should be >= selling price.';
   }
 
   if (form.stock === '' || form.stock === null)
@@ -200,12 +203,12 @@ const ProductModal = ({ editingId, initialForm, onClose, onSubmit, submitting })
                 {errors.price && <span className="field-error"><i className="fas fa-exclamation-circle"></i> {errors.price}</span>}
               </div>
 
-              {/* Original Price — only enabled when isSale is checked */}
+              {/* Original Price — required when isSale, disabled otherwise */}
               <div className={`form-group${errors.originalPrice ? ' has-error' : ''}${!form.isSale ? ' field-disabled' : ''}`}>
                 <label>
                   <i className="fas fa-strikethrough"></i> Original Price
                   {form.isSale
-                    ? <span className="opt">(optional)</span>
+                    ? <span className="req">*</span>
                     : <span className="opt">— enable "On Sale" first</span>
                   }
                 </label>
@@ -385,7 +388,9 @@ const StockManagement = ({ products, updateProduct }) => {
     return matchSearch && matchCat;
   });
 
-  const lowStockProducts = filteredProducts.filter(p => p.stock <= 10);
+  // Sort by lowest stock first (ascending)
+  const sortedFiltered   = [...filteredProducts].sort((a, b) => (a.stock ?? 0) - (b.stock ?? 0));
+  const lowStockProducts = sortedFiltered.filter(p => p.stock <= 10);
   const lowStockCount    = products.filter(p => p.stock <= 10).length;
   const totalStock       = products.reduce((s, p) => s + (p.stock || 0), 0);
   const outOfStockCount  = products.filter(p => p.stock === 0).length;
@@ -418,7 +423,7 @@ const StockManagement = ({ products, updateProduct }) => {
 
   const cancelEdit = () => { setEditingStock(null); setStockValue(''); setStockError(''); };
 
-  const displayList = activeTab === 'low' ? lowStockProducts : filteredProducts;
+  const displayList = activeTab === 'low' ? lowStockProducts : sortedFiltered;
 
   return (
     <div className="stock-section">
@@ -499,7 +504,7 @@ const StockManagement = ({ products, updateProduct }) => {
                     <th>Category</th>
                     <th>Group</th>
                     {activeTab === 'all' && <th>Price</th>}
-                    <th>Stock</th>
+                    <th>Stock ↑</th>
                     <th>Status</th>
                     <th>Actions</th>
                   </tr>
@@ -590,7 +595,7 @@ const AdminProducts = () => {
   const [editingId,       setEditingId]       = useState(null);
   const [modalForm,       setModalForm]       = useState(emptyForm);
   const [submitting,      setSubmitting]      = useState(false);
-  const [activeView,      setActiveView]      = useState('products');
+  const [activeView,      setActiveView]      = useState('products'); // 'products' | 'stock'
   const [searchTerm,      setSearchTerm]      = useState('');
   const [filterCategory,  setFilterCategory]  = useState('all');
   const [successMsg,      setSuccessMsg]      = useState('');
