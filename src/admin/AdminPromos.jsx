@@ -153,6 +153,11 @@ const AdminPromos = () => {
     await deletePromo({ id });
   };
 
+  const openCreate = () => {
+    setEditingPromo(null); setFormData(EMPTY_FORM);
+    setErrors({}); setServerMsg(''); setShowModal(true);
+  };
+
   const resetForm = () => {
     setFormData(EMPTY_FORM); setEditingPromo(null);
     setErrors({}); setServerMsg(''); setShowModal(false);
@@ -178,58 +183,60 @@ const AdminPromos = () => {
 
   return (
     <div className="admin-promos">
-      <div className="promos-header">
-        <div>
-          <h1>Promos</h1>
-          <p className="subtitle">Create a promo → email blast auto-sends to all users 📧</p>
-        </div>
-        <button className="create-btn" onClick={() => {
-          setEditingPromo(null); setFormData(EMPTY_FORM);
-          setErrors({}); setServerMsg(''); setShowModal(true);
-        }}>
-          + Create Promo
-        </button>
-      </div>
 
       {/* ── Desktop Table ── */}
       <div className="promos-table-container">
-        <table className="promos-table">
-          <thead>
-            <tr>
-              <th>Code</th><th>K-Pop Group</th><th>Discount</th>
-              <th>Period</th><th>Status</th><th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {promos.length === 0
-              ? <tr><td colSpan="6" className="empty-state">No promos yet. Create your first promo!</td></tr>
-              : promos.map(promo => {
-                  const { label, cls } = getStatus(promo);
-                  return (
-                    <tr key={promo._id}>
-                      <td><span className="promo-code"><TagIcon />{promo.code}</span></td>
-                      <td><span className="group-chip">{promo.name}</span></td>
-                      <td>{promo.discount}%</td>
-                      <td className="period-cell">{formatPeriod(promo)}</td>
-                      <td><span className={`status-badge ${cls}`}>{label}</span></td>
-                      <td>
-                        <div className="action-buttons">
-                          <button className="edit-btn" onClick={() => handleEdit(promo)}><EditIcon /></button>
-                          <button className="delete-btn" onClick={() => handleDelete(promo._id)}><DeleteIcon /></button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-            }
-          </tbody>
-        </table>
+        {promos.length === 0 ? (
+          <div className="promos-empty-state">
+            <i className="fas fa-tag"></i>
+            <p>No promos yet.</p>
+            <button className="create-btn" onClick={openCreate}>+ Create Promo</button>
+          </div>
+        ) : (
+          <table className="promos-table">
+            <thead>
+              <tr>
+                <th>Code</th><th>K-Pop Group</th><th>Discount</th>
+                <th>Period</th><th>Status</th>
+                <th>
+                  <div className="th-actions-row">
+                    <span>Actions</span>
+                    <button className="create-btn-sm" onClick={openCreate}>+ Create</button>
+                  </div>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {promos.map(promo => {
+                const { label, cls } = getStatus(promo);
+                return (
+                  <tr key={promo._id}>
+                    <td><span className="promo-code"><TagIcon />{promo.code}</span></td>
+                    <td><span className="group-chip">{promo.name}</span></td>
+                    <td>{promo.discount}%</td>
+                    <td className="period-cell">{formatPeriod(promo)}</td>
+                    <td><span className={`status-badge ${cls}`}>{label}</span></td>
+                    <td>
+                      <div className="action-buttons">
+                        <button className="edit-btn" onClick={() => handleEdit(promo)}><EditIcon /></button>
+                        <button className="delete-btn" onClick={() => handleDelete(promo._id)}><DeleteIcon /></button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {/* ── Mobile Card View ── */}
       <div className="promo-cards-list">
+        <div className="mobile-create-row">
+          <button className="create-btn" onClick={openCreate}>+ Create Promo</button>
+        </div>
         {promos.length === 0
-          ? <div className="empty-cards-msg">No promos yet. Create your first promo!</div>
+          ? <div className="empty-cards-msg">No promos yet.</div>
           : promos.map(promo => {
               const { label, cls } = getStatus(promo);
               return (
@@ -263,8 +270,6 @@ const AdminPromos = () => {
             </div>
             <form onSubmit={handleSubmit} noValidate>
               <div className="form-grid">
-
-                {/* Row 1: Promo Code | K-Pop Group */}
                 <div className="form-group">
                   <label>Promo Code <span className="req">*</span></label>
                   <input type="text" name="code" value={formData.code}
@@ -273,7 +278,6 @@ const AdminPromos = () => {
                     style={{ textTransform: 'uppercase' }} maxLength={20} />
                   {errors.code && <span className="field-error">{errors.code}</span>}
                 </div>
-
                 <div className="form-group">
                   <label>K-Pop Group <span className="req">*</span></label>
                   <select name="name" value={formData.name} onChange={handleInputChange}
@@ -283,8 +287,6 @@ const AdminPromos = () => {
                   </select>
                   {errors.name && <span className="field-error">{errors.name}</span>}
                 </div>
-
-                {/* Row 2: Discount (%) | Start Time */}
                 <div className="form-group">
                   <label>Discount (%) <span className="req">*</span></label>
                   <input type="text" inputMode="numeric" name="discount" value={formData.discount}
@@ -293,44 +295,33 @@ const AdminPromos = () => {
                   <span className="field-hint">1–100% only</span>
                   {errors.discount && <span className="field-error">{errors.discount}</span>}
                 </div>
-
                 <div className="form-group">
                   <label>Start Time <span className="field-optional">(optional)</span></label>
                   <div className="time-input-wrapper">
                     <input type="time" name="startTime" value={formData.startTime}
                       onChange={handleInputChange} className="time-input" />
-                    {formData.startTime && (
-                      <span className="time-preview">▶ <strong>{fmt12(formData.startTime)}</strong></span>
-                    )}
+                    {formData.startTime && <span className="time-preview">▶ <strong>{fmt12(formData.startTime)}</strong></span>}
                   </div>
                   <span className="field-hint">Blank = 12:00 AM</span>
                 </div>
-
-                {/* Row 3: Start Date | End Time */}
                 <div className="form-group">
                   <label>Start Date <span className="req">*</span></label>
                   <input type="date" name="startDate" value={formData.startDate}
-                    onChange={handleInputChange}
-                    min={today} max="9999-12-31"
+                    onChange={handleInputChange} min={today} max="9999-12-31"
                     className={errors.startDate ? 'input-error' : ''} />
                   {errors.startDate && <span className="field-error">{errors.startDate}</span>}
                 </div>
-
                 <div className="form-group">
                   <label>End Time <span className="field-optional">(optional)</span></label>
                   <div className="time-input-wrapper">
                     <input type="time" name="endTime" value={formData.endTime}
                       onChange={handleInputChange}
                       className={`time-input ${errors.endTime ? 'input-error' : ''}`} />
-                    {formData.endTime && (
-                      <span className="time-preview">⏹ <strong>{fmt12(formData.endTime)}</strong></span>
-                    )}
+                    {formData.endTime && <span className="time-preview">⏹ <strong>{fmt12(formData.endTime)}</strong></span>}
                   </div>
                   <span className="field-hint">Blank = 11:59 PM</span>
                   {errors.endTime && <span className="field-error">{errors.endTime}</span>}
                 </div>
-
-                {/* Row 4: End Date | (empty) */}
                 <div className="form-group">
                   <label>End Date <span className="req">*</span></label>
                   <input type="date" name="endDate" value={formData.endDate}
@@ -339,21 +330,15 @@ const AdminPromos = () => {
                     className={errors.endDate ? 'input-error' : ''} />
                   {errors.endDate && <span className="field-error">{errors.endDate}</span>}
                 </div>
-
                 <div className="form-group"></div>
-
               </div>
 
               {(formData.startDate || formData.endDate) && (
                 <div className="schedule-summary">
                   📅{' '}
-                  {formData.startDate && (
-                    <span>{formData.startDate} • {formData.startTime ? fmt12(formData.startTime) : '12:00 AM'}</span>
-                  )}
+                  {formData.startDate && <span>{formData.startDate} • {formData.startTime ? fmt12(formData.startTime) : '12:00 AM'}</span>}
                   {formData.startDate && formData.endDate && <span className="sched-arrow"> → </span>}
-                  {formData.endDate && (
-                    <span>{formData.endDate} • {formData.endTime ? fmt12(formData.endTime) : '11:59 PM'}</span>
-                  )}
+                  {formData.endDate && <span>{formData.endDate} • {formData.endTime ? fmt12(formData.endTime) : '11:59 PM'}</span>}
                 </div>
               )}
 

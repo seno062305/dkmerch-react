@@ -159,13 +159,11 @@ const AdminSalesReports = () => {
   const isCompleted = (o) =>
     ['completed','Completed','Delivered','delivered'].includes(o.status || o.orderStatus || '');
 
-  // ── Has approved refund ───────────────────────────────────────────────────
   const hasApprovedRefund = (o) =>
     o.refundStatus === 'approved' ||
     o.refundApproved === true ||
     (o.status || '').toLowerCase() === 'refunded';
 
-  // ── Date-range filtered ───────────────────────────────────────────────────
   const filtered = useMemo(() => {
     const start = new Date(effectiveStart);
     const end   = new Date(effectiveEnd);
@@ -179,40 +177,24 @@ const AdminSalesReports = () => {
   const summary = useMemo(() => {
     const paidOrders      = filtered.filter(isPaid);
     const completedOrders = filtered.filter(isCompleted);
-
-    // Refunded items (approved refunds only)
-    const refundedOrders = filtered.filter(hasApprovedRefund);
-    const refundCount    = refundedOrders.length;
-
-    // Total value of refunded items
+    const refundedOrders  = filtered.filter(hasApprovedRefund);
+    const refundCount     = refundedOrders.length;
     const totalRefundValue = refundedOrders.reduce(
       (s, o) => s + (o.refundAmount ?? o.finalTotal ?? o.total ?? 0), 0
     );
-
-    // Total Sales = paid orders revenue MINUS refund value
     const grossSales  = paidOrders.reduce((s, o) => s + (o.finalTotal ?? o.total ?? 0), 0);
     const totalSales  = Math.max(0, grossSales - totalRefundValue);
-
-    // Registered users count stored for display
     const avgOrderValue = completedOrders.length
       ? completedOrders.reduce((s, o) => s + (o.finalTotal ?? o.total ?? 0), 0) / completedOrders.length
       : 0;
-
     const registeredUsers = allUsers.filter(u => u.role !== 'admin').length;
-
     return {
-      totalSales,
-      grossSales,
-      totalOrders:     filtered.length,
-      completedOrders: completedOrders.length,
-      refundCount,
-      totalRefundValue,
-      avgOrderValue,
-      registeredUsers,
+      totalSales, grossSales, totalOrders: filtered.length,
+      completedOrders: completedOrders.length, refundCount, totalRefundValue,
+      avgOrderValue, registeredUsers,
     };
   }, [filtered, allUsers]);
 
-  // ── Chart Data Builder ────────────────────────────────────────────────────
   const buildChartData = useCallback((mode, type) => {
     if (mode === 'today' || mode === 'last_week' || mode === 'last_month') {
       const buckets = getDailyBuckets(nowMs, mode);
@@ -249,12 +231,10 @@ const AdminSalesReports = () => {
   const salesData  = useMemo(() => buildChartData(salesFilter,  'sales'),  [buildChartData, salesFilter]);
   const volumeData = useMemo(() => buildChartData(volumeFilter, 'volume'), [buildChartData, volumeFilter]);
 
-  // ── Open summary card modal ───────────────────────────────────────────────
   const openSummaryModal = (type) => {
     if (type === 'totalSales') {
       setSummaryModal({
-        title: 'Total Sales',
-        value: fmt(summary.totalSales),
+        title: 'Total Sales', value: fmt(summary.totalSales),
         icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
         explanation: 'Net revenue from all paid orders within the selected date range, after deducting the total value of approved refunds. Formula: Gross Sales − Total Refund Value.',
         breakdown: [
@@ -265,28 +245,24 @@ const AdminSalesReports = () => {
       });
     } else if (type === 'refundItems') {
       setSummaryModal({
-        title: 'Refund Items',
-        value: fmtNum(summary.refundCount),
+        title: 'Refund Items', value: fmtNum(summary.refundCount),
         icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>,
-        explanation: 'Total number of orders within the selected date range that have been approved for a refund (refundStatus = "approved" or order status = "refunded").',
+        explanation: 'Total number of orders within the selected date range that have been approved for a refund.',
         breakdown: [
           { label: 'Refunded Orders',        value: fmtNum(summary.refundCount),       color: '#dc2626' },
           { label: 'Total Value of Refunds', value: fmt(summary.totalRefundValue),      color: '#dc2626' },
           { label: 'Out of Total Orders',    value: fmtNum(summary.totalOrders) },
           { label: 'Refund Rate',
-            value: summary.totalOrders
-              ? `${((summary.refundCount / summary.totalOrders) * 100).toFixed(1)}%`
-              : '0%',
+            value: summary.totalOrders ? `${((summary.refundCount / summary.totalOrders) * 100).toFixed(1)}%` : '0%',
             color: '#d97706'
           },
         ],
       });
     } else if (type === 'totalRefundValue') {
       setSummaryModal({
-        title: 'Total Value of Refund Items',
-        value: fmt(summary.totalRefundValue),
+        title: 'Total Value of Refund Items', value: fmt(summary.totalRefundValue),
         icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
-        explanation: 'Sum of the refund amounts for all approved refund orders in the selected date range. Uses the refundAmount field if available, otherwise falls back to the order total.',
+        explanation: 'Sum of the refund amounts for all approved refund orders in the selected date range.',
         breakdown: [
           { label: 'Refunded Orders',         value: fmtNum(summary.refundCount) },
           { label: 'Total Refund Value',       value: fmt(summary.totalRefundValue),  color: '#dc2626' },
@@ -295,10 +271,9 @@ const AdminSalesReports = () => {
       });
     } else if (type === 'registeredUsers') {
       setSummaryModal({
-        title: 'Registered Users',
-        value: fmtNum(summary.registeredUsers),
+        title: 'Registered Users', value: fmtNum(summary.registeredUsers),
         icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>,
-        explanation: 'Total number of registered non-admin users in the system. This is based on all users from User Management, excluding admin accounts.',
+        explanation: 'Total number of registered non-admin users in the system.',
         breakdown: [
           { label: 'Total Registered Users', value: fmtNum(summary.registeredUsers), color: '#7c3aed' },
           { label: 'Completed Orders',        value: fmtNum(summary.completedOrders) },
@@ -307,24 +282,16 @@ const AdminSalesReports = () => {
     }
   };
 
-  // ── SVG chart helpers ─────────────────────────────────────────────────────
   const maxVal = (arr) => Math.max(...arr.map(i => i.value), 1);
-
-  const CHART_W   = 600;
-  const CHART_H   = 210;
-  const PAD_LEFT  = 52;
-  const PAD_TOP   = 15;
-  const PLOT_H    = 170;
-  const PLOT_W    = CHART_W - PAD_LEFT - 10;
+  const CHART_W = 600, CHART_H = 210, PAD_LEFT = 52, PAD_TOP = 15, PLOT_H = 170;
+  const PLOT_W  = CHART_W - PAD_LEFT - 10;
 
   const ChartY = ({ max, steps = 4, isRevenue }) => (
     <>
       {Array.from({ length: steps + 1 }, (_, i) => {
         const val = Math.round(max * (steps - i) / steps);
         const y   = PAD_TOP + (i * PLOT_H / steps);
-        const lbl = isRevenue
-          ? (val >= 1000 ? `₱${Math.round(val / 1000)}k` : `₱${val}`)
-          : val;
+        const lbl = isRevenue ? (val >= 1000 ? `₱${Math.round(val / 1000)}k` : `₱${val}`) : val;
         return <text key={i} x="8" y={y + 4} className="axis-label">{lbl}</text>;
       })}
     </>
@@ -346,19 +313,17 @@ const AdminSalesReports = () => {
     return data.map((item, i) => ({
       x: PAD_LEFT + (n === 1 ? PLOT_W / 2 : i * step),
       y: PAD_TOP  + (1 - item.value / maxVal(data)) * PLOT_H,
-      value: item.value,
-      label: item.label,
+      value: item.value, label: item.label,
     }));
   };
 
   const getBarProps = (data, i) => {
     const n = data.length;
-    const totalW = PLOT_W;
-    const gap    = n > 20 ? 1 : n > 10 ? 2 : 4;
-    const barW   = Math.max(2, (totalW / n) - gap);
-    const x      = PAD_LEFT + i * (totalW / n) + gap / 2;
-    const barH   = (data[i].value / maxVal(data)) * PLOT_H;
-    const y      = PAD_TOP + PLOT_H - barH;
+    const gap  = n > 20 ? 1 : n > 10 ? 2 : 4;
+    const barW = Math.max(2, (PLOT_W / n) - gap);
+    const x    = PAD_LEFT + i * (PLOT_W / n) + gap / 2;
+    const barH = (data[i].value / maxVal(data)) * PLOT_H;
+    const y    = PAD_TOP + PLOT_H - barH;
     return { x, y, barW, barH };
   };
 
@@ -374,10 +339,6 @@ const AdminSalesReports = () => {
 
   return (
     <div className="admin-sales-reports">
-      <div className="reports-header">
-        <h1>Sales Report</h1>
-        <p className="subtitle">Real-time data · Server-verified dates</p>
-      </div>
 
       {/* ── Date Filter ── */}
       <div className="filter-section">
@@ -408,8 +369,6 @@ const AdminSalesReports = () => {
 
       {/* ── Summary Cards ── */}
       <div className="summary-cards">
-
-        {/* Total Sales (net of refunds) */}
         <div className="summary-card clickable-summary" onClick={() => openSummaryModal('totalSales')}>
           <div className="card-icon revenue-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -421,7 +380,6 @@ const AdminSalesReports = () => {
           <div className="summary-card-hint"><i className="fas fa-info-circle"></i></div>
         </div>
 
-        {/* Refund Items (was Total Orders) */}
         <div className="summary-card clickable-summary" onClick={() => openSummaryModal('refundItems')}>
           <div className="card-icon orders-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
@@ -433,7 +391,6 @@ const AdminSalesReports = () => {
           <div className="summary-card-hint"><i className="fas fa-info-circle"></i></div>
         </div>
 
-        {/* Total Value of Refund Items (was Completed Orders) */}
         <div className="summary-card clickable-summary" onClick={() => openSummaryModal('totalRefundValue')}>
           <div className="card-icon completed-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -445,7 +402,6 @@ const AdminSalesReports = () => {
           <div className="summary-card-hint"><i className="fas fa-info-circle"></i></div>
         </div>
 
-        {/* Registered Users / Avg Order Value (was Avg. Order Value) */}
         <div className="summary-card clickable-summary" onClick={() => openSummaryModal('registeredUsers')}>
           <div className="card-icon average-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
@@ -460,18 +416,13 @@ const AdminSalesReports = () => {
 
       {/* ── Charts ── */}
       <div className="charts-grid">
-
-        {/* Sales Trend */}
         <div className="chart-container">
           <div className="chart-header">
             <h3>Sales Trend</h3>
             <div className="chart-filter-pills">
               {CHART_FILTERS.map(f => (
-                <button
-                  key={f.key}
-                  className={`chart-pill ${salesFilter === f.key ? 'active' : ''}`}
-                  onClick={() => { setSalesFilter(f.key); setSalesTooltip({ visible: false }); }}
-                >
+                <button key={f.key} className={`chart-pill ${salesFilter === f.key ? 'active' : ''}`}
+                  onClick={() => { setSalesFilter(f.key); setSalesTooltip({ visible: false }); }}>
                   {f.label}
                 </button>
               ))}
@@ -501,17 +452,13 @@ const AdminSalesReports = () => {
           </div>
         </div>
 
-        {/* Order Volume */}
         <div className="chart-container">
           <div className="chart-header">
             <h3>Order Volume</h3>
             <div className="chart-filter-pills">
               {CHART_FILTERS.map(f => (
-                <button
-                  key={f.key}
-                  className={`chart-pill ${volumeFilter === f.key ? 'active' : ''}`}
-                  onClick={() => { setVolumeFilter(f.key); setVolumeTooltip({ visible: false }); }}
-                >
+                <button key={f.key} className={`chart-pill ${volumeFilter === f.key ? 'active' : ''}`}
+                  onClick={() => { setVolumeFilter(f.key); setVolumeTooltip({ visible: false }); }}>
                   {f.label}
                 </button>
               ))}
@@ -553,7 +500,6 @@ const AdminSalesReports = () => {
         </span>
       </div>
 
-      {/* Summary Card Modal */}
       <SummaryModal data={summaryModal} onClose={() => setSummaryModal(null)} />
     </div>
   );
