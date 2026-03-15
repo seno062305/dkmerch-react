@@ -166,21 +166,21 @@
 .order-modal::-webkit-scrollbar { display: none; }
 @keyframes slideUp { from { transform: translateY(50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
-/* ── Modal Header — plain pink, no gradient ── */
+/* ── Modal Header ── */
 .modal-header {
-  display: flex !important;
-  justify-content: space-between !important;
-  align-items: flex-start !important;
-  padding: 20px 24px !important;
-  border-bottom: 2px solid #e2e8f0 !important;
-  position: sticky !important;
-  top: 0 !important;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 20px 24px;
+  border-bottom: 2px solid #000000;
+  position: sticky;
+  top: 0;
   background: #ffffff !important;
   background-image: none !important;
-  z-index: 10 !important;
+  z-index: 10;
 }
 .modal-header > div { display: flex; flex-direction: column; gap: 10px; }
-.modal-header h2 { font-size: 22px !important; font-weight: 700 !important; color: #000000 !important; margin: 0 !important; }
+.modal-header h2 { font-size: 22px; font-weight: 700; color: #000000 !important; margin: 0; }
 
 .close-btn {
   width: 36px !important;
@@ -285,12 +285,8 @@
 .status-done-notice.cancelled { background: #fde8e8; border: 2px solid #dc3545; color: #7b1a24; }
 .status-done-notice i { font-size: 18px; }
 
-/* ── Status Buttons — compact ── */
-.status-buttons {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
+/* ── Status Buttons ── */
+.status-buttons { display: flex; gap: 10px; flex-wrap: wrap; }
 .status-btn-wrapper { display: flex; flex-direction: column; gap: 5px; }
 .block-reason { text-align: center; font-size: 11px; font-weight: 600; color: #94a3b8; display: flex; align-items: center; justify-content: center; gap: 4px; }
 .block-reason i { font-size: 10px; }
@@ -412,57 +408,102 @@
 .date-filter-clear { display: flex; align-items: center; gap: 5px; padding: 5px 12px; background: #fee2e2; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; color: #dc3545; cursor: pointer; transition: background 0.2s; }
 .date-filter-clear:hover { background: #fecaca; }
 
-/* Print Waybill */
+/* Print Waybill button */
 .print-waybill-btn-bottom { display: flex; align-items: center; gap: 7px; padding: 12px 24px; background: #fc1268; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.2s; margin-right: auto; }
 .print-waybill-btn-bottom:hover { opacity: 0.9; transform: translateY(-1px); box-shadow: 0 4px 14px rgba(252,18,104,0.35); }
 
-/* Waybill modal */
-.waybill-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 99999; padding: 20px; animation: fadeInOverlay 0.2s ease; }
-.waybill-modal { background: white; border-radius: 16px; width: 100%; max-width: 860px; max-height: 92vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 24px 64px rgba(0,0,0,0.3); animation: slideUp 0.25s ease; }
-.waybill-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; background: #fc1268; color: white; flex-shrink: 0; }
-.waybill-toolbar-title { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+/* ══════════════════════════════════
+   WAYBILL MODAL — on-screen preview
+   (print CSS is inline in handlePrint)
+══════════════════════════════════ */
+.waybill-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 99999; padding: 20px; animation: fadeInOverlay 0.2s ease;
+}
+.waybill-modal {
+  background: white; border-radius: 16px; width: 100%; max-width: 760px;
+  max-height: 92vh; overflow: hidden; display: flex; flex-direction: column;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.3); animation: slideUp 0.25s ease;
+}
+.waybill-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 20px; background: #ffffff; border-bottom: 1px solid #e2e8f0;
+  flex-shrink: 0;
+}
+.waybill-toolbar-title { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 10px; color: #1a1f36; }
 .waybill-toolbar-actions { display: flex; align-items: center; gap: 10px; }
-.waybill-print-btn { display: flex; align-items: center; gap: 8px; padding: 9px 20px; background: white; color: #fc1268; border: none; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.2s; }
-.waybill-print-btn:hover { background: #fff1f5; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
-.waybill-toolbar .close-btn { background: rgba(255,255,255,0.2); color: white; }
-.waybill-toolbar .close-btn:hover { background: rgba(255,255,255,0.35); color: white; }
-.waybill-preview-wrap { flex: 1; overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none; background: #f1f5f9; padding: 24px; }
+.waybill-print-btn {
+  display: flex; align-items: center; gap: 8px; padding: 9px 20px;
+  background: rgb(107,104,107); color: #000000; border: none; border-radius: 8px;
+  font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.2s;
+}
+.waybill-print-btn:hover { background: #575455; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+.waybill-preview-wrap {
+  flex: 1; overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none;
+  background: #f1f5f9; padding: 20px;
+}
 .waybill-preview-wrap::-webkit-scrollbar { display: none; }
-.waybill-print-root { background: white; border-radius: 12px; padding: 28px; box-shadow: 0 2px 16px rgba(0,0,0,0.08); max-width: 800px; margin: 0 auto; font-family: 'Segoe UI', Arial, sans-serif; }
 
-.wb-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 16px; border-bottom: 3px solid #7c3aed; margin-bottom: 20px; }
-.wb-brand-name { font-size: 28px; font-weight: 900; color: #fc1268; }
-.wb-brand-sub  { font-size: 12px; color: #6b7280; font-weight: 600; margin-top: 2px; }
-.wb-brand-contact { margin-top: 8px; font-size: 11px; color: #6b7280; }
-.wb-qr-block { display: flex; flex-direction: column; align-items: center; gap: 8px; }
-.wb-qr-block svg { width: 100px !important; height: 100px !important; }
-.wb-qr-label { font-size: 12px; color: #fc1268; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
-.wb-order-banner { background: linear-gradient(135deg, #fc1268); color: white; border-radius: 10px; padding: 12px 20px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
-.wb-order-id { font-size: 22px; font-weight: 900; letter-spacing: 2px; font-family: 'Courier New', monospace; }
-.wb-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
-.wb-box { border: 1.5px solid #e5e7eb; border-radius: 10px; overflow: hidden; }
-.wb-box-hd { background: #f3f4f6; padding: 8px 14px; font-size: 11px; font-weight: 800; color: #374151; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #e5e7eb; }
-.wb-box-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
-.wb-field-lbl { font-size: 10px; color: #9ca3af; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 2px; }
-.wb-field-val { font-size: 13px; color: #1f2937; font-weight: 600; }
-.wb-items-box { border: 1.5px solid #e5e7eb; border-radius: 10px; overflow: hidden; margin-bottom: 20px; }
-.wb-items-hd { background: #f3f4f6; padding: 8px 14px; font-size: 11px; font-weight: 800; color: #374151; text-transform: uppercase; border-bottom: 1px solid #e5e7eb; }
+/* ── Preview root (on-screen) ── */
+.waybill-print-root {
+  background: white;
+  border-radius: 10px;
+  padding: 20px 22px;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+  max-width: 660px;
+  margin: 0 auto;
+  font-family: 'Segoe UI', Arial, sans-serif;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Header */
+.wb-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-bottom: 10px; border-bottom: 3px solid #7c3aed;
+}
+.wb-brand-name    { font-size: 22px; font-weight: 900; color: #fc1268; }
+.wb-brand-sub     { font-size: 11px; color: #6b7280; font-weight: 600; margin-top: 2px; }
+.wb-brand-contact { margin-top: 3px; font-size: 10px; color: #6b7280; }
+.wb-qr-block      { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.wb-qr-block svg  { width: 76px !important; height: 76px !important; }
+.wb-qr-label      { font-size: 10px; color: #7c3aed; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
+
+/* 2-col grid */
+.wb-cols    { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.wb-box     { border: 1.5px solid #e5e7eb; border-radius: 7px; overflow: hidden; }
+.wb-box-hd  { background: #f3f4f6; padding: 5px 10px; font-size: 10px; font-weight: 800; color: #374151; text-transform: uppercase; letter-spacing: 0.4px; border-bottom: 1px solid #e5e7eb; }
+.wb-box-body { padding: 7px 10px; display: flex; flex-direction: column; gap: 5px; }
+.wb-rider-row { flex-direction: row !important; gap: 14px !important; flex-wrap: wrap; }
+.wb-field-lbl { font-size: 9px; color: #9ca3af; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 1px; }
+.wb-field-val { font-size: 12px; color: #1f2937; font-weight: 600; line-height: 1.3; }
+
+/* Items table */
+.wb-items-box  { border: 1.5px solid #e5e7eb; border-radius: 7px; overflow: hidden; }
+.wb-items-hd   { background: #f3f4f6; padding: 5px 10px; font-size: 10px; font-weight: 800; color: #374151; text-transform: uppercase; border-bottom: 1px solid #e5e7eb; }
 .wb-items-table { width: 100%; border-collapse: collapse; }
-.wb-items-table th { padding: 8px 12px; text-align: left; font-size: 11px; font-weight: 700; color: #6b7280; border-bottom: 1px solid #f0f0f0; }
-.wb-items-table td { padding: 8px 12px; font-size: 13px; color: #1f2937; border-bottom: 1px solid #f8f8f8; }
+.wb-items-table th { padding: 5px 8px; text-align: left; font-size: 10px; font-weight: 700; color: #6b7280; border-bottom: 1px solid #f0f0f0; }
+.wb-items-table td { padding: 5px 8px; font-size: 11px; color: #1f2937; border-bottom: 1px solid #f8f8f8; }
 .wb-items-table tr:last-child td { border-bottom: none; }
-.td-right { text-align: right; font-weight: 700; }
+.td-right  { text-align: right; font-weight: 700; }
 .td-center { text-align: center; }
-.wb-totals { border: 1.5px solid #e5e7eb; border-radius: 10px; overflow: hidden; margin-bottom: 20px; }
-.wb-totals-row { display: flex; justify-content: space-between; padding: 8px 16px; font-size: 13px; border-bottom: 1px solid #f0f0f0; }
+
+/* Totals */
+.wb-totals     { border: 1.5px solid #e5e7eb; border-radius: 7px; overflow: hidden; }
+.wb-totals-row { display: flex; justify-content: space-between; padding: 5px 12px; font-size: 12px; border-bottom: 1px solid #f0f0f0; }
 .wb-totals-row:last-child { border-bottom: none; }
-.wb-grand { background: #fff1f5; font-size: 16px; font-weight: 800; color: #fc1268; }
-.wb-promo-row { color: #16a34a; font-weight: 600; }
-.wb-sig-strip { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
-.wb-sig-box { border: 1.5px dashed #d1d5db; border-radius: 8px; padding: 12px 16px; }
-.wb-sig-lbl { font-size: 10px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 32px; }
-.wb-sig-line { border-top: 1.5px solid #374151; padding-top: 6px; font-size: 10px; color: #9ca3af; }
-.wb-footer { text-align: center; font-size: 11px; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 12px; }
+.wb-grand      { background: #fff1f5; font-size: 14px; font-weight: 800; color: #fc1268; }
+.wb-promo-row  { color: #16a34a; font-weight: 600; }
+
+/* Footer */
+.wb-footer {
+  text-align: center; font-size: 10px; color: #9ca3af;
+  border-top: 1px solid #e5e7eb; padding-top: 6px; line-height: 1.5;
+}
+
+/* NOTE: .wb-sig-strip and .wb-sig-box removed — signature section deleted */
 
 /* ══════════════════════════
    REFUND STYLES
@@ -571,9 +612,8 @@
   .waybill-overlay { padding: 0; align-items: flex-end; }
   .waybill-modal { border-radius: 20px 20px 0 0; max-height: 94vh; }
   .waybill-preview-wrap { padding: 12px; }
-  .waybill-print-root { padding: 16px; }
+  .waybill-print-root { padding: 14px; }
   .wb-cols { grid-template-columns: 1fr; }
-  .wb-sig-strip { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 900px) {
@@ -613,24 +653,3 @@
   .order-info-grid { padding: 10px; }
   .modal-body { padding: 12px; }
 }
-
-/* ══════════════════════════════════════════
-   PATCH: Replace existing .modal-header and 
-   .modal-header h2 in AdminOrders.css
-   with these exact rules
-══════════════════════════════════════════ */
-
-/* ── Modal Header ── */
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  padding: 20px 24px;
-  border-bottom: 2px solid #000000;
-  position: sticky;
-  top: 0;
-  background: #ffffff !important;
-  z-index: 10;
-}
-.modal-header > div { display: flex; flex-direction: column; gap: 10px; }
-.modal-header h2 { font-size: 22px; font-weight: 700; color: #000000 !important; margin: 0; }

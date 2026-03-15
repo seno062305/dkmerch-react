@@ -34,71 +34,87 @@ const WaybillModal = ({ order, onClose }) => {
   const discount    = order.discountAmount || 0;
   const finalTotal  = order.finalTotal  ?? ((order.total || 0) - discount);
   const hasPromo    = !!(order.promoCode && discount > 0);
-  const riderLink   = `${SITE_URL}/rider-track/${order.orderId}`;
-  const shortId     = order.orderId?.slice(-8).toUpperCase();
+
+  // ✅ CHANGED: QR now points to public track order page (no login needed)
+  const trackOrderLink = `${SITE_URL}/track-order?order=${order.orderId}`;
+  const shortId        = order.orderId?.slice(-8).toUpperCase();
 
   const handlePrint = () => {
     const node = printRef.current;
     if (!node) return;
-
     const svgs = node.querySelectorAll('svg');
-    svgs.forEach(svg => {
-      if (!svg.getAttribute('xmlns')) svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-    });
-
+    svgs.forEach(svg => { if (!svg.getAttribute('xmlns')) svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg'); });
     const printContents = node.innerHTML;
     const printWindow = window.open('', '_blank', 'width=900,height=700');
     if (!printWindow) { alert('Pop-up blocked! Please allow pop-ups for this site.'); return; }
-
     printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
-<meta name="viewport" content="width=100mm"/>
 <title>Waybill — ${shortId} | DKMerch</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-  @page { size: 100mm 150mm; margin: 0mm; }
-  html { width: 100mm; height: 150mm; }
-  body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 8pt; width: 100mm; min-height: 150mm; padding: 3mm; background: white; }
-  .waybill-print-root { width: 94mm; }
-  .wb-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 5px; border-bottom: 2px solid #7c3aed; margin-bottom: 5px; }
-  .wb-brand-name { font-size: 14pt; font-weight: 900; color: #fc1268; line-height: 1; }
-  .wb-brand-sub { font-size: 7pt; color: #6b7280; font-weight: 600; margin-top: 2px; }
-  .wb-brand-contact { margin-top: 2px; font-size: 6pt; color: #6b7280; }
-  .wb-qr-block { display: flex; flex-direction: column; align-items: center; gap: 3px; }
-  .wb-qr-block svg { width: 60px !important; height: 60px !important; shape-rendering: crispEdges; }
-  .wb-qr-label { font-size: 6pt; color: #7c3aed; font-weight: 800; text-transform: uppercase; letter-spacing: 0.3px; }
-  .wb-order-banner { background: linear-gradient(135deg,#fc1268,#9c27b0) !important; color: white !important; border-radius: 4px; padding: 5px 8px; margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center; }
-  .wb-order-id { font-size: 12pt; font-weight: 900; letter-spacing: 1.5px; font-family: 'Courier New', monospace; }
-  .wb-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 5px; }
-  .wb-box { border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; }
-  .wb-box-hd { background: #f3f4f6 !important; padding: 3px 6px; font-size: 7pt; font-weight: 800; color: #374151; text-transform: uppercase; border-bottom: 1px solid #e5e7eb; }
-  .wb-box-body { padding: 4px 6px; display: flex; flex-direction: column; gap: 3px; }
-  .wb-field-lbl { font-size: 6pt; color: #9ca3af; font-weight: 700; text-transform: uppercase; margin-bottom: 0; }
-  .wb-field-val { font-size: 8pt; color: #1f2937; font-weight: 600; line-height: 1.3; }
-  .wb-items-box { border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; margin-bottom: 4px; }
-  .wb-items-hd { background: #f3f4f6 !important; padding: 3px 6px; font-size: 7pt; font-weight: 800; color: #374151; text-transform: uppercase; border-bottom: 1px solid #e5e7eb; }
+  @page { size: A5 portrait; margin: 7mm; }
+  html, body { width: 100%; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; background: white; }
+
+  .waybill-print-root {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  /* ── HEADER ── */
+  .wb-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 6px;
+    border-bottom: 2.5px solid #7c3aed;
+    margin-bottom: 2px;
+  }
+  .wb-brand-name    { font-size: 20pt; font-weight: 900; color: #fc1268; line-height: 1; }
+  .wb-brand-sub     { font-size: 8pt; color: #6b7280; font-weight: 600; margin-top: 2px; }
+  .wb-brand-contact { font-size: 7.5pt; color: #6b7280; margin-top: 2px; }
+  .wb-qr-block      { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .wb-qr-block svg  { width: 68px !important; height: 68px !important; shape-rendering: crispEdges; }
+  .wb-qr-label      { font-size: 7pt; color: #7c3aed; font-weight: 800; text-transform: uppercase; letter-spacing: 0.4px; }
+
+  /* ── 2-COL SENDER / RECIPIENT ── */
+  .wb-cols     { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .wb-box      { border: 1px solid #e5e7eb; border-radius: 5px; overflow: hidden; }
+  .wb-box-hd   { background: #f3f4f6 !important; padding: 4px 8px; font-size: 8pt; font-weight: 800; color: #374151; text-transform: uppercase; border-bottom: 1px solid #e5e7eb; }
+  .wb-box-body { padding: 5px 8px; display: flex; flex-direction: column; gap: 4px; }
+  .wb-field-lbl { font-size: 7pt; color: #9ca3af; font-weight: 700; text-transform: uppercase; }
+  .wb-field-val { font-size: 9pt; color: #1f2937; font-weight: 600; line-height: 1.3; }
+
+  /* ── RIDER BOX ── */
+  .wb-rider-row { flex-direction: row !important; gap: 16px !important; flex-wrap: wrap; }
+
+  /* ── ITEMS TABLE ── */
+  .wb-items-box { border: 1px solid #e5e7eb; border-radius: 5px; overflow: hidden; }
+  .wb-items-hd  { background: #f3f4f6 !important; padding: 4px 8px; font-size: 8pt; font-weight: 800; color: #374151; text-transform: uppercase; border-bottom: 1px solid #e5e7eb; }
   .wb-items-table { width: 100%; border-collapse: collapse; }
-  .wb-items-table th { padding: 3px 5px; text-align: left; font-size: 6.5pt; font-weight: 700; color: #6b7280; border-bottom: 1px solid #f0f0f0; }
-  .wb-items-table td { padding: 3px 5px; font-size: 7.5pt; color: #1f2937; border-bottom: 1px solid #f8f8f8; }
+  .wb-items-table th { padding: 4px 6px; text-align: left; font-size: 7.5pt; font-weight: 700; color: #6b7280; border-bottom: 1px solid #f0f0f0; }
+  .wb-items-table td { padding: 4px 6px; font-size: 8.5pt; color: #1f2937; border-bottom: 1px solid #f8f8f8; }
   .wb-items-table tr:last-child td { border-bottom: none; }
-  .td-right { text-align: right; font-weight: 700; }
+  .td-right  { text-align: right; font-weight: 700; }
   .td-center { text-align: center; }
-  .wb-totals { border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; margin-bottom: 4px; }
-  .wb-totals-row { display: flex; justify-content: space-between; padding: 3px 7px; font-size: 7.5pt; border-bottom: 1px solid #f0f0f0; }
+
+  /* ── TOTALS ── */
+  .wb-totals     { border: 1px solid #e5e7eb; border-radius: 5px; overflow: hidden; }
+  .wb-totals-row { display: flex; justify-content: space-between; padding: 4px 10px; font-size: 9pt; border-bottom: 1px solid #f0f0f0; }
   .wb-totals-row:last-child { border-bottom: none; }
-  .wb-grand { background: #fff1f5 !important; font-size: 9.5pt; font-weight: 800; color: #fc1268 !important; }
-  .wb-promo-row { color: #16a34a; font-weight: 600; }
-  .wb-sig-strip { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 4px; }
-  .wb-sig-box { border: 1px dashed #d1d5db; border-radius: 3px; padding: 4px 6px; }
-  .wb-sig-lbl { font-size: 6.5pt; font-weight: 700; color: #6b7280; text-transform: uppercase; margin-bottom: 12px; }
-  .wb-sig-line { border-top: 1px solid #374151; padding-top: 2px; font-size: 6pt; color: #9ca3af; }
-  .wb-footer { text-align: center; font-size: 6pt; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 3px; }
+  .wb-grand      { background: #fff1f5 !important; font-size: 11pt; font-weight: 800; color: #fc1268 !important; padding: 5px 10px !important; }
+  .wb-promo-row  { color: #16a34a; font-weight: 600; }
+
+  /* ── FOOTER ── */
+  .wb-footer { text-align: center; font-size: 7pt; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 4px; margin-top: 2px; line-height: 1.5; }
+
   svg { display: block; }
-  img { image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges; }
 </style>
 </head><body>
 <div class="waybill-print-root">${printContents}</div>
 <script>
-  window.onload = function() { setTimeout(function() { window.print(); }, 500); };
+  window.onload = function() { setTimeout(function() { window.print(); }, 400); };
 <\/script>
 </body></html>`);
     printWindow.document.close();
@@ -108,33 +124,26 @@ const WaybillModal = ({ order, onClose }) => {
     <div className="waybill-overlay" onClick={onClose}>
       <div className="waybill-modal" onClick={e => e.stopPropagation()}>
         <div className="waybill-toolbar">
-          <div className="waybill-toolbar-title">
-            <i className="fas fa-print"></i> Print Waybill — #{shortId}
-          </div>
+          <div className="waybill-toolbar-title"><i className="fas fa-print"></i> Print Waybill — #{shortId}</div>
           <div className="waybill-toolbar-actions">
-            <button className="waybill-print-btn" onClick={handlePrint}>
-              <i className="fas fa-print"></i> Print
-            </button>
+            <button className="waybill-print-btn" onClick={handlePrint}><i className="fas fa-print"></i> Print</button>
             <button className="close-btn" onClick={onClose}><i className="fas fa-times"></i></button>
           </div>
         </div>
-
         <div className="waybill-preview-wrap">
           <div ref={printRef} className="waybill-print-root">
-
-            {/* ── Header: brand + ONE big rider QR ── */}
             <div className="wb-header">
               <div>
                 <div className="wb-brand-name">DKMerch</div>
                 <div className="wb-brand-sub">K-Pop Paradise</div>
                 <div className="wb-brand-contact">📍 Manila, Philippines &nbsp;|&nbsp; support@dkmerch.com</div>
               </div>
+              {/* ✅ CHANGED: QR now points to public track order page */}
               <div className="wb-qr-block">
-                <QRCodeSVG value={riderLink} size={60} level="H" includeMargin={false} fgColor="#7c3aed" />
-                <div className="wb-qr-label">🛵 Rider GPS</div>
+                <QRCodeSVG value={trackOrderLink} size={60} level="H" includeMargin={false} fgColor="#7c3aed" />
+                <div className="wb-qr-label">📦 Track Order</div>
               </div>
             </div>
-
             <div className="wb-cols">
               <div className="wb-box">
                 <div className="wb-box-hd">📦 From (Sender)</div>
@@ -154,27 +163,20 @@ const WaybillModal = ({ order, onClose }) => {
                 </div>
               </div>
             </div>
-
             {order.riderInfo?.name && (
-              <div className="wb-box" style={{ marginBottom: '5px' }}>
+              <div className="wb-box">
                 <div className="wb-box-hd">🛵 Assigned Rider</div>
-                <div className="wb-box-body" style={{ flexDirection: 'row', gap: '12px', flexWrap: 'wrap' }}>
+                <div className="wb-box-body wb-rider-row">
                   <div><div className="wb-field-lbl">Name</div><div className="wb-field-val">{order.riderInfo.name}</div></div>
                   <div><div className="wb-field-lbl">Phone</div><div className="wb-field-val">{order.riderInfo.phone || 'N/A'}</div></div>
                   {order.riderInfo.plate && <div><div className="wb-field-lbl">Plate No.</div><div className="wb-field-val">{order.riderInfo.plate}</div></div>}
                 </div>
               </div>
             )}
-
             <div className="wb-items-box">
               <div className="wb-items-hd">🛍 Order Items ({order.items?.length || 0})</div>
               <table className="wb-items-table">
-                <thead>
-                  <tr>
-                    <th>#</th><th>Item</th><th className="td-center">Qty</th>
-                    <th className="td-right">Unit Price</th><th className="td-right">Subtotal</th>
-                  </tr>
-                </thead>
+                <thead><tr><th>#</th><th>Item</th><th className="td-center">Qty</th><th className="td-right">Unit Price</th><th className="td-right">Subtotal</th></tr></thead>
                 <tbody>
                   {order.items?.map((item, idx) => (
                     <tr key={idx}>
@@ -182,50 +184,25 @@ const WaybillModal = ({ order, onClose }) => {
                       <td style={{ fontWeight: 600 }}>{item.name || 'N/A'}</td>
                       <td className="td-center">{item.quantity}</td>
                       <td className="td-right">₱{(item.price || 0).toLocaleString('en-PH')}</td>
-                      <td className="td-right" style={{ color: '#fc1268' }}>
-                        ₱{((item.quantity || 0) * (item.price || 0)).toLocaleString('en-PH')}
-                      </td>
+                      <td className="td-right" style={{ color: '#fc1268' }}>₱{((item.quantity || 0) * (item.price || 0)).toLocaleString('en-PH')}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-
             <div className="wb-totals">
               <div className="wb-totals-row"><span>Subtotal</span><strong>₱{subtotal.toLocaleString('en-PH')}</strong></div>
-              <div className="wb-totals-row">
-                <span>Shipping</span>
-                <strong>{shippingFee === 0 ? 'FREE' : `₱${shippingFee.toLocaleString('en-PH')}`}</strong>
-              </div>
-              {hasPromo && (
-                <div className="wb-totals-row wb-promo-row">
-                  <span>Promo ({order.promoCode})</span><strong>−₱{discount.toLocaleString('en-PH')}</strong>
-                </div>
-              )}
-              <div className="wb-totals-row wb-grand">
-                <span>{hasPromo ? 'Total Charged' : 'Total'}</span>
-                <strong>₱{finalTotal.toLocaleString('en-PH')}</strong>
-              </div>
+              <div className="wb-totals-row"><span>Shipping</span><strong>{shippingFee === 0 ? 'FREE' : `₱${shippingFee.toLocaleString('en-PH')}`}</strong></div>
+              {hasPromo && <div className="wb-totals-row wb-promo-row"><span>Promo ({order.promoCode})</span><strong>−₱{discount.toLocaleString('en-PH')}</strong></div>}
+              <div className="wb-totals-row wb-grand"><span>{hasPromo ? 'Total Charged' : 'Total'}</span><strong>₱{finalTotal.toLocaleString('en-PH')}</strong></div>
             </div>
-
-            <div className="wb-sig-strip">
-              <div className="wb-sig-box">
-                <div className="wb-sig-lbl">Rider Signature</div>
-                <div className="wb-sig-line">Signature over printed name</div>
-              </div>
-              <div className="wb-sig-box">
-                <div className="wb-sig-lbl">Customer / Received by</div>
-                <div className="wb-sig-line">Signature over printed name</div>
-              </div>
-            </div>
-
+            {/* ✅ REMOVED: wb-sig-strip (Rider Signature + Customer/Received by) */}
             <div className="wb-footer">
               <strong style={{ color: '#fc1268' }}>DKMerch</strong> · K-Pop Paradise · Manila, Philippines
               &nbsp;|&nbsp; Order #{shortId} &nbsp;|&nbsp; Printed {new Date().toLocaleDateString('en-PH')}
-              <br />
-              <span style={{ fontSize: '9px', marginTop: '2px', display: 'block' }}>Rider GPS: {riderLink}</span>
+              {/* ✅ CHANGED: footer URL now shows track order link */}
+              <br /><span style={{ fontSize: '9px', marginTop: '2px', display: 'block' }}>Track: {trackOrderLink}</span>
             </div>
-
           </div>
         </div>
       </div>
@@ -380,7 +357,7 @@ const AdminOrders = () => {
 
       <div className="admin-flow-info">
         <i className="fas fa-info-circle"></i>
-        <span><strong>Order Flow:</strong> Customer pays → <strong>Paid &amp; Awaiting</strong> → Admin confirms → Notify Customer (Out for Delivery) → Rider delivers with OTP + photo</span>
+        <span><strong>Order Flow:</strong> Customer pays → <strong>Paid &amp; Awaiting</strong> → Admin confirms → Rider delivers with OTP + photo</span>
       </div>
 
       {activeTab === 'refund' && refundCount > 0 && (
@@ -514,9 +491,6 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
   const [resolvingRefund,   setResolvingRefund]   = useState(false);
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
   const [showWaybill,       setShowWaybill]       = useState(false);
-  const [notifying, setNotifying] = useState(false);
-  const [notified,  setNotified]  = useState(false);
-  const notifyMutation = useMutation(api.orders.notifyCustomerOutForDelivery);
 
   const refundPhotoUrl = useQuery(
     api.orders.getRefundPhotoUrl,
@@ -544,8 +518,6 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
   const pm = getPaymentMethodLabel(order);
 
   const canPrintWaybill = isPaid && currentStatus !== 'pending';
-  const canNotify       = isPaid && (currentStatus === 'confirmed' || currentStatus === 'shipped') && !!order.riderInfo?.name;
-  const alreadyNotified = currentStatus === 'out_for_delivery';
 
   const handleRefundResolve = async (status) => {
     setResolvingRefund(true);
@@ -553,24 +525,10 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
     finally { setResolvingRefund(false); setShowRejectConfirm(false); }
   };
 
-  const handleNotifyCustomer = async () => {
-    const ri = order.riderInfo || {};
-    if (!ri.name || !ri.phone) { alert('Set rider name and phone in AdminRiders first.'); return; }
-    if (!order.email) { alert('No customer email found for this order.'); return; }
-    setNotifying(true);
-    try {
-      await notifyMutation({ orderId: order.orderId, riderName: ri.name, riderPhone: ri.phone, riderPlate: ri.plate || undefined, customerEmail: order.email });
-      setNotified(true);
-      setTimeout(() => setNotified(false), 4000);
-    } catch (e) {
-      console.error('Notify error:', e);
-      alert('Failed to notify customer. Please try again.');
-    } finally { setNotifying(false); }
-  };
-
   return (
     <div className="order-modal-overlay" onClick={onClose}>
       <div className="order-modal" onClick={e => e.stopPropagation()}>
+        {/* ── HEADER ── */}
         <div className="modal-header">
           <div>
             <h2>Order #{order.orderId?.slice(-8) || 'N/A'}</h2>
@@ -592,8 +550,8 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
 
         <div className="modal-body">
           {!isPaid && <div className="flow-notice warning"><i className="fas fa-exclamation-triangle"></i><div><strong>Payment not yet confirmed</strong><p>Do not confirm until payment is verified via PayMongo.</p></div></div>}
-          {isPaid && currentStatus === 'pending' && <div className="flow-notice success"><i className="fas fa-check-circle"></i><div><strong>Payment received!</strong><p>Confirm order below. Then set rider info and click Notify Customer.</p></div></div>}
-          {isPaid && currentStatus === 'confirmed' && <div className="flow-notice info"><i className="fas fa-motorcycle"></i><div><strong>Order confirmed</strong><p>Set rider info in AdminRiders, then click <strong>Notify Customer</strong> to dispatch.</p></div></div>}
+          {isPaid && currentStatus === 'pending' && <div className="flow-notice success"><i className="fas fa-check-circle"></i><div><strong>Payment received!</strong><p>Confirm order below. Then assign a rider from AdminRiders.</p></div></div>}
+          {isPaid && currentStatus === 'confirmed' && <div className="flow-notice info"><i className="fas fa-motorcycle"></i><div><strong>Order confirmed</strong><p>Assign a rider from the <strong>Riders</strong> tab to dispatch.</p></div></div>}
           {isRiderManaged && <div className="flow-notice purple"><i className="fas fa-shipping-fast"></i><div><strong>Rider is handling delivery</strong><p>Rider confirms via OTP + photo proof.</p></div></div>}
 
           <div className="modal-section">
@@ -741,6 +699,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
             </div>
           </div>
 
+          {/* ── UPDATE ORDER STATUS ── */}
           <div className="modal-section">
             <h3><i className="fas fa-tasks"></i> Update Order Status</h3>
             {isDone && (
@@ -755,7 +714,11 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
             {!isDone && !isRiderManaged && (
               <div className="status-buttons">
                 <div className="status-btn-wrapper">
-                  <button className={`status-btn confirmed ${currentStatus === 'confirmed' ? 'is-current' : ''} ${!canConfirm ? 'is-blocked' : ''}`} onClick={() => canConfirm && onUpdateStatus(order.orderId, 'confirmed')} disabled={!canConfirm}>
+                  <button
+                    className={`status-btn confirmed ${currentStatus === 'confirmed' ? 'is-current' : ''} ${!canConfirm ? 'is-blocked' : ''}`}
+                    onClick={() => canConfirm && onUpdateStatus(order.orderId, 'confirmed')}
+                    disabled={!canConfirm}
+                  >
                     <i className="fas fa-check-circle"></i><span>Confirm Order</span>
                     {currentStatus === 'confirmed' && <span className="current-indicator">Current</span>}
                   </button>
@@ -764,36 +727,10 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                 </div>
                 {canCancel && (
                   <div className="status-btn-wrapper">
-                    <button className="status-btn cancelled" onClick={() => setShowCancelModal(true)}><i className="fas fa-times-circle"></i><span>Cancel Order</span></button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {isPaid && !isDone && (
-              <div className="notify-customer-section">
-                <div className="notify-section-label"><i className="fas fa-bell"></i> Notify Customer — Out for Delivery</div>
-                {alreadyNotified ? (
-                  <div className="notify-done-banner">
-                    <i className="fas fa-check-circle"></i> Customer already notified — Out for Delivery
-                    {order.deliveryOtp && <span className="notify-otp-inline"> · OTP: <strong>{order.deliveryOtp}</strong></span>}
-                  </div>
-                ) : !order.riderInfo?.name ? (
-                  <div className="notify-no-rider">
-                    <i className="fas fa-exclamation-triangle"></i> Set rider info in <strong>Delivery Management</strong> first before notifying
-                  </div>
-                ) : (
-                  <>
-                    <div className="notify-rider-preview">
-                      <i className="fas fa-motorcycle"></i> {order.riderInfo.name}
-                      {order.riderInfo.phone && <> · {order.riderInfo.phone}</>}
-                      {order.riderInfo.plate && <> · {order.riderInfo.plate}</>}
-                    </div>
-                    <button className={`notify-customer-btn ${notified ? 'notify-customer-btn--done' : ''}`} onClick={handleNotifyCustomer} disabled={notifying || !canNotify}>
-                      {notifying ? <><i className="fas fa-spinner fa-spin"></i> Sending…</> : notified ? <><i className="fas fa-check-circle"></i> Customer Notified!</> : <><i className="fas fa-bell"></i> Notify Customer (Out for Delivery)</>}
+                    <button className="status-btn cancelled" onClick={() => setShowCancelModal(true)}>
+                      <i className="fas fa-times-circle"></i><span>Cancel Order</span>
                     </button>
-                    {notified && order.deliveryOtp && <div className="notify-otp-display">Generated OTP: <strong>{order.deliveryOtp}</strong></div>}
-                  </>
+                  </div>
                 )}
               </div>
             )}
