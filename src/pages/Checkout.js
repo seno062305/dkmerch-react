@@ -9,10 +9,6 @@ import { useMutation, useQuery, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import './Checkout.css';
 
-// ─── STORE COORDINATES ────────────────────────────────────────────────────────
-const STORE_LAT = 14.5995;
-const STORE_LNG = 120.9842;
-
 // ─── LALAMOVE-STYLE SHIPPING CONFIG ──────────────────────────────────────────
 const LALAMOVE_CONFIG = {
   baseFare:          49,
@@ -46,11 +42,11 @@ function getDistanceKm(lat1, lng1, lat2, lng2) {
 }
 
 // ─── LALAMOVE SHIPPING CALCULATOR ────────────────────────────────────────────
-function calcLalamoveShipping(lat, lng, cartItems = [], products = []) {
-  if (!lat || !lng) return null;
+function calcLalamoveShipping(storeLat, storeLng, lat, lng, cartItems = [], products = []) {
+  if (!lat || !lng || !storeLat || !storeLng) return null;
 
   const cfg = LALAMOVE_CONFIG;
-  const km  = Math.round(getDistanceKm(STORE_LAT, STORE_LNG, lat, lng) * 10) / 10;
+  const km  = Math.round(getDistanceKm(storeLat, storeLng, lat, lng) * 10) / 10;
 
   let fee = cfg.baseFare;
   const chargeableKm = Math.max(0, km - cfg.freeKm);
@@ -466,6 +462,11 @@ const Checkout = () => {
   const clearCart     = useClearCart();
   const updateProduct = useUpdateProduct();
 
+  // ── Store coords from DB (set by admin in Dashboard) ──────────────────
+  const storeSettings = useQuery(api.settings.getSettings);
+  const STORE_LAT     = storeSettings?.storeLat ?? 14.5995;
+  const STORE_LNG     = storeSettings?.storeLng ?? 120.9842;
+
   const savedProfile = useQuery(
     api.users.getProfile,
     user?._id || user?.id ? { userId: user?._id || user?.id } : 'skip'
@@ -487,7 +488,7 @@ const Checkout = () => {
   const [savedCoords, setSavedCoords]     = useState(null);
 
   const shippingInfo = addressCoords
-    ? calcLalamoveShipping(addressCoords.lat, addressCoords.lng, cartItems, products)
+    ? calcLalamoveShipping(STORE_LAT, STORE_LNG, addressCoords.lat, addressCoords.lng, cartItems, products)
     : null;
   const shippingFee  = shippingInfo?.fee ?? 0;
 
@@ -635,7 +636,6 @@ const Checkout = () => {
       return;
     }
 
-    // ── Stock validation ──────────────────────────────────────────────────
     for (const item of cartItems) {
       const product = getProductById(item.productId || item.id);
       if (!product) continue;
@@ -676,7 +676,7 @@ const Checkout = () => {
       if (savedAddress.zipCode) addressParts.push(savedAddress.zipCode);
       const shippingAddressStr = addressParts.join(', ');
 
-      // ── STEP 1: Create order FIRST so savePaymentLink can find it ──────────
+      // ── STEP 1: Create order ──────────────────────────────────────────────
       await createOrder({
         orderId,
         email:           savedContact.email,
@@ -701,7 +701,7 @@ const Checkout = () => {
         paymentStatus:   'pending',
       });
 
-      // ── STEP 2: Get PayMongo checkout URL (patches the order via savePaymentLink) ─
+      // ── STEP 2: Get PayMongo checkout URL ─────────────────────────────────
       let paymentLinkUrl;
       try {
         const result = await createPaymentLink({
@@ -765,7 +765,7 @@ const Checkout = () => {
         });
       } catch (emailErr) { console.warn('Email failed:', emailErr); }
 
-      // ── STEP 6: Clear cart → redirect directly to PayMongo ───────────────
+      // ── STEP 6: Clear cart → redirect to PayMongo ─────────────────────────
       await clearCart();
       setLoading(false);
       window.location.href = paymentLinkUrl;
@@ -909,7 +909,7 @@ const Checkout = () => {
                       />
                     </div>
                     {addressCoords && (() => {
-                      const preview = calcLalamoveShipping(addressCoords.lat, addressCoords.lng, cartItems, products);
+                      const preview = calcLalamoveShipping(STORE_LAT, STORE_LNG, addressCoords.lat, addressCoords.lng, cartItems, products);
                       return preview ? (
                         <div className="form-group full-width">
                           <ShippingBreakdown shippingInfo={preview} />

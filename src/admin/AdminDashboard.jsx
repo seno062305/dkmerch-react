@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useQuery } from 'convex/react';
+import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import {
   Chart as ChartJS,
@@ -83,6 +83,74 @@ const AdminDashboard = () => {
   const [showProductModal, setShowProductModal] = useState(false);
   const [statModal, setStatModal] = useState(null);
 
+  // ── Store Location State ───────────────────────────────────────────────
+  const storeSettings  = useQuery(api.settings.getSettings);
+  const updateSettings = useMutation(api.settings.updateSettings);
+  const [storeForm, setStoreForm]             = useState({ storeName: '', storeAddress: '', storeLat: '', storeLng: '' });
+  const [storeFormSaved, setStoreFormSaved]   = useState(false);
+  const [storeLocating, setStoreLocating]     = useState(false);
+
+  useEffect(() => {
+    if (storeSettings) {
+      setStoreForm({
+        storeName:    storeSettings.storeName    ?? 'DKMerch Store',
+        storeAddress: storeSettings.storeAddress ?? '',
+        storeLat:     storeSettings.storeLat     != null ? String(storeSettings.storeLat) : '',
+        storeLng:     storeSettings.storeLng     != null ? String(storeSettings.storeLng) : '',
+      });
+    }
+  }, [storeSettings]);
+
+  const handleStoreFormChange = (e) => {
+    const { name, value } = e.target;
+    setStoreForm(prev => ({ ...prev, [name]: value }));
+    setStoreFormSaved(false);
+  };
+
+  const handleDetectLocation = () => {
+    if (!navigator.geolocation) { alert('Geolocation is not supported by your browser.'); return; }
+    setStoreLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        try {
+          const res  = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`,
+            { headers: { 'Accept-Language': 'en' } }
+          );
+          const data = await res.json();
+          setStoreForm(prev => ({
+            ...prev,
+            storeLat:     String(lat),
+            storeLng:     String(lng),
+            storeAddress: data.display_name || prev.storeAddress,
+          }));
+        } catch {
+          setStoreForm(prev => ({ ...prev, storeLat: String(lat), storeLng: String(lng) }));
+        }
+        setStoreLocating(false);
+        setStoreFormSaved(false);
+      },
+      (err) => { setStoreLocating(false); alert('Could not get location: ' + err.message); },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  const handleSaveStoreSettings = async () => {
+    const lat = parseFloat(storeForm.storeLat);
+    const lng = parseFloat(storeForm.storeLng);
+    if (isNaN(lat) || isNaN(lng)) { alert('Please enter valid coordinates or use Detect Location.'); return; }
+    await updateSettings({
+      storeName:    storeForm.storeName    || undefined,
+      storeAddress: storeForm.storeAddress || undefined,
+      storeLat:     lat,
+      storeLng:     lng,
+    });
+    setStoreFormSaved(true);
+  };
+  // ──────────────────────────────────────────────────────────────────────
+
   const allOrders   = useQuery(api.orders.getAllOrders)     ?? [];
   const allUsers    = useQuery(api.users.getAllUsers)       ?? [];
   const allProducts = useQuery(api.products.getAllProducts) ?? [];
@@ -112,7 +180,6 @@ const AdminDashboard = () => {
       );
     });
 
-    // Inventory costing = sum of (stock × price) per product
     const inventoryCosting = allProducts.reduce((sum, p) =>
       sum + ((p.stock ?? 0) * (p.price ?? 0)), 0
     );
@@ -144,10 +211,10 @@ const AdminDashboard = () => {
         iconColor: '#ee4d2d',
         explanation: 'Total estimated value of all current stock. Computed by multiplying each product\'s current stock quantity by its selling price, then summing all products.',
         breakdown: [
-          { label: 'Total Products',     value: stats.totalProducts },
-          { label: 'Low Stock Items',    value: stats.lowStockProducts,  color: '#d97706' },
-          { label: 'Out of Stock Items', value: stats.outOfStock,        color: '#dc2626' },
-          { label: 'Total Inventory Value', value: `₱${stats.inventoryCosting.toLocaleString()}`, color: '#ee4d2d' },
+          { label: 'Total Products',        value: stats.totalProducts },
+          { label: 'Low Stock Items',        value: stats.lowStockProducts,  color: '#d97706' },
+          { label: 'Out of Stock Items',     value: stats.outOfStock,        color: '#dc2626' },
+          { label: 'Total Inventory Value',  value: `₱${stats.inventoryCosting.toLocaleString()}`, color: '#ee4d2d' },
         ],
       });
     } else if (type === 'orders') {
@@ -160,9 +227,9 @@ const AdminDashboard = () => {
         explanation: 'Total number of all orders placed in the system, regardless of status (pending, paid, completed, cancelled, etc.).',
         breakdown: [
           { label: 'All Orders',       value: stats.totalOrders },
-          { label: 'Pending Orders',   value: stats.pendingOrders,    color: '#d97706' },
-          { label: 'Paid Orders',      value: stats.saleOrders,       color: '#2563eb' },
-          { label: 'Completed Orders', value: stats.completedOrders,  color: '#16a34a' },
+          { label: 'Pending Orders',   value: stats.pendingOrders,   color: '#d97706' },
+          { label: 'Paid Orders',      value: stats.saleOrders,      color: '#2563eb' },
+          { label: 'Completed Orders', value: stats.completedOrders, color: '#16a34a' },
         ],
       });
     } else if (type === 'completed') {
@@ -193,10 +260,10 @@ const AdminDashboard = () => {
         iconColor: '#a855f7',
         explanation: 'Total number of active products in the catalog. Low stock means the item has fewer than 10 units remaining.',
         breakdown: [
-          { label: 'Total Products',     value: stats.totalProducts },
-          { label: 'Low Stock (< 10)',   value: stats.lowStockProducts,  color: '#d97706' },
-          { label: 'Out of Stock',       value: stats.outOfStock,        color: '#dc2626' },
-          { label: 'Healthy Stock',      value: stats.totalProducts - stats.lowStockProducts, color: '#16a34a' },
+          { label: 'Total Products',   value: stats.totalProducts },
+          { label: 'Low Stock (< 10)', value: stats.lowStockProducts, color: '#d97706' },
+          { label: 'Out of Stock',     value: stats.outOfStock,       color: '#dc2626' },
+          { label: 'Healthy Stock',    value: stats.totalProducts - stats.lowStockProducts, color: '#16a34a' },
         ],
       });
     }
@@ -344,7 +411,6 @@ const AdminDashboard = () => {
       {/* Stats Cards */}
       <div className="stats-grid">
 
-        {/* Inventory Costing (was Total Sales) */}
         <div className="stat-card sales clickable-card" onClick={() => openStatModal('inventory')}>
           <div className="stat-icon"><i className="fas fa-boxes"></i></div>
           <div className="stat-details">
@@ -355,7 +421,6 @@ const AdminDashboard = () => {
           <div className="card-click-hint"><i className="fas fa-info-circle"></i></div>
         </div>
 
-        {/* Total Orders */}
         <div className="stat-card orders clickable-card" onClick={() => openStatModal('orders')}>
           <div className="stat-icon"><i className="fas fa-shopping-cart"></i></div>
           <div className="stat-details">
@@ -366,7 +431,6 @@ const AdminDashboard = () => {
           <div className="card-click-hint"><i className="fas fa-info-circle"></i></div>
         </div>
 
-        {/* Completed Orders (was Registered Users) */}
         <div className="stat-card users clickable-card" onClick={() => openStatModal('completed')}>
           <div className="stat-icon"><i className="fas fa-check-circle"></i></div>
           <div className="stat-details">
@@ -377,7 +441,6 @@ const AdminDashboard = () => {
           <div className="card-click-hint"><i className="fas fa-info-circle"></i></div>
         </div>
 
-        {/* Total Products */}
         <div className="stat-card products clickable-card" onClick={() => openStatModal('products')}>
           <div className="stat-icon"><i className="fas fa-box"></i></div>
           <div className="stat-details">
@@ -456,6 +519,113 @@ const AdminDashboard = () => {
               <div className="no-data"><i className="fas fa-shopping-cart"></i><p>No orders yet</p></div>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* ── Store / Pickup Location Settings ── */}
+      <div className="chart-card full-width" style={{ marginTop: '24px' }}>
+        <div className="chart-header">
+          <div className="chart-title">
+            <i className="fas fa-map-marker-alt" style={{ color: '#fc1268' }}></i>
+            <h3>Store / Pickup Location</h3>
+          </div>
+        </div>
+        <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>
+            This location is used as the <strong>starting point</strong> for computing shipping fees in Checkout.
+            Set it to the exact address where riders pick up orders.
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>Store Name</label>
+              <input
+                type="text" name="storeName" value={storeForm.storeName}
+                onChange={handleStoreFormChange}
+                placeholder="DKMerch Store"
+                style={{ padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '13px' }}
+              />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>Store Address</label>
+              <input
+                type="text" name="storeAddress" value={storeForm.storeAddress}
+                onChange={handleStoreFormChange}
+                placeholder="Full store address"
+                style={{ padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '13px' }}
+              />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>Latitude</label>
+              <input
+                type="number" name="storeLat" value={storeForm.storeLat}
+                onChange={handleStoreFormChange}
+                placeholder="e.g. 14.5995"
+                step="0.00001"
+                style={{ padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '13px' }}
+              />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>Longitude</label>
+              <input
+                type="number" name="storeLng" value={storeForm.storeLng}
+                onChange={handleStoreFormChange}
+                placeholder="e.g. 120.9842"
+                step="0.00001"
+                style={{ padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '13px' }}
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <button
+              onClick={handleDetectLocation}
+              disabled={storeLocating}
+              style={{
+                padding: '9px 16px', borderRadius: '8px', border: '1.5px solid #3b82f6',
+                background: '#eff6ff', color: '#2563eb', fontWeight: 600, fontSize: '13px',
+                cursor: storeLocating ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
+              }}
+            >
+              <i className={storeLocating ? 'fas fa-spinner fa-spin' : 'fas fa-crosshairs'}></i>
+              {storeLocating ? 'Detecting…' : 'Detect My Location'}
+            </button>
+
+            <button
+              onClick={handleSaveStoreSettings}
+              style={{
+                padding: '9px 20px', borderRadius: '8px', border: 'none',
+                background: storeFormSaved ? '#16a34a' : '#fc1268', color: '#fff',
+                fontWeight: 600, fontSize: '13px', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: '6px'
+              }}
+            >
+              <i className={storeFormSaved ? 'fas fa-check' : 'fas fa-save'}></i>
+              {storeFormSaved ? 'Saved!' : 'Save Location'}
+            </button>
+
+            {storeSettings?.storeLat && storeSettings?.storeLng && (
+              <a
+                href={`https://www.google.com/maps?q=${storeSettings.storeLat},${storeSettings.storeLng}`}
+                target="_blank" rel="noreferrer"
+                style={{ fontSize: '12px', color: '#2563eb', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}
+              >
+                <i className="fas fa-external-link-alt"></i> View on Google Maps
+              </a>
+            )}
+          </div>
+
+          {storeSettings?.storeAddress && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#475569', background: '#f8fafc', padding: '8px 12px', borderRadius: '8px' }}>
+              <i className="fas fa-map-marker-alt" style={{ color: '#fc1268' }}></i>
+              <strong>Current:</strong> {storeSettings.storeAddress}
+              {storeSettings.storeLat && (
+                <span style={{ marginLeft: '8px', color: '#94a3b8' }}>
+                  ({Number(storeSettings.storeLat).toFixed(5)}, {Number(storeSettings.storeLng).toFixed(5)})
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

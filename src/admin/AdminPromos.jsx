@@ -15,13 +15,6 @@ const validateDiscount = (val) => {
   if (num > 100) return 'Cannot exceed 100%.';
   return '';
 };
-const validateMaxDiscount = (val) => {
-  const num = Number(val);
-  if (!val || isNaN(num)) return 'Required.';
-  if (num < 1) return 'Must be at least ₱1.';
-  if (String(Math.floor(num)).length > 4) return 'Max 4 digits (up to ₱9999).';
-  return '';
-};
 
 const fmt12 = (t) => {
   if (!t) return '';
@@ -32,9 +25,8 @@ const fmt12 = (t) => {
 };
 
 const EMPTY_FORM = {
-  code: '', name: '', discount: '', maxDiscount: '',
+  code: '', name: '', discount: '',
   startDate: '', startTime: '', endDate: '', endTime: '',
-  isActive: true,
 };
 
 const PH = 8 * 3600000;
@@ -46,19 +38,18 @@ const toMs = (d, t) => {
 };
 
 const AdminPromos = () => {
-  const promos       = useQuery(api.promos.getAllPromos) || [];
-  const createPromo  = useMutation(api.promos.createPromo);
-  const updatePromo  = useMutation(api.promos.updatePromo);
-  const deletePromo  = useMutation(api.promos.deletePromo);
-  const toggleStatus = useMutation(api.promos.togglePromoStatus);
+  const promos      = useQuery(api.promos.getAllPromos) || [];
+  const createPromo = useMutation(api.promos.createPromo);
+  const updatePromo = useMutation(api.promos.updatePromo);
+  const deletePromo = useMutation(api.promos.deletePromo);
 
-  const [nowMs, setNowMs]               = useState(() => Date.now());
-  const [showModal, setShowModal]       = useState(false);
+  const [nowMs,        setNowMs]        = useState(() => Date.now());
+  const [showModal,    setShowModal]    = useState(false);
   const [editingPromo, setEditingPromo] = useState(null);
-  const [formData, setFormData]         = useState(EMPTY_FORM);
-  const [errors, setErrors]             = useState({});
-  const [serverMsg, setServerMsg]       = useState('');
-  const [submitting, setSubmitting]     = useState(false);
+  const [formData,     setFormData]     = useState(EMPTY_FORM);
+  const [errors,       setErrors]       = useState({});
+  const [serverMsg,    setServerMsg]    = useState('');
+  const [submitting,   setSubmitting]   = useState(false);
 
   useEffect(() => {
     const id = setInterval(() => setNowMs(Date.now()), 10000);
@@ -71,16 +62,14 @@ const AdminPromos = () => {
     if (!showModal) return;
     const y = window.scrollY;
     document.body.style.cssText = `position:fixed;top:-${y}px;width:100%;overflow:hidden`;
-    return () => {
-      document.body.style.cssText = '';
-      window.scrollTo(0, y);
-    };
+    return () => { document.body.style.cssText = ''; window.scrollTo(0, y); };
   }, [showModal]);
 
   const handleInputChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    if ((name === 'discount' || name === 'maxDiscount') && value !== '' && !/^\d+$/.test(value)) return;
-    setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
+    const { name, value } = e.target;
+    if (name === 'discount' && value !== '' && !/^\d+$/.test(value)) return;
+    if ((name === 'startDate' || name === 'endDate') && value && value < today) return;
+    setFormData(prev => ({ ...prev, [name]: value }));
     setErrors(prev => ({ ...prev, [name]: '' }));
     setServerMsg('');
   };
@@ -91,17 +80,17 @@ const AdminPromos = () => {
     if (!formData.name)        errs.name = 'Please select a K-Pop group.';
     const de = validateDiscount(formData.discount);
     if (de) errs.discount = de;
-    const me = validateMaxDiscount(formData.maxDiscount);
-    if (me) errs.maxDiscount = me;
     if (!formData.startDate) errs.startDate = 'Required.';
     if (!formData.endDate)   errs.endDate   = 'Required.';
+    if (formData.startDate && formData.startDate < today)
+      errs.startDate = 'Start date cannot be in the past.';
+    if (formData.endDate && formData.endDate < today)
+      errs.endDate = 'End date cannot be in the past.';
     if (formData.startDate && formData.endDate && formData.endDate < formData.startDate)
       errs.endDate = 'End date must be after start date.';
     if (formData.startDate === formData.endDate && formData.startTime && formData.endTime
         && formData.startTime >= formData.endTime)
       errs.endTime = 'End time must be after start time on the same day.';
-
-    // ✅ Validate year is max 4 digits
     const yearCheck = (dateStr, field) => {
       if (dateStr) {
         const yr = parseInt(dateStr.split('-')[0], 10);
@@ -109,8 +98,7 @@ const AdminPromos = () => {
       }
     };
     yearCheck(formData.startDate, 'startDate');
-    yearCheck(formData.endDate, 'endDate');
-
+    yearCheck(formData.endDate,   'endDate');
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -121,15 +109,14 @@ const AdminPromos = () => {
     setSubmitting(true); setServerMsg('');
     try {
       const payload = {
-        code:        formData.code.toUpperCase().trim(),
-        name:        formData.name,
-        discount:    Number(formData.discount),
-        maxDiscount: Number(formData.maxDiscount),
-        startDate:   formData.startDate || undefined,
-        startTime:   formData.startTime || undefined,
-        endDate:     formData.endDate   || undefined,
-        endTime:     formData.endTime   || undefined,
-        isActive:    formData.isActive,
+        code:      formData.code.toUpperCase().trim(),
+        name:      formData.name,
+        discount:  Number(formData.discount),
+        startDate: formData.startDate || undefined,
+        startTime: formData.startTime || undefined,
+        endDate:   formData.endDate   || undefined,
+        endTime:   formData.endTime   || undefined,
+        isActive:  true,
       };
       if (editingPromo) {
         await updatePromo({ id: editingPromo._id, ...payload });
@@ -150,15 +137,13 @@ const AdminPromos = () => {
   const handleEdit = (promo) => {
     setEditingPromo(promo);
     setFormData({
-      code:        promo.code,
-      name:        promo.name,
-      discount:    String(promo.discount),
-      maxDiscount: String(promo.maxDiscount),
-      startDate:   promo.startDate || '',
-      startTime:   promo.startTime || '',
-      endDate:     promo.endDate   || '',
-      endTime:     promo.endTime   || '',
-      isActive:    promo.isActive,
+      code:      promo.code,
+      name:      promo.name,
+      discount:  String(promo.discount),
+      startDate: promo.startDate || '',
+      startTime: promo.startTime || '',
+      endDate:   promo.endDate   || '',
+      endTime:   promo.endTime   || '',
     });
     setErrors({}); setServerMsg(''); setShowModal(true);
   };
@@ -182,11 +167,8 @@ const AdminPromos = () => {
   };
 
   const getStatus = (promo) => {
-    if (!promo.isActive) return { label: 'Inactive', cls: 'badge-inactive' };
-    const startMs = toMs(promo.startDate, promo.startTime || '00:00');
-    const endMs   = toMs(promo.endDate,   promo.endTime   || '23:59');
-    if (endMs   && nowMs > endMs)   return { label: 'Expired',  cls: 'badge-expired'  };
-    if (startMs && nowMs < startMs) return { label: 'Upcoming', cls: 'badge-upcoming' };
+    const endMs = toMs(promo.endDate, promo.endTime || '23:59');
+    if (endMs && nowMs > endMs) return { label: 'Expired', cls: 'badge-expired' };
     return { label: 'Active', cls: 'badge-active' };
   };
 
@@ -214,18 +196,13 @@ const AdminPromos = () => {
         <table className="promos-table">
           <thead>
             <tr>
-              <th>Code</th>
-              <th>K-Pop Group</th>
-              <th>Discount</th>
-              <th>Max Discount</th>
-              <th>Period</th>
-              <th>Status</th>
-              <th>Actions</th>
+              <th>Code</th><th>K-Pop Group</th><th>Discount</th>
+              <th>Period</th><th>Status</th><th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {promos.length === 0
-              ? <tr><td colSpan="7" className="empty-state">No promos yet. Create your first promo!</td></tr>
+              ? <tr><td colSpan="6" className="empty-state">No promos yet. Create your first promo!</td></tr>
               : promos.map(promo => {
                   const { label, cls } = getStatus(promo);
                   return (
@@ -233,18 +210,8 @@ const AdminPromos = () => {
                       <td><span className="promo-code"><TagIcon />{promo.code}</span></td>
                       <td><span className="group-chip">{promo.name}</span></td>
                       <td>{promo.discount}%</td>
-                      <td>₱{promo.maxDiscount.toLocaleString()}</td>
                       <td className="period-cell">{formatPeriod(promo)}</td>
-                      <td>
-                        <div className="status-cell">
-                          <label className="toggle-switch">
-                            <input type="checkbox" checked={promo.isActive}
-                              onChange={() => toggleStatus({ id: promo._id })} />
-                            <span className="toggle-slider"></span>
-                          </label>
-                          <span className={`status-badge ${cls}`}>{label}</span>
-                        </div>
-                      </td>
+                      <td><span className={`status-badge ${cls}`}>{label}</span></td>
                       <td>
                         <div className="action-buttons">
                           <button className="edit-btn" onClick={() => handleEdit(promo)}><EditIcon /></button>
@@ -269,19 +236,11 @@ const AdminPromos = () => {
                 <div className="promo-card" key={promo._id}>
                   <div className="promo-card-header">
                     <span className="promo-card-code"><TagIcon />{promo.code}</span>
-                    <div className="promo-card-toggle">
-                      <span className={`status-badge ${cls}`}>{label}</span>
-                      <label className="toggle-switch">
-                        <input type="checkbox" checked={promo.isActive}
-                          onChange={() => toggleStatus({ id: promo._id })} />
-                        <span className="toggle-slider"></span>
-                      </label>
-                    </div>
+                    <span className={`status-badge ${cls}`}>{label}</span>
                   </div>
                   <div className="promo-card-body">
                     <div className="promo-card-field"><label>K-Pop Group</label><span className="group-chip">{promo.name}</span></div>
                     <div className="promo-card-field"><label>Discount</label><span>{promo.discount}%</span></div>
-                    <div className="promo-card-field"><label>Max Discount</label><span>₱{promo.maxDiscount.toLocaleString()}</span></div>
                     <div className="promo-card-field promo-card-period"><label>Period</label><span>{formatPeriod(promo)}</span></div>
                   </div>
                   <div className="promo-card-actions">
@@ -305,6 +264,7 @@ const AdminPromos = () => {
             <form onSubmit={handleSubmit} noValidate>
               <div className="form-grid">
 
+                {/* Row 1: Promo Code | K-Pop Group */}
                 <div className="form-group">
                   <label>Promo Code <span className="req">*</span></label>
                   <input type="text" name="code" value={formData.code}
@@ -324,6 +284,7 @@ const AdminPromos = () => {
                   {errors.name && <span className="field-error">{errors.name}</span>}
                 </div>
 
+                {/* Row 2: Discount (%) | Start Time */}
                 <div className="form-group">
                   <label>Discount (%) <span className="req">*</span></label>
                   <input type="text" inputMode="numeric" name="discount" value={formData.discount}
@@ -331,26 +292,6 @@ const AdminPromos = () => {
                     className={errors.discount ? 'input-error' : ''} />
                   <span className="field-hint">1–100% only</span>
                   {errors.discount && <span className="field-error">{errors.discount}</span>}
-                </div>
-
-                <div className="form-group">
-                  <label>Max Discount (₱) <span className="req">*</span></label>
-                  <input type="text" inputMode="numeric" name="maxDiscount" value={formData.maxDiscount}
-                    onChange={handleInputChange} placeholder="e.g., 500" maxLength={4}
-                    className={errors.maxDiscount ? 'input-error' : ''} />
-                  <span className="field-hint">Max ₱9999</span>
-                  {errors.maxDiscount && <span className="field-error">{errors.maxDiscount}</span>}
-                </div>
-
-                <div className="form-group">
-                  <label>Start Date <span className="req">*</span></label>
-                  {/* ✅ max="9999-12-31" prevents 5-digit year */}
-                  <input type="date" name="startDate" value={formData.startDate}
-                    onChange={handleInputChange}
-                    min="2020-01-01"
-                    max="9999-12-31"
-                    className={errors.startDate ? 'input-error' : ''} />
-                  {errors.startDate && <span className="field-error">{errors.startDate}</span>}
                 </div>
 
                 <div className="form-group">
@@ -365,15 +306,14 @@ const AdminPromos = () => {
                   <span className="field-hint">Blank = 12:00 AM</span>
                 </div>
 
+                {/* Row 3: Start Date | End Time */}
                 <div className="form-group">
-                  <label>End Date <span className="req">*</span></label>
-                  {/* ✅ max="9999-12-31" prevents 5-digit year */}
-                  <input type="date" name="endDate" value={formData.endDate}
+                  <label>Start Date <span className="req">*</span></label>
+                  <input type="date" name="startDate" value={formData.startDate}
                     onChange={handleInputChange}
-                    min={formData.startDate || today}
-                    max="9999-12-31"
-                    className={errors.endDate ? 'input-error' : ''} />
-                  {errors.endDate && <span className="field-error">{errors.endDate}</span>}
+                    min={today} max="9999-12-31"
+                    className={errors.startDate ? 'input-error' : ''} />
+                  {errors.startDate && <span className="field-error">{errors.startDate}</span>}
                 </div>
 
                 <div className="form-group">
@@ -390,6 +330,18 @@ const AdminPromos = () => {
                   {errors.endTime && <span className="field-error">{errors.endTime}</span>}
                 </div>
 
+                {/* Row 4: End Date | (empty) */}
+                <div className="form-group">
+                  <label>End Date <span className="req">*</span></label>
+                  <input type="date" name="endDate" value={formData.endDate}
+                    onChange={handleInputChange}
+                    min={formData.startDate || today} max="9999-12-31"
+                    className={errors.endDate ? 'input-error' : ''} />
+                  {errors.endDate && <span className="field-error">{errors.endDate}</span>}
+                </div>
+
+                <div className="form-group"></div>
+
               </div>
 
               {(formData.startDate || formData.endDate) && (
@@ -404,14 +356,6 @@ const AdminPromos = () => {
                   )}
                 </div>
               )}
-
-              <div className="form-group checkbox-group" style={{ marginTop: 12 }}>
-                <label>
-                  <input type="checkbox" name="isActive" checked={formData.isActive}
-                    onChange={handleInputChange} />
-                  <span>Active (users can use this promo)</span>
-                </label>
-              </div>
 
               {!editingPromo && (
                 <p className="email-notice">
