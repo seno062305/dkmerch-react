@@ -366,17 +366,17 @@ const ImportTab = () => {
   );
 };
 
-// ── Backup Tab — uses BackupContext so data persists across tab switches ──────
+// ── Backup Tab ────────────────────────────────────────────────────────────────
 const BackupTab = () => {
   const convex = useConvex();
   const { allData, loadStatus, lastFetched, updateTable, setTableStatus, resetAll, setLastFetched } = useBackup();
-  const [modalTable, setModalTable] = useState(null);
-  const [downloading, setDownloading] = useState(false);
+  const [modalTable,   setModalTable]   = useState(null);
+  const [downloading,  setDownloading]  = useState(false);
 
-  const loadedKeys   = Object.keys(allData);
-  const allLoaded    = loadedKeys.length === TABLES.length && Object.values(loadStatus).every(s => s === 'done');
+  const loadedKeys   = Object.keys(allData).filter(k => loadStatus[k] === 'done');
+  const allLoaded    = loadedKeys.length === TABLES.length;
   const isLoading    = Object.values(loadStatus).some(s => s === 'loading');
-  const neverFetched = loadedKeys.length === 0 && !isLoading;
+  const hasCached    = Object.keys(allData).length > 0;
   const totalRecords = Object.values(allData).reduce((s, d) => s + (Array.isArray(d) ? d.length : 0), 0);
 
   const handleFetchAll = async () => {
@@ -414,32 +414,42 @@ const BackupTab = () => {
         <button className={`ab-fetch-btn ${isLoading ? 'loading' : ''}`} onClick={handleFetchAll} disabled={isLoading}>
           {isLoading
             ? <><span className="ab-spinner ab-spinner--white"></span> Fetching…</>
-            : <><i className="fas fa-sync-alt"></i> {neverFetched ? 'Load All Tables' : 'Refresh All Tables'}</>
+            : <><i className="fas fa-sync-alt"></i> {!hasCached ? 'Load All Tables' : 'Refresh All Tables'}</>
           }
         </button>
-        {allLoaded && (
-          <button className={`ab-download-all-btn ${downloading ? 'loading' : ''}`} onClick={handleDownloadAll} disabled={downloading}>
+        {hasCached && (
+          <button
+            className={`ab-download-all-btn ${downloading ? 'loading' : ''}`}
+            onClick={handleDownloadAll}
+            disabled={downloading}
+          >
             {downloading
               ? <><span className="ab-spinner ab-spinner--white"></span> Preparing…</>
               : <><i className="fas fa-file-code"></i> Export All .ts</>
             }
           </button>
         )}
+
       </div>
 
       {lastFetched && (
-        <p className="ab-last-fetched"><i className="fas fa-clock"></i> Last fetched: {lastFetched}</p>
+        <p className="ab-last-fetched">
+          <i className="fas fa-clock"></i> Last fetched: {lastFetched}
+          <span className="ab-cached-badge"><i className="fas fa-hdd"></i> Cached</span>
+        </p>
       )}
 
-      {neverFetched && (
+      {/* ✅ Show empty state only when truly no data and not loading */}
+      {!hasCached && !isLoading && (
         <div className="ab-empty-state">
           <div className="ab-empty-icon"><i className="fas fa-database"></i></div>
           <p>Click <strong>Load All Tables</strong> to fetch a snapshot of the database.</p>
-          <p className="ab-empty-sub">Data will not auto-update — click Refresh to get the latest.</p>
+          <p className="ab-empty-sub">Data will be saved locally and persist until you clear it.</p>
         </div>
       )}
 
-      {!neverFetched && (
+      {/* ✅ Always show summary + cards when there's data (even while refreshing) */}
+      {hasCached && (
         <div className="ab-summary">
           <div className="ab-stat">
             <span className="ab-stat-val">{totalRecords.toLocaleString()}</span>
@@ -450,43 +460,53 @@ const BackupTab = () => {
             <span className="ab-stat-label">Tables Loaded</span>
           </div>
           <div className="ab-stat">
-            <span className={`ab-stat-badge ${allLoaded ? 'ab-stat-badge--ok' : 'ab-stat-badge--loading'}`}>
-              {allLoaded ? '✅ Ready' : '⏳ Loading…'}
+            <span className={`ab-stat-badge ${allLoaded && !isLoading ? 'ab-stat-badge--ok' : 'ab-stat-badge--loading'}`}>
+              {isLoading ? '⏳ Refreshing…' : allLoaded ? '✅ Ready' : '⚠️ Partial'}
             </span>
             <span className="ab-stat-label">Status</span>
           </div>
-          <div className="ab-progress-bar">
-            <div className="ab-progress-fill" style={{ width: `${(loadedKeys.length / TABLES.length) * 100}%` }}></div>
-          </div>
+          {isLoading && (
+            <div className="ab-progress-bar">
+              <div
+                className="ab-progress-fill"
+                style={{ width: `${(loadedKeys.length / TABLES.length) * 100}%` }}
+              />
+            </div>
+          )}
         </div>
       )}
 
-      {!neverFetched && (
+      {hasCached && (
         <div className="ab-cards">
           {TABLES.map(t => {
-            const s     = loadStatus[t.key] || 'idle';
+            const s     = loadStatus[t.key] || 'done';
             const data  = allData[t.key];
             const count = Array.isArray(data) ? data.length : null;
+            const isRefreshing = s === 'loading';
             return (
               <div
                 key={t.key}
-                className={`ab-card ${s !== 'done' ? 'ab-card--disabled' : ''}`}
-                onClick={() => s === 'done' && data?.length && setModalTable({ table: t, data })}
+                className={`ab-card ${(!data || !data.length) && s !== 'loading' ? 'ab-card--disabled' : ''}`}
+                onClick={() => data?.length && s !== 'loading' && setModalTable({ table: t, data })}
               >
                 <div className="ab-card-header">
                   <div className="ab-card-left">
                     <div className="ab-card-icon"><i className={t.icon}></i></div>
                     <div className="ab-card-info">
                       <span className="ab-card-label">{t.label}</span>
-                      {s === 'idle'    && <span className="ab-card-count">Not loaded</span>}
-                      {s === 'loading' && <span className="ab-card-count ab-loading">Fetching…</span>}
-                      {s === 'done'    && <span className="ab-card-count">{count?.toLocaleString()} records</span>}
-                      {s === 'error'   && <span className="ab-card-count" style={{ color: '#dc2626' }}>Failed to load</span>}
+                      {isRefreshing && count !== null
+                        ? <span className="ab-card-count ab-loading">{count?.toLocaleString()} records · refreshing…</span>
+                        : isRefreshing
+                        ? <span className="ab-card-count ab-loading">Fetching…</span>
+                        : s === 'error'
+                        ? <span className="ab-card-count" style={{ color: '#dc2626' }}>Failed to load</span>
+                        : <span className="ab-card-count">{count?.toLocaleString() ?? 0} records</span>
+                      }
                     </div>
                   </div>
                   <div className="ab-card-right">
-                    {s === 'loading' && <span className="ab-spinner"></span>}
-                    {s === 'done' && (
+                    {isRefreshing && <span className="ab-spinner"></span>}
+                    {!isRefreshing && data?.length > 0 && (
                       <>
                         <button className="ab-dl-btn" title="Download .ts"
                           onClick={e => { e.stopPropagation(); downloadTs(generateTableTs(t.key, data), `${t.key}.ts`); }}>
@@ -504,8 +524,7 @@ const BackupTab = () => {
       )}
 
       <p className="ab-footer-note">
-        <i className="fas fa-lock"></i> Data is only visible to admins and is never auto-refreshed.
-        Click any table to view records after loading.
+        <i className="fas fa-lock"></i> Data is only visible to admins. Cached locally — click Refresh to get the latest.
       </p>
 
       {modalTable && (
