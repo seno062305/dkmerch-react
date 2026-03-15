@@ -9,26 +9,29 @@ import './WeverseSection.css';
 
 const MAX_WISHLIST = 10;
 
+const getReleaseMs = (product) => {
+  if (!product.isPreOrder || !product.releaseDate) return null;
+  const rt = product.releaseTime || '00:00';
+  return new Date(`${product.releaseDate}T${rt}:00+08:00`).getTime();
+};
+
+const isReleased = (product) => {
+  const ms = getReleaseMs(product);
+  return ms !== null && Date.now() >= ms;
+};
+
 const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
   const { showNotification } = useNotification();
 
-  const products = useCollectionProducts();
-  const wishlistItems = useWishlist();
+  const products       = useCollectionProducts();
+  const wishlistItems  = useWishlist();
   const toggleWishlist = useToggleWishlist();
 
   const isWishlisted = (productId) =>
     wishlistItems.some(item => item.productId === productId);
-
-  const saleProducts = (products || [])
-    .filter(p =>
-      p.isSale === true ||
-      (p.originalPrice && Number(p.originalPrice) > Number(p.price))
-    )
-    .sort((a, b) => (b._creationTime || 0) - (a._creationTime || 0))
-    .slice(0, 8);
 
   const isPromoProduct = (product) => {
     if (!activePromo || !activePromo.isActive) return false;
@@ -36,31 +39,41 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
     return product.kpopGroup?.trim().toUpperCase() === activePromo.name.trim().toUpperCase();
   };
 
-  // ✅ KEY FIX: stopPropagation first (blocks card onClick immediately),
-  // THEN show confirm. This matches how PreOrder's button works.
+  // Released preorders first (newest release), then sale items by creation time
+  const saleProducts = (products || [])
+    .filter(p =>
+      p.isSale === true ||
+      (p.originalPrice && Number(p.originalPrice) > Number(p.price))
+    )
+    .sort((a, b) => {
+      const aReleased  = isReleased(a);
+      const bReleased  = isReleased(b);
+      const aReleaseMs = getReleaseMs(a) || 0;
+      const bReleaseMs = getReleaseMs(b) || 0;
+      if (aReleased && !bReleased) return -1;
+      if (!aReleased && bReleased) return 1;
+      if (aReleased && bReleased) return bReleaseMs - aReleaseMs;
+      return (b._creationTime || 0) - (a._creationTime || 0);
+    })
+    .slice(0, 8);
+
   const handleWishlistClick = (e, product) => {
     e.stopPropagation();
-
     if (!isAuthenticated) {
       setShowLoginModal(true);
       showNotification('Please login to add to favorites', 'error');
       return;
     }
-
     const pid = product._id || product.id;
     const alreadyWishlisted = isWishlisted(pid);
-
     if (!alreadyWishlisted && wishlistItems.length >= MAX_WISHLIST) {
       showNotification(`Favorites limit reached (max ${MAX_WISHLIST}). Remove an item first.`, 'error');
       return;
     }
-
     const msg = alreadyWishlisted
       ? `Remove "${product.name}" from Favorites?`
       : `Add "${product.name}" to Favorites?`;
-
     if (!window.confirm(msg)) return;
-
     toggleWishlist(product);
     showNotification(
       alreadyWishlisted ? `${product.name} removed from favorites!` : `${product.name} added to favorites!`,
@@ -100,6 +113,12 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
           {saleProducts.map((product) => {
             const pid = product._id || product.id;
             const hasPromo = isPromoProduct(product);
+
+            // Released badge: visible only within 1 hour of release
+            const releaseMs = getReleaseMs(product);
+            const diffMs = releaseMs !== null ? Date.now() - releaseMs : -1;
+            const showReleasedBadge = diffMs >= 0 && diffMs < 60 * 60 * 1000;
+
             const discountPct =
               product.originalPrice && Number(product.originalPrice) > Number(product.price)
                 ? Math.round(
@@ -111,17 +130,22 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
             return (
               <div
                 key={pid}
-                className={`wv-card ${hasPromo ? 'wv-card-promo' : ''}`}
+                className={`wv-card ${hasPromo ? 'wv-card-promo' : ''} ${showReleasedBadge ? 'wv-card-released' : ''}`}
                 onClick={() => onProductClick && onProductClick(product)}
               >
-                {discountPct && <div className="wv-sale-badge">-{discountPct}%</div>}
-                {hasPromo && (
+                {/* Released OR discount badge — never both */}
+                {showReleasedBadge
+                  ? <div className="wv-released-badge"><i className="fas fa-bolt"></i> Just Released</div>
+                  : discountPct && <div className="wv-sale-badge">-{discountPct}%</div>
+                }
+
+                {/* Promo badge only when not showing released */}
+                {hasPromo && !showReleasedBadge && (
                   <div className="wv-promo-badge">
                     <i className="fas fa-tag"></i> {activePromo.discount}% OFF
                   </div>
                 )}
 
-                {/* ✅ Star button — stopPropagation runs SYNCHRONOUSLY before confirm */}
                 <button
                   className={`wv-card-fav ${isWishlisted(pid) ? 'active' : ''}`}
                   onClick={(e) => handleWishlistClick(e, product)}

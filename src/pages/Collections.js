@@ -10,28 +10,40 @@ import './Collections.css';
 
 const MAX_WISHLIST = 10;
 
+const getReleaseMs = (product) => {
+  if (!product.isPreOrder || !product.releaseDate) return null;
+  const rt = product.releaseTime || '00:00';
+  return new Date(`${product.releaseDate}T${rt}:00+08:00`).getTime();
+};
+
+const isReleased = (product) => {
+  const ms = getReleaseMs(product);
+  return ms !== null && Date.now() >= ms;
+};
+
 const Collections = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { showNotification } = useNotification();
 
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [selectedGroup, setSelectedGroup] = useState('all');
+  const [selectedCategory, setSelectedCategory]         = useState('all');
+  const [selectedGroup, setSelectedGroup]               = useState('all');
+  const [searchTerm, setSearchTerm]                     = useState('');
   const [highlightedProductId, setHighlightedProductId] = useState(null);
-  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [selectedProduct, setSelectedProduct]           = useState(null);
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
-  const [groupDropdownOpen, setGroupDropdownOpen] = useState(false);
+  const [groupDropdownOpen, setGroupDropdownOpen]       = useState(false);
 
   const categoryRef = useRef(null);
-  const groupRef = useRef(null);
+  const groupRef    = useRef(null);
 
-  const products = useQuery(api.products.getCollectionProducts) || [];
-  const wishlistItems = useWishlist();
-  const addToCartMutation = useAddToCart();
+  const products             = useQuery(api.products.getCollectionProducts) || [];
+  const wishlistItems        = useWishlist();
+  const addToCartMutation    = useAddToCart();
   const toggleWishlistMutation = useToggleWishlist();
-  const activePromos = useQuery(api.promos.getActivePromos) || [];
-  const activePromo = activePromos[0] || null;
+  const activePromos         = useQuery(api.promos.getActivePromos) || [];
+  const activePromo          = activePromos[0] || null;
 
   const isWishlisted = (productId) =>
     wishlistItems.some(item => item.productId === productId);
@@ -66,6 +78,9 @@ const Collections = () => {
     const productId = searchParams.get('product');
     if (productId) {
       setHighlightedProductId(productId);
+      setSelectedCategory('all');
+      setSelectedGroup('all');
+      setSearchTerm('');
       setTimeout(() => {
         const element = document.querySelector(`[data-product-id="${productId}"]`);
         if (element) element.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -75,19 +90,29 @@ const Collections = () => {
   }, [searchParams]);
 
   const categories = ['all', 'albums', 'photocards', 'lightsticks', 'accessories'];
-  const groups = ['all', 'BTS', 'BLACKPINK', 'TWICE', 'SEVENTEEN', 'STRAY KIDS', 'EXO', 'RED VELVET', 'NEWJEANS'];
+  const groups     = ['all', 'BTS', 'BLACKPINK', 'TWICE', 'SEVENTEEN', 'STRAY KIDS', 'EXO', 'RED VELVET', 'NEWJEANS'];
 
   const filteredProducts = (products || [])
     .filter(product => {
       const categoryMatch = selectedCategory === 'all' || product.category === selectedCategory;
-      const groupMatch = selectedGroup === 'all' || product.kpopGroup === selectedGroup;
-      return categoryMatch && groupMatch;
+      const groupMatch    = selectedGroup === 'all'    || product.kpopGroup === selectedGroup;
+      const searchMatch   = !searchTerm.trim() ||
+        product.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        product.kpopGroup?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        product.category?.toLowerCase().includes(searchTerm.toLowerCase());
+      return categoryMatch && groupMatch && searchMatch;
     })
-    .sort((a, b) => (b._creationTime || 0) - (a._creationTime || 0));
+    .sort((a, b) => {
+      const aReleased  = isReleased(a);
+      const bReleased  = isReleased(b);
+      const aReleaseMs = getReleaseMs(a) || 0;
+      const bReleaseMs = getReleaseMs(b) || 0;
+      if (aReleased && !bReleased) return -1;
+      if (!aReleased && bReleased) return 1;
+      if (aReleased && bReleased) return bReleaseMs - aReleaseMs;
+      return (b._creationTime || 0) - (a._creationTime || 0);
+    });
 
-  // ── Add to Cart ──
-  // NOTE: No window.confirm here — ProductModal already handles confirmation.
-  // This is only called via ProductModal's onAddToCart prop.
   const handleAddToCart = (product) => {
     if (product.stock === 0 && !product.isPreOrder) {
       showNotification('Product is out of stock', 'error');
@@ -99,21 +124,16 @@ const Collections = () => {
 
   const handleCardWishlist = (e, product) => {
     e.stopPropagation();
-
     const pid = product._id || product.id;
     const alreadyWishlisted = isWishlisted(pid);
-
     if (!alreadyWishlisted && wishlistItems.length >= MAX_WISHLIST) {
       showNotification(`Favorites limit reached (max ${MAX_WISHLIST}). Remove an item first.`, 'error');
       return;
     }
-
     const msg = alreadyWishlisted
       ? `Remove "${product.name}" from Favorites?`
       : `Add "${product.name}" to Favorites?`;
-
     if (!window.confirm(msg)) return;
-
     toggleWishlistMutation(product);
     showNotification(
       alreadyWishlisted ? `${product.name} removed from favorites!` : `${product.name} added to favorites!`,
@@ -121,21 +141,17 @@ const Collections = () => {
     );
   };
 
-  // ── Wishlist from ProductModal ──
   const handleAddToWishlist = (product) => {
     const pid = product._id || product.id;
     const alreadyWishlisted = isWishlisted(pid);
-
     if (!alreadyWishlisted && wishlistItems.length >= MAX_WISHLIST) {
       showNotification(`Favorites limit reached (max ${MAX_WISHLIST}). Remove an item first.`, 'error');
       return;
     }
-
     const msg = alreadyWishlisted
       ? `Remove "${product.name}" from Favorites?`
       : `Add "${product.name}" to Favorites?`;
     if (!window.confirm(msg)) return;
-
     toggleWishlistMutation(product);
     showNotification(
       alreadyWishlisted ? `${product.name} removed from favorites!` : `${product.name} added to favorites!`,
@@ -155,15 +171,32 @@ const Collections = () => {
             <span>
               <strong>{activePromo.name} Promo Active!</strong> Use code{' '}
               <span className="collections-promo-code">{activePromo.code}</span> for{' '}
-              {activePromo.discount}% off — max ₱{activePromo.maxDiscount?.toLocaleString()} discount
+              {activePromo.discount}% off
             </span>
           </div>
         )}
       </div>
 
+      {/* ── Search bar ── */}
+      <div className="collections-search-wrap">
+        <div className="collections-search-box">
+          <i className="fas fa-search"></i>
+          <input
+            type="text"
+            placeholder="Search products, groups, categories..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+          />
+          {searchTerm && (
+            <button className="collections-search-clear" onClick={() => setSearchTerm('')}>
+              <i className="fas fa-times"></i>
+            </button>
+          )}
+        </div>
+      </div>
+
       <div className="collections-filters">
         <div className="filters-single-line">
-
           <div className="filter-group">
             <label>CATEGORY:</label>
             <div className="filter-buttons desktop-only">
@@ -232,7 +265,6 @@ const Collections = () => {
               )}
             </div>
           </div>
-
         </div>
       </div>
 
@@ -241,15 +273,16 @@ const Collections = () => {
           Showing {filteredProducts.length} product{filteredProducts.length !== 1 ? 's' : ''}
           {selectedGroup !== 'all' && ` for ${selectedGroup}`}
           {selectedCategory !== 'all' && ` in ${selectedCategory}`}
+          {searchTerm && ` matching "${searchTerm}"`}
         </p>
       </div>
 
       {filteredProducts.length === 0 ? (
         <div className="no-results">
           <i className="fas fa-box-open"></i>
-          <p>{selectedGroup !== 'all' ? `No products found for ${selectedGroup}` : 'No products available'}</p>
-          {(selectedGroup !== 'all' || selectedCategory !== 'all') && (
-            <button className="reset-filters-btn" onClick={() => { setSelectedCategory('all'); setSelectedGroup('all'); }}>
+          <p>{searchTerm ? `No products found for "${searchTerm}"` : selectedGroup !== 'all' ? `No products found for ${selectedGroup}` : 'No products available'}</p>
+          {(selectedGroup !== 'all' || selectedCategory !== 'all' || searchTerm) && (
+            <button className="reset-filters-btn" onClick={() => { setSelectedCategory('all'); setSelectedGroup('all'); setSearchTerm(''); }}>
               Reset Filters
             </button>
           )}
@@ -257,20 +290,30 @@ const Collections = () => {
       ) : (
         <div className="collections-grid">
           {filteredProducts.map(product => {
-            const pid = product._id || product.id;
+            const pid      = product._id || product.id;
             const hasPromo = isPromoProduct(product);
             const wishlisted = isWishlisted(pid);
+
+            // Released badge: visible only within 1 hour of release
+            const releaseMs = getReleaseMs(product);
+            const diffMs = releaseMs !== null ? Date.now() - releaseMs : -1;
+            const showReleasedBadge = diffMs >= 0 && diffMs < 60 * 60 * 1000;
+
             return (
               <div
                 key={pid}
                 data-product-id={pid}
-                className={`collection-card ${highlightedProductId === pid ? 'highlighted' : ''} ${hasPromo ? 'collection-card-promo' : ''}`}
+                className={`collection-card ${highlightedProductId === pid ? 'highlighted' : ''} ${hasPromo ? 'collection-card-promo' : ''} ${showReleasedBadge ? 'collection-card-released' : ''}`}
                 onClick={() => setSelectedProduct(product)}
               >
-                {product.isSale && !product.isPreOrder && (
-                  <div className="collection-sale-badge">SALE</div>
-                )}
-                {hasPromo && (
+                {/* Released OR sale badge — never both */}
+                {showReleasedBadge
+                  ? <div className="collection-released-badge"><i className="fas fa-bolt"></i> Just Released</div>
+                  : product.isSale && !product.isPreOrder && <div className="collection-sale-badge">SALE</div>
+                }
+
+                {/* Promo badge only when not showing released */}
+                {hasPromo && !showReleasedBadge && (
                   <div className="collection-promo-badge">
                     <i className="fas fa-tag"></i> {activePromo.discount}% OFF
                   </div>
