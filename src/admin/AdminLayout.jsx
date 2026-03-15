@@ -8,11 +8,10 @@ const AdminLayout = () => {
   const { user, role, isAuthenticated, isReady } = useAuth();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mapOpen, setMapOpen] = useState(false);
 
   useEffect(() => {
-    // ✅ Wait for session restore before checking auth
     if (!isReady) return;
-
     if (!isAuthenticated || role !== 'admin') {
       navigate('/', { replace: true });
     }
@@ -30,61 +29,44 @@ const AdminLayout = () => {
     } else {
       document.body.style.overflow = 'unset';
     }
-    return () => {
-      document.body.style.overflow = 'unset';
-    };
+    return () => { document.body.style.overflow = 'unset'; };
   }, [mobileMenuOpen]);
 
-  // ✅ Show loading while auth is restoring
+  // Watch for ar-map-open class on body — hide burger when map is fullscreen
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setMapOpen(document.body.classList.contains('ar-map-open'));
+    });
+    observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
+
   if (!isReady) {
     return (
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: '100vh',
-        background: '#f5f5f5',
-      }}>
-        <div style={{
-          width: 48,
-          height: 48,
-          border: '4px solid #f3f4f6',
-          borderTop: '4px solid #fc1268',
-          borderRadius: '50%',
-          animation: 'spin 0.8s linear infinite',
-        }} />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#f5f5f5' }}>
+        <div style={{ width: 48, height: 48, border: '4px solid #f3f4f6', borderTop: '4px solid #fc1268', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
 
-  // ✅ Don't render admin UI if not admin
   if (!isAuthenticated || role !== 'admin') return null;
 
   const toggleMobileMenu = () => setMobileMenuOpen(!mobileMenuOpen);
-  const closeMobileMenu = () => setMobileMenuOpen(false);
+  const closeMobileMenu  = () => setMobileMenuOpen(false);
 
   return (
     <div className="admin-layout">
 
-      {/* ✅ Burger button — naka-hide kapag bukas na ang sidebar */}
-      {!mobileMenuOpen && (
-        <button
-          className="mobile-menu-toggle"
-          onClick={toggleMobileMenu}
-          aria-label="Open menu"
-        >
+      {/* Burger — hidden when sidebar open OR map is open */}
+      {!mobileMenuOpen && !mapOpen && (
+        <button className="mobile-menu-toggle" onClick={toggleMobileMenu} aria-label="Open menu">
           <i className="fas fa-bars"></i>
         </button>
       )}
 
-      {/* Mobile Overlay */}
-      <div
-        className={`mobile-overlay ${mobileMenuOpen ? 'active' : ''}`}
-        onClick={closeMobileMenu}
-      ></div>
+      <div className={`mobile-overlay ${mobileMenuOpen ? 'active' : ''}`} onClick={closeMobileMenu}></div>
 
-      {/* Sidebar — AdminSidebar handles the X button internally */}
       <div className={`admin-sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
         <AdminSidebar onLinkClick={closeMobileMenu} onClose={closeMobileMenu} />
       </div>
