@@ -33,7 +33,7 @@
   background: white;
   border-top: 1px solid #e0e0e0;
   border-left: 1px solid #e0e0e0;
-  align-items: stretch; /* ✅ FIX: equal height rows */
+  align-items: stretch;
 }
 
 /* ORDER CARD */
@@ -43,8 +43,8 @@
   border-bottom: 1px solid #e0e0e0;
   transition: all 0.3s ease;
   position: relative;
-  display: flex;             /* ✅ FIX */
-  flex-direction: column;    /* ✅ FIX */
+  display: flex;
+  flex-direction: column;
 }
 
 .order-card:hover {
@@ -65,7 +65,7 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  flex-shrink: 0; /* ✅ FIX: don't compress image */
+  flex-shrink: 0;
 }
 
 .order-card-img img {
@@ -127,7 +127,6 @@
 .status-delivered  { background: #e8f5e9; color: var(--success-color); }
 .status-cancelled  { background: #ffebee; color: var(--danger-color); }
 
-/* ✅ FIX: card info grows to fill card, pushes button to bottom */
 .order-card-info {
   padding: 14px 16px;
   display: flex;
@@ -205,14 +204,13 @@
 
 .order-card-price { font-size: 15px; font-weight: 700; color: var(--primary-color); }
 
-/* ✅ FIX: push buttons to bottom */
 .order-view-btn {
   width: 100%;
   justify-content: center;
   font-size: 13px;
   padding: 9px 12px;
   margin-bottom: 8px;
-  margin-top: auto; /* ✅ FIX */
+  margin-top: auto;
 }
 
 .order-remove-btn {
@@ -415,6 +413,13 @@
   overflow-y: auto;
   position: relative;
   animation: slideUp 0.3s ease;
+  /* ✅ FIX: hide scrollbar but keep scrollable */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.tracking-modal::-webkit-scrollbar {
+  display: none;
 }
 
 @keyframes slideUp {
@@ -423,29 +428,31 @@
 }
 
 .modal-close-btn {
-  position: sticky;
-  top: 12px;
-  float: right;
-  margin: 12px 12px 0 0;
-  width: 38px; height: 38px;
+  width: 36px; height: 36px;
   border-radius: 50%;
-  background: white; border: none;
-  font-size: 18px; color: var(--gray-color);
+  background: #f3f4f6;
+  border: none;
+  font-size: 16px;
+  color: #374151;
   cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-  z-index: 20; transition: all 0.2s;
+  flex-shrink: 0;
+  transition: all 0.2s;
+  margin-left: auto;
 }
 
-.modal-close-btn:hover { background: #f0f0f0; color: var(--dark-color); }
+.modal-close-btn:hover { background: #e5e7eb; color: #000; }
 
 .tracking-result { padding: 20px 24px 30px; }
 
 .result-header {
-  display: flex; justify-content: space-between; align-items: center;
-  margin-bottom: 20px; padding-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
   border-bottom: 2px solid #f0f0f0;
-  flex-wrap: wrap; gap: 10px; clear: both;
+  flex-wrap: nowrap;
 }
 
 .result-header h2 { font-size: 20px; color: var(--dark-color); }
@@ -513,24 +520,81 @@
 .otp-display-note { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; color: var(--gray-color); background: #fff3cd; padding: 10px 12px; border-radius: 6px; }
 .otp-display-note i { color: var(--warning-color); flex-shrink: 0; margin-top: 2px; }
 
-/* Timeline */
+/* ══════════════════════════════════════════
+   TIMELINE — ✅ FIXED: no overlap on markers
+══════════════════════════════════════════ */
 .tracking-timeline { margin-bottom: 24px; }
-.tracking-timeline h3, .order-items-timeline h3 { font-size: 17px; color: var(--dark-color); margin-bottom: 16px; padding-bottom: 10px; border-bottom: 2px solid #f0f0f0; }
+.tracking-timeline h3, .order-items-timeline h3 {
+  font-size: 17px; color: var(--dark-color); margin-bottom: 16px;
+  padding-bottom: 10px; border-bottom: 2px solid #f0f0f0;
+}
 
-.timeline { position: relative; padding-left: 32px; }
-.timeline::before { content: ''; position: absolute; left: 11px; top: 0; bottom: 0; width: 2px; background: #e0e0e0; }
+.timeline {
+  position: relative;
+  padding-left: 36px;
+}
 
-.timeline-item { position: relative; margin-bottom: 24px; }
-.timeline-item:last-child { margin-bottom: 0; }
+/* Vertical line — starts/ends at marker centers, not bleeding out */
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 11px;
+  top: 14px;
+  bottom: 14px;
+  width: 2px;
+  background: #e0e0e0;
+  z-index: 0;
+}
 
-.timeline-marker { position: absolute; left: -32px; width: 24px; height: 24px; border-radius: 50%; background: #e0e0e0; display: flex; align-items: center; justify-content: center; top: 2px; z-index: 1; }
-.timeline-marker i { font-size: 11px; color: #999; }
-.timeline-item.completed .timeline-marker { background: var(--success-color); }
+.timeline-item {
+  position: relative;
+  margin-bottom: 28px;
+}
+
+.timeline-item:last-child {
+  margin-bottom: 0;
+}
+
+/* Circle marker — white border creates visual gap from the line */
+.timeline-marker {
+  position: absolute;
+  left: -36px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #e0e0e0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  top: 0px;
+  z-index: 2;
+  flex-shrink: 0;
+  border: 2px solid white;
+  box-sizing: border-box;
+}
+
+.timeline-marker i { font-size: 10px; color: #999; }
+
+.timeline-item.completed .timeline-marker {
+  background: var(--success-color, #28a745);
+  border-color: white;
+}
+
 .timeline-item.completed .timeline-marker i { color: white; }
-.timeline-item.cancelled-step .timeline-marker { background: var(--danger-color); }
 
-.timeline-content h4 { font-size: 15px; color: var(--dark-color); margin-bottom: 4px; }
-.timeline-content p  { font-size: 13px; color: var(--gray-color); }
+.timeline-item.cancelled-step .timeline-marker {
+  background: var(--danger-color, #dc3545);
+  border-color: white;
+}
+
+.timeline-item.cancelled-step .timeline-marker i { color: white; }
+
+.timeline-content { padding-top: 1px; }
+.timeline-content h4 { font-size: 15px; color: var(--dark-color); margin-bottom: 4px; line-height: 1.3; }
+.timeline-content p  { font-size: 13px; color: var(--gray-color); margin: 0; }
+
+.timeline-desc-done    { color: #374151 !important; }
+.timeline-desc-pending { color: #9ca3af !important; font-style: italic; }
 
 .timeline-cancel-reason { margin-top: 8px; padding: 10px 12px; background: #f8d7da; border-radius: 6px; border-left: 3px solid var(--danger-color); }
 .timeline-cancel-reason-label { font-size: 12px; color: #721c24; font-weight: 600; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
@@ -620,7 +684,7 @@
 .order-card-img-wrap {
   position: relative; width: 100%; aspect-ratio: 1 / 1;
   background: #f8f9fa; overflow: hidden;
-  flex-shrink: 0; /* ✅ FIX: don't compress image area */
+  flex-shrink: 0;
 }
 
 .order-img-strip {
@@ -708,9 +772,7 @@
   font-size: 13px; font-weight: 600; padding: 4px 14px; border-radius: 20px; z-index: 10;
 }
 
-/* ======
-   RESPONSIVE — 3 CARDS PER ROW ON MOBILE
-   ====== */
+/* RESPONSIVE */
 @media (max-width: 768px) {
   .tracking-form-section { grid-template-columns: 1fr; }
   .tracking-modal-overlay { align-items: flex-end; padding: 0; }
@@ -719,10 +781,7 @@
   .result-header h2 { font-size: 17px; }
   .otp-code-display { gap: 8px; }
   .otp-digit { width: 44px; height: 56px; font-size: 24px; }
-
-  /* ✅ 3 columns */
   .orders-grid { grid-template-columns: repeat(3, 1fr); }
-
   .remove-confirm-dialog { padding: 24px 20px; }
   .order-card-info { padding: 8px 10px; }
   .order-card-id { font-size: 10px; }
@@ -733,7 +792,6 @@
 }
 
 @media (max-width: 576px) {
-  /* ✅ Still 3 columns on smaller phones */
   .orders-grid { grid-template-columns: repeat(3, 1fr); }
   .order-card-info { padding: 6px 8px; }
   .order-card-id { font-size: 9px; }
@@ -760,52 +818,26 @@
   .lightbox-arrow-right { right: 10px; }
 }
 
-/* ======
-   GPS TRACKING — RiderDashboard.css additions
-   ====== */
-
+/* GPS TRACKING */
 .rider-gps-sidebar-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 12px 8px;
-  padding: 8px 12px;
+  display: flex; align-items: center; gap: 8px;
+  margin: 0 12px 8px; padding: 8px 12px;
   background: linear-gradient(135deg, #f0fdf4, #dcfce7);
-  border: 1.5px solid #86efac;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 700;
-  color: #14532d;
+  border: 1.5px solid #86efac; border-radius: 8px;
+  font-size: 12px; font-weight: 700; color: #14532d;
 }
 
-.rider-gps-sidebar-status small {
-  font-weight: 400;
-  color: #166534;
-  margin-left: 2px;
-}
+.rider-gps-sidebar-status small { font-weight: 400; color: #166534; margin-left: 2px; }
 
 .rider-gps-active-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: #d1fae5;
-  color: #065f46;
-  border: 1px solid #6ee7b7;
-  border-radius: 20px;
-  padding: 3px 10px;
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 5px;
+  background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7;
+  border-radius: 20px; padding: 3px 10px; font-size: 11px; font-weight: 700; white-space: nowrap;
 }
 
 .rider-gps-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #16a34a;
-  flex-shrink: 0;
-  box-shadow: 0 0 0 0 rgba(22,163,74,0.4);
-  animation: gpsPulse 1.5s infinite;
+  width: 8px; height: 8px; border-radius: 50%; background: #16a34a; flex-shrink: 0;
+  box-shadow: 0 0 0 0 rgba(22,163,74,0.4); animation: gpsPulse 1.5s infinite;
 }
 
 @keyframes gpsPulse {
@@ -815,185 +847,88 @@
 }
 
 .rider-gps-panel {
-  margin-bottom: 12px;
-  background: white;
-  border: 2px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 16px;
-  transition: all 0.25s;
+  margin-bottom: 12px; background: white; border: 2px solid #e2e8f0;
+  border-radius: 12px; padding: 16px; transition: all 0.25s;
 }
 
-.rider-gps-panel.gps-panel-active {
-  background: linear-gradient(135deg, #f0fdf4, #e8f5e9);
-  border-color: #86efac;
-}
+.rider-gps-panel.gps-panel-active { background: linear-gradient(135deg, #f0fdf4, #e8f5e9); border-color: #86efac; }
 
 .rider-gps-panel-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 800;
-  color: #1a1f36;
-  margin-bottom: 10px;
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 800; color: #1a1f36; margin-bottom: 10px;
 }
 
 .rider-gps-panel-title i { color: #fc1268; font-size: 14px; }
 
 .rider-gps-live-tag {
-  margin-left: auto;
-  background: #16a34a;
-  color: white;
-  font-size: 10px;
-  font-weight: 800;
-  padding: 2px 8px;
-  border-radius: 20px;
-  letter-spacing: 0.5px;
-  animation: gpsLiveBlink 2s ease-in-out infinite;
+  margin-left: auto; background: #16a34a; color: white;
+  font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 20px;
+  letter-spacing: 0.5px; animation: gpsLiveBlink 2s ease-in-out infinite;
 }
 
-@keyframes gpsLiveBlink {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.6; }
-}
+@keyframes gpsLiveBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
 
 .rider-gps-status-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: #166534;
-  margin-bottom: 8px;
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; color: #166534; margin-bottom: 8px;
 }
 
 .rider-gps-coords {
-  font-size: 11px;
-  color: #64748b;
-  font-family: monospace;
-  padding: 4px 8px;
-  background: white;
-  border-radius: 6px;
-  border: 1px solid #e2e8f0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 10px;
+  font-size: 11px; color: #64748b; font-family: monospace;
+  padding: 4px 8px; background: white; border-radius: 6px;
+  border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 6px; margin-bottom: 10px;
 }
 
 .rider-gps-coords i { color: #94a3b8; font-size: 10px; }
 
-.rider-gps-desc {
-  font-size: 12px;
-  color: #64748b;
-  margin-bottom: 12px;
-  line-height: 1.5;
-}
+.rider-gps-desc { font-size: 12px; color: #64748b; margin-bottom: 12px; line-height: 1.5; }
 
 .rider-gps-start-btn {
-  width: 100%;
-  padding: 12px 16px;
-  background: linear-gradient(135deg, #fc1268, #ff4d94);
-  color: white;
-  border: none;
-  border-radius: 10px;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  transition: all 0.2s;
-  box-shadow: 0 3px 12px rgba(252,18,104,0.3);
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
+  width: 100%; padding: 12px 16px;
+  background: linear-gradient(135deg, #fc1268, #ff4d94); color: white; border: none;
+  border-radius: 10px; font-size: 13px; font-weight: 700; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  transition: all 0.2s; box-shadow: 0 3px 12px rgba(252,18,104,0.3);
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation;
 }
 
-.rider-gps-start-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(252,18,104,0.4);
-}
+.rider-gps-start-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(252,18,104,0.4); }
 
 .rider-gps-stop-btn {
-  width: 100%;
-  padding: 10px 14px;
-  background: transparent;
-  color: #dc2626;
-  border: 1.5px solid #fca5a5;
-  border-radius: 10px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  transition: all 0.2s;
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
+  width: 100%; padding: 10px 14px; background: transparent; color: #dc2626;
+  border: 1.5px solid #fca5a5; border-radius: 10px; font-size: 12px; font-weight: 600;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
+  transition: all 0.2s; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
 }
 
 .rider-gps-stop-btn:hover { background: #fee2e2; border-color: #dc2626; }
 
 .rider-gps-error-banner {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  background: #fef2f2;
-  border: 1.5px solid #fca5a5;
-  border-radius: 10px;
-  padding: 12px 16px;
-  font-size: 13px;
-  color: #991b1b;
-  margin-bottom: 16px;
-  line-height: 1.5;
+  display: flex; align-items: flex-start; gap: 10px; background: #fef2f2;
+  border: 1.5px solid #fca5a5; border-radius: 10px; padding: 12px 16px;
+  font-size: 13px; color: #991b1b; margin-bottom: 16px; line-height: 1.5;
 }
 
 .rider-gps-error-banner i { color: #dc2626; flex-shrink: 0; margin-top: 2px; }
+.rider-gps-error-banner button { margin-left: auto; background: none; border: none; color: #991b1b; cursor: pointer; font-size: 14px; padding: 0 4px; flex-shrink: 0; }
 
-.rider-gps-error-banner button {
-  margin-left: auto;
-  background: none;
-  border: none;
-  color: #991b1b;
-  cursor: pointer;
-  font-size: 14px;
-  padding: 0 4px;
-  flex-shrink: 0;
-}
-
-/* ======
-   LEAFLET MAP
-   ====== */
-
+/* LEAFLET MAP */
 .rider-map-section {
-  margin-bottom: 24px;
-  border-radius: 14px;
-  overflow: hidden;
-  border: 2px solid #e2e8f0;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+  margin-bottom: 24px; border-radius: 14px; overflow: hidden;
+  border: 2px solid #e2e8f0; box-shadow: 0 4px 16px rgba(0,0,0,0.08);
 }
 
 .rider-map-section-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
-  background: linear-gradient(135deg, #1a1f36, #2d3561);
-  color: white;
-  font-size: 13px;
-  font-weight: 700;
+  display: flex; align-items: center; gap: 8px; padding: 12px 16px;
+  background: linear-gradient(135deg, #1a1f36, #2d3561); color: white;
+  font-size: 13px; font-weight: 700;
 }
 
 .rider-map-section-title i { color: #fc1268; font-size: 14px; }
 
 .rider-map-status-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  font-size: 12px;
-  font-weight: 600;
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 14px; font-size: 12px; font-weight: 600;
 }
 
 .rider-map-status-bar.status-waiting  { background: #fef3c7; color: #92400e; }
@@ -1001,18 +936,14 @@
 .rider-map-status-bar.status-stale    { background: #fff3cd; color: #856404; }
 .rider-map-status-bar.status-stopped  { background: #f8f9fa; color: #64748b; }
 
-.map-status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
+.map-status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 
 .dot-live    { background: #16a34a; animation: gpsPulse 1.5s infinite; }
 .dot-waiting { background: #f59e0b; animation: gpsPulse 2s infinite; }
 .dot-stale   { background: #f59e0b; }
 .dot-stopped { background: #94a3b8; }
 
+/* ✅ Map height */
 .rider-map-container {
   width: 100%;
   height: 300px;
@@ -1020,29 +951,16 @@
 }
 
 .rider-map-accuracy {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
-  font-size: 11px;
-  color: #64748b;
-  background: #f8f9fa;
-  border-top: 1px solid #e2e8f0;
+  display: flex; align-items: center; gap: 6px; padding: 7px 14px;
+  font-size: 11px; color: #64748b; background: #f8f9fa; border-top: 1px solid #e2e8f0;
 }
 
 .rider-map-accuracy i { color: #94a3b8; font-size: 10px; }
 
 .rider-map-error {
-  height: 200px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: #f8f9fa;
-  color: #64748b;
-  gap: 10px;
-  padding: 20px;
-  text-align: center;
+  height: 200px; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; background: #f8f9fa; color: #64748b;
+  gap: 10px; padding: 20px; text-align: center;
 }
 
 .rider-map-error i { font-size: 36px; color: #cbd5e1; }
@@ -1051,30 +969,18 @@
 .rider-map-wrapper { position: relative; }
 
 .rider-map-waiting-overlay {
-  position: absolute;
-  inset: 0;
-  top: 32px;
-  background: rgba(248, 249, 250, 0.92);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 500;
+  position: absolute; inset: 0; top: 32px;
+  background: rgba(248,249,250,0.92);
+  display: flex; align-items: center; justify-content: center; z-index: 500;
 }
 
 .rider-map-waiting-inner {
-  text-align: center;
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
+  text-align: center; padding: 24px; display: flex;
+  flex-direction: column; align-items: center; gap: 10px;
 }
 
 .rider-map-waiting-inner i {
-  font-size: 42px;
-  color: #fc1268;
-  opacity: 0.5;
-  animation: waitingPulse 2s ease-in-out infinite;
+  font-size: 42px; color: #fc1268; opacity: 0.5; animation: waitingPulse 2s ease-in-out infinite;
 }
 
 @keyframes waitingPulse {
@@ -1086,64 +992,36 @@
 .rider-map-waiting-inner small { font-size: 12px; color: #9ca3af; }
 
 .rider-map-live-pill {
-  margin-left: auto;
-  background: #16a34a;
-  color: white;
-  font-size: 10px;
-  font-weight: 800;
-  padding: 2px 8px;
-  border-radius: 20px;
-  letter-spacing: 0.5px;
-  animation: livePillBlink 2s ease-in-out infinite;
+  margin-left: auto; background: #16a34a; color: white;
+  font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 20px;
+  letter-spacing: 0.5px; animation: livePillBlink 2s ease-in-out infinite;
 }
 
-@keyframes livePillBlink {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.6; }
-}
+@keyframes livePillBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
 
 .rider-map-popup { font-family: 'Segoe UI', sans-serif; min-width: 140px; text-align: center; }
 .rider-map-popup strong { display: block; font-size: 13px; color: #1a1f36; margin-bottom: 3px; }
 .rider-map-popup small  { font-size: 11px; color: #64748b; }
 
-.leaflet-popup-content-wrapper {
-  border-radius: 10px !important;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.15) !important;
-}
+.leaflet-popup-content-wrapper { border-radius: 10px !important; box-shadow: 0 4px 16px rgba(0,0,0,0.15) !important; }
 
 /* Pending Payment */
 .status-pending-payment { background: #fff3cd; color: #856404; border: 1px solid #ffc107; }
 
 .btn-continue-payment {
-  width: 100%;
-  padding: 10px 16px;
-  background: linear-gradient(135deg, #fc1268, #8b5cf6);
-  color: #fff;
-  border: none;
-  border-radius: 10px;
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  margin-top: 8px;
-  transition: opacity 0.2s;
+  width: 100%; padding: 10px 16px;
+  background: linear-gradient(135deg, #fc1268, #8b5cf6); color: #fff; border: none;
+  border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  margin-top: 8px; transition: opacity 0.2s;
 }
 .btn-continue-payment:hover { opacity: 0.88; }
 .btn-continue-payment:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .pending-payment-banner {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  background: #fff8e1;
-  border: 1.5px solid #ffc107;
-  border-radius: 12px;
-  padding: 14px 16px;
-  margin-bottom: 18px;
-  flex-wrap: wrap;
+  display: flex; align-items: center; gap: 14px; background: #fff8e1;
+  border: 1.5px solid #ffc107; border-radius: 12px; padding: 14px 16px;
+  margin-bottom: 18px; flex-wrap: wrap;
 }
 .pending-payment-icon { font-size: 24px; color: #f59e0b; flex-shrink: 0; }
 .pending-payment-text { flex: 1; min-width: 0; }
@@ -1153,53 +1031,31 @@
 
 /* Refund card timer */
 .order-card-refund-timer {
-  display: flex; align-items: center; gap: 6px;
-  background: #fffbeb; border: 1px solid #fde68a;
-  border-radius: 6px; padding: 5px 10px;
+  display: flex; align-items: center; gap: 6px; background: #fffbeb;
+  border: 1px solid #fde68a; border-radius: 6px; padding: 5px 10px;
   font-size: 11px; font-weight: 600; color: #92400e; margin-bottom: 6px;
 }
-
 .order-card-refund-timer i { font-size: 10px; color: #d97706; }
 
-.order-card-refund-expired {
-  display: flex; align-items: center; gap: 6px;
-  font-size: 11px; color: #9ca3af; margin-bottom: 6px;
-}
-
+.order-card-refund-expired { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #9ca3af; margin-bottom: 6px; }
 .order-card-refund-expired i { font-size: 10px; }
 
 /* Refund button on order card */
 .order-refund-btn {
-  width: 100%;
-  justify-content: center;
-  font-size: 12px;
-  padding: 7px 12px;
-  background: white;
-  border: 1.5px solid #f59e0b;
-  color: #b45309;
-  border-radius: var(--border-radius);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  transition: all 0.2s;
-  font-weight: 600;
-  margin-top: 6px;
+  width: 100%; justify-content: center; font-size: 12px; padding: 7px 12px;
+  background: white; border: 1.5px solid #f59e0b; color: #b45309;
+  border-radius: var(--border-radius); cursor: pointer;
+  display: flex; align-items: center; gap: 6px; transition: all 0.2s;
+  font-weight: 600; margin-top: 6px;
 }
 .order-refund-btn:hover { background: #fffbeb; border-color: #d97706; color: #92400e; }
-
 .order-refund-retry-btn { border-color: #6366f1; color: #4338ca; }
 .order-refund-retry-btn:hover { background: #eef2ff; border-color: #4f46e5; color: #3730a3; }
 
 /* Refund status badge */
 .refund-status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11px;
-  font-weight: 700;
-  padding: 3px 10px;
-  border-radius: 20px;
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px;
 }
 .refund-badge-pending  { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
 .refund-badge-approved { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
@@ -1207,34 +1063,19 @@
 
 /* Refund button inside modal */
 .modal-refund-btn {
-  width: 100%;
-  padding: 11px 16px;
-  margin-bottom: 16px;
+  width: 100%; padding: 11px 16px; margin-bottom: 16px;
   background: linear-gradient(135deg, #fffbeb, #fef3c7);
-  border: 1.5px solid #f59e0b;
-  color: #92400e;
-  border-radius: 10px;
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  transition: all 0.2s;
+  border: 1.5px solid #f59e0b; color: #92400e; border-radius: 10px;
+  font-size: 14px; font-weight: 700; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s;
 }
 .modal-refund-btn:hover { background: #fef3c7; border-color: #d97706; }
 
 /* Refund status banner inside modal */
 .refund-status-banner {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  border-radius: 10px;
-  padding: 14px 16px;
-  margin-bottom: 16px;
-  border-width: 1.5px;
-  border-style: solid;
+  display: flex; align-items: flex-start; gap: 14px;
+  border-radius: 10px; padding: 14px 16px; margin-bottom: 16px;
+  border-width: 1.5px; border-style: solid;
 }
 .refund-banner-requested { background: #fffbeb; border-color: #fde68a; }
 .refund-banner-approved  { background: #f0fdf4; border-color: #86efac; }
@@ -1256,9 +1097,8 @@
 
 /* Refund window banners */
 .refund-window-banner {
-  display: flex; align-items: center; gap: 8px;
-  background: #fffbeb; border: 1px solid #fde68a;
-  border-radius: 8px; padding: 10px 14px;
+  display: flex; align-items: center; gap: 8px; background: #fffbeb;
+  border: 1px solid #fde68a; border-radius: 8px; padding: 10px 14px;
   font-size: 13px; color: #92400e; margin-bottom: 14px;
 }
 .refund-window-banner i { color: #d97706; }
@@ -1267,59 +1107,31 @@
 
 /* REFUND MODAL */
 .refund-modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.65);
-  z-index: 3500;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  animation: fadeInLightbox 0.2s ease;
+  position: fixed; inset: 0; background: rgba(0,0,0,0.65);
+  z-index: 3500; display: flex; align-items: center; justify-content: center;
+  padding: 20px; animation: fadeInLightbox 0.2s ease;
 }
 
 .refund-modal {
-  background: white;
-  border-radius: 18px;
-  width: 100%;
-  max-width: 520px;
-  max-height: 90vh;
-  overflow-y: auto;
-  position: relative;
-  animation: zoomInLightbox 0.25s ease;
-  display: flex;
-  flex-direction: column;
+  background: white; border-radius: 18px; width: 100%; max-width: 520px;
+  max-height: 90vh; overflow-y: auto; position: relative;
+  animation: zoomInLightbox 0.25s ease; display: flex; flex-direction: column;
 }
 
 .refund-modal-close {
-  position: absolute;
-  top: 14px; right: 14px;
-  width: 34px; height: 34px;
-  border-radius: 50%;
-  background: #f3f4f6;
-  border: none;
-  font-size: 15px;
-  color: #6b7280;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.2s;
-  z-index: 5;
+  position: absolute; top: 14px; right: 14px;
+  width: 34px; height: 34px; border-radius: 50%; background: #f3f4f6; border: none;
+  font-size: 15px; color: #6b7280; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; transition: background 0.2s; z-index: 5;
 }
 .refund-modal-close:hover { background: #e5e7eb; color: #111; }
 
 .refund-modal-header {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 22px 22px 16px;
-  border-bottom: 1px solid #f0f0f0;
+  display: flex; align-items: center; gap: 14px; padding: 22px 22px 16px; border-bottom: 1px solid #f0f0f0;
 }
 
 .refund-modal-icon {
-  width: 48px; height: 48px;
-  border-radius: 12px;
+  width: 48px; height: 48px; border-radius: 12px;
   background: linear-gradient(135deg, #fef3c7, #fde68a);
   display: flex; align-items: center; justify-content: center;
   font-size: 20px; color: #d97706; flex-shrink: 0;
@@ -1329,42 +1141,28 @@
 .refund-modal-header p  { font-size: 13px; color: #6b7280; margin: 0; }
 
 .refund-window-timer {
-  display: flex; align-items: center; gap: 8px;
-  background: #fff7ed; border-bottom: 1px solid #fed7aa;
-  padding: 8px 22px; font-size: 13px; color: #c2410c; font-weight: 600;
+  display: flex; align-items: center; gap: 8px; background: #fff7ed;
+  border-bottom: 1px solid #fed7aa; padding: 8px 22px; font-size: 13px; color: #c2410c; font-weight: 600;
 }
 .refund-window-timer i { color: #ea580c; }
 
 .refund-modal-body { padding: 18px 22px; flex: 1; display: flex; flex-direction: column; gap: 16px; }
 
 .refund-modal-label {
-  font-size: 13px;
-  font-weight: 700;
-  color: #374151;
-  margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  font-size: 13px; font-weight: 700; color: #374151; margin-bottom: 8px;
+  display: flex; align-items: center; gap: 6px;
 }
 
 .refund-required { color: #ef4444; }
 
 .refund-reason-fixed {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  background: #fffbeb;
-  border: 1.5px solid #fde68a;
-  border-radius: 10px;
-  padding: 12px 14px;
+  display: flex; align-items: flex-start; gap: 12px; background: #fffbeb;
+  border: 1.5px solid #fde68a; border-radius: 10px; padding: 12px 14px;
 }
 
 .refund-reason-fixed-icon {
-  width: 36px; height: 36px;
-  border-radius: 8px;
-  background: #fef3c7;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 16px; color: #d97706; flex-shrink: 0;
+  width: 36px; height: 36px; border-radius: 8px; background: #fef3c7;
+  display: flex; align-items: center; justify-content: center; font-size: 16px; color: #d97706; flex-shrink: 0;
 }
 
 .refund-reason-fixed-label { display: block; font-size: 14px; font-weight: 700; color: #92400e; margin-bottom: 3px; }
@@ -1373,19 +1171,9 @@
 .refund-field-group { display: flex; flex-direction: column; gap: 0; }
 
 .refund-photo-upload-area {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border: 2px dashed #d1d5db;
-  border-radius: 12px;
-  padding: 28px 20px;
-  cursor: pointer;
-  transition: all 0.2s;
-  background: #f9fafb;
-  color: #6b7280;
-  text-align: center;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  border: 2px dashed #d1d5db; border-radius: 12px; padding: 28px 20px; cursor: pointer;
+  transition: all 0.2s; background: #f9fafb; color: #6b7280; text-align: center;
 }
 .refund-photo-upload-area:hover { border-color: #f59e0b; background: #fffbeb; color: #d97706; }
 .refund-photo-upload-area i { font-size: 28px; }
@@ -1396,11 +1184,8 @@
 .refund-photo-preview { width: 100%; max-height: 200px; object-fit: cover; display: block; }
 
 .refund-photo-remove {
-  position: absolute;
-  bottom: 10px; right: 10px;
-  background: rgba(0,0,0,0.6);
-  color: white; border: none; border-radius: 8px;
-  padding: 6px 12px; font-size: 12px; font-weight: 600;
+  position: absolute; bottom: 10px; right: 10px; background: rgba(0,0,0,0.6); color: white;
+  border: none; border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600;
   cursor: pointer; display: flex; align-items: center; gap: 5px; transition: background 0.2s;
 }
 .refund-photo-remove:hover { background: rgba(220,38,38,0.8); }
@@ -1408,21 +1193,9 @@
 .refund-method-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
 .refund-method-btn {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 14px 10px;
-  border: 2px solid #e5e7eb;
-  border-radius: 12px;
-  background: white;
-  cursor: pointer;
-  transition: all 0.2s;
-  position: relative;
-  font-size: 14px;
-  font-weight: 700;
-  color: #374151;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  padding: 14px 10px; border: 2px solid #e5e7eb; border-radius: 12px; background: white;
+  cursor: pointer; transition: all 0.2s; position: relative; font-size: 14px; font-weight: 700; color: #374151;
 }
 .refund-method-btn:hover { border-color: #d1d5db; background: #f9fafb; }
 .refund-method-btn.selected { border-color: #f59e0b; background: #fffbeb; box-shadow: 0 0 0 3px rgba(245,158,11,0.15); }
@@ -1433,42 +1206,26 @@
 .refund-account-fields { gap: 8px; }
 
 .refund-input {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1.5px solid #e5e7eb;
-  border-radius: 8px;
-  font-size: 14px;
-  font-family: inherit;
-  color: #111827;
-  transition: border-color 0.2s;
-  box-sizing: border-box;
+  width: 100%; padding: 10px 12px; border: 1.5px solid #e5e7eb; border-radius: 8px;
+  font-size: 14px; font-family: inherit; color: #111827; transition: border-color 0.2s; box-sizing: border-box;
 }
 .refund-input:focus { border-color: #f59e0b; outline: none; box-shadow: 0 0 0 3px rgba(245,158,11,0.12); }
 
 .refund-comment-box {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1.5px solid #e5e7eb;
-  border-radius: 8px;
-  font-size: 13px;
-  font-family: inherit;
-  resize: vertical;
-  transition: border-color 0.2s;
-  box-sizing: border-box;
+  width: 100%; padding: 10px 12px; border: 1.5px solid #e5e7eb; border-radius: 8px;
+  font-size: 13px; font-family: inherit; resize: vertical; transition: border-color 0.2s; box-sizing: border-box;
 }
 .refund-comment-box:focus { border-color: #f59e0b; outline: none; box-shadow: 0 0 0 3px rgba(245,158,11,0.12); }
 
 .refund-error-msg {
-  display: flex; align-items: center; gap: 8px;
-  background: #fef2f2; border: 1px solid #fca5a5;
-  color: #dc2626; font-size: 13px; font-weight: 600;
+  display: flex; align-items: center; gap: 8px; background: #fef2f2;
+  border: 1px solid #fca5a5; color: #dc2626; font-size: 13px; font-weight: 600;
   padding: 10px 12px; border-radius: 8px;
 }
 
 .refund-expired-notice {
-  display: flex; align-items: flex-start; gap: 12px;
-  background: #fef2f2; border: 1px solid #fca5a5;
-  border-radius: 10px; padding: 14px 16px;
+  display: flex; align-items: flex-start; gap: 12px; background: #fef2f2;
+  border: 1px solid #fca5a5; border-radius: 10px; padding: 14px 16px;
 }
 .refund-expired-notice i { font-size: 22px; color: #dc2626; flex-shrink: 0; margin-top: 2px; }
 .refund-expired-notice strong { display: block; font-size: 14px; color: #991b1b; margin-bottom: 4px; }
@@ -1477,31 +1234,24 @@
 .refund-modal-footer { display: flex; gap: 10px; padding: 14px 22px 20px; border-top: 1px solid #f0f0f0; }
 
 .refund-cancel-btn {
-  flex: 1; padding: 11px;
-  background: white; border: 1.5px solid #e5e7eb;
-  border-radius: 10px; font-size: 14px; font-weight: 600;
-  color: #6b7280; cursor: pointer; transition: all 0.2s;
+  flex: 1; padding: 11px; background: white; border: 1.5px solid #e5e7eb;
+  border-radius: 10px; font-size: 14px; font-weight: 600; color: #6b7280; cursor: pointer; transition: all 0.2s;
 }
 .refund-cancel-btn:hover:not(:disabled) { border-color: #9ca3af; color: #374151; }
 
 .refund-submit-btn {
-  flex: 2; padding: 11px;
-  background: linear-gradient(135deg, #f59e0b, #d97706);
-  border: none; border-radius: 10px;
-  font-size: 14px; font-weight: 700; color: white;
-  cursor: pointer; display: flex; align-items: center; justify-content: center;
-  gap: 8px; transition: opacity 0.2s;
-  box-shadow: 0 3px 12px rgba(245,158,11,0.35);
+  flex: 2; padding: 11px; background: linear-gradient(135deg, #f59e0b, #d97706);
+  border: none; border-radius: 10px; font-size: 14px; font-weight: 700; color: white;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+  transition: opacity 0.2s; box-shadow: 0 3px 12px rgba(245,158,11,0.35);
 }
 .refund-submit-btn:hover:not(:disabled) { opacity: 0.9; }
 .refund-submit-btn:disabled { opacity: 0.55; cursor: not-allowed; }
 
 .refund-success-toast {
-  display: flex; align-items: center; gap: 10px;
-  background: #f0fdf4; border: 1.5px solid #86efac;
-  color: #15803d; font-size: 14px; font-weight: 600;
-  padding: 12px 18px; border-radius: 12px;
-  margin-bottom: 16px; animation: slideDown 0.3s ease;
+  display: flex; align-items: center; gap: 10px; background: #f0fdf4;
+  border: 1.5px solid #86efac; color: #15803d; font-size: 14px; font-weight: 600;
+  padding: 12px 18px; border-radius: 12px; margin-bottom: 16px; animation: slideDown 0.3s ease;
 }
 .refund-success-toast i { font-size: 18px; color: #16a34a; flex-shrink: 0; }
 
@@ -1512,9 +1262,8 @@
 
 /* Guest notices */
 .guest-login-notice {
-  display: flex; align-items: center; gap: 8px;
-  background: #eff6ff; border: 1px solid #bfdbfe;
-  border-radius: 8px; padding: 10px 14px;
+  display: flex; align-items: center; gap: 8px; background: #eff6ff;
+  border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px 14px;
   font-size: 13px; color: #1e40af; margin-top: 10px;
 }
 .guest-login-notice i { color: #3b82f6; flex-shrink: 0; }
@@ -1522,27 +1271,23 @@
 .guest-login-notice a:hover { text-decoration: underline; }
 
 .guest-modal-notice {
-  display: flex; align-items: flex-start; gap: 10px;
-  background: #eff6ff; border: 1px solid #bfdbfe;
-  border-radius: 10px; padding: 12px 16px;
+  display: flex; align-items: flex-start; gap: 10px; background: #eff6ff;
+  border: 1px solid #bfdbfe; border-radius: 10px; padding: 12px 16px;
   font-size: 13px; color: #1e40af; margin-bottom: 18px;
 }
 .guest-modal-notice i { color: #3b82f6; flex-shrink: 0; margin-top: 2px; }
 .guest-modal-notice a { color: #2563eb; font-weight: 700; text-decoration: none; }
 
 .guest-login-prompt {
-  display: flex; align-items: center; gap: 7px;
-  font-size: 12px; color: #6b7280;
-  margin-top: 6px; padding: 7px 10px;
-  background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;
+  display: flex; align-items: center; gap: 7px; font-size: 12px; color: #6b7280;
+  margin-top: 6px; padding: 7px 10px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;
 }
 .guest-login-prompt i { font-size: 11px; color: #9ca3af; }
 .guest-login-prompt a { color: var(--primary-color); font-weight: 700; text-decoration: none; }
 
 /* GPS Link Section */
 .rider-gps-link-section {
-  padding: 20px;
-  background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+  padding: 20px; background: linear-gradient(135deg, #f0fdf4, #dcfce7);
   display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center;
 }
 
@@ -1551,16 +1296,14 @@
 
 .rider-gps-open-link {
   display: inline-flex; align-items: center; gap: 10px;
-  background: linear-gradient(135deg, #16a34a, #15803d);
-  color: white; padding: 14px 28px; border-radius: 12px;
-  font-size: 15px; font-weight: 700; text-decoration: none;
-  transition: all 0.2s; box-shadow: 0 4px 14px rgba(22,163,74,0.35);
+  background: linear-gradient(135deg, #16a34a, #15803d); color: white;
+  padding: 14px 28px; border-radius: 12px; font-size: 15px; font-weight: 700;
+  text-decoration: none; transition: all 0.2s; box-shadow: 0 4px 14px rgba(22,163,74,0.35);
 }
 .rider-gps-open-link:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(22,163,74,0.45); }
 
 .rider-gps-waiting {
-  padding: 32px 20px;
-  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 32px 20px; display: flex; flex-direction: column; align-items: center; gap: 8px;
   background: #f8fafc; text-align: center; color: #64748b;
 }
 .rider-gps-waiting i { font-size: 36px; color: #fc1268; opacity: 0.5; animation: waitingPulse 2s ease-in-out infinite; display: block; }

@@ -7,7 +7,6 @@ import { useUserOrders, useOrdersByEmail, useUpdateOrderOtp } from '../utils/ord
 import { useProducts, usePreOrderProducts } from '../utils/productStorage';
 import './TrackOrder.css';
 
-// ─── HELPERS ─────────────────────────────────────────────────────────────────
 const formatTimeAgo = (timestamp) => {
   if (!timestamp) return 'unknown';
   const diff = Math.floor((Date.now() - timestamp) / 1000);
@@ -169,6 +168,12 @@ const RefundBadge = ({ status }) => {
 };
 
 // ─── RIDER MAP ────────────────────────────────────────────────────────────────
+// ✅ NCR bounding box — restricts map pan/zoom to Metro Manila only
+const NCR_BOUNDS = [
+  [14.3500, 120.8500],
+  [14.8000, 121.1500],
+];
+
 const RiderMap = ({ orderId, riderName, orderData }) => {
   const mapRef             = useRef(null);
   const mapInstanceRef     = useRef(null);
@@ -209,7 +214,18 @@ const RiderMap = ({ orderId, riderName, orderData }) => {
     if (!leafletLoaded || mapInstanceRef.current || !mapRef.current) return;
     try {
       const L = window.L;
-      const map = L.map(mapRef.current, { zoomControl: true, attributionControl: true, tap: false, scrollWheelZoom: true }).setView([14.5995, 120.9842], 15);
+      // ✅ NCR-restricted map init
+      const map = L.map(mapRef.current, {
+        zoomControl: true,
+        attributionControl: true,
+        tap: false,
+        scrollWheelZoom: true,
+        maxBounds: NCR_BOUNDS,
+        maxBoundsViscosity: 1.0,
+        minZoom: 11,
+        maxZoom: 19,
+      }).setView([14.5995, 120.9842], 13);
+
       map.zoomControl.setPosition('bottomright');
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>', maxZoom: 19 }).addTo(map);
       const riderIcon = L.divIcon({
@@ -816,23 +832,20 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
 
   return (
     <div className="tracking-modal-overlay" onClick={onClose}>
-      {/* ✅ FIX: Close button is OUTSIDE .tracking-result so it stays fixed at top-right
-           regardless of scroll position inside the modal */}
       <div className="tracking-modal" onClick={e => e.stopPropagation()}>
-        <button
-          className="modal-close-btn"
-          onClick={(e) => { e.stopPropagation(); onClose(); }}
-          type="button"
-          aria-label="Close"
-        >
-          <i className="fas fa-times"></i>
-        </button>
-
         <div className="tracking-result">
 
           <div className="result-header">
             <h2>Order #{order.orderId?.slice(-8) || 'N/A'}</h2>
             <div className={`status-badge ${getStatusClass(order.orderStatus || order.status)}`}>{getDisplayStatus(order)}</div>
+            <button
+              className="modal-close-btn"
+              onClick={(e) => { e.stopPropagation(); onClose(); }}
+              type="button"
+              aria-label="Close"
+            >
+              <i className="fas fa-times"></i>
+            </button>
           </div>
 
           {isGuest && (
