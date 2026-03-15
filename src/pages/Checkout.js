@@ -9,6 +9,20 @@ import { useMutation, useQuery, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import './Checkout.css';
 
+// ─── NCR BOUNDS — delivery coverage area ─────────────────────────────────────
+const NCR_BOUNDS = {
+  minLat: 14.3500, maxLat: 14.8000,
+  minLng: 120.8600, maxLng: 121.1500,
+};
+
+const isWithinNCR = (lat, lng) => {
+  if (!lat || !lng) return true; // no coords yet — don't block
+  return (
+    lat >= NCR_BOUNDS.minLat && lat <= NCR_BOUNDS.maxLat &&
+    lng >= NCR_BOUNDS.minLng && lng <= NCR_BOUNDS.maxLng
+  );
+};
+
 // ─── LALAMOVE-STYLE SHIPPING CONFIG ──────────────────────────────────────────
 const LALAMOVE_CONFIG = {
   baseFare:          49,
@@ -99,7 +113,7 @@ function calcLalamoveShipping(storeLat, storeLng, lat, lng, cartItems = [], prod
 }
 
 // ─── ADDRESS MAP PICKER ───────────────────────────────────────────────────────
-const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) => {
+const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords, onNCRViolation }) => {
   const mapRef         = useRef(null);
   const mapInstanceRef = useRef(null);
   const markerRef      = useRef(null);
@@ -136,6 +150,13 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) 
     document.head.appendChild(script);
   }, []);
 
+  // Helper: check NCR and call parent callback
+  const checkAndNotifyNCR = useCallback((lat, lng) => {
+    const valid = isWithinNCR(lat, lng);
+    if (onNCRViolation) onNCRViolation(!valid);
+    return valid;
+  }, [onNCRViolation]);
+
   const geocodeAddress = useCallback(async (addr) => {
     if (!addr) return;
     if (!mapInstanceRef.current || !markerRef.current) {
@@ -154,16 +175,21 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) 
       if (data?.length > 0) {
         const lat = parseFloat(data[0].lat);
         const lng = parseFloat(data[0].lon);
+        const withinNCR = checkAndNotifyNCR(lat, lng);
         if (markerRef.current && mapInstanceRef.current) {
-          markerRef.current.setLatLng([lat, lng]);
+          // Update marker icon based on NCR status
+          updateMarkerIcon(lat, lng, withinNCR);
           markerRef.current.getPopup()?.setContent(
-            `<div style="font-size:12px;max-width:200px"><strong>📍 Delivery Address</strong><br><small>${addr}</small></div>`
+            `<div style="font-size:12px;max-width:200px"><strong>${withinNCR ? '📍' : '⚠️'} ${withinNCR ? 'Delivery Address' : 'Outside NCR Coverage'}</strong><br><small>${addr}</small></div>`
           );
           markerRef.current.openPopup();
           mapInstanceRef.current.flyTo([lat, lng], 17, { animate: true, duration: 0.8 });
           onSelectSuggestion({ address: addr, lat, lng, city: '', zipCode: '' });
         }
-        setStatusText('Pin your exact location — drag the marker to adjust');
+        setStatusText(withinNCR
+          ? 'Pin your exact location — drag the marker to adjust'
+          : '⚠️ This address is outside our NCR delivery area'
+        );
       } else {
         setStatusText('Address not found. Drag the pin to set location manually.');
       }
@@ -171,31 +197,57 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) 
       setStatusText('Could not locate address. Drag the pin to set location.');
     }
     setGeocoding(false);
-  }, [onSelectSuggestion]);
+  }, [onSelectSuggestion, checkAndNotifyNCR]);
+
+  const updateMarkerIcon = (lat, lng, withinNCR) => {
+    if (!markerRef.current || !window.L) return;
+    const L = window.L;
+    const color = withinNCR ? '#fc1268' : '#dc2626';
+    const icon = L.divIcon({
+      className: '',
+      html: `<div style="
+        width:36px;height:36px;background:${color};border-radius:50% 50% 50% 0;
+        transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;
+        box-shadow:0 3px 10px ${withinNCR ? 'rgba(252,18,104,0.5)' : 'rgba(220,38,38,0.5)'};border:3px solid white;">
+        <span style="transform:rotate(45deg);font-size:16px">${withinNCR ? '📍' : '⚠️'}</span>
+      </div>`,
+      iconSize: [36, 36], iconAnchor: [18, 36], popupAnchor: [0, -40],
+    });
+    markerRef.current.setIcon(icon);
+    if (lat && lng) markerRef.current.setLatLng([lat, lng]);
+  };
 
   useEffect(() => {
     if (!mapVisible || mapInstanceRef.current || !mapRef.current || !leafletReady) return;
     try {
       const L        = window.L;
       const startLat  = savedCoords?.lat ?? 14.5995;
-      const startLng  = savedCoords?.lng ?? 120.9842;
+      const startLng  = savedCoords?.lng ?? 121.0;
       const startZoom = savedCoords ? 17 : 13;
 
       const map = L.map(mapRef.current, {
         zoomControl    : true,
         tap            : false,
         scrollWheelZoom: false,
+        minZoom: 11,
+        maxZoom: 19,
+        maxBounds: [[14.3500, 120.8600], [14.8000, 121.1500]],
+        maxBoundsViscosity: 1.0,
       }).setView([startLat, startLng], startZoom);
+      map.setMaxBounds([[14.3500, 120.8600], [14.8000, 121.1500]]);
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         maxZoom: 19,
+        minZoom: 11,
       }).addTo(map);
 
+      const initWithinNCR = savedCoords ? isWithinNCR(savedCoords.lat, savedCoords.lng) : true;
+      const initColor = initWithinNCR ? '#fc1268' : '#dc2626';
       const icon = L.divIcon({
         className: '',
         html: `<div style="
-          width:36px;height:36px;background:#fc1268;border-radius:50% 50% 50% 0;
+          width:36px;height:36px;background:${initColor};border-radius:50% 50% 50% 0;
           transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;
           box-shadow:0 3px 10px rgba(252,18,104,0.5);border:3px solid white;">
           <span style="transform:rotate(45deg);font-size:16px">📍</span>
@@ -213,14 +265,20 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) 
 
       if (savedCoords) {
         marker.openPopup();
+        checkAndNotifyNCR(savedCoords.lat, savedCoords.lng);
         onSelectSuggestion({ address: value || '', lat: startLat, lng: startLng, city: '', zipCode: '' });
-        setStatusText('📍 Showing your last saved location — drag the pin to adjust');
+        setStatusText(initWithinNCR
+          ? '📍 Showing your last saved location — drag the pin to adjust'
+          : '⚠️ Your saved location is outside our NCR delivery area'
+        );
       }
 
       marker.on('dragend', async () => {
         const { lat, lng } = marker.getLatLng();
+        const withinNCR = checkAndNotifyNCR(lat, lng);
         setGeocoding(true);
-        setStatusText('Getting address for this location…');
+        setStatusText(withinNCR ? 'Getting address for this location…' : '⚠️ Location is outside NCR coverage area');
+        updateMarkerIcon(null, null, withinNCR);
         try {
           const res  = await fetch(
             `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`,
@@ -233,10 +291,13 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) 
           onChange(addr);
           onSelectSuggestion({ address: addr, lat, lng, city, zipCode });
           marker.getPopup()?.setContent(
-            `<div style="font-size:12px;max-width:200px"><strong>📍 Delivery Address</strong><br><small>${addr}</small></div>`
+            `<div style="font-size:12px;max-width:200px"><strong>${withinNCR ? '📍 Delivery Address' : '⚠️ Outside NCR Coverage'}</strong><br><small>${addr}</small></div>`
           );
           marker.openPopup();
-          setStatusText('Pin your exact location — drag the marker to adjust');
+          setStatusText(withinNCR
+            ? 'Pin your exact location — drag the marker to adjust'
+            : '⚠️ This location is outside our NCR delivery coverage'
+          );
         } catch {
           setStatusText('Could not get address. Try again.');
         }
@@ -299,6 +360,8 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) 
   const handleInputChange = (e) => {
     const val = e.target.value;
     onChange(val);
+    // Reset NCR violation when user clears/changes address
+    if (onNCRViolation) onNCRViolation(false);
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => fetchSuggestions(val), 500);
   };
@@ -307,19 +370,23 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) 
     onChange(s.address);
     setSuggestions([]);
     setShowSuggestions(false);
+    const withinNCR = checkAndNotifyNCR(s.lat, s.lng);
     if (!mapVisible) {
       pendingGeocode.current = s.address;
       setMapVisible(true);
     } else {
       if (mapInstanceRef.current && markerRef.current) {
-        markerRef.current.setLatLng([s.lat, s.lng]);
+        updateMarkerIcon(s.lat, s.lng, withinNCR);
         markerRef.current.getPopup()?.setContent(
-          `<div style="font-size:12px;max-width:200px"><strong>📍 Delivery Address</strong><br><small>${s.address}</small></div>`
+          `<div style="font-size:12px;max-width:200px"><strong>${withinNCR ? '📍 Delivery Address' : '⚠️ Outside NCR Coverage'}</strong><br><small>${s.address}</small></div>`
         );
         markerRef.current.openPopup();
         mapInstanceRef.current.flyTo([s.lat, s.lng], 17, { animate: true, duration: 0.8 });
         onSelectSuggestion({ address: s.address, lat: s.lat, lng: s.lng, city: s.city, zipCode: s.zipCode });
-        setStatusText('Pin your exact location — drag the marker to adjust');
+        setStatusText(withinNCR
+          ? 'Pin your exact location — drag the marker to adjust'
+          : '⚠️ This address is outside our NCR delivery area'
+        );
       } else {
         pendingGeocode.current = s.address;
       }
@@ -364,12 +431,23 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) 
         )}
         {showSuggestions && suggestions.length > 0 && (
           <ul className="address-suggestions-list">
-            {suggestions.map((s, i) => (
-              <li key={i} onMouseDown={() => handleSelectSuggestion(s)}>
-                <i className="fas fa-map-marker-alt"></i>
-                <span>{s.label}</span>
-              </li>
-            ))}
+            {suggestions.map((s, i) => {
+              const sInNCR = isWithinNCR(s.lat, s.lng);
+              return (
+                <li key={i} onMouseDown={() => handleSelectSuggestion(s)}
+                  style={!sInNCR ? { opacity: 0.65 } : {}}>
+                  <i className={`fas fa-map-marker-alt`} style={{ color: sInNCR ? '#fc1268' : '#dc2626' }}></i>
+                  <span>
+                    {s.label}
+                    {!sInNCR && (
+                      <span style={{ display: 'block', fontSize: 11, color: '#dc2626', fontWeight: 700, marginTop: 2 }}>
+                        ⚠️ Outside NCR — delivery not available
+                      </span>
+                    )}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
@@ -382,6 +460,7 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords }) 
           <div ref={mapRef} className="address-map-preview-container" />
           <div className="address-map-preview-hint">
             <i className="fas fa-hand-pointer"></i> Drag the 📍 pin to fine-tune your delivery location
+            <span style={{ marginLeft: 'auto', fontSize: 10, color: '#64748b', fontWeight: 600 }}>📍 NCR Only</span>
           </div>
         </div>
       )}
@@ -442,6 +521,20 @@ const ShippingBreakdown = ({ shippingInfo }) => {
   );
 };
 
+// ─── NCR VIOLATION BANNER ─────────────────────────────────────────────────────
+const NCRViolationBanner = () => (
+  <div className="ncr-violation-banner">
+    <div className="ncr-violation-icon">🚫</div>
+    <div className="ncr-violation-body">
+      <strong>Address Outside Delivery Area</strong>
+      <p>
+        Sorry, we currently only deliver within <strong>Metro Manila (NCR)</strong>.
+        Please enter an address within NCR to proceed with your order.
+      </p>
+    </div>
+  </div>
+);
+
 // ─── MAIN CHECKOUT ────────────────────────────────────────────────────────────
 const Checkout = () => {
   const navigate  = useNavigate();
@@ -462,10 +555,9 @@ const Checkout = () => {
   const clearCart     = useClearCart();
   const updateProduct = useUpdateProduct();
 
-  // ── Store coords from DB (set by admin in Dashboard) ──────────────────
   const storeSettings = useQuery(api.settings.getSettings);
   const STORE_LAT     = storeSettings?.storeLat ?? 14.5995;
-  const STORE_LNG     = storeSettings?.storeLng ?? 120.9842;
+  const STORE_LNG     = storeSettings?.storeLng ?? 121.0;
 
   const savedProfile = useQuery(
     api.users.getProfile,
@@ -487,7 +579,10 @@ const Checkout = () => {
   const [addressCoords, setAddressCoords] = useState(null);
   const [savedCoords, setSavedCoords]     = useState(null);
 
-  const shippingInfo = addressCoords
+  // ── NCR validation state ──────────────────────────────────────────────────
+  const [isOutsideNCR, setIsOutsideNCR] = useState(false);
+
+  const shippingInfo = addressCoords && !isOutsideNCR
     ? calcLalamoveShipping(STORE_LAT, STORE_LNG, addressCoords.lat, addressCoords.lng, cartItems, products)
     : null;
   const shippingFee  = shippingInfo?.fee ?? 0;
@@ -517,6 +612,8 @@ const Checkout = () => {
       const coords = { lat: profile.addressLat, lng: profile.addressLng };
       setSavedCoords(coords);
       setAddressCoords(coords);
+      // Check if saved coords are within NCR
+      setIsOutsideNCR(!isWithinNCR(coords.lat, coords.lng));
     }
   }, [isAuthenticated, navigate, showNotification, user, savedProfile]);
 
@@ -588,8 +685,9 @@ const Checkout = () => {
 
   const isAddressComplete = () => savedAddress.address.trim();
 
+  // ── Form is ready only when address is within NCR ───────────────────────
   const isFormReady = () =>
-    isContactComplete() && isAddressComplete() && !isEditingContact && !isEditingAddress;
+    isContactComplete() && isAddressComplete() && !isEditingContact && !isEditingAddress && !isOutsideNCR;
 
   const handleSaveContact = async () => {
     if (!formData.fullName.trim()) { showNotification('Please enter your full name', 'error'); return; }
@@ -610,6 +708,11 @@ const Checkout = () => {
 
   const handleSaveAddress = async () => {
     if (!formData.address.trim()) { showNotification('Please enter your street address', 'error'); return; }
+    // ── Block save if outside NCR ──
+    if (isOutsideNCR) {
+      showNotification('Please enter an address within Metro Manila (NCR) to proceed.', 'error');
+      return;
+    }
     setSavedAddress({ address: formData.address, city: formData.city, zipCode: formData.zipCode });
     setIsEditingAddress(false);
     try {
@@ -625,6 +728,12 @@ const Checkout = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    // ── Extra NCR guard on submit ──
+    if (isOutsideNCR) {
+      showNotification('Delivery is only available within Metro Manila (NCR). Please update your address.', 'error');
+      setIsEditingAddress(true);
+      return;
+    }
     if (!isFormReady()) {
       showNotification('Please fill in and save all required fields', 'error');
       if (!isContactComplete()) setIsEditingContact(true);
@@ -676,7 +785,6 @@ const Checkout = () => {
       if (savedAddress.zipCode) addressParts.push(savedAddress.zipCode);
       const shippingAddressStr = addressParts.join(', ');
 
-      // ── STEP 1: Create order ──────────────────────────────────────────────
       await createOrder({
         orderId,
         email:           savedContact.email,
@@ -701,7 +809,6 @@ const Checkout = () => {
         paymentStatus:   'pending',
       });
 
-      // ── STEP 2: Get PayMongo checkout URL ─────────────────────────────────
       let paymentLinkUrl;
       try {
         const result = await createPaymentLink({
@@ -720,7 +827,6 @@ const Checkout = () => {
         return;
       }
 
-      // ── STEP 3: Deduct stock ──────────────────────────────────────────────
       for (const item of cartItems) {
         const product = getProductById(item.productId || item.id);
         if (product) {
@@ -732,7 +838,6 @@ const Checkout = () => {
         }
       }
 
-      // ── STEP 4: Save coords to profile (non-critical) ─────────────────────
       if (addressCoords) {
         try {
           await saveProfile({
@@ -749,7 +854,6 @@ const Checkout = () => {
         } catch { /* non-critical */ }
       }
 
-      // ── STEP 5: Send confirmation email (non-critical) ────────────────────
       try {
         await sendOrderConfirmation({
           to:   savedContact.email,
@@ -765,7 +869,6 @@ const Checkout = () => {
         });
       } catch (emailErr) { console.warn('Email failed:', emailErr); }
 
-      // ── STEP 6: Clear cart → redirect to PayMongo ─────────────────────────
       await clearCart();
       setLoading(false);
       window.location.href = paymentLinkUrl;
@@ -860,25 +963,44 @@ const Checkout = () => {
                 <div className="section-header">
                   <h2>
                     Shipping Address
-                    {isAddressComplete() && !isEditingAddress && <span className="section-complete-badge"><i className="fas fa-check-circle"></i> Saved</span>}
+                    {isAddressComplete() && !isEditingAddress && !isOutsideNCR && <span className="section-complete-badge"><i className="fas fa-check-circle"></i> Saved</span>}
+                    {isOutsideNCR && <span className="section-ncr-badge"><i className="fas fa-exclamation-triangle"></i> Outside NCR</span>}
                   </h2>
                   {!isEditingAddress
                     ? <button type="button" className="edit-info-btn" onClick={() => setIsEditingAddress(true)}><i className="fas fa-pen"></i> Edit</button>
-                    : <button type="button" className="save-info-btn" onClick={handleSaveAddress}><i className="fas fa-check"></i> Save</button>
+                    : <button
+                        type="button"
+                        className="save-info-btn"
+                        onClick={handleSaveAddress}
+                        disabled={isOutsideNCR}
+                        style={isOutsideNCR ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+                      >
+                        <i className="fas fa-check"></i> Save
+                      </button>
                   }
                 </div>
+
+                {/* NCR violation banner — shown in edit mode */}
+                {isEditingAddress && isOutsideNCR && <NCRViolationBanner />}
+
                 {!isEditingAddress ? (
                   <div className="info-display-grid">
                     <div className="info-display-item info-display-full">
                       <span className="info-label"><i className="fas fa-map-marker-alt"></i> Street Address</span>
                       <span className="info-value">{savedAddress.address || <span className="info-missing">Not set — click Edit</span>}</span>
                     </div>
-                    {shippingInfo && (
+                    {/* NCR violation shown in read mode too */}
+                    {isOutsideNCR && (
+                      <div className="info-display-item info-display-full" style={{ padding: 0, background: 'transparent', border: 'none' }}>
+                        <NCRViolationBanner />
+                      </div>
+                    )}
+                    {shippingInfo && !isOutsideNCR && (
                       <div className="info-display-item info-display-full" style={{ padding: 0, background: 'transparent', border: 'none' }}>
                         <ShippingBreakdown shippingInfo={shippingInfo} />
                       </div>
                     )}
-                    {!shippingInfo && isAddressComplete() && (
+                    {!shippingInfo && isAddressComplete() && !isOutsideNCR && (
                       <div className="info-display-item info-display-full" style={{ background: '#fffbeb', borderColor: '#fde68a' }}>
                         <span className="info-label" style={{ color: '#92400e' }}><i className="fas fa-motorcycle"></i> Shipping Fee</span>
                         <span className="info-value" style={{ fontSize: '13px', color: '#78350f' }}>
@@ -887,7 +1009,7 @@ const Checkout = () => {
                         </span>
                       </div>
                     )}
-                    {addressCoords && (
+                    {addressCoords && !isOutsideNCR && (
                       <div className="info-display-item info-display-full" style={{ background: '#eff6ff', borderColor: '#bfdbfe' }}>
                         <span className="info-label" style={{ color: '#1e40af' }}><i className="fas fa-map-marker-alt"></i> Map Pin</span>
                         <span className="info-value" style={{ fontSize: '13px', color: '#1e3a8a' }}>
@@ -906,9 +1028,10 @@ const Checkout = () => {
                         onChange={handleAddressChange}
                         onSelectSuggestion={handleAddressSelect}
                         savedCoords={savedCoords}
+                        onNCRViolation={setIsOutsideNCR}
                       />
                     </div>
-                    {addressCoords && (() => {
+                    {addressCoords && !isOutsideNCR && (() => {
                       const preview = calcLalamoveShipping(STORE_LAT, STORE_LNG, addressCoords.lat, addressCoords.lng, cartItems, products);
                       return preview ? (
                         <div className="form-group full-width">
@@ -1008,12 +1131,17 @@ const Checkout = () => {
                       )}
                     </span>
                     <span>
-                      {shippingInfo
-                        ? <strong style={{ color: '#1e293b' }}>₱{shippingInfo.fee.toLocaleString()}</strong>
-                        : <span style={{ fontSize: '12px', color: '#f59e0b', fontWeight: 600 }}>
-                            <i className="fas fa-map-marker-alt" style={{ marginRight: '4px' }}></i>
-                            Set address first
+                      {isOutsideNCR
+                        ? <span style={{ fontSize: '12px', color: '#dc2626', fontWeight: 700 }}>
+                            <i className="fas fa-ban" style={{ marginRight: '4px' }}></i>
+                            NCR only
                           </span>
+                        : shippingInfo
+                          ? <strong style={{ color: '#1e293b' }}>₱{shippingInfo.fee.toLocaleString()}</strong>
+                          : <span style={{ fontSize: '12px', color: '#f59e0b', fontWeight: 600 }}>
+                              <i className="fas fa-map-marker-alt" style={{ marginRight: '4px' }}></i>
+                              Set address first
+                            </span>
                       }
                     </span>
                   </div>
@@ -1026,13 +1154,15 @@ const Checkout = () => {
                   <div className="summary-row total">
                     <span>Total</span>
                     <span>
-                      {shippingInfo
-                        ? `₱${finalTotal.toLocaleString()}`
-                        : <span style={{ fontSize: '15px', color: '#f59e0b' }}>Set address to see total</span>
+                      {isOutsideNCR
+                        ? <span style={{ fontSize: '14px', color: '#dc2626' }}>Address outside NCR</span>
+                        : shippingInfo
+                          ? `₱${finalTotal.toLocaleString()}`
+                          : <span style={{ fontSize: '15px', color: '#f59e0b' }}>Set address to see total</span>
                       }
                     </span>
                   </div>
-                  {totalDiscount > 0 && (
+                  {totalDiscount > 0 && !isOutsideNCR && (
                     <div className="promo-savings-checkout">
                       <i className="fas fa-piggy-bank"></i>
                       You're saving <strong>₱{totalDiscount.toLocaleString()}</strong> with your promo!
@@ -1040,24 +1170,36 @@ const Checkout = () => {
                   )}
                 </div>
 
+                {/* NCR block notice in summary card */}
+                {isOutsideNCR && (
+                  <div className="ncr-summary-block">
+                    <i className="fas fa-map-marker-alt"></i>
+                    <span>We only deliver within <strong>Metro Manila (NCR)</strong>. Please update your address.</span>
+                  </div>
+                )}
+
                 <button
                   type="submit"
-                  className={`btn btn-primary btn-checkout${!isFormReady() || loading ? ' btn-checkout-disabled' : ''}`}
+                  className={`btn btn-primary btn-checkout${(!isFormReady() || loading) ? ' btn-checkout-disabled' : ''}`}
                   disabled={loading || !isFormReady()}
                 >
                   {loading
                     ? <><i className="fas fa-spinner fa-spin"></i> Processing...</>
-                    : !isFormReady()
-                      ? <><i className="fas fa-lock"></i> Complete Your Info First</>
-                      : shippingInfo
-                        ? <>Pay ₱{finalTotal.toLocaleString()} Securely</>
-                        : <>Pay Securely</>
+                    : isOutsideNCR
+                      ? <><i className="fas fa-ban"></i> Address Outside NCR</>
+                      : !isFormReady()
+                        ? <><i className="fas fa-lock"></i> Complete Your Info First</>
+                        : shippingInfo
+                          ? <>Pay ₱{finalTotal.toLocaleString()} Securely</>
+                          : <>Pay Securely</>
                   }
                 </button>
                 {!isFormReady() && !loading && (
                   <p className="form-incomplete-hint">
                     <i className="fas fa-exclamation-circle"></i>{' '}
-                    {isEditingContact ? 'Click "Save" on Contact Information to continue.'
+                    {isOutsideNCR
+                      ? 'Your address is outside NCR. We only deliver within Metro Manila.'
+                      : isEditingContact ? 'Click "Save" on Contact Information to continue.'
                       : isEditingAddress ? 'Click "Save" on Shipping Address to continue.'
                       : 'Fill in and save your contact and address info above.'}
                   </p>
