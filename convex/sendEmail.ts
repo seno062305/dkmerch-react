@@ -1322,3 +1322,154 @@ export const sendRiderRejectedEmail = internalAction({
     });
   },
 });
+
+
+
+export const sendPaymentReceivedEmail = action({
+  args: {
+    to: v.string(),
+    name: v.string(),
+    orderId: v.string(),
+    items: v.array(
+      v.object({
+        name: v.string(),
+        price: v.number(),
+        quantity: v.number(),
+      })
+    ),
+    total: v.number(),
+    promoCode: v.optional(v.string()),
+    promoName: v.optional(v.string()),
+    discountAmount: v.optional(v.number()),
+    finalTotal: v.optional(v.number()),
+    shippingFee: v.optional(v.number()),
+    shippingDistanceKm: v.optional(v.number()),
+  },
+  handler: async (
+    ctx,
+    {
+      to, name, orderId, items, total,
+      promoCode, promoName, discountAmount, finalTotal,
+      shippingFee, shippingDistanceKm,
+    }: {
+      to: string; name: string; orderId: string;
+      items: { name: string; price: number; quantity: number }[];
+      total: number; promoCode?: string; promoName?: string;
+      discountAmount?: number; finalTotal?: number;
+      shippingFee?: number; shippingDistanceKm?: number;
+    }
+  ): Promise<{ success: boolean; message?: string; id?: string }> => {
+    const subtotalAmount = total - (shippingFee ?? 0);
+    const chargedAmount = finalTotal ?? total;
+    const hasPromo = !!(promoCode && discountAmount && discountAmount > 0);
+    const shortId = orderId.slice(-8).toUpperCase();
+    const trackUrl = `${SITE_URL}/track-order?order=${orderId}`;
+
+    const itemRows = items.map((item) => `
+      <tr>
+        <td style="padding:10px 12px;border-bottom:1px solid #eee;color:#333;font-size:14px;">${item.name}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #eee;text-align:center;color:#555;font-size:14px;">${item.quantity}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #eee;text-align:right;color:#333;font-size:14px;">₱${item.price.toLocaleString()}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #eee;text-align:right;color:#fc1268;font-weight:600;font-size:14px;">₱${(item.price * item.quantity).toLocaleString()}</td>
+      </tr>
+    `).join("");
+
+    const shippingKmLabel = shippingDistanceKm ? ` <span style="font-size:12px;color:#94a3b8;font-weight:400;">(~${shippingDistanceKm} km)</span>` : "";
+    const shippingRow = `
+      <tr>
+        <td colspan="3" style="padding:10px 12px;border-bottom:1px solid #eee;color:#555;font-size:14px;">Shipping Fee${shippingKmLabel}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #eee;text-align:right;color:#333;font-size:14px;">
+          ${(shippingFee ?? 0) === 0 ? '<span style="color:#16a34a;font-weight:600;">FREE</span>' : `₱${(shippingFee ?? 0).toLocaleString()}`}
+        </td>
+      </tr>
+    `;
+
+    const promoRow = hasPromo ? `
+      <tr style="background:#f0fdf4;">
+        <td colspan="3" style="padding:10px 12px;color:#15803d;font-size:14px;font-weight:600;">
+          Promo Code: <span style="font-family:'Courier New',monospace;background:#dcfce7;padding:2px 8px;border-radius:4px;letter-spacing:1px;">${promoCode}</span>
+          ${promoName ? `<span style="color:#6b7280;font-size:12px;margin-left:6px;">(${promoName})</span>` : ""}
+        </td>
+        <td style="padding:10px 12px;text-align:right;color:#16a34a;font-weight:700;font-size:14px;">-₱${discountAmount!.toLocaleString()}</td>
+      </tr>
+    ` : "";
+
+    const summaryShippingLabel = shippingDistanceKm ? `Shipping (~${shippingDistanceKm} km)` : `Shipping`;
+
+    const html = `
+      <div style="font-family:'Segoe UI',sans-serif;max-width:620px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
+        <div style="background:linear-gradient(135deg,#1e3a5f,#2563eb);padding:36px 32px;text-align:center;">
+          <div style="font-size:40px;margin-bottom:10px;">💳</div>
+          <h1 style="color:white;margin:0 0 6px;font-size:26px;font-weight:800;">Payment Received!</h1>
+          <p style="color:rgba(255,255,255,0.85);margin:0;font-size:14px;">DKMerch K-Pop Paradise · Order #${shortId}</p>
+        </div>
+        <div style="background:#eff6ff;padding:18px 32px;border-bottom:1px solid #bfdbfe;text-align:center;">
+          <p style="font-size:14px;color:#1e40af;margin:0;line-height:1.6;">
+            ✅ We've received your payment. Your order is now <strong>awaiting admin confirmation</strong>.<br/>
+            You'll receive another email once your order is confirmed and ready for dispatch.
+          </p>
+        </div>
+        <div style="padding:28px 32px;">
+          <p style="color:#374151;font-size:15px;margin:0 0 6px;">Hi <strong>${name}</strong>!</p>
+          <p style="color:#6b7280;font-size:13px;margin:0 0 22px;">Order ID: <strong style="font-family:monospace;font-size:14px;color:#1e293b;">${orderId}</strong></p>
+          <table style="width:100%;border-collapse:collapse;margin:0 0 20px;border:1px solid #f0f0f0;border-radius:10px;overflow:hidden;">
+            <thead>
+              <tr style="background:#1e3a5f;">
+                <th style="padding:12px;text-align:left;color:white;font-size:13px;">Item</th>
+                <th style="padding:12px;text-align:center;color:white;font-size:13px;">Qty</th>
+                <th style="padding:12px;text-align:right;color:white;font-size:13px;">Unit Price</th>
+                <th style="padding:12px;text-align:right;color:white;font-size:13px;">Subtotal</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemRows}
+              ${shippingRow}
+              ${promoRow}
+            </tbody>
+          </table>
+          <div style="background:#f8fafc;border-radius:10px;padding:18px 20px;margin-bottom:20px;border:1px solid #e2e8f0;">
+            <table style="width:100%;border-collapse:collapse;">
+              <tr>
+                <td style="padding:5px 0;color:#64748b;font-size:14px;">Subtotal</td>
+                <td style="padding:5px 0;text-align:right;color:#1e293b;font-size:14px;">₱${subtotalAmount.toLocaleString()}</td>
+              </tr>
+              <tr>
+                <td style="padding:5px 0;color:#64748b;font-size:14px;">${summaryShippingLabel}</td>
+                <td style="padding:5px 0;text-align:right;color:#1e293b;font-size:14px;">${(shippingFee ?? 0) === 0 ? '<span style="color:#16a34a;font-weight:600;">FREE</span>' : `₱${(shippingFee ?? 0).toLocaleString()}`}</td>
+              </tr>
+              ${hasPromo ? `
+              <tr>
+                <td style="padding:5px 0;color:#16a34a;font-size:14px;font-weight:600;">Promo Discount (${promoCode})</td>
+                <td style="padding:5px 0;text-align:right;color:#16a34a;font-size:14px;font-weight:700;">-₱${discountAmount!.toLocaleString()}</td>
+              </tr>` : ""}
+              <tr style="border-top:2px solid #e2e8f0;">
+                <td style="padding:10px 0 4px;font-size:17px;font-weight:700;color:#1a1a1a;">${hasPromo ? "Total Charged" : "Total Paid"}</td>
+                <td style="padding:10px 0 4px;text-align:right;font-size:22px;font-weight:800;color:#2563eb;">₱${chargedAmount.toLocaleString()}</td>
+              </tr>
+            </table>
+          </div>
+          <div style="background:#fffbeb;border-radius:10px;border:1px solid #fde68a;padding:16px 20px;margin-bottom:20px;">
+            <div style="font-size:13px;color:#92400e;line-height:1.7;">
+              ⏳ <strong>What's next?</strong><br/>
+              Our team will review and confirm your order shortly. Once confirmed, a rider will be assigned to deliver your items.
+            </div>
+          </div>
+          <div style="text-align:center;">
+            <a href="${trackUrl}" style="display:inline-block;background:#2563eb;color:white;text-decoration:none;padding:13px 30px;border-radius:10px;font-size:14px;font-weight:700;">Track My Order</a>
+          </div>
+        </div>
+        <div style="background:#f8f9fa;padding:16px;text-align:center;border-top:1px solid #e9ecef;">
+          <p style="color:#aaa;font-size:12px;margin:0;">© 2026 DKMerch · K-Pop Paradise</p>
+        </div>
+      </div>
+    `;
+
+    return await ctx.runAction(internal.sendEmail.sendEmail, {
+      to,
+      subject: hasPromo
+        ? `💳 Payment Received (saved ₱${discountAmount!.toLocaleString()}!) — Order #${shortId} | DKMerch`
+        : `💳 Payment Received — Order #${shortId} | DKMerch`,
+      html,
+    });
+  },
+});

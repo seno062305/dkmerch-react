@@ -578,7 +578,7 @@ const Checkout = () => {
     user?._id || user?.id ? { userId: user?._id || user?.id } : 'skip'
   );
   const saveProfile           = useMutation(api.users.saveProfile);
-  const sendOrderConfirmation = useAction(api.sendEmail.sendOrderConfirmation);
+  const sendPaymentReceivedEmail = useAction(api.sendEmail.sendPaymentReceivedEmail);
   const createPaymentLink     = useAction(api.payments.createPaymentLink);
 
   const [loading, setLoading]                   = useState(false);
@@ -869,7 +869,7 @@ const Checkout = () => {
       }
 
       try {
-        await sendOrderConfirmation({
+        await sendPaymentReceivedEmail({
           to:   savedContact.email,
           name: savedContact.fullName,
           orderId,
