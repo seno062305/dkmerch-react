@@ -208,8 +208,12 @@ const buildRiderIconHtml = (heading) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Fullscreen map modal — true fullscreen for mobile
+// Fullscreen map modal
+// Desktop: left offset = sidebar width (260px) so it doesn't cover the sidebar
+// Mobile: true fullscreen covering entire viewport
 // ─────────────────────────────────────────────────────────────────────────────
+const SIDEBAR_WIDTH = 260; // must match .rider-sidebar width in CSS
+
 const FullscreenMapModal = ({ address, customerName, coords, riderCoords, riderHeading, onClose }) => {
   const mapRef         = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -218,6 +222,14 @@ const FullscreenMapModal = ({ address, customerName, coords, riderCoords, riderH
   const riderMarkerRef = useRef(null);
   const routeDrawnRef  = useRef(false);
   const [geocoding, setGeocoding] = useState(!coords);
+  // On mobile (≤768px) use true fullscreen; on desktop offset by sidebar
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   useEffect(() => {
     document.body.style.overflow = 'hidden';
@@ -319,27 +331,62 @@ const FullscreenMapModal = ({ address, customerName, coords, riderCoords, riderH
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Mobile: start below the sticky mobile header (52px) so burger stays visible
+  // Desktop: offset left by sidebar width (260px)
+  const MOBILE_HEADER_H = 52;
+
   return (
     <div
-      style={{ position: 'fixed', inset: 0, zIndex: 99999, display: 'flex', flexDirection: 'column', background: '#1a1f36' }}
+      style={{
+        position: 'fixed',
+        top: isMobile ? MOBILE_HEADER_H : 0,
+        bottom: 0,
+        left: isMobile ? 0 : SIDEBAR_WIDTH,
+        right: 0,
+        zIndex: 9999, // below mobile header z-index:200, above everything else
+        display: 'flex',
+        flexDirection: 'column',
+        background: '#1a1f36',
+      }}
       onClick={onClose}
     >
       <div
         style={{ flex: 1, display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}
         onClick={e => e.stopPropagation()}
       >
-        <div className="fullscreen-map-header">
-          <div className="fullscreen-map-header-left">
-            <i className="fas fa-map-marked-alt"></i>
-            <div>
-              <strong>{customerName ? `${customerName}'s Location` : 'Customer Location'}</strong>
-              <span>{address}</span>
+        {/* Desktop only: show address header. Mobile: hidden, burger is already visible above */}
+        {!isMobile && (
+          <div className="fullscreen-map-header">
+            <div className="fullscreen-map-header-left">
+              <i className="fas fa-map-marked-alt"></i>
+              <div>
+                <strong>{customerName ? `${customerName}'s Location` : 'Customer Location'}</strong>
+                <span>{address}</span>
+              </div>
             </div>
+            <button className="fullscreen-map-close" onClick={onClose} type="button" aria-label="Close map">
+              <i className="fas fa-times"></i>
+            </button>
           </div>
-          <button className="fullscreen-map-close" onClick={onClose} type="button" aria-label="Close map">
-            <i className="fas fa-times"></i>
-          </button>
-        </div>
+        )}
+        {/* Mobile: minimal close button in top-right corner */}
+        {isMobile && (
+          <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 1000 }}>
+            <button
+              onClick={onClose}
+              type="button"
+              style={{
+                width: 36, height: 36, borderRadius: '50%',
+                background: 'white', border: 'none',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', fontSize: 14, color: '#374151',
+              }}
+            >
+              <i className="fas fa-times"></i>
+            </button>
+          </div>
+        )}
         {geocoding && (
           <div className="fullscreen-map-loading">
             <div className="fullscreen-map-loading-bar"></div>
@@ -1070,11 +1117,8 @@ const RiderDashboard = () => {
         {/* ── AVAILABLE ORDERS — no subtitle ── */}
         {tab === 'available' && (
           <div className="rider-content">
-            <div className="rider-page-header">
-              <div className="rider-page-header-top">
-                <h1>📦 Available Orders</h1>
-                <div className="rider-live-badge"><span className="sync-dot"></span>Live Updates</div>
-              </div>
+            <div className="rider-live-pill-row">
+              <div className="rider-live-badge"><span className="sync-dot"></span>Live Updates</div>
             </div>
             {confirmedOrders.length === 0 ? (
               <div className="rider-empty"><i className="fas fa-box-open"></i><p>No confirmed orders available right now.</p><span>Updates are real-time via Convex.</span></div>
@@ -1129,7 +1173,7 @@ const RiderDashboard = () => {
         {/* ── MY PICKUPS — no subtitle ── */}
         {tab === 'my-pickups' && (
           <div className="rider-content">
-            <div className="rider-page-header"><h1>🚚 My Pickup Requests</h1></div>
+
             {myPickups.length === 0 ? (
               <div className="rider-empty"><i className="fas fa-truck-pickup"></i><p>No pickup requests yet.</p><span>Go to Available Orders to request your first pickup!</span></div>
             ) : (
@@ -1177,7 +1221,7 @@ const RiderDashboard = () => {
         {/* ── DELIVER — no subtitle ── */}
         {tab === 'deliver' && (
           <div className="rider-content">
-            <div className="rider-page-header"><h1>🚀 Deliver</h1></div>
+
             {gpsError && (
               <div className="rider-gps-error-banner">
                 <i className="fas fa-exclamation-triangle"></i><span>{gpsError}</span><button onClick={() => setGpsError(null)}>✕</button>
