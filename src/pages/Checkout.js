@@ -469,7 +469,7 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords, on
 };
 
 // ─── SHIPPING BREAKDOWN DISPLAY ───────────────────────────────────────────────
-const ShippingBreakdown = ({ shippingInfo }) => {
+const ShippingBreakdown = ({ shippingInfo, isEstimate = false }) => {
   const [expanded, setExpanded] = useState(false);
   if (!shippingInfo) return null;
   return (
@@ -478,7 +478,9 @@ const ShippingBreakdown = ({ shippingInfo }) => {
         <div className="shipping-breakdown-main">
           <i className="fas fa-motorcycle" style={{ color: '#fc1268' }}></i>
           <div>
-            <span className="shipping-fee-label">Estimated Shipping Fee</span>
+            <span className="shipping-fee-label">
+              {isEstimate ? '⚠️ Estimated Shipping Fee' : 'Estimated Shipping Fee'}
+            </span>
             <strong className="shipping-fee-amount">₱{shippingInfo.fee.toLocaleString()}</strong>
           </div>
         </div>
@@ -489,6 +491,16 @@ const ShippingBreakdown = ({ shippingInfo }) => {
           </span>
         </div>
       </div>
+
+      {/* Warning banner when store location is not set by admin */}
+      {isEstimate && (
+        <div className="shipping-estimate-warning">
+          <i className="fas fa-exclamation-triangle"></i>
+          <span>
+            <strong>Shipping fee is an estimate.</strong> The store pickup location hasn't been precisely set yet — the actual fee may differ slightly when your rider is assigned.
+          </span>
+        </div>
+      )}
 
       {expanded && (
         <div className="shipping-breakdown-details">
@@ -556,8 +568,10 @@ const Checkout = () => {
   const updateProduct = useUpdateProduct();
 
   const storeSettings = useQuery(api.settings.getSettings);
-  const STORE_LAT     = storeSettings?.storeLat ?? 14.5995;
-  const STORE_LNG     = storeSettings?.storeLng ?? 121.0;
+  // True only when admin has explicitly saved real coords
+  const hasStoreLocation = !!(storeSettings?.storeLat && storeSettings?.storeLng);
+  const STORE_LAT = storeSettings?.storeLat ?? 14.5995;
+  const STORE_LNG = storeSettings?.storeLng ?? 121.0;
 
   const savedProfile = useQuery(
     api.users.getProfile,
@@ -997,7 +1011,7 @@ const Checkout = () => {
                     )}
                     {shippingInfo && !isOutsideNCR && (
                       <div className="info-display-item info-display-full" style={{ padding: 0, background: 'transparent', border: 'none' }}>
-                        <ShippingBreakdown shippingInfo={shippingInfo} />
+                        <ShippingBreakdown shippingInfo={shippingInfo} isEstimate={!hasStoreLocation} />
                       </div>
                     )}
                     {!shippingInfo && isAddressComplete() && !isOutsideNCR && (
@@ -1035,7 +1049,7 @@ const Checkout = () => {
                       const preview = calcLalamoveShipping(STORE_LAT, STORE_LNG, addressCoords.lat, addressCoords.lng, cartItems, products);
                       return preview ? (
                         <div className="form-group full-width">
-                          <ShippingBreakdown shippingInfo={preview} />
+                          <ShippingBreakdown shippingInfo={preview} isEstimate={!hasStoreLocation} />
                         </div>
                       ) : null;
                     })()}
