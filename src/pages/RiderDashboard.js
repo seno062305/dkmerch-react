@@ -113,6 +113,13 @@ const GPS = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// NCR map constants — locks ALL maps to Metro Manila only
+// ─────────────────────────────────────────────────────────────────────────────
+const NCR_BOUNDS = [[14.3500, 120.8600], [14.8000, 121.1500]];
+const NCR_CENTER = [14.5995, 121.0];
+const NCR_MIN_ZOOM = 11;
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Route fetcher (OSRM)
 // ─────────────────────────────────────────────────────────────────────────────
 const fetchRoute = async (fromLat, fromLng, toLat, toLng) => {
@@ -201,7 +208,7 @@ const buildRiderIconHtml = (heading) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Fullscreen map modal
+// Fullscreen map modal — true fullscreen for mobile
 // ─────────────────────────────────────────────────────────────────────────────
 const FullscreenMapModal = ({ address, customerName, coords, riderCoords, riderHeading, onClose }) => {
   const mapRef         = useRef(null);
@@ -214,7 +221,13 @@ const FullscreenMapModal = ({ address, customerName, coords, riderCoords, riderH
 
   useEffect(() => {
     document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = ''; };
+    document.body.style.position = 'fixed';
+    document.body.style.width = '100%';
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+    };
   }, []);
 
   useEffect(() => {
@@ -226,10 +239,14 @@ const FullscreenMapModal = ({ address, customerName, coords, riderCoords, riderH
       if (!window.L || !mapRef.current || unmountedRef.current) return;
       try {
         const L      = window.L;
-        const startLat = coords?.lat ?? 14.5995;
-        const startLng = coords?.lng ?? 120.9842;
-        const map = L.map(mapRef.current, { zoomControl: false, tap: false, scrollWheelZoom: true })
-          .setView([startLat, startLng], coords ? 16 : 14);
+        const startLat = coords?.lat ?? NCR_CENTER[0];
+        const startLng = coords?.lng ?? NCR_CENTER[1];
+        const map = L.map(mapRef.current, {
+          zoomControl: false, tap: false, scrollWheelZoom: true,
+          minZoom: NCR_MIN_ZOOM, maxZoom: 19,
+          maxBounds: NCR_BOUNDS, maxBoundsViscosity: 1.0,
+        }).setView([startLat, startLng], coords ? 16 : NCR_MIN_ZOOM + 1);
+        map.setMaxBounds(NCR_BOUNDS);
         L.control.zoom({ position: 'bottomright' }).addTo(map);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -303,8 +320,14 @@ const FullscreenMapModal = ({ address, customerName, coords, riderCoords, riderH
   }, []);
 
   return (
-    <div className="fullscreen-map-overlay" onClick={onClose}>
-      <div className="fullscreen-map-modal" onClick={e => e.stopPropagation()}>
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 99999, display: 'flex', flexDirection: 'column', background: '#1a1f36' }}
+      onClick={onClose}
+    >
+      <div
+        style={{ flex: 1, display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}
+        onClick={e => e.stopPropagation()}
+      >
         <div className="fullscreen-map-header">
           <div className="fullscreen-map-header-left">
             <i className="fas fa-map-marked-alt"></i>
@@ -323,7 +346,7 @@ const FullscreenMapModal = ({ address, customerName, coords, riderCoords, riderH
             <span>Locating address on map…</span>
           </div>
         )}
-        <div ref={mapRef} className="fullscreen-map-container" />
+        <div ref={mapRef} style={{ flex: 1, width: '100%', minHeight: 0 }} />
         <div className="fullscreen-map-footer">
           <span><i className="fas fa-hand-pointer"></i> Pinch to zoom · Drag to pan</span>
           <span className="fullscreen-map-footer-right">
@@ -338,7 +361,7 @@ const FullscreenMapModal = ({ address, customerName, coords, riderCoords, riderH
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Customer map (inline)
+// Customer map (inline) — single Full Map button only, no duplicate link
 // ─────────────────────────────────────────────────────────────────────────────
 const CustomerMap = ({ orderId, allOrders, riderCoords, riderHeading }) => {
   const mapRef             = useRef(null);
@@ -385,10 +408,14 @@ const CustomerMap = ({ orderId, allOrders, riderCoords, riderHeading }) => {
     if (!leafletLoaded || mapInstanceRef.current || !mapRef.current) return;
     try {
       const L        = window.L;
-      const startLat = savedCoords?.lat ?? 14.5995;
-      const startLng = savedCoords?.lng ?? 120.9842;
-      const map = L.map(mapRef.current, { zoomControl: false, tap: false, scrollWheelZoom: false, dragging: true })
-        .setView([startLat, startLng], savedCoords ? 16 : 14);
+      const startLat = savedCoords?.lat ?? NCR_CENTER[0];
+      const startLng = savedCoords?.lng ?? NCR_CENTER[1];
+      const map = L.map(mapRef.current, {
+        zoomControl: false, tap: false, scrollWheelZoom: false, dragging: true,
+        minZoom: NCR_MIN_ZOOM, maxZoom: 19,
+        maxBounds: NCR_BOUNDS, maxBoundsViscosity: 1.0,
+      }).setView([startLat, startLng], savedCoords ? 16 : NCR_MIN_ZOOM + 1);
+      map.setMaxBounds(NCR_BOUNDS);
       L.control.zoom({ position: 'bottomright' }).addTo(map);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -542,16 +569,15 @@ const CustomerMap = ({ orderId, allOrders, riderCoords, riderHeading }) => {
         {mapError && <div className="customer-map-error"><i className="fas fa-exclamation-triangle"></i> {mapError}</div>}
         <div className="customer-map-inner-wrapper">
           <div ref={mapRef} className="customer-map-container" />
+          {/* Single fullscreen button only — no duplicate link */}
           <button className="customer-map-fullscreen-btn" onClick={() => setShowFullscreen(true)} type="button" title="View full map">
-            <i className="fas fa-expand-alt"></i><span>View Full Map</span>
+            <i className="fas fa-expand-alt"></i><span>Full Map</span>
           </button>
         </div>
+        {/* Zoom hint only — no Full Screen link */}
         <div className="customer-map-zoom-hint">
           <i className="fas fa-search-plus"></i>
           <span>Use <strong>+</strong> / <strong>−</strong> on map to zoom</span>
-          <button className="customer-map-fullscreen-link" onClick={() => setShowFullscreen(true)} type="button">
-            <i className="fas fa-expand-alt"></i> Full Screen
-          </button>
         </div>
       </div>
       {showFullscreen && address && (
@@ -1041,11 +1067,12 @@ const RiderDashboard = () => {
       )}
 
       <main className="rider-main">
+        {/* ── AVAILABLE ORDERS — no subtitle ── */}
         {tab === 'available' && (
           <div className="rider-content">
             <div className="rider-page-header">
               <div className="rider-page-header-top">
-                <div><h1>📦 Available Orders</h1><p>Confirmed orders ready for pickup — sorted by most recently confirmed.</p></div>
+                <h1>📦 Available Orders</h1>
                 <div className="rider-live-badge"><span className="sync-dot"></span>Live Updates</div>
               </div>
             </div>
@@ -1099,9 +1126,10 @@ const RiderDashboard = () => {
           </div>
         )}
 
+        {/* ── MY PICKUPS — no subtitle ── */}
         {tab === 'my-pickups' && (
           <div className="rider-content">
-            <div className="rider-page-header"><h1>🚚 My Pickup Requests</h1><p>Active and recent pickup requests — approved ones appear first.</p></div>
+            <div className="rider-page-header"><h1>🚚 My Pickup Requests</h1></div>
             {myPickups.length === 0 ? (
               <div className="rider-empty"><i className="fas fa-truck-pickup"></i><p>No pickup requests yet.</p><span>Go to Available Orders to request your first pickup!</span></div>
             ) : (
@@ -1146,9 +1174,10 @@ const RiderDashboard = () => {
           </div>
         )}
 
+        {/* ── DELIVER — no subtitle ── */}
         {tab === 'deliver' && (
           <div className="rider-content">
-            <div className="rider-page-header"><h1>🚀 Deliver</h1><p>Notify the customer you're on the way, then confirm delivery with their OTP.</p></div>
+            <div className="rider-page-header"><h1>🚀 Deliver</h1></div>
             {gpsError && (
               <div className="rider-gps-error-banner">
                 <i className="fas fa-exclamation-triangle"></i><span>{gpsError}</span><button onClick={() => setGpsError(null)}>✕</button>
@@ -1223,7 +1252,18 @@ const RiderDashboard = () => {
                                     <span>Sending location every 5 seconds{currentPosition && <> · <strong>±{Math.round(currentPosition.accuracy || 0)}m</strong></>}</span>
                                   </div>
                                   {currentPosition && <div className="rider-gps-coords"><i className="fas fa-crosshairs"></i>{currentPosition.lat.toFixed(6)}, {currentPosition.lng.toFixed(6)}</div>}
-                                  <button className="rider-gps-stop-btn" onClick={stopTrackingLocal}><i className="fas fa-stop-circle"></i> Stop Sharing Location</button>
+                                  {/* Stop sharing disabled — auto-stops on delivery confirm */}
+                                  <button
+                                    className="rider-gps-stop-btn"
+                                    disabled={true}
+                                    style={{ opacity: 0.4, cursor: 'not-allowed' }}
+                                    title="GPS tracking cannot be stopped during active delivery"
+                                  >
+                                    <i className="fas fa-stop-circle"></i> Stop Sharing Location
+                                  </button>
+                                  <p style={{ fontSize: 11, color: '#6b7280', margin: '6px 0 0', textAlign: 'center' }}>
+                                    📍 GPS auto-stops when delivery is confirmed
+                                  </p>
                                 </>
                               ) : (
                                 <>

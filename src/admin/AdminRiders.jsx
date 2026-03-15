@@ -9,6 +9,31 @@ const SITE_URL = process.env.REACT_APP_SITE_URL || 'https://dkmerchwebsite.verce
 const toDateStr = (ms) => new Date(ms).toISOString().split('T')[0];
 const todayStr  = toDateStr(Date.now());
 
+// ── NCR bounds ──
+const NCR_BOUNDS = [[14.3500, 120.8600], [14.8000, 121.1500]];
+const NCR_CENTER = [14.5995, 121.0];
+const NCR_DEFAULT_ZOOM = 12;
+const NCR_MIN_ZOOM = 11;
+
+// ── Real-time timeAgo ──
+const useTimeAgo = (ts) => {
+  const [display, setDisplay] = useState('');
+  useEffect(() => {
+    if (!ts) { setDisplay('unknown'); return; }
+    const update = () => {
+      const diff = Math.floor((Date.now() - ts) / 1000);
+      if (diff < 10)   return setDisplay('just now');
+      if (diff < 60)   return setDisplay(`${diff}s ago`);
+      if (diff < 3600) return setDisplay(`${Math.floor(diff / 60)}m ago`);
+      setDisplay(`${Math.floor(diff / 3600)}h ago`);
+    };
+    update();
+    const id = setInterval(update, 1000);
+    return () => clearInterval(id);
+  }, [ts]);
+  return display;
+};
+
 const timeAgo = (ts) => {
   if (!ts) return 'unknown';
   const diff = Math.floor((Date.now() - ts) / 1000);
@@ -19,16 +44,16 @@ const timeAgo = (ts) => {
 };
 
 const REJECT_REASONS = [
-  { value: 'incomplete_documents', label: 'Incomplete Documents',     hint: 'Missing required IDs or photos' },
-  { value: 'invalid_license',      label: 'Invalid License',          hint: 'License number is invalid or unverifiable' },
-  { value: 'invalid_plate',        label: 'Invalid Plate Number',     hint: 'Plate number cannot be verified' },
-  { value: 'failed_verification',  label: 'Failed Identity Check',    hint: 'Could not verify applicant identity' },
-  { value: 'area_unavailable',     label: 'Area Not Covered',         hint: 'Delivery area not yet available' },
-  { value: 'other',                label: 'Other Reason',             hint: 'Specify in the note below' },
+  { value: 'incomplete_documents', label: 'Incomplete Documents',    hint: 'Missing required IDs or photos' },
+  { value: 'invalid_license',      label: 'Invalid License',         hint: 'License number is invalid or unverifiable' },
+  { value: 'invalid_plate',        label: 'Invalid Plate Number',    hint: 'Plate number cannot be verified' },
+  { value: 'failed_verification',  label: 'Failed Identity Check',   hint: 'Could not verify applicant identity' },
+  { value: 'area_unavailable',     label: 'Area Not Covered',        hint: 'Delivery area not yet available' },
+  { value: 'other',                label: 'Other Reason',            hint: 'Specify in the note below' },
 ];
 
 // ─────────────────────────────────────────────────────────────
-// Rider Applications
+// Rider ID Card Modal
 // ─────────────────────────────────────────────────────────────
 const RiderIdCardModal = ({ rider, onClose }) => {
   const cardRef = useRef();
@@ -182,13 +207,13 @@ const LiveBadge = ({ orderId }) => {
 // Notification Bell
 // ─────────────────────────────────────────────────────────────
 const NotificationBell = () => {
-  const [open, setOpen] = useState(false);
-  const dropdownRef     = useRef(null);
-  const notifications   = useQuery(api.riderNotifications.getRecent) ?? [];
-  const unread          = useQuery(api.riderNotifications.getUnread)  ?? [];
-  const markAllRead     = useMutation(api.riderNotifications.markAllRead);
-  const clearAll        = useMutation(api.riderNotifications.clearAll);
-  const unreadCount     = unread.length;
+  const [open, setOpen]   = useState(false);
+  const dropdownRef       = useRef(null);
+  const notifications     = useQuery(api.riderNotifications.getRecent) ?? [];
+  const unread            = useQuery(api.riderNotifications.getUnread)  ?? [];
+  const markAllRead       = useMutation(api.riderNotifications.markAllRead);
+  const clearAll          = useMutation(api.riderNotifications.clearAll);
+  const unreadCount       = unread.length;
   const handleOpen = async () => { setOpen(o => !o); if (!open && unreadCount > 0) await markAllRead().catch(() => {}); };
   const timeAgoStr = (isoStr) => {
     const diff = Date.now() - new Date(isoStr).getTime();
@@ -232,27 +257,33 @@ const NotificationBell = () => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// LiveMapModal — realtime GPS, persists until order complete
+// LiveMapModal — NCR-locked map
 // ─────────────────────────────────────────────────────────────
 const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
-  const mapRef             = useRef(null);
-  const mapObjRef          = useRef(null);
-  const markerRef          = useRef(null);
-  const lastKnownMarkerRef = useRef(null);
-  const circleRef          = useRef(null);
-  const routeLineRef       = useRef(null);
-  const destMarkerRef      = useRef(null);
-  const routeAbortRef      = useRef(null);
-  const routeTimerRef      = useRef(null);
-  const lastPlottedRef     = useRef({ lat: null, lng: null });
-  const initialCenteredRef = useRef(false);
-  const pollIntervalRef    = useRef(null);
+  const mapRef              = useRef(null);
+  const mapObjRef           = useRef(null);
+  const markerRef           = useRef(null);
+  const lastKnownMarkerRef  = useRef(null);
+  const circleRef           = useRef(null);
+  const routeLineRef        = useRef(null);
+  const destMarkerRef       = useRef(null);
+  const routeAbortRef       = useRef(null);
+  const routeTimerRef       = useRef(null);
+  const lastPlottedRef      = useRef({ lat: null, lng: null });
+  const lastRoutePlottedRef = useRef({ lat: null, lng: null });
+  const mapReadyRef         = useRef(false);
+  const pollIntervalRef     = useRef(null);
 
   const [leafletReady, setLeafletReady] = useState(!!window.L);
-  const [lastUpdate,   setLastUpdate]   = useState(null);
   const [isFullscreen, setIsFullscreen] = useState(fullscreen);
   const [sidebarWidth, setSidebarWidth] = useState(0);
-  const [pollTick,     setPollTick]     = useState(0); // force re-query
+  const [, forceRender] = useState(0);
+
+  // Real-time timer — ticks every second
+  useEffect(() => {
+    const id = setInterval(() => forceRender(n => n + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     const measure = () => {
@@ -263,23 +294,19 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
     return () => window.removeEventListener('resize', measure);
   }, []);
 
-  // Poll rider location every 5 seconds while map is open
   useEffect(() => {
-    pollIntervalRef.current = setInterval(() => setPollTick(t => t + 1), 5000);
+    pollIntervalRef.current = setInterval(() => {}, 3000);
     return () => { if (pollIntervalRef.current) clearInterval(pollIntervalRef.current); };
   }, []);
 
-  // Use pollTick to keep the query fresh (Convex real-time subs handle this automatically,
-  // but the tick ensures React re-renders with latest data)
   const location = useQuery(api.riders.getRiderLocation, { orderId });
 
   const isLive       = !!(location?.isTracking && location?.updatedAt && (Date.now() - location.updatedAt) < 30000);
   const hasLoc       = !!(location?.lat && location?.lng && location.lat !== 0 && location.lng !== 0);
   const hasLastKnown = !!(location?.lastKnownLat && location?.lastKnownLng);
 
-  // Determine if delivery is completed — keep map showing until then
-  const orderStatus   = (order.orderStatus || order.status || '').toLowerCase();
-  const isDelivered   = orderStatus === 'completed' || orderStatus === 'delivered';
+  const orderStatus = (order.orderStatus || order.status || '').toLowerCase();
+  const isDelivered = orderStatus === 'completed' || orderStatus === 'delivered';
 
   // Lock body scroll
   useEffect(() => {
@@ -300,61 +327,136 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
     const script = document.createElement('script'); script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'; script.onload = () => setLeafletReady(true); document.head.appendChild(script);
   }, []);
 
-  // Init map — center on destination pin immediately
+  // Init map — NCR-locked with minZoom + maxBounds + maxBoundsViscosity
   useEffect(() => {
     if (!leafletReady || !mapRef.current || mapObjRef.current) return;
     const L = window.L;
-    const map = L.map(mapRef.current, { zoomControl: true });
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors', maxZoom: 19 }).addTo(map);
+
+    const map = L.map(mapRef.current, {
+      zoomControl: true,
+      minZoom: NCR_MIN_ZOOM,
+      maxZoom: 19,
+      maxBounds: NCR_BOUNDS,
+      maxBoundsViscosity: 1.0,
+    });
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors',
+      maxZoom: 19,
+      minZoom: NCR_MIN_ZOOM,
+    }).addTo(map);
+
+    // Also call setMaxBounds after init for extra enforcement
+    map.setMaxBounds(NCR_BOUNDS);
 
     const destLat = order?.addressLat;
     const destLng = order?.addressLng;
 
-    if (destLat && destLng) {
+    const destInNCR = destLat && destLng &&
+      destLat >= 14.35 && destLat <= 14.80 &&
+      destLng >= 120.86 && destLng <= 121.15;
+
+    if (destInNCR) {
       map.setView([destLat, destLng], 15);
       const destIcon = L.divIcon({ html: `<div style="width:40px;height:40px;background:linear-gradient(135deg,#fc1268,#e0005a);border-radius:50%;border:3px solid white;box-shadow:0 3px 14px rgba(252,18,104,0.5);display:flex;align-items:center;justify-content:center;font-size:20px;">📍</div>`, className: '', iconSize: [40, 40], iconAnchor: [20, 40] });
       const dm = L.marker([destLat, destLng], { icon: destIcon }).addTo(map);
       dm.bindPopup(`<b>📍 Deliver to:</b><br>${order?.customerName || 'Customer'}<br><small>${order?.shippingAddress || ''}</small>`).openPopup();
       destMarkerRef.current = dm;
     } else {
-      map.setView([14.5995, 120.9842], 12);
+      map.setView(NCR_CENTER, NCR_DEFAULT_ZOOM);
     }
 
     mapObjRef.current = map;
+    mapReadyRef.current = true;
     setTimeout(() => { try { map.invalidateSize(); } catch {} }, 150);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leafletReady]);
 
-  useEffect(() => { if (mapObjRef.current) setTimeout(() => { try { mapObjRef.current.invalidateSize(); } catch {} }, 150); }, [isFullscreen]);
-
-  // Auto-center on last known location when map first loads (if no live GPS)
   useEffect(() => {
-    if (!mapObjRef.current || !location || initialCenteredRef.current) return;
-    if (!isLive && hasLastKnown) {
-      initialCenteredRef.current = true;
-      try { mapObjRef.current.setView([location.lastKnownLat, location.lastKnownLng], 15, { animate: false }); } catch {}
+    if (mapObjRef.current) setTimeout(() => { try { mapObjRef.current.invalidateSize(); } catch {} }, 150);
+  }, [isFullscreen]);
+
+  // Show last known location when offline
+  useEffect(() => {
+    if (!mapReadyRef.current || !mapObjRef.current || !location || !window.L) return;
+    if (isLive) return;
+    if (!hasLastKnown) return;
+
+    const L = window.L;
+    const map = mapObjRef.current;
+    const { lastKnownLat, lastKnownLng, lastKnownAt, lastKnownAddress } = location;
+
+    const prev = lastPlottedRef.current;
+    if (prev.lat === lastKnownLat && prev.lng === lastKnownLng && lastKnownMarkerRef.current) return;
+    lastPlottedRef.current = { lat: lastKnownLat, lng: lastKnownLng };
+
+    const lastTimeStr = lastKnownAt
+      ? new Date(lastKnownAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })
+      : '';
+
+    const ghostIcon = L.divIcon({
+      className: '',
+      html: `<div style="position:relative;width:40px;height:40px;">
+        <div style="width:40px;height:40px;background:linear-gradient(135deg,#6b7280,#9ca3af);border-radius:50%;border:3px solid white;display:flex;align-items:center;justify-content:center;font-size:20px;opacity:0.88;">🛵</div>
+        <div style="position:absolute;top:-5px;right:-5px;background:#f59e0b;color:white;border-radius:50%;width:17px;height:17px;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid white;">!</div>
+      </div>`,
+      iconSize: [40, 40], iconAnchor: [20, 20]
+    });
+
+    if (!lastKnownMarkerRef.current) {
+      try {
+        lastKnownMarkerRef.current = L.marker([lastKnownLat, lastKnownLng], { icon: ghostIcon })
+          .addTo(map)
+          .bindPopup(`<div style="min-width:180px">
+            <strong>🛵 ${order.riderInfo?.name || 'Rider'}</strong><br>
+            <span style="color:#f59e0b;font-weight:600;font-size:12px">⚠️ Last seen ${lastTimeStr}</span>
+            ${lastKnownAddress ? `<br><span style="color:#374151;font-size:11px">📍 ${lastKnownAddress}</span>` : ''}
+          </div>`)
+          .openPopup();
+      } catch {}
+    } else {
+      try {
+        lastKnownMarkerRef.current.setLatLng([lastKnownLat, lastKnownLng]);
+        lastKnownMarkerRef.current.setIcon(ghostIcon);
+      } catch {}
     }
-    if (isLive && hasLoc) { initialCenteredRef.current = true; }
-  }, [location, isLive, hasLoc, hasLastKnown]);
+
+    const destLat = order?.addressLat;
+    const destLng = order?.addressLng;
+    if (destLat && destLng) drawRoute(lastKnownLat, lastKnownLng, destLat, destLng, true);
+
+    try { map.setView([lastKnownLat, lastKnownLng], 15, { animate: true }); } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location, isLive, hasLastKnown, mapReadyRef.current]);
 
   const clearRoute = useCallback(() => {
     if (routeLineRef.current) {
-      if (Array.isArray(routeLineRef.current)) { routeLineRef.current.forEach(l => { try { l.remove(); } catch {} }); }
-      else { try { routeLineRef.current.remove(); } catch {} }
+      const lines = Array.isArray(routeLineRef.current) ? routeLineRef.current : [routeLineRef.current];
+      lines.forEach(l => { try { l.remove(); } catch {} });
       routeLineRef.current = null;
     }
+    lastRoutePlottedRef.current = { lat: null, lng: null };
   }, []);
 
   const drawRoute = useCallback((lat, lng, destLat, destLng, dashed = false) => {
     if (routeAbortRef.current) { routeAbortRef.current.abort(); routeAbortRef.current = null; }
     if (routeTimerRef.current) clearTimeout(routeTimerRef.current);
+
     routeTimerRef.current = setTimeout(async () => {
       if (!mapObjRef.current || !window.L) return;
-      const L = window.L; const map = mapObjRef.current; clearRoute();
+      const L = window.L; const map = mapObjRef.current;
+      clearRoute();
+
       if (dashed) {
-        try { routeLineRef.current = L.polyline([[lat, lng], [destLat, destLng]], { color: '#9ca3af', weight: 3, opacity: 0.75, dashArray: '8, 8' }).addTo(map); map.fitBounds(L.latLngBounds([lat, lng], [destLat, destLng]), { padding: [48, 48], maxZoom: 17 }); } catch {}
+        try {
+          routeLineRef.current = L.polyline([[lat, lng], [destLat, destLng]], {
+            color: '#9ca3af', weight: 3, opacity: 0.75, dashArray: '8, 8'
+          }).addTo(map);
+          map.fitBounds(L.latLngBounds([lat, lng], [destLat, destLng]), { padding: [48, 48], maxZoom: 17 });
+        } catch {}
         return;
       }
+
       const controller = new AbortController(); routeAbortRef.current = controller;
       try {
         const url = `https://router.project-osrm.org/route/v1/bike/${lng},${lat};${destLng},${destLat}?overview=full&geometries=geojson`;
@@ -364,77 +466,84 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
           const coords = data.routes[0].geometry.coordinates.map(([lo, la]) => [la, lo]);
           const outline = L.polyline(coords, { color: 'white', weight: 7, opacity: 0.6 }).addTo(map);
           const line    = L.polyline(coords, { color: '#e53e3e', weight: 4.5, opacity: 0.92 }).addTo(map);
-          routeLineRef.current = [outline, line]; map.fitBounds(L.latLngBounds(coords), { padding: [48, 48], maxZoom: 17 });
+          routeLineRef.current = [outline, line];
+          lastRoutePlottedRef.current = { lat, lng };
+          map.fitBounds(L.latLngBounds(coords), { padding: [48, 48], maxZoom: 17 });
         } else { throw new Error('no route'); }
       } catch (err) {
         if (err?.name === 'AbortError') return;
-        try { const dLat = order?.addressLat, dLng = order?.addressLng; if (dLat && dLng) { routeLineRef.current = window.L.polyline([[lat, lng], [dLat, dLng]], { color: '#e53e3e', weight: 4, opacity: 0.8, dashArray: '10, 8' }).addTo(mapObjRef.current); mapObjRef.current.fitBounds(window.L.latLngBounds([lat, lng], [dLat, dLng]), { padding: [48, 48], maxZoom: 17 }); } } catch {}
-      } finally { if (routeAbortRef.current === controller) routeAbortRef.current = null; }
+        try {
+          if (destLat && destLng && mapObjRef.current) {
+            routeLineRef.current = window.L.polyline([[lat, lng], [destLat, destLng]], {
+              color: '#e53e3e', weight: 4, opacity: 0.8, dashArray: '10, 8'
+            }).addTo(mapObjRef.current);
+            mapObjRef.current.fitBounds(window.L.latLngBounds([lat, lng], [destLat, destLng]), { padding: [48, 48], maxZoom: 17 });
+          }
+        } catch {}
+      } finally {
+        if (routeAbortRef.current === controller) routeAbortRef.current = null;
+      }
     }, 600);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clearRoute, order]);
 
-  // Update rider marker on location change
+  // Update rider marker
   useEffect(() => {
-    if (!mapObjRef.current || !window.L) return;
+    if (!mapObjRef.current || !window.L || !isLive || !hasLoc) return;
     const L = window.L; const map = mapObjRef.current;
     const destLat = order?.addressLat; const destLng = order?.addressLng;
+    const { lat, lng, accuracy, updatedAt } = location;
 
-    if (isLive && hasLoc) {
-      const { lat, lng, accuracy, updatedAt } = location;
-      const prev = lastPlottedRef.current;
-      if (prev.lat === lat && prev.lng === lng) return;
-      lastPlottedRef.current = { lat, lng };
+    const prev = lastPlottedRef.current;
+    const moved = prev.lat !== lat || prev.lng !== lng;
+    if (!moved && markerRef.current) return;
+    lastPlottedRef.current = { lat, lng };
 
-      if (lastKnownMarkerRef.current) { try { lastKnownMarkerRef.current.remove(); } catch {} lastKnownMarkerRef.current = null; }
-
-      if (!markerRef.current) {
-        const riderIcon = L.divIcon({ html: `<div style="width:40px;height:40px;background:linear-gradient(135deg,#fc1268,#e0005a);border-radius:50%;border:3px solid white;box-shadow:0 3px 14px rgba(252,18,104,0.55);display:flex;align-items:center;justify-content:center;font-size:20px;">🛵</div>`, className: '', iconSize: [40, 40], iconAnchor: [20, 20] });
-        markerRef.current = L.marker([lat, lng], { icon: riderIcon }).addTo(map);
-        markerRef.current.bindPopup(`<b>🛵 ${order.riderInfo?.name || 'Rider'}</b><br>📍 Live location`);
-      } else {
-        try { markerRef.current.setLatLng([lat, lng]); } catch {}
-      }
-
-      if (circleRef.current) { try { circleRef.current.remove(); } catch {} circleRef.current = null; }
-      if (accuracy) { try { circleRef.current = L.circle([lat, lng], { radius: accuracy, color: '#fc1268', fillColor: '#fc1268', fillOpacity: 0.07, weight: 1.5 }).addTo(map); } catch {} }
-
-      if (destLat && destLng) { drawRoute(lat, lng, destLat, destLng, false); }
-      else { try { map.flyTo([lat, lng], Math.max(map.getZoom(), 16), { animate: true, duration: 1 }); } catch {} }
-      setLastUpdate(new Date(updatedAt));
-      return;
+    if (lastKnownMarkerRef.current) {
+      try { lastKnownMarkerRef.current.remove(); } catch {}
+      lastKnownMarkerRef.current = null;
     }
 
-    if (!isLive && hasLastKnown) {
-      const { lastKnownLat, lastKnownLng, lastKnownAt, lastKnownAddress } = location;
-      if (markerRef.current) { try { markerRef.current.setOpacity(0); } catch {} }
-      if (circleRef.current) { try { circleRef.current.remove(); } catch {} circleRef.current = null; }
+    if (!markerRef.current) {
+      const riderIcon = L.divIcon({ html: `<div style="width:40px;height:40px;background:linear-gradient(135deg,#fc1268,#e0005a);border-radius:50%;border:3px solid white;box-shadow:0 3px 14px rgba(252,18,104,0.55);display:flex;align-items:center;justify-content:center;font-size:20px;">🛵</div>`, className: '', iconSize: [40, 40], iconAnchor: [20, 20] });
+      markerRef.current = L.marker([lat, lng], { icon: riderIcon }).addTo(map);
+      markerRef.current.bindPopup(`<b>🛵 ${order.riderInfo?.name || 'Rider'}</b><br>📍 Live location`);
+    } else {
+      try { markerRef.current.setLatLng([lat, lng]); } catch {}
+    }
 
-      const ghostIcon = L.divIcon({ className: '', html: `<div style="position:relative;width:40px;height:40px;"><div style="width:40px;height:40px;background:linear-gradient(135deg,#6b7280,#9ca3af);border-radius:50%;border:3px solid white;display:flex;align-items:center;justify-content:center;font-size:20px;opacity:0.88;">🛵</div><div style="position:absolute;top:-5px;right:-5px;background:#f59e0b;color:white;border-radius:50%;width:17px;height:17px;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid white;">!</div></div>`, iconSize: [40, 40], iconAnchor: [20, 20] });
-      const lastTimeStr = lastKnownAt ? new Date(lastKnownAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }) : '';
+    if (circleRef.current) { try { circleRef.current.remove(); } catch {} circleRef.current = null; }
+    if (accuracy) {
+      try { circleRef.current = L.circle([lat, lng], { radius: accuracy, color: '#fc1268', fillColor: '#fc1268', fillOpacity: 0.07, weight: 1.5 }).addTo(map); } catch {}
+    }
 
-      if (!lastKnownMarkerRef.current) {
-        try { lastKnownMarkerRef.current = L.marker([lastKnownLat, lastKnownLng], { icon: ghostIcon }).addTo(map).bindPopup(`<div style="min-width:160px"><strong>🛵 ${order.riderInfo?.name || 'Rider'}</strong><br><span style="color:#f59e0b;font-weight:600;font-size:12px">⚠️ Last seen ${lastTimeStr}</span>${lastKnownAddress ? `<br><span style="color:#6b7280;font-size:11px">📍 ${lastKnownAddress}</span>` : ''}</div>`); } catch {}
-      } else {
-        try { lastKnownMarkerRef.current.setLatLng([lastKnownLat, lastKnownLng]); lastKnownMarkerRef.current.setIcon(ghostIcon); } catch {}
-      }
+    const lastR = lastRoutePlottedRef.current;
+    const movedFarFromRoute = !lastR.lat ||
+      Math.abs(lat - lastR.lat) > 0.00015 ||
+      Math.abs(lng - lastR.lng) > 0.00015;
+    const noRoute = !routeLineRef.current;
 
-      if (destLat && destLng) { drawRoute(lastKnownLat, lastKnownLng, destLat, destLng, true); }
-      else { try { map.panTo([lastKnownLat, lastKnownLng]); } catch {} }
-      if (lastKnownAt) setLastUpdate(new Date(lastKnownAt));
+    if (destLat && destLng && (noRoute || movedFarFromRoute)) {
+      drawRoute(lat, lng, destLat, destLng, false);
+    } else if (!destLat || !destLng) {
+      try { map.flyTo([lat, lng], Math.max(map.getZoom(), 16), { animate: true, duration: 1 }); } catch {}
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location, isLive, hasLoc, hasLastKnown, drawRoute, pollTick]);
+  }, [location, isLive, hasLoc, drawRoute]);
 
   useEffect(() => () => {
-    if (routeAbortRef.current) { routeAbortRef.current.abort(); }
+    if (routeAbortRef.current) routeAbortRef.current.abort();
     if (routeTimerRef.current) clearTimeout(routeTimerRef.current);
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     if (lastKnownMarkerRef.current) { try { lastKnownMarkerRef.current.remove(); } catch {} }
     if (mapObjRef.current) { try { mapObjRef.current.remove(); } catch {} mapObjRef.current = null; }
+    mapReadyRef.current = false;
   }, []);
 
-  const lastKnownTimeStr = location?.lastKnownAt ? new Date(location.lastKnownAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }) : null;
+  const lastKnownAt      = location?.lastKnownAt;
+  const lastKnownTimeStr = lastKnownAt ? new Date(lastKnownAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }) : null;
+  const lastKnownAgoStr  = lastKnownAt ? timeAgo(lastKnownAt) : null;
+
   const overlayClass = isFullscreen ? 'ar-modal-overlay ar-map-overlay ar-overlay--full' : 'ar-modal-overlay ar-map-overlay';
 
   return (
@@ -449,16 +558,25 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
           <div className="ar-map-title-row">
             <span className="ar-map-title">📍 Live Rider Location</span>
             <span className="ar-map-order-id">#{orderId?.slice(-8).toUpperCase()}</span>
+            <span className="ar-ncr-label">NCR Only</span>
             {isDelivered && <span style={{ background: '#d1fae5', color: '#065f46', borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 700 }}>✅ Delivered</span>}
           </div>
           <div className="ar-map-header-right">
             {isLive
-              ? <div className="ar-map-live-badge"><span className="ar-gps-live-dot" />Live · {lastUpdate?.toLocaleTimeString()}</div>
+              ? <div className="ar-map-live-badge">
+                  <span className="ar-gps-live-dot" />
+                  Live · {location?.updatedAt
+                    ? new Date(location.updatedAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                    : new Date().toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                </div>
               : hasLastKnown
-                ? <div className="ar-map-stale-badge" style={{ background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a' }}>⚠️ Offline · Last seen {lastKnownTimeStr || 'unknown'}</div>
+                ? <div className="ar-map-stale-badge" style={{ background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a' }}>
+                    ⚠️ Offline · Last seen {lastKnownTimeStr || 'unknown'}
+                  </div>
                 : !location
                   ? <div className="ar-map-waiting-badge">⏳ Waiting for rider GPS…</div>
-                  : <div className="ar-map-stale-badge">⏸ {lastUpdate?.toLocaleTimeString() || '—'}</div>}
+                  : <div className="ar-map-stale-badge">⏸ {new Date().toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
+            }
             <button className="ar-map-fullscreen-btn" onClick={() => setIsFullscreen(f => !f)}>{isFullscreen ? '⛶ Exit' : '⛶ Full'}</button>
             <button className="ar-modal-close ar-modal-close--map" onClick={onClose}>✕</button>
           </div>
@@ -466,9 +584,31 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
 
         <div ref={mapRef} className="ar-map-container" style={isFullscreen ? { flex: '1 1 auto', height: 'auto', minHeight: 0 } : {}} />
 
-        {!location && <div className="ar-map-waiting-overlay" style={{ flexShrink: 0 }}><span className="ar-gps-live-dot" style={{ background: '#f59e0b' }} /><span>Waiting for rider GPS… Map will update automatically when rider starts tracking.</span></div>}
-        {!isLive && hasLastKnown && <div className="ar-map-offline-bar"><span style={{ fontSize: 14 }}>⚠️</span><span><strong>Rider offline</strong> · Last known {lastKnownTimeStr} ({timeAgo(location?.lastKnownAt)}){location?.lastKnownAddress && <> · <strong>📍 {location.lastKnownAddress}</strong></>}</span></div>}
-        {isLive && hasLoc && <div className="ar-map-info-bar" style={{ flexShrink: 0 }}><span>🛵 {order.riderInfo?.name || 'Rider'}</span><span>📍 {location.lat.toFixed(5)}, {location.lng.toFixed(5)}</span>{location.speed > 0 && <span>🚀 {(location.speed * 3.6).toFixed(1)} km/h</span>}<span style={{ color: '#e53e3e', fontWeight: 700 }}>━━ Route</span></div>}
+        {!location && (
+          <div className="ar-map-waiting-overlay" style={{ flexShrink: 0 }}>
+            <span className="ar-gps-live-dot" style={{ background: '#f59e0b' }} />
+            <span>Waiting for rider GPS… Map will update automatically when rider starts tracking.</span>
+          </div>
+        )}
+
+        {!isLive && hasLastKnown && (
+          <div className="ar-map-offline-bar">
+            <span style={{ fontSize: 14 }}>⚠️</span>
+            <span>
+              <strong>Rider offline</strong> · Last known {lastKnownTimeStr} ({lastKnownAgoStr})
+              {location?.lastKnownAddress && <> · <strong>📍 {location.lastKnownAddress}</strong></>}
+            </span>
+          </div>
+        )}
+
+        {isLive && hasLoc && (
+          <div className="ar-map-info-bar" style={{ flexShrink: 0 }}>
+            <span>🛵 {order.riderInfo?.name || 'Rider'}</span>
+            <span>📍 {location.lat.toFixed(5)}, {location.lng.toFixed(5)}</span>
+            {location.speed > 0 && <span>🚀 {(location.speed * 3.6).toFixed(1)} km/h</span>}
+            <span style={{ color: '#e53e3e', fontWeight: 700 }}>━━ Route</span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -494,9 +634,9 @@ const RemoveConfirmModal = ({ order, onConfirm, onClose }) => (
 // ─────────────────────────────────────────────────────────────
 const ActiveOrderCard = ({ order, collapsed, onToggleCollapse, onOpenMap }) => {
   const { orderId } = order;
-  const pickupReq  = order._pickupReq || {};
-  const _riderBase = order.riderInfo  || {};
-  const riderInfo  = {
+  const pickupReq   = order._pickupReq || {};
+  const _riderBase  = order.riderInfo  || {};
+  const riderInfo   = {
     name:    pickupReq.riderName    || _riderBase.name    || '',
     phone:   pickupReq.riderPhone   || _riderBase.phone   || '',
     plate:   pickupReq.riderPlate   || _riderBase.plate   || '',
@@ -557,7 +697,6 @@ const ActiveOrderCard = ({ order, collapsed, onToggleCollapse, onOpenMap }) => {
             )}
           </div>
 
-          {/* Notify notice — OTP hidden for customer privacy */}
           <div className="ar-notify-section">
             {alreadyNotified
               ? <div className="ar-notify-done"><span>✅ Customer notified — Out for Delivery</span></div>
@@ -568,7 +707,6 @@ const ActiveOrderCard = ({ order, collapsed, onToggleCollapse, onOpenMap }) => {
             }
           </div>
 
-          {/* GPS Tracking */}
           <div className="ar-section ar-section-full ar-gps-compact">
             <div className="ar-section-title">📍 GPS Tracking</div>
             <div className="ar-map-btn-row">
@@ -634,9 +772,9 @@ const AdminRiders = () => {
   const sendRiderApprovedEmailAction = useAction(api.sendEmail.sendRiderApprovedEmail);
   const sendRiderRejectedEmailAction = useAction(api.sendEmail.sendRiderRejectedEmail);
 
-  const applications      = allRiders.filter(r => r.status === 'pending');
-  const approvedRiders    = allRiders.filter(r => r.status === 'approved');
-  const pendingPickups    = allPickupRequests.filter(p => p.status === 'pending');
+  const applications   = allRiders.filter(r => r.status === 'pending');
+  const approvedRiders = allRiders.filter(r => r.status === 'approved');
+  const pendingPickups = allPickupRequests.filter(p => p.status === 'pending');
   const completedStatuses = ['completed', 'delivered'];
 
   const matchesDateFilter = (order) => {
@@ -746,7 +884,6 @@ const AdminRiders = () => {
         <div className="ar-bell-tab-slot"><NotificationBell /></div>
       </div>
 
-      {/* PENDING APPLICATIONS */}
       {tab === 'applications' && (
         applications.length === 0 ? <p className="riders-empty">No pending applications.</p> : (
           <div className="riders-table-wrapper">
@@ -772,7 +909,6 @@ const AdminRiders = () => {
         )
       )}
 
-      {/* APPROVED RIDERS */}
       {tab === 'approved' && (
         approvedRiders.length === 0 ? <p className="riders-empty">No approved riders yet.</p> : (
           <div className="riders-table-wrapper">
@@ -784,8 +920,8 @@ const AdminRiders = () => {
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         {rider.riderPhoto
-                          ? <img src={rider.riderPhoto} alt={rider.fullName} style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', border: '2px solid #ffc0d8', flexShrink: 0 }} />
-                          : <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#fff0f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>👤</div>}
+                          ? <img src={rider.riderPhoto} alt={rider.fullName} style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', border: '2px solid #e2e8f0', flexShrink: 0 }} />
+                          : <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>👤</div>}
                         {rider.fullName}
                       </div>
                     </td>
@@ -805,7 +941,6 @@ const AdminRiders = () => {
         )
       )}
 
-      {/* PENDING PICKUP REQUESTS */}
       {tab === 'pickups' && (
         pendingPickups.length === 0 ? <p className="riders-empty">No pending pickup requests.</p> : (
           <div className="riders-table-wrapper">
@@ -833,7 +968,6 @@ const AdminRiders = () => {
         )
       )}
 
-      {/* ALL PICKUPS HISTORY */}
       {tab === 'all-pickups' && (
         allPickupRequests.length === 0 ? <p className="riders-empty">No pickup requests yet.</p> : (
           <div className="riders-table-wrapper">
@@ -857,7 +991,6 @@ const AdminRiders = () => {
         )
       )}
 
-      {/* ACTIVE DELIVERY */}
       {tab === 'delivery' && (
         <>
           <DateFilter />
@@ -868,7 +1001,6 @@ const AdminRiders = () => {
         </>
       )}
 
-      {/* COMPLETED DELIVERIES */}
       {tab === 'completed' && (
         <>
           <DateFilter />
