@@ -8,7 +8,7 @@
   display: flex;
   gap: 0;
   margin-bottom: 24px;
-  border-bottom: 2px solid #000000;
+  border-bottom: 2px solid #e2e8f0;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
@@ -41,7 +41,7 @@
 .riders-tab-btn.active {
   color: #fc1268 !important;
   background: transparent !important;
-  border-bottom-color: #ffffff !important;
+  border-bottom-color: #fc1268 !important;
   border-radius: 0;
 }
 
@@ -56,8 +56,8 @@
   font-size: 11px;
   font-weight: 800;
   line-height: 1;
-  background: #c73a3a;
-  color: #000000;
+  background: #f1f5f9;
+  color: #64748b;
   transition: background 0.2s, color 0.2s;
 }
 .riders-tab-btn.active .riders-tab-count-badge { background: #fc1268; color: white; }
@@ -183,7 +183,7 @@
   border: 1.5px solid #e2e8f0;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
-.ar-order-card:hover { border-color: #ffffff; box-shadow: 0 4px 16px rgba(252,18,104,0.1); }
+.ar-order-card:hover { border-color: #ffd6e7; box-shadow: 0 4px 16px rgba(252,18,104,0.1); }
 .ar-card-collapsed { box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
 
 /* Card header — clean dark like RiderDashboard compact cards */
@@ -205,9 +205,9 @@
 .ar-header-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
 .ar-collapse-btn {
-  background: rgba(255,255,255,0.12);
-  color: white;
-  border: 1.5px solid rgba(255,255,255,0.25);
+  background: rgba(0, 0, 0, 0.12);
+  color: rgb(0, 0, 0);
+  border: 1.5px solid rgba(0, 0, 0, 0.25);
   border-radius: 7px;
   padding: 6px 12px;
   font-size: 12px;
@@ -362,23 +362,35 @@ body.ar-map-open { overflow: hidden !important; position: fixed !important; widt
 .ar-overlay--full { padding: 0 !important; align-items: flex-start !important; justify-content: flex-start !important; overflow: hidden !important; touch-action: none !important; }
 .ar-map-modal { background: white; border-radius: 18px; width: 100%; max-width: 700px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 24px 80px rgba(0,0,0,0.3); position: relative; }
 .ar-map-modal--full { max-width: none !important; max-height: 100dvh !important; height: 100dvh !important; border-radius: 0 !important; margin: 0 !important; position: fixed !important; top: 0 !important; bottom: 0 !important; z-index: 10001 !important; display: flex !important; flex-direction: column !important; overflow: hidden !important; }
-.ar-map-header { background: linear-gradient(135deg, #1a1f36, #2d3561); padding: 14px 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; flex-shrink: 0; }
+.ar-map-header { background: #ffffff; border-bottom: 1.5px solid #e2e8f0; padding: 12px 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; flex-shrink: 0; }
 .ar-map-container { flex: 1; height: 420px; min-height: 300px; z-index: 1; touch-action: pan-x pan-y; overscroll-behavior: contain; }
 .ar-map-modal--full .ar-map-container { flex: 1 1 auto !important; height: auto !important; min-height: 0 !important; }
 .ar-map-title-row { display: flex; align-items: center; gap: 10px; flex: 1; }
-.ar-map-title     { font-size: 15px; font-weight: 800; color: white; }
-.ar-map-order-id  { background: rgba(255,255,255,0.12); border-radius: 20px; padding: 3px 10px; font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.75); letter-spacing: 1px; }
+.ar-map-title     { font-size: 15px; font-weight: 800; color: #1a1f36; }
+.ar-map-order-id  { background: #f1f5f9; border-radius: 20px; padding: 3px 10px; font-size: 12px; font-weight: 700; color: #475569; letter-spacing: 1px; border: 1px solid #e2e8f0; }
 .ar-map-header-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.ar-map-live-badge    { display: flex; align-items: center; gap: 6px; background: rgba(16,185,129,0.2); border: 1px solid rgba(16,185,129,0.4); border-radius: 20px; padding: 4px 12px; font-size: 12px; font-weight: 700; color: #6ee7b7; }
-.ar-map-stale-badge   { background: rgba(107,114,128,0.18); border: 1px solid rgba(107,114,128,0.3); border-radius: 20px; padding: 4px 12px; font-size: 12px; color: #9ca3af; }
-.ar-map-waiting-badge { font-size: 12px; color: rgba(255,255,255,0.6); padding: 4px 0; }
-.ar-map-fullscreen-btn { background: rgba(255,255,255,0.12); color: white; border: 1.5px solid rgba(255,255,255,0.3); border-radius: 7px; padding: 6px 12px; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
-.ar-map-fullscreen-btn:hover { background: rgba(255,255,255,0.22); }
-.ar-modal-close--map { position: static !important; background: rgba(255,255,255,0.12) !important; color: white !important; width: 32px; height: 32px; }
-.ar-modal-close--map:hover { background: rgba(220,38,38,0.5) !important; }
+.ar-map-live-badge    { display: flex; align-items: center; gap: 6px; background: #f0fdf4; border: 1px solid #86efac; border-radius: 20px; padding: 4px 12px; font-size: 12px; font-weight: 700; color: #15803d; }
+.ar-map-stale-badge   { background: #fef3c7; border: 1px solid #fde68a; border-radius: 20px; padding: 4px 12px; font-size: 12px; font-weight: 600; color: #92400e; }
+.ar-map-waiting-badge { font-size: 12px; color: #64748b; padding: 4px 0; font-weight: 500; }
+.ar-map-fullscreen-btn { background: #f1f5f9; color: #374151; border: 1.5px solid #e2e8f0; border-radius: 7px; padding: 6px 12px; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+.ar-map-fullscreen-btn:hover { background: #e2e8f0; color: #1a1f36; }
+.ar-modal-close--map { position: static !important; background: #f1f5f9 !important; color: #374151 !important; width: 32px; height: 32px; border: 1.5px solid #e2e8f0 !important; }
+.ar-modal-close--map:hover { background: #fee2e2 !important; color: #dc2626 !important; border-color: #fca5a5 !important; }
 .ar-map-info-bar     { display: flex; align-items: center; gap: 16px; padding: 9px 16px; background: #f8fafc; border-top: 1px solid #e5e7eb; font-size: 12px; color: #374151; flex-wrap: wrap; flex-shrink: 0; }
 .ar-map-offline-bar  { display: flex; align-items: center; gap: 8px; padding: 9px 16px; background: #fffbeb; border-top: 1px solid #fde68a; font-size: 12px; color: #92400e; font-weight: 600; flex-wrap: wrap; flex-shrink: 0; }
 .ar-map-waiting-overlay { display: flex; align-items: center; gap: 8px; padding: 9px 16px; background: #fffbeb; border-top: 1px solid #fde68a; font-size: 13px; color: #92400e; font-weight: 600; flex-shrink: 0; }
+
+/* NCR coverage label in map header */
+.ar-ncr-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  padding: 2px 10px;
+  letter-spacing: 0.3px;
+}
 
 /* NCR coverage badge */
 .ar-ncr-badge {
