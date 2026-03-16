@@ -1,0 +1,85 @@
+[
+  {
+    "_creationTime": 1773514871281.8516,
+    "_id": "j977g6ekand6pz84dqpedw07ph82whrh",
+    "addressLat": 14.6767494,
+    "addressLng": 120.9807766,
+    "confirmedAt": "2026-03-14T19:27:10.825Z",
+    "customerName": "seno",
+    "email": "justinetrajano023@gmail.com",
+    "items": [
+      {
+        "id": "k176spz4j1z015d24wmcers38d82hbdd",
+        "image": "/images/BTSPHOTOCARDS.jpg",
+        "isPreOrder": false,
+        "name": "BTS PHOTOCARDS",
+        "price": 475,
+        "quantity": 1,
+        "releaseDate": null
+      },
+      {
+        "id": "k172b0hdxxbnxtsknxvh14615582h95c",
+        "image": "/images/NewJeans - NJ Get Up PHOTOCARD SET.png",
+        "isPreOrder": false,
+        "name": "[SHOCKING SALE] NewJeans - NJ Get Up PHOTOCARD SET",
+        "price": 750,
+        "quantity": 1,
+        "releaseDate": null
+      }
+    ],
+    "notes": "",
+    "orderId": "DK-1773514871226-SZ8LJK",
+    "orderStatus": "out_for_delivery",
+    "outForDeliveryAt": "2026-03-15T03:44:24.560Z",
+    "paidAt": "2026-03-14T19:01:47.041Z",
+    "paymentLinkId": "cs_b9e171a48858a0f2a976d169",
+    "paymentLinkUrl": "https://checkout.paymongo.com/b9e171a48858a0f2a976d169",
+    "paymentMethod": "GCash",
+    "paymentStatus": "paid",
+    "phone": "09614336575",
+    "riderInfo": {
+      "name": "samantha",
+      "phone": "09614336575",
+      "plate": "PRO 1234",
+      "vehicle": "motorcycle"
+    },
+    "shippingAddress": "Datamex Computer College, MacArthur Highway, Elysian, Marulas, 2nd District, Valenzuela, Northern Manila District, Metro Manila, 1475, Philippines, Valenzuela, 1475",
+    "shippingFee": 129,
+    "status": "Out for Delivery",
+    "subtotal": 1225,
+    "total": 1354
+  },
+  {
+    "_creationTime": 1773575144405.6907,
+    "_id": "j972qwgexqxyncpmzbh9jsrbk582yrnm",
+    "addressLat": 14.6898323,
+    "addressLng": 120.9986926,
+    "customerName": "seno",
+    "email": "justinetrajano023@gmail.com",
+    "items": [
+      {
+        "id": "k17dk5y1cvekkkfk3qxeyq8jwd82g8t1",
+        "image": "/images/REDVELVETACCESSORIES.jpg",
+        "isPreOrder": false,
+        "name": "Red Velvet – Cosmic Keychain Ver.",
+        "price": 199,
+        "quantity": 1,
+        "releaseDate": null
+      }
+    ],
+    "notes": "",
+    "orderId": "DK-1773575144869-CKIH8I",
+    "orderStatus": "pending",
+    "paidAt": "2026-03-15T11:46:18.078Z",
+    "paymentLinkId": "cs_b64ba5d9dd9bcd83a97e09ae",
+    "paymentLinkUrl": "https://checkout.paymongo.com/b64ba5d9dd9bcd83a97e09ae",
+    "paymentMethod": "Maya",
+    "paymentStatus": "paid",
+    "phone": "09614336575",
+    "shippingAddress": "Demetillo Street, Jim Homes, General T. de Leon, 2nd District, Valenzuela, Northern Manila District, Metro Manila, 1442, Philippines, Valenzuela, 1442",
+    "shippingFee": 49,
+    "status": "Pending Payment",
+    "subtotal": 199,
+    "total": 248
+  }
+]
