@@ -153,7 +153,7 @@ const AdminDashboard = () => {
 
   const allOrders   = useQuery(api.orders.getAllOrders)     ?? [];
   const allUsers    = useQuery(api.users.getAllUsers)       ?? [];
-  const allProducts = useQuery(api.products.getAllProducts) ?? [];
+ const allProducts = useQuery(api.products.getAllProductsAdmin) ?? [];
 
   useEffect(() => {
     document.body.style.overflow = (showProductModal || statModal) ? 'hidden' : 'unset';
