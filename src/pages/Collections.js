@@ -6,6 +6,7 @@ import { useAddToCart } from '../context/cartUtils';
 import { useWishlist, useToggleWishlist } from '../context/wishlistUtils';
 import { useNotification } from '../context/NotificationContext';
 import ProductModal from '../components/ProductModal';
+import { PointsBadge } from '../utils/pointsUtils';
 import './Collections.css';
 
 const MAX_WISHLIST = 10;
@@ -38,12 +39,12 @@ const Collections = () => {
   const categoryRef = useRef(null);
   const groupRef    = useRef(null);
 
-  const products             = useQuery(api.products.getCollectionProducts) || [];
-  const wishlistItems        = useWishlist();
-  const addToCartMutation    = useAddToCart();
+  const products               = useQuery(api.products.getCollectionProducts) || [];
+  const wishlistItems          = useWishlist();
+  const addToCartMutation      = useAddToCart();
   const toggleWishlistMutation = useToggleWishlist();
-  const activePromos         = useQuery(api.promos.getActivePromos) || [];
-  const activePromo          = activePromos[0] || null;
+  const activePromos           = useQuery(api.promos.getActivePromos) || [];
+  const activePromo            = activePromos[0] || null;
 
   const isWishlisted = (productId) =>
     wishlistItems.some(item => item.productId === productId);
@@ -57,7 +58,7 @@ const Collections = () => {
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (categoryRef.current && !categoryRef.current.contains(e.target)) setCategoryDropdownOpen(false);
-      if (groupRef.current && !groupRef.current.contains(e.target)) setGroupDropdownOpen(false);
+      if (groupRef.current    && !groupRef.current.contains(e.target))    setGroupDropdownOpen(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -95,7 +96,7 @@ const Collections = () => {
   const filteredProducts = (products || [])
     .filter(product => {
       const categoryMatch = selectedCategory === 'all' || product.category === selectedCategory;
-      const groupMatch    = selectedGroup === 'all'    || product.kpopGroup === selectedGroup;
+      const groupMatch    = selectedGroup    === 'all' || product.kpopGroup === selectedGroup;
       const searchMatch   = !searchTerm.trim() ||
         product.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         product.kpopGroup?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -107,9 +108,9 @@ const Collections = () => {
       const bReleased  = isReleased(b);
       const aReleaseMs = getReleaseMs(a) || 0;
       const bReleaseMs = getReleaseMs(b) || 0;
-      if (aReleased && !bReleased) return -1;
-      if (!aReleased && bReleased) return 1;
-      if (aReleased && bReleased) return bReleaseMs - aReleaseMs;
+      if (aReleased  && !bReleased) return -1;
+      if (!aReleased && bReleased)  return 1;
+      if (aReleased  && bReleased)  return bReleaseMs - aReleaseMs;
       return (b._creationTime || 0) - (a._creationTime || 0);
     });
 
@@ -294,9 +295,8 @@ const Collections = () => {
             const hasPromo = isPromoProduct(product);
             const wishlisted = isWishlisted(pid);
 
-            // Released badge: visible only within 1 hour of release
             const releaseMs = getReleaseMs(product);
-            const diffMs = releaseMs !== null ? Date.now() - releaseMs : -1;
+            const diffMs    = releaseMs !== null ? Date.now() - releaseMs : -1;
             const showReleasedBadge = diffMs >= 0 && diffMs < 60 * 60 * 1000;
 
             return (
@@ -306,13 +306,11 @@ const Collections = () => {
                 className={`collection-card ${highlightedProductId === pid ? 'highlighted' : ''} ${hasPromo ? 'collection-card-promo' : ''} ${showReleasedBadge ? 'collection-card-released' : ''}`}
                 onClick={() => setSelectedProduct(product)}
               >
-                {/* Released OR sale badge — never both */}
                 {showReleasedBadge
                   ? <div className="collection-released-badge"><i className="fas fa-bolt"></i> Just Released</div>
                   : product.isSale && !product.isPreOrder && <div className="collection-sale-badge">SALE</div>
                 }
 
-                {/* Promo badge only when not showing released */}
                 {hasPromo && !showReleasedBadge && (
                   <div className="collection-promo-badge">
                     <i className="fas fa-tag"></i> {activePromo.discount}% OFF
@@ -330,6 +328,7 @@ const Collections = () => {
                 <div className="collection-card-img">
                   <img src={product.image} alt={product.name} />
                 </div>
+
                 <div className="collection-card-info">
                   <div className="collection-card-group">{product.kpopGroup}</div>
                   <div className="collection-card-name">{product.name}</div>
@@ -340,6 +339,8 @@ const Collections = () => {
                     {product.originalPrice > product.price && (
                       <span className="collection-card-price-original">₱{product.originalPrice?.toLocaleString()}</span>
                     )}
+                    {/* ✅ Points badge */}
+                    <PointsBadge price={product.price} />
                   </div>
                   {hasPromo && (
                     <div className="collection-promo-hint">

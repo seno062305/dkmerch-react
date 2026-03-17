@@ -1,3 +1,4 @@
+// src/components/Checkout.js
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -9,21 +10,21 @@ import { useMutation, useQuery, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import './Checkout.css';
 
-// ─── NCR BOUNDS — delivery coverage area ─────────────────────────────────────
+// ─── NCR BOUNDS ───────────────────────────────────────────────────────────────
 const NCR_BOUNDS = {
   minLat: 14.3500, maxLat: 14.8000,
   minLng: 120.8600, maxLng: 121.1500,
 };
 
 const isWithinNCR = (lat, lng) => {
-  if (!lat || !lng) return true; // no coords yet — don't block
+  if (!lat || !lng) return true;
   return (
     lat >= NCR_BOUNDS.minLat && lat <= NCR_BOUNDS.maxLat &&
     lng >= NCR_BOUNDS.minLng && lng <= NCR_BOUNDS.maxLng
   );
 };
 
-// ─── LALAMOVE-STYLE SHIPPING CONFIG ──────────────────────────────────────────
+// ─── LALAMOVE SHIPPING CONFIG ─────────────────────────────────────────────────
 const LALAMOVE_CONFIG = {
   baseFare:          49,
   freeKm:            2,
@@ -42,7 +43,6 @@ const LALAMOVE_CONFIG = {
   },
 };
 
-// ─── HAVERSINE DISTANCE ───────────────────────────────────────────────────────
 function getDistanceKm(lat1, lng1, lat2, lng2) {
   const R    = 6371;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -55,7 +55,6 @@ function getDistanceKm(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// ─── LALAMOVE SHIPPING CALCULATOR ────────────────────────────────────────────
 function calcLalamoveShipping(storeLat, storeLng, lat, lng, cartItems = [], products = []) {
   if (!lat || !lng || !storeLat || !storeLng) return null;
 
@@ -120,12 +119,12 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords, on
   const debounceRef    = useRef(null);
   const pendingGeocode = useRef(null);
 
-  const [suggestions, setSuggestions]         = useState([]);
+  const [suggestions,     setSuggestions]     = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [geocoding, setGeocoding]             = useState(false);
-  const [leafletReady, setLeafletReady]       = useState(!!window.L);
-  const [mapVisible, setMapVisible]           = useState(false);
-  const [statusText, setStatusText]           = useState('');
+  const [geocoding,       setGeocoding]       = useState(false);
+  const [leafletReady,    setLeafletReady]    = useState(!!window.L);
+  const [mapVisible,      setMapVisible]      = useState(false);
+  const [statusText,      setStatusText]      = useState('');
 
   useEffect(() => {
     if (window.L) { setLeafletReady(true); return; }
@@ -150,7 +149,6 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords, on
     document.head.appendChild(script);
   }, []);
 
-  // Helper: check NCR and call parent callback
   const checkAndNotifyNCR = useCallback((lat, lng) => {
     const valid = isWithinNCR(lat, lng);
     if (onNCRViolation) onNCRViolation(!valid);
@@ -177,7 +175,6 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords, on
         const lng = parseFloat(data[0].lon);
         const withinNCR = checkAndNotifyNCR(lat, lng);
         if (markerRef.current && mapInstanceRef.current) {
-          // Update marker icon based on NCR status
           updateMarkerIcon(lat, lng, withinNCR);
           markerRef.current.getPopup()?.setContent(
             `<div style="font-size:12px;max-width:200px"><strong>${withinNCR ? '📍' : '⚠️'} ${withinNCR ? 'Delivery Address' : 'Outside NCR Coverage'}</strong><br><small>${addr}</small></div>`
@@ -201,9 +198,9 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords, on
 
   const updateMarkerIcon = (lat, lng, withinNCR) => {
     if (!markerRef.current || !window.L) return;
-    const L = window.L;
+    const L     = window.L;
     const color = withinNCR ? '#fc1268' : '#dc2626';
-    const icon = L.divIcon({
+    const icon  = L.divIcon({
       className: '',
       html: `<div style="
         width:36px;height:36px;background:${color};border-radius:50% 50% 50% 0;
@@ -229,8 +226,7 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords, on
         zoomControl    : true,
         tap            : false,
         scrollWheelZoom: false,
-        minZoom: 11,
-        maxZoom: 19,
+        minZoom: 11, maxZoom: 19,
         maxBounds: [[14.3500, 120.8600], [14.8000, 121.1500]],
         maxBoundsViscosity: 1.0,
       }).setView([startLat, startLng], startZoom);
@@ -238,12 +234,11 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords, on
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        maxZoom: 19,
-        minZoom: 11,
+        maxZoom: 19, minZoom: 11,
       }).addTo(map);
 
       const initWithinNCR = savedCoords ? isWithinNCR(savedCoords.lat, savedCoords.lng) : true;
-      const initColor = initWithinNCR ? '#fc1268' : '#dc2626';
+      const initColor     = initWithinNCR ? '#fc1268' : '#dc2626';
       const icon = L.divIcon({
         className: '',
         html: `<div style="
@@ -275,7 +270,7 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords, on
 
       marker.on('dragend', async () => {
         const { lat, lng } = marker.getLatLng();
-        const withinNCR = checkAndNotifyNCR(lat, lng);
+        const withinNCR    = checkAndNotifyNCR(lat, lng);
         setGeocoding(true);
         setStatusText(withinNCR ? 'Getting address for this location…' : '⚠️ Location is outside NCR coverage area');
         updateMarkerIcon(null, null, withinNCR);
@@ -284,7 +279,7 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords, on
             `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`,
             { headers: { 'Accept-Language': 'en' } }
           );
-          const data = await res.json();
+          const data    = await res.json();
           const addr    = data.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
           const city    = data.address?.city || data.address?.town || data.address?.municipality || data.address?.suburb || '';
           const zipCode = data.address?.postcode || '';
@@ -360,7 +355,6 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords, on
   const handleInputChange = (e) => {
     const val = e.target.value;
     onChange(val);
-    // Reset NCR violation when user clears/changes address
     if (onNCRViolation) onNCRViolation(false);
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => fetchSuggestions(val), 500);
@@ -434,9 +428,8 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords, on
             {suggestions.map((s, i) => {
               const sInNCR = isWithinNCR(s.lat, s.lng);
               return (
-                <li key={i} onMouseDown={() => handleSelectSuggestion(s)}
-                  style={!sInNCR ? { opacity: 0.65 } : {}}>
-                  <i className={`fas fa-map-marker-alt`} style={{ color: sInNCR ? '#fc1268' : '#dc2626' }}></i>
+                <li key={i} onMouseDown={() => handleSelectSuggestion(s)} style={!sInNCR ? { opacity: 0.65 } : {}}>
+                  <i className="fas fa-map-marker-alt" style={{ color: sInNCR ? '#fc1268' : '#dc2626' }}></i>
                   <span>
                     {s.label}
                     {!sInNCR && (
@@ -468,7 +461,7 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords, on
   );
 };
 
-// ─── SHIPPING BREAKDOWN DISPLAY ───────────────────────────────────────────────
+// ─── SHIPPING BREAKDOWN ───────────────────────────────────────────────────────
 const ShippingBreakdown = ({ shippingInfo, isEstimate = false }) => {
   const [expanded, setExpanded] = useState(false);
   if (!shippingInfo) return null;
@@ -491,8 +484,6 @@ const ShippingBreakdown = ({ shippingInfo, isEstimate = false }) => {
           </span>
         </div>
       </div>
-
-      {/* Warning banner when store location is not set by admin */}
       {isEstimate && (
         <div className="shipping-estimate-warning">
           <i className="fas fa-exclamation-triangle"></i>
@@ -501,7 +492,6 @@ const ShippingBreakdown = ({ shippingInfo, isEstimate = false }) => {
           </span>
         </div>
       )}
-
       {expanded && (
         <div className="shipping-breakdown-details">
           {shippingInfo.breakdown.map((row, i) => (
@@ -522,7 +512,6 @@ const ShippingBreakdown = ({ shippingInfo, isEstimate = false }) => {
           </div>
         </div>
       )}
-
       {shippingInfo.outOfCoverage && (
         <div className="shipping-out-of-coverage">
           <i className="fas fa-exclamation-triangle"></i>
@@ -553,6 +542,7 @@ const Checkout = () => {
   const location  = useLocation();
   const { user, isAuthenticated } = useAuth();
   const { showNotification }      = useNotification();
+
   const collectionProducts = useCollectionProducts() || [];
   const regularProducts    = useProducts() || [];
   const preOrderProducts   = usePreOrderProducts() || [];
@@ -567,40 +557,47 @@ const Checkout = () => {
   const clearCart     = useClearCart();
   const updateProduct = useUpdateProduct();
 
-  const storeSettings = useQuery(api.settings.getSettings);
-  // True only when admin has explicitly saved real coords
+  const storeSettings    = useQuery(api.settings.getSettings);
   const hasStoreLocation = !!(storeSettings?.storeLat && storeSettings?.storeLng);
-  const STORE_LAT = storeSettings?.storeLat ?? 14.5995;
-  const STORE_LNG = storeSettings?.storeLng ?? 121.0;
+  const STORE_LAT        = storeSettings?.storeLat ?? 14.5995;
+  const STORE_LNG        = storeSettings?.storeLng ?? 121.0;
 
   const savedProfile = useQuery(
     api.users.getProfile,
     user?._id || user?.id ? { userId: user?._id || user?.id } : 'skip'
   );
-  const saveProfile           = useMutation(api.users.saveProfile);
+  const saveProfile              = useMutation(api.users.saveProfile);
   const sendPaymentReceivedEmail = useAction(api.sendEmail.sendPaymentReceivedEmail);
-  const createPaymentLink     = useAction(api.payments.createPaymentLink);
+  const createPaymentLink        = useAction(api.payments.createPaymentLink);
+  const markTicketCheckedOut     = useMutation(api.rewards.markTicketCheckedOut);
 
-  const [loading, setLoading]                   = useState(false);
-  const [isEditingContact, setIsEditingContact] = useState(false);
-  const [isEditingAddress, setIsEditingAddress] = useState(false);
-  const [errors, setErrors]                     = useState({ phone: '' });
+  // ── Reward order state ────────────────────────────────────────────────────
+  const [rewardOrder, setRewardOrder] = useState(location.state?.rewardOrder || null);
+
+  const [loading,           setLoading]           = useState(false);
+  const [isEditingContact,  setIsEditingContact]  = useState(false);
+  const [isEditingAddress,  setIsEditingAddress]  = useState(false);
+  const [errors,            setErrors]            = useState({ phone: '' });
   const cartPromo = location.state?.appliedPromo || null;
 
-  const [formData, setFormData]         = useState({ fullName: '', email: '', phone: '', address: '', city: '', zipCode: '', notes: '' });
-  const [savedContact, setSavedContact] = useState({ fullName: '', email: '', phone: '' });
-  const [savedAddress, setSavedAddress] = useState({ address: '', city: '', zipCode: '' });
+  const [formData,      setFormData]      = useState({ fullName: '', email: '', phone: '', address: '', city: '', zipCode: '', notes: '' });
+  const [savedContact,  setSavedContact]  = useState({ fullName: '', email: '', phone: '' });
+  const [savedAddress,  setSavedAddress]  = useState({ address: '', city: '', zipCode: '' });
   const [addressCoords, setAddressCoords] = useState(null);
-  const [savedCoords, setSavedCoords]     = useState(null);
+  const [savedCoords,   setSavedCoords]   = useState(null);
+  const [isOutsideNCR,  setIsOutsideNCR]  = useState(false);
 
-  // ── NCR validation state ──────────────────────────────────────────────────
-  const [isOutsideNCR, setIsOutsideNCR] = useState(false);
+  // ── For reward orders, use 1 qty item for shipping calc ──────────────────
+  const shippingCartItems = rewardOrder
+    ? [{ qty: 1, productId: rewardOrder.productId }]
+    : cartItems;
 
   const shippingInfo = addressCoords && !isOutsideNCR
-    ? calcLalamoveShipping(STORE_LAT, STORE_LNG, addressCoords.lat, addressCoords.lng, cartItems, products)
+    ? calcLalamoveShipping(STORE_LAT, STORE_LNG, addressCoords.lat, addressCoords.lng, shippingCartItems, products)
     : null;
-  const shippingFee  = shippingInfo?.fee ?? 0;
+  const shippingFee = shippingInfo?.fee ?? 0;
 
+  // ── Init form ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!isAuthenticated) {
       showNotification('Please login to checkout', 'warning');
@@ -615,7 +612,7 @@ const Checkout = () => {
       address:  profile?.address  || '',
       city:     profile?.city     || '',
       zipCode:  profile?.zipCode  || '',
-      notes:    ''
+      notes:    '',
     };
     setFormData(init);
     setSavedContact({ fullName: init.fullName, email: init.email, phone: init.phone });
@@ -626,38 +623,46 @@ const Checkout = () => {
       const coords = { lat: profile.addressLat, lng: profile.addressLng };
       setSavedCoords(coords);
       setAddressCoords(coords);
-      // Check if saved coords are within NCR
       setIsOutsideNCR(!isWithinNCR(coords.lat, coords.lng));
     }
   }, [isAuthenticated, navigate, showNotification, user, savedProfile]);
 
+  // ── Cart empty guard — skip for reward orders ─────────────────────────────
   useEffect(() => {
+    if (rewardOrder) return;
     if (cartItems.length === 0 && products.length > 0) {
       showNotification('Your cart is empty', 'warning');
       navigate('/collections');
     }
-  }, [cartItems.length, products.length]);
+  }, [cartItems.length, products.length, rewardOrder]);
 
   const getProductById    = (id) => products.find(p => p._id?.toString() === id?.toString() || p.id === id);
   const getQty            = (item) => item.qty ?? item.quantity ?? 1;
   const getEffectivePrice = (item, product) => {
     if (item.finalPrice !== undefined && item.finalPrice !== null) return item.finalPrice;
-    if (item.price     !== undefined && item.price     !== null) return item.price;
+    if (item.price      !== undefined && item.price      !== null) return item.price;
     return product?.price ?? 0;
   };
-  const calculateSubtotal = () =>
-    cartItems.reduce((total, item) => {
+
+  // ── Subtotal: 0 for reward orders ────────────────────────────────────────
+  const calculateSubtotal = () => {
+    if (rewardOrder) return 0;
+    return cartItems.reduce((total, item) => {
       const product = getProductById(item.productId || item.id);
       return total + getEffectivePrice(item, product) * getQty(item);
     }, 0);
-  const calculateTotalDiscount = () =>
-    cartItems.reduce((total, item) => {
+  };
+
+  const calculateTotalDiscount = () => {
+    if (rewardOrder) return 0;
+    return cartItems.reduce((total, item) => {
       if (!item.promoCode) return total;
-      const product = getProductById(item.productId || item.id);
+      const product       = getProductById(item.productId || item.id);
       const originalPrice = product?.price ?? item.price ?? 0;
       const finalPrice    = item.finalPrice ?? originalPrice;
       return total + (originalPrice - finalPrice) * getQty(item);
     }, 0);
+  };
 
   const subtotal      = calculateSubtotal();
   const totalDiscount = calculateTotalDiscount();
@@ -665,8 +670,8 @@ const Checkout = () => {
 
   const validatePhone = (phone) => {
     const cleaned = phone.replace(/[\s-]/g, '');
-    if (!/^\d*$/.test(cleaned)) return 'Phone number must contain only numbers';
-    if (cleaned.length > 0 && cleaned.length !== 11) return 'Phone number must be exactly 11 digits';
+    if (!/^\d*$/.test(cleaned))                          return 'Phone number must contain only numbers';
+    if (cleaned.length > 0 && cleaned.length !== 11)     return 'Phone number must be exactly 11 digits';
     if (cleaned.length === 11 && !cleaned.startsWith('09')) return 'Phone number must start with 09';
     return '';
   };
@@ -699,7 +704,6 @@ const Checkout = () => {
 
   const isAddressComplete = () => savedAddress.address.trim();
 
-  // ── Form is ready only when address is within NCR ───────────────────────
   const isFormReady = () =>
     isContactComplete() && isAddressComplete() && !isEditingContact && !isEditingAddress && !isOutsideNCR;
 
@@ -722,7 +726,6 @@ const Checkout = () => {
 
   const handleSaveAddress = async () => {
     if (!formData.address.trim()) { showNotification('Please enter your street address', 'error'); return; }
-    // ── Block save if outside NCR ──
     if (isOutsideNCR) {
       showNotification('Please enter an address within Metro Manila (NCR) to proceed.', 'error');
       return;
@@ -742,7 +745,6 @@ const Checkout = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    // ── Extra NCR guard on submit ──
     if (isOutsideNCR) {
       showNotification('Delivery is only available within Metro Manila (NCR). Please update your address.', 'error');
       setIsEditingAddress(true);
@@ -754,17 +756,20 @@ const Checkout = () => {
       if (!isAddressComplete()) setIsEditingAddress(true);
       return;
     }
-    if (products.length === 0) {
+    if (!rewardOrder && products.length === 0) {
       showNotification('Products are still loading. Please wait a moment and try again.', 'warning');
       return;
     }
 
-    for (const item of cartItems) {
-      const product = getProductById(item.productId || item.id);
-      if (!product) continue;
-      if (product.stock !== undefined && product.stock < getQty(item)) {
-        showNotification(`Insufficient stock for ${product.name}. Available: ${product.stock}`, 'error');
-        return;
+    // Stock check — skip for reward orders
+    if (!rewardOrder) {
+      for (const item of cartItems) {
+        const product = getProductById(item.productId || item.id);
+        if (!product) continue;
+        if (product.stock !== undefined && product.stock < getQty(item)) {
+          showNotification(`Insufficient stock for ${product.name}. Available: ${product.stock}`, 'error');
+          return;
+        }
       }
     }
 
@@ -774,25 +779,38 @@ const Checkout = () => {
       const orderId  = `DK-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
       const shipping = shippingFee;
 
-      const orderItems = cartItems.map(item => {
-        const product = getProductById(item.productId || item.id);
-        return {
-          id:          item.productId || item.id,
-          name:        product?.name  || 'Unknown',
-          price:       getEffectivePrice(item, product),
-          image:       product?.image || '',
-          quantity:    getQty(item),
-          isPreOrder:  product?.isPreOrder  || false,
-          releaseDate: product?.releaseDate || null,
-        };
-      });
+      // ── Build order items ───────────────────────────────────────────────
+      const orderItems = rewardOrder
+        ? [{
+            id:          rewardOrder.productId,
+            name:        rewardOrder.productName,
+            price:       0,           // FREE — reward item
+            image:       rewardOrder.productImage,
+            quantity:    1,
+            isPreOrder:  false,
+            releaseDate: null,
+          }]
+        : cartItems.map(item => {
+            const product = getProductById(item.productId || item.id);
+            return {
+              id:          item.productId || item.id,
+              name:        product?.name  || 'Unknown',
+              price:       getEffectivePrice(item, product),
+              image:       product?.image || '',
+              quantity:    getQty(item),
+              isPreOrder:  product?.isPreOrder  || false,
+              releaseDate: product?.releaseDate || null,
+            };
+          });
 
-      const originalSubtotal = cartItems.reduce((total, item) => {
-        const product = getProductById(item.productId || item.id);
-        return total + (product?.price ?? 0) * getQty(item);
-      }, 0);
+      const originalSubtotal = rewardOrder
+        ? 0
+        : cartItems.reduce((total, item) => {
+            const product = getProductById(item.productId || item.id);
+            return total + (product?.price ?? 0) * getQty(item);
+          }, 0);
 
-      const promoItem = cartItems.find(i => i.promoCode);
+      const promoItem = rewardOrder ? null : cartItems.find(i => i.promoCode);
 
       const addressParts = [savedAddress.address];
       if (savedAddress.city)    addressParts.push(savedAddress.city);
@@ -821,14 +839,32 @@ const Checkout = () => {
         paymentMethod:   'paymongo',
         notes:           formData.notes || '',
         paymentStatus:   'pending',
+        // ── Reward order fields ──
+        ...(rewardOrder && {
+          isRewardOrder:    true,
+          rewardTicketCode: rewardOrder.ticketCode,
+        }),
       });
 
+      // ── Mark ticket as checked out ─────────────────────────────────────
+      if (rewardOrder) {
+        try {
+          await markTicketCheckedOut({
+            ticketCode:        rewardOrder.ticketCode,
+            checkedOutOrderId: orderId,
+          });
+        } catch (e) { console.warn('markTicketCheckedOut failed:', e); }
+      }
+
+      // ── Payment link ───────────────────────────────────────────────────
       let paymentLinkUrl;
       try {
         const result = await createPaymentLink({
           orderId,
           amount:        finalTotal,
-          description:   `DKMerch Order ${orderId}${promoItem ? ` (Promo: ${promoItem.promoCode})` : ''}`,
+          description:   rewardOrder
+            ? `DKMerch Reward Order ${orderId} (Ticket: ${rewardOrder.ticketCode})`
+            : `DKMerch Order ${orderId}${promoItem ? ` (Promo: ${promoItem.promoCode})` : ''}`,
           customerName:  savedContact.fullName,
           customerEmail: savedContact.email,
           customerPhone: savedContact.phone,
@@ -841,17 +877,21 @@ const Checkout = () => {
         return;
       }
 
-      for (const item of cartItems) {
-        const product = getProductById(item.productId || item.id);
-        if (product) {
-          try {
-            await updateProduct({ id: product._id, stock: product.stock - getQty(item) });
-          } catch (stockErr) {
-            console.warn('Stock update failed for', product.name, stockErr);
+      // ── Stock update — skip for reward orders ──────────────────────────
+      if (!rewardOrder) {
+        for (const item of cartItems) {
+          const product = getProductById(item.productId || item.id);
+          if (product) {
+            try {
+              await updateProduct({ id: product._id, stock: product.stock - getQty(item) });
+            } catch (stockErr) {
+              console.warn('Stock update failed for', product.name, stockErr);
+            }
           }
         }
       }
 
+      // ── Save profile coords ────────────────────────────────────────────
       if (addressCoords) {
         try {
           await saveProfile({
@@ -868,6 +908,7 @@ const Checkout = () => {
         } catch { /* non-critical */ }
       }
 
+      // ── Send email ─────────────────────────────────────────────────────
       try {
         await sendPaymentReceivedEmail({
           to:   savedContact.email,
@@ -883,7 +924,9 @@ const Checkout = () => {
         });
       } catch (emailErr) { console.warn('Email failed:', emailErr); }
 
-      await clearCart();
+      // ── Clear cart only for non-reward orders ──────────────────────────
+      if (!rewardOrder) await clearCart();
+
       setLoading(false);
       window.location.href = paymentLinkUrl;
 
@@ -894,8 +937,8 @@ const Checkout = () => {
     }
   };
 
-  const promoCartItems    = cartItems.filter(i => !!i.promoCode);
-  const nonPromoCartItems = cartItems.filter(i => !i.promoCode);
+  const promoCartItems    = rewardOrder ? [] : cartItems.filter(i => !!i.promoCode);
+  const nonPromoCartItems = rewardOrder ? [] : cartItems.filter(i => !i.promoCode);
 
   const renderSummaryItem = (item) => {
     const product = getProductById(item.productId || item.id);
@@ -906,8 +949,10 @@ const Checkout = () => {
     const itemTotal      = effectivePrice * qty;
     const originalTotal  = product.price * qty;
     return (
-      <div key={item._id || `${item.productId}-${item.promoCode || 'nopromo'}`}
-           className={`summary-item${hasPromo ? ' summary-item-promo' : ''}`}>
+      <div
+        key={item._id || `${item.productId}-${item.promoCode || 'nopromo'}`}
+        className={`summary-item${hasPromo ? ' summary-item-promo' : ''}`}
+      >
         <img src={product.image} alt={product.name} />
         <div className="item-details">
           <p className="item-name">
@@ -945,7 +990,9 @@ const Checkout = () => {
                 <div className="section-header">
                   <h2>
                     Contact Information
-                    {isContactComplete() && !isEditingContact && <span className="section-complete-badge"><i className="fas fa-check-circle"></i> Saved</span>}
+                    {isContactComplete() && !isEditingContact && (
+                      <span className="section-complete-badge"><i className="fas fa-check-circle"></i> Saved</span>
+                    )}
                   </h2>
                   {!isEditingContact
                     ? <button type="button" className="edit-info-btn" onClick={() => setIsEditingContact(true)}><i className="fas fa-pen"></i> Edit</button>
@@ -954,19 +1001,40 @@ const Checkout = () => {
                 </div>
                 {!isEditingContact ? (
                   <div className="info-display-grid">
-                    <div className="info-display-item"><span className="info-label"><i className="fas fa-user"></i> Full Name</span><span className="info-value">{savedContact.fullName || <span className="info-missing">Not set — click Edit</span>}</span></div>
-                    <div className="info-display-item"><span className="info-label"><i className="fas fa-envelope"></i> Email</span><span className="info-value">{savedContact.email || <span className="info-missing">Not set — click Edit</span>}</span></div>
-                    <div className="info-display-item info-display-full"><span className="info-label"><i className="fas fa-phone"></i> Phone Number</span><span className="info-value">{savedContact.phone || <span className="info-missing">Not set — click Edit</span>}</span></div>
+                    <div className="info-display-item">
+                      <span className="info-label"><i className="fas fa-user"></i> Full Name</span>
+                      <span className="info-value">{savedContact.fullName || <span className="info-missing">Not set — click Edit</span>}</span>
+                    </div>
+                    <div className="info-display-item">
+                      <span className="info-label"><i className="fas fa-envelope"></i> Email</span>
+                      <span className="info-value">{savedContact.email || <span className="info-missing">Not set — click Edit</span>}</span>
+                    </div>
+                    <div className="info-display-item info-display-full">
+                      <span className="info-label"><i className="fas fa-phone"></i> Phone Number</span>
+                      <span className="info-value">{savedContact.phone || <span className="info-missing">Not set — click Edit</span>}</span>
+                    </div>
                   </div>
                 ) : (
                   <div className="form-grid">
-                    <div className="form-group"><label>Full Name</label><input type="text" name="fullName" value={formData.fullName} onChange={handleChange} placeholder="Juan Dela Cruz" /></div>
-                    <div className="form-group"><label>Email</label><input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="juan@example.com" /></div>
+                    <div className="form-group">
+                      <label>Full Name</label>
+                      <input type="text" name="fullName" value={formData.fullName} onChange={handleChange} placeholder="Juan Dela Cruz" />
+                    </div>
+                    <div className="form-group">
+                      <label>Email</label>
+                      <input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="juan@example.com" />
+                    </div>
                     <div className="form-group full-width">
                       <label>Phone Number</label>
-                      <input type="tel" name="phone" value={formData.phone} onChange={handleChange} placeholder="09XXXXXXXXX" maxLength="11" className={errors.phone ? 'input-error' : ''} />
+                      <input
+                        type="tel" name="phone" value={formData.phone} onChange={handleChange}
+                        placeholder="09XXXXXXXXX" maxLength="11"
+                        className={errors.phone ? 'input-error' : ''}
+                      />
                       {errors.phone && <span className="error-message"><i className="fas fa-exclamation-circle"></i> {errors.phone}</span>}
-                      {!errors.phone && formData.phone?.length === 11 && <span className="success-message"><i className="fas fa-check-circle"></i> Valid phone number</span>}
+                      {!errors.phone && formData.phone?.length === 11 && (
+                        <span className="success-message"><i className="fas fa-check-circle"></i> Valid phone number</span>
+                      )}
                     </div>
                   </div>
                 )}
@@ -977,8 +1045,12 @@ const Checkout = () => {
                 <div className="section-header">
                   <h2>
                     Shipping Address
-                    {isAddressComplete() && !isEditingAddress && !isOutsideNCR && <span className="section-complete-badge"><i className="fas fa-check-circle"></i> Saved</span>}
-                    {isOutsideNCR && <span className="section-ncr-badge"><i className="fas fa-exclamation-triangle"></i> Outside NCR</span>}
+                    {isAddressComplete() && !isEditingAddress && !isOutsideNCR && (
+                      <span className="section-complete-badge"><i className="fas fa-check-circle"></i> Saved</span>
+                    )}
+                    {isOutsideNCR && (
+                      <span className="section-ncr-badge"><i className="fas fa-exclamation-triangle"></i> Outside NCR</span>
+                    )}
                   </h2>
                   {!isEditingAddress
                     ? <button type="button" className="edit-info-btn" onClick={() => setIsEditingAddress(true)}><i className="fas fa-pen"></i> Edit</button>
@@ -994,7 +1066,6 @@ const Checkout = () => {
                   }
                 </div>
 
-                {/* NCR violation banner — shown in edit mode */}
                 {isEditingAddress && isOutsideNCR && <NCRViolationBanner />}
 
                 {!isEditingAddress ? (
@@ -1003,7 +1074,6 @@ const Checkout = () => {
                       <span className="info-label"><i className="fas fa-map-marker-alt"></i> Street Address</span>
                       <span className="info-value">{savedAddress.address || <span className="info-missing">Not set — click Edit</span>}</span>
                     </div>
-                    {/* NCR violation shown in read mode too */}
                     {isOutsideNCR && (
                       <div className="info-display-item info-display-full" style={{ padding: 0, background: 'transparent', border: 'none' }}>
                         <NCRViolationBanner />
@@ -1046,7 +1116,7 @@ const Checkout = () => {
                       />
                     </div>
                     {addressCoords && !isOutsideNCR && (() => {
-                      const preview = calcLalamoveShipping(STORE_LAT, STORE_LNG, addressCoords.lat, addressCoords.lng, cartItems, products);
+                      const preview = calcLalamoveShipping(STORE_LAT, STORE_LNG, addressCoords.lat, addressCoords.lng, shippingCartItems, products);
                       return preview ? (
                         <div className="form-group full-width">
                           <ShippingBreakdown shippingInfo={preview} isEstimate={!hasStoreLocation} />
@@ -1057,8 +1127,8 @@ const Checkout = () => {
                 )}
               </div>
 
-              {/* ── Promo Applied ── */}
-              {totalDiscount > 0 && (
+              {/* ── Promo Applied (regular orders only) ── */}
+              {!rewardOrder && totalDiscount > 0 && (
                 <div className="checkout-section">
                   <h2>Promo Applied</h2>
                   <div className="promo-applied-checkout">
@@ -1080,7 +1150,15 @@ const Checkout = () => {
               {/* ── Payment ── */}
               <div className="checkout-section">
                 <h2>Payment</h2>
-                <div className="payment-info-notice">
+                {rewardOrder && (
+                  <div className="reward-payment-notice">
+                    <i className="fas fa-gift"></i>
+                    <span>
+                      Your reward item is <strong>FREE</strong> — you only pay for the shipping fee.
+                    </span>
+                  </div>
+                )}
+                <div className="payment-info-notice" style={{ marginTop: rewardOrder ? '12px' : '0' }}>
                   <i className="fas fa-shield-alt"></i>
                   <span>You will be redirected to a secure <strong>PayMongo</strong> page where you can choose to pay via <strong>GCash</strong> or <strong>Maya</strong>.</span>
                 </div>
@@ -1107,33 +1185,84 @@ const Checkout = () => {
             <div className="order-summary">
               <div className="summary-card">
                 <h2>Order Summary</h2>
+
                 <div className="summary-items">
-                  {nonPromoCartItems.length > 0 && (
+                  {/* ── Reward order item ── */}
+                  {rewardOrder && (
                     <>
-                      {promoCartItems.length > 0 && <div className="summary-group-label"><i className="fas fa-shopping-bag"></i> Regular Items</div>}
-                      {nonPromoCartItems.map(item => renderSummaryItem(item))}
+                      <div className="reward-order-banner">
+                        <div className="reward-order-banner-icon">🎁</div>
+                        <div>
+                          <strong>Reward Redemption</strong>
+                          <p>This item is free — you only pay for shipping.</p>
+                        </div>
+                      </div>
+                      <div className="summary-item summary-item-reward">
+                        <img src={rewardOrder.productImage} alt={rewardOrder.productName} />
+                        <div className="item-details">
+                          <p className="item-name">
+                            {rewardOrder.productName}
+                            <span className="item-reward-tag">
+                              <i className="fas fa-gift"></i> FREE REWARD
+                            </span>
+                          </p>
+                          {rewardOrder.productGroup && (
+                            <p className="item-meta">{rewardOrder.productGroup}</p>
+                          )}
+                          <p className="item-qty">Qty: 1</p>
+                          <p style={{ fontSize: '10px', color: '#9ca3af', fontFamily: 'Courier New', letterSpacing: '1px', marginTop: '2px' }}>
+                            {rewardOrder.ticketCode}
+                          </p>
+                        </div>
+                        <div className="item-price-col">
+                          <div className="item-price item-price-free">FREE</div>
+                        </div>
+                      </div>
                     </>
                   )}
-                  {promoCartItems.length > 0 && (
+
+                  {/* ── Regular cart items ── */}
+                  {!rewardOrder && (
                     <>
-                      <div className="summary-group-label summary-group-label-promo"><i className="fas fa-tag"></i> Promo Items</div>
-                      {promoCartItems.map(item => renderSummaryItem(item))}
+                      {nonPromoCartItems.length > 0 && (
+                        <>
+                          {promoCartItems.length > 0 && (
+                            <div className="summary-group-label"><i className="fas fa-shopping-bag"></i> Regular Items</div>
+                          )}
+                          {nonPromoCartItems.map(item => renderSummaryItem(item))}
+                        </>
+                      )}
+                      {promoCartItems.length > 0 && (
+                        <>
+                          <div className="summary-group-label summary-group-label-promo"><i className="fas fa-tag"></i> Promo Items</div>
+                          {promoCartItems.map(item => renderSummaryItem(item))}
+                        </>
+                      )}
                     </>
                   )}
                 </div>
+
                 <div className="summary-divider"></div>
 
                 <div className="summary-totals">
-                  {totalDiscount > 0 && (
+                  {/* Regular order discount row */}
+                  {!rewardOrder && totalDiscount > 0 && (
                     <div className="summary-row summary-row-original">
                       <span>Original Price</span>
                       <span className="summary-strikethrough">₱{(subtotal + totalDiscount).toLocaleString()}</span>
                     </div>
                   )}
+
                   <div className="summary-row">
                     <span>Subtotal</span>
-                    <span>₱{subtotal.toLocaleString()}</span>
+                    <span>
+                      {rewardOrder
+                        ? <span style={{ color: '#16a34a', fontWeight: 800 }}>FREE</span>
+                        : `₱${subtotal.toLocaleString()}`
+                      }
+                    </span>
                   </div>
+
                   <div className="summary-row">
                     <span>
                       <i className="fas fa-motorcycle" style={{ marginRight: '6px', color: '#fc1268' }}></i>
@@ -1147,24 +1276,24 @@ const Checkout = () => {
                     <span>
                       {isOutsideNCR
                         ? <span style={{ fontSize: '12px', color: '#dc2626', fontWeight: 700 }}>
-                            <i className="fas fa-ban" style={{ marginRight: '4px' }}></i>
-                            NCR only
+                            <i className="fas fa-ban" style={{ marginRight: '4px' }}></i>NCR only
                           </span>
                         : shippingInfo
                           ? <strong style={{ color: '#1e293b' }}>₱{shippingInfo.fee.toLocaleString()}</strong>
                           : <span style={{ fontSize: '12px', color: '#f59e0b', fontWeight: 600 }}>
-                              <i className="fas fa-map-marker-alt" style={{ marginRight: '4px' }}></i>
-                              Set address first
+                              <i className="fas fa-map-marker-alt" style={{ marginRight: '4px' }}></i>Set address first
                             </span>
                       }
                     </span>
                   </div>
-                  {totalDiscount > 0 && (
+
+                  {!rewardOrder && totalDiscount > 0 && (
                     <div className="summary-row promo-discount-row">
                       <span><i className="fas fa-tag" style={{ marginRight: '6px', color: '#ec4899' }}></i>Promo Discount</span>
                       <span className="promo-discount-amount">−₱{totalDiscount.toLocaleString()}</span>
                     </div>
                   )}
+
                   <div className="summary-row total">
                     <span>Total</span>
                     <span>
@@ -1176,7 +1305,15 @@ const Checkout = () => {
                       }
                     </span>
                   </div>
-                  {totalDiscount > 0 && !isOutsideNCR && (
+
+                  {rewardOrder && shippingInfo && !isOutsideNCR && (
+                    <div className="reward-shipping-note">
+                      <i className="fas fa-info-circle"></i>
+                      Item is free — total is shipping only.
+                    </div>
+                  )}
+
+                  {!rewardOrder && totalDiscount > 0 && !isOutsideNCR && (
                     <div className="promo-savings-checkout">
                       <i className="fas fa-piggy-bank"></i>
                       You're saving <strong>₱{totalDiscount.toLocaleString()}</strong> with your promo!
@@ -1184,7 +1321,6 @@ const Checkout = () => {
                   )}
                 </div>
 
-                {/* NCR block notice in summary card */}
                 {isOutsideNCR && (
                   <div className="ncr-summary-block">
                     <i className="fas fa-map-marker-alt"></i>
@@ -1204,10 +1340,13 @@ const Checkout = () => {
                       : !isFormReady()
                         ? <><i className="fas fa-lock"></i> Complete Your Info First</>
                         : shippingInfo
-                          ? <>Pay ₱{finalTotal.toLocaleString()} Securely</>
+                          ? rewardOrder
+                            ? <><i className="fas fa-motorcycle"></i> Pay Shipping ₱{finalTotal.toLocaleString()}</>
+                            : <>Pay ₱{finalTotal.toLocaleString()} Securely</>
                           : <>Pay Securely</>
                   }
                 </button>
+
                 {!isFormReady() && !loading && (
                   <p className="form-incomplete-hint">
                     <i className="fas fa-exclamation-circle"></i>{' '}
@@ -1218,6 +1357,7 @@ const Checkout = () => {
                       : 'Fill in and save your contact and address info above.'}
                   </p>
                 )}
+
                 <div className="security-info">
                   <i className="fas fa-shield-alt"></i>
                   <p>Secured by PayMongo. Your payment info is protected.</p>

@@ -56,6 +56,10 @@ const AdminSidebar = ({ onLinkClick, onClose }) => {
   const pendingPickups      = allPickupRequests.filter(p => p.status === 'pending').length;
   const riderBadgeCount     = pendingApplications + pendingPickups;
 
+  // ✅ Rewards pending redemptions badge
+  const allRedemptions  = useQuery(api.rewards.getAllRedemptions) ?? [];
+  const pendingRedemptions = allRedemptions.filter(r => r.status === 'pending').length;
+
   const doLogout = () => {
     logout();
     navigate('/', { replace: true });
@@ -128,7 +132,6 @@ const AdminSidebar = ({ onLinkClick, onClose }) => {
         <NavLink to="/admin/products" className="admin-nav-link" onClick={handleNavClick}>
           <i className="fas fa-box"></i><span>Products</span>
         </NavLink>
-        {/* Item List removed — merged into Products page */}
         <NavLink to="/admin/orders" className="admin-nav-link" onClick={handleNavClick}>
           <i className="fas fa-shopping-bag"></i><span>Orders</span>
           {newOrderCount > 0 && <span className="order-badge">{newOrderCount}</span>}
@@ -150,6 +153,11 @@ const AdminSidebar = ({ onLinkClick, onClose }) => {
         <NavLink to="/admin/riders" className="admin-nav-link" onClick={handleNavClick}>
           <i className="fas fa-motorcycle"></i><span>Riders</span>
           {riderBadgeCount > 0 && <span className="order-badge">{riderBadgeCount}</span>}
+        </NavLink>
+        {/* ✅ Rewards tab */}
+        <NavLink to="/admin/rewards" className="admin-nav-link" onClick={handleNavClick}>
+          <i className="fas fa-star"></i><span>Rewards</span>
+          {pendingRedemptions > 0 && <span className="order-badge">{pendingRedemptions}</span>}
         </NavLink>
         <NavLink to="/admin/backup" className="admin-nav-link" onClick={handleNavClick}>
           <i className="fas fa-database"></i><span>Backup</span>

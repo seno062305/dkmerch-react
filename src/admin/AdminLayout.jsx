@@ -17,12 +17,10 @@ const AdminLayout = () => {
     }
   }, [isReady, isAuthenticated, role, navigate]);
 
-  // Close mobile menu on route change
   useEffect(() => {
     setMobileMenuOpen(false);
   }, [window.location.pathname]);
 
-  // Prevent body scroll when mobile menu is open
   useEffect(() => {
     if (mobileMenuOpen) {
       document.body.style.overflow = 'hidden';
@@ -32,7 +30,6 @@ const AdminLayout = () => {
     return () => { document.body.style.overflow = 'unset'; };
   }, [mobileMenuOpen]);
 
-  // Watch for ar-map-open class on body — hide burger when map is fullscreen
   useEffect(() => {
     const observer = new MutationObserver(() => {
       setMapOpen(document.body.classList.contains('ar-map-open'));
@@ -58,7 +55,6 @@ const AdminLayout = () => {
   return (
     <div className="admin-layout">
 
-      {/* Burger — hidden when sidebar open OR map is open */}
       {!mobileMenuOpen && !mapOpen && (
         <button className="mobile-menu-toggle" onClick={toggleMobileMenu} aria-label="Open menu">
           <i className="fas fa-bars"></i>

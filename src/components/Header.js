@@ -5,6 +5,7 @@ import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import './Header.css';
 import RiderLoginModal from './RiderLoginModal';
+import RewardsModal from './RewardsModal';
 
 const Header = ({ cartCount, wishlistCount, onCartClick }) => {
   const { user, isAuthenticated, logout } = useAuth();
@@ -17,6 +18,7 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
   const [searchResults, setSearchResults]             = useState([]);
   const [selectedIndex, setSelectedIndex]             = useState(-1);
   const [showRiderModal, setShowRiderModal]           = useState(false);
+  const [showRewardsModal, setShowRewardsModal]       = useState(false);
   const dropdownRef      = useRef(null);
   const lastScrollTarget = useRef(null);
 
@@ -27,6 +29,13 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
     api.preOrderRequests.hasAvailablePreOrder,
     isAuthenticated && user?._id ? { userId: user._id } : 'skip'
   );
+
+  // ✅ Fetch user points for badge display
+  const userPoints = useQuery(
+    api.rewards.getUserPoints,
+    isAuthenticated && user?.email ? { email: user.email } : 'skip'
+  );
+  const totalPoints = userPoints?.totalPoints ?? 0;
 
   useEffect(() => {
     if (!location.hash) window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -174,7 +183,6 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
                 <li><Link to="/collections" onClick={closeMobileMenu}>Collections</Link></li>
                 <li><Link to="/preorder" onClick={closeMobileMenu}>Pre-Order</Link></li>
                 <li><Link to="/track-order" onClick={closeMobileMenu}>Track Order</Link></li>
-                {/* Rider — mobile sidebar */}
                 <li className="mobile-nav-rider-item">
                   <button
                     className="mobile-nav-rider-btn"
@@ -190,7 +198,6 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
             {/* RIGHT: Actions */}
             <div className="header-actions">
 
-              {/* 🛵 Rider — same style as Search/Cart/Favorites */}
               <button className="header-action-item" onClick={() => setShowRiderModal(true)}>
                 <span className="icon-wrapper"><i className="fas fa-motorcycle"></i></span>
                 <span>Rider</span>
@@ -239,6 +246,7 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
                           <div className="user-email">{user?.email}</div>
                         </div>
                       </div>
+
                       <Link to="/my-preorders"
                         className={`dropdown-item preorder-dropdown-item ${hasAvailable ? 'has-available' : ''}`}
                         onClick={() => setShowAccountDropdown(false)}>
@@ -250,6 +258,19 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
                           </span>
                         )}
                       </Link>
+
+                      {/* ✅ Rewards — before Settings */}
+                      <button
+                        className="dropdown-item rewards-dropdown-item"
+                        onClick={() => { setShowAccountDropdown(false); setShowRewardsModal(true); }}
+                      >
+                        <i className="fas fa-star rewards-star-icon"></i>
+                        My Rewards
+                        <span className="rewards-pts-badge">
+                          ⭐ {totalPoints} pts
+                        </span>
+                      </button>
+
                       <Link to="/settings" className="dropdown-item" onClick={() => setShowAccountDropdown(false)}>
                         <i className="fas fa-cog"></i> Settings
                       </Link>
@@ -338,6 +359,11 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
           onClose={() => setShowRiderModal(false)}
           onLoginSuccess={handleRiderLoginSuccess}
         />
+      )}
+
+      {/* ✅ Rewards Modal */}
+      {showRewardsModal && (
+        <RewardsModal onClose={() => setShowRewardsModal(false)} />
       )}
     </>
   );

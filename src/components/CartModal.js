@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../context/NotificationContext';
 import { useProducts, usePreOrderProducts, useCollectionProducts } from '../utils/productStorage';
 import { useUpdateCartQtyById, useRemoveFromCartById } from '../context/cartUtils';
+import { getPointsForPrice } from '../utils/pointsUtils';
 import './CartModal.css';
 
 const CartModal = ({ cart, onClose }) => {
@@ -24,14 +25,14 @@ const CartModal = ({ cart, onClose }) => {
   React.useEffect(() => {
     const scrollY = window.scrollY;
     document.body.style.position = 'fixed';
-    document.body.style.top = `-${scrollY}px`;
-    document.body.style.width = '100%';
+    document.body.style.top      = `-${scrollY}px`;
+    document.body.style.width    = '100%';
     document.body.style.overflow = 'hidden';
     document.body.classList.add('cart-modal-open');
     return () => {
       document.body.style.position = '';
-      document.body.style.top = '';
-      document.body.style.width = '';
+      document.body.style.top      = '';
+      document.body.style.width    = '';
       document.body.style.overflow = '';
       document.body.classList.remove('cart-modal-open');
       window.scrollTo(0, scrollY);
@@ -57,7 +58,7 @@ const CartModal = ({ cart, onClose }) => {
   const calculateTotalDiscount = () =>
     cart.reduce((total, item) => {
       if (!item.promoCode) return total;
-      const product = findProduct(item.productId || item.id);
+      const product       = findProduct(item.productId || item.id);
       const originalPrice = product?.price ?? item.price ?? 0;
       const finalPrice    = item.finalPrice ?? originalPrice;
       return total + (originalPrice - finalPrice) * getQty(item);
@@ -73,7 +74,10 @@ const CartModal = ({ cart, onClose }) => {
     discountAmount: totalDiscount,
   } : null;
 
-  // ── Estimated delivery date (2–4 business days from today) ──
+  // ✅ Points earned for this order (based on subtotal after discount)
+  const orderTotal   = subtotal;
+  const pointsToEarn = getPointsForPrice(orderTotal);
+
   const getEstimatedDelivery = () => {
     const today = new Date();
     const addBusinessDays = (date, days) => {
@@ -99,14 +103,11 @@ const CartModal = ({ cart, onClose }) => {
   };
 
   const handleUpdateQty = async (item, change) => {
-    const product = findProduct(item.productId || item.id);
+    const product    = findProduct(item.productId || item.id);
     const currentQty = getQty(item);
-    const newQty = currentQty + change;
+    const newQty     = currentQty + change;
 
-    if (newQty < 1) {
-      handleRemoveItem(item);
-      return;
-    }
+    if (newQty < 1) { handleRemoveItem(item); return; }
     if (product && newQty > product.stock) {
       showNotification(`Only ${product.stock} item(s) available in stock`, 'error');
       return;
@@ -128,14 +129,14 @@ const CartModal = ({ cart, onClose }) => {
   };
 
   const renderCartItem = (item) => {
-    const productId      = item.productId || item.id;
-    const product        = findProduct(productId);
+    const productId    = item.productId || item.id;
+    const product      = findProduct(productId);
 
-    const displayName    = product?.name  ?? item.name  ?? 'Product';
-    const displayImage   = product?.image ?? item.image ?? '';
-    const displayGroup   = product?.kpopGroup ?? '';
-    const displayCat     = product?.category  ?? '';
-    const displayStock   = product?.stock ?? 99;
+    const displayName  = product?.name      ?? item.name  ?? 'Product';
+    const displayImage = product?.image     ?? item.image ?? '';
+    const displayGroup = product?.kpopGroup ?? '';
+    const displayCat   = product?.category  ?? '';
+    const displayStock = product?.stock ?? 99;
 
     const qty            = getQty(item);
     const atMaxStock     = qty >= displayStock;
@@ -309,6 +310,15 @@ const CartModal = ({ cart, onClose }) => {
                     You're saving <strong>₱{totalDiscount.toLocaleString()}</strong> with your promo!
                   </div>
                 )}
+
+                {/* ✅ Points banner — shown above checkout button */}
+                <div className="cart-points-banner">
+                  <span className="cart-points-icon">⭐</span>
+                  <span>
+                    Complete this order to earn <strong>{pointsToEarn} pts</strong>
+                    {' '}toward a free reward!
+                  </span>
+                </div>
               </div>
             </>
           )}

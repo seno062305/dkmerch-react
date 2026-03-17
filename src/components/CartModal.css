@@ -787,3 +787,29 @@ body.cart-modal-open {
   white-space: nowrap;
   flex-shrink: 0;
 }
+
+/* ── Points Earn Banner ── */
+.cart-points-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(135deg, #fffbeb, #fef3c7);
+  border: 1.5px solid #fde68a;
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: #92400e;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.cart-points-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.cart-points-banner strong {
+  color: #b45309;
+  font-weight: 800;
+}

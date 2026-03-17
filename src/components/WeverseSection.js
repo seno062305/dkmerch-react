@@ -4,6 +4,7 @@ import { useCollectionProducts } from '../utils/productStorage';
 import { useWishlist, useToggleWishlist } from '../context/wishlistUtils';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
+import { PointsBadge } from '../utils/pointsUtils';
 import LoginModal from './LoginModal';
 import './WeverseSection.css';
 
@@ -39,7 +40,6 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
     return product.kpopGroup?.trim().toUpperCase() === activePromo.name.trim().toUpperCase();
   };
 
-  // Released preorders first (newest release), then sale items by creation time
   const saleProducts = (products || [])
     .filter(p =>
       p.isSale === true ||
@@ -50,9 +50,9 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
       const bReleased  = isReleased(b);
       const aReleaseMs = getReleaseMs(a) || 0;
       const bReleaseMs = getReleaseMs(b) || 0;
-      if (aReleased && !bReleased) return -1;
-      if (!aReleased && bReleased) return 1;
-      if (aReleased && bReleased) return bReleaseMs - aReleaseMs;
+      if (aReleased  && !bReleased) return -1;
+      if (!aReleased && bReleased)  return 1;
+      if (aReleased  && bReleased)  return bReleaseMs - aReleaseMs;
       return (b._creationTime || 0) - (a._creationTime || 0);
     })
     .slice(0, 8);
@@ -111,12 +111,11 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
 
         <div className="wv-grid">
           {saleProducts.map((product) => {
-            const pid = product._id || product.id;
+            const pid      = product._id || product.id;
             const hasPromo = isPromoProduct(product);
 
-            // Released badge: visible only within 1 hour of release
             const releaseMs = getReleaseMs(product);
-            const diffMs = releaseMs !== null ? Date.now() - releaseMs : -1;
+            const diffMs    = releaseMs !== null ? Date.now() - releaseMs : -1;
             const showReleasedBadge = diffMs >= 0 && diffMs < 60 * 60 * 1000;
 
             const discountPct =
@@ -133,13 +132,11 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
                 className={`wv-card ${hasPromo ? 'wv-card-promo' : ''} ${showReleasedBadge ? 'wv-card-released' : ''}`}
                 onClick={() => onProductClick && onProductClick(product)}
               >
-                {/* Released OR discount badge — never both */}
                 {showReleasedBadge
                   ? <div className="wv-released-badge"><i className="fas fa-bolt"></i> Just Released</div>
                   : discountPct && <div className="wv-sale-badge">-{discountPct}%</div>
                 }
 
-                {/* Promo badge only when not showing released */}
                 {hasPromo && !showReleasedBadge && (
                   <div className="wv-promo-badge">
                     <i className="fas fa-tag"></i> {activePromo.discount}% OFF
@@ -170,6 +167,8 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
                         ₱{Number(product.originalPrice)?.toLocaleString()}
                       </span>
                     )}
+                    {/* ✅ Points badge */}
+                    <PointsBadge price={product.price} />
                   </div>
                   {hasPromo && (
                     <div className="wv-card-promo-hint">

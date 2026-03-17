@@ -4,7 +4,6 @@ import './AdminUsers.css';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 
-// ── Suspend reason config ─────────────────────────────────────────────────────
 const SUSPEND_REASONS = [
   { value: 'abusive_behavior', label: 'Abusive / Harassing Behavior', defaultDays: 3 },
   { value: 'spam',             label: 'Spam / Fake Orders',           defaultDays: 3 },
@@ -32,7 +31,6 @@ const DURATION_OPTIONS_OTHER = [
 const STEP_CONFIGURE = 'configure';
 const STEP_CONFIRM   = 'confirm';
 
-// ── Rider delete reasons (cleaned up) ────────────────────────────────────────
 const RIDER_DELETE_REASONS = [
   { value: 'inactive',          label: 'Account Inactive',     hint: 'Rider has been inactive for a long time' },
   { value: 'policy_violation',  label: 'Policy Violation',     hint: 'Violated DKMerch rider policies' },
@@ -43,7 +41,6 @@ const RIDER_DELETE_REASONS = [
 const AdminUsers = () => {
   const [activeTab, setActiveTab] = useState('users');
 
-  // ─── CONVEX DATA ─────────────────────────────────────────────────────────────
   const users  = useQuery(api.users.getAllUsers)   ?? [];
   const riders = useQuery(api.riders.getAllRiders) ?? [];
 
@@ -53,7 +50,6 @@ const AdminUsers = () => {
   const activateUserMutation  = useMutation(api.users.activateUser);
   const deleteRiderMutation   = useMutation(api.riders.deleteRider);
 
-  // ─── USERS STATE ─────────────────────────────────────────────────────────────
   const [searchTerm, setSearchTerm]     = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
 
@@ -74,7 +70,6 @@ const AdminUsers = () => {
   const [showActivateConfirm, setShowActivateConfirm] = useState(false);
   const [userToActivate, setUserToActivate]           = useState(null);
 
-  // ─── RIDERS STATE ─────────────────────────────────────────────────────────────
   const [riderSearch, setRiderSearch]             = useState('');
   const [riderFilterStatus, setRiderFilterStatus] = useState('all');
 
@@ -92,7 +87,6 @@ const AdminUsers = () => {
     setTimeout(() => setNotification({ show: false, message: '', type: '' }), 6000);
   };
 
-  // ─── FILTERED DATA ────────────────────────────────────────────────────────────
   const pendingUsers = users.filter(u => u.status === 'pending_activation');
   const regularUsers = users.filter(u => u.status !== 'pending_activation');
 
@@ -130,7 +124,6 @@ const AdminUsers = () => {
     );
   });
 
-  // ─── SUSPEND HELPERS ──────────────────────────────────────────────────────────
   const openSuspendModal = (user) => {
     setUserToSuspend(user);
     setSuspendReason('');
@@ -174,13 +167,11 @@ const AdminUsers = () => {
         note: suspendNote || undefined,
         durationDays: suspendDays ?? undefined,
       });
-
       const auth = JSON.parse(localStorage.getItem('authUser') || 'null');
       if (auth && auth._id === userToSuspend._id) {
         localStorage.removeItem('authUser');
         window.location.href = '/';
       }
-
       const durationLabel = suspendDays
         ? `for ${suspendDays} day${suspendDays !== 1 ? 's' : ''}`
         : 'permanently';
@@ -232,7 +223,6 @@ const AdminUsers = () => {
     setUserToActivate(null);
   };
 
-  // ─── RIDER DELETE HELPERS ─────────────────────────────────────────────────────
   const openRiderDeleteModal = (rider) => {
     setRiderToDelete(rider);
     setRiderDeleteReason('');
@@ -250,7 +240,6 @@ const AdminUsers = () => {
     setRiderDeleteNote('');
   };
 
-  // Email is sent automatically for approved/suspended riders — no toggle needed
   const willSendEmail = (rider) =>
     rider && ['approved', 'suspended'].includes(rider.status);
 
@@ -276,7 +265,6 @@ const AdminUsers = () => {
   const getSelectedDeleteReasonLabel = () =>
     RIDER_DELETE_REASONS.find(r => r.value === riderDeleteReason)?.label || riderDeleteReason || '—';
 
-  // ─── DISPLAY HELPERS ──────────────────────────────────────────────────────────
   const getRoleBadgeClass        = (role)   => role === 'admin' ? 'role-badge admin' : 'role-badge user';
   const getStatusBadgeClass      = (status) => `status-badge ${status || 'active'}`;
   const getRiderStatusBadgeClass = (status) => {
@@ -323,39 +311,78 @@ const AdminUsers = () => {
         </div>
       )}
 
-      <div className="users-header">
-        <div className="header-left">
-          <h1><i className="fas fa-users"></i> User Management</h1>
-          <p className="subtitle">Manage user accounts and rider registrations</p>
-        </div>
-        <div className="users-stats">
-          {activeTab !== 'riders' ? (
-            <>
-              <div className="stat-card"><i className="fas fa-users"></i><div><div className="stat-number">{totalUsers}</div><div className="stat-label">Total Users</div></div></div>
-              <div className="stat-card"><i className="fas fa-check-circle"></i><div><div className="stat-number">{activeUsers}</div><div className="stat-label">Active</div></div></div>
-              <div className="stat-card"><i className="fas fa-ban"></i><div><div className="stat-number">{suspendedUsers}</div><div className="stat-label">Suspended</div></div></div>
-            </>
-          ) : (
-            <>
-              <div className="stat-card rider-stat"><i className="fas fa-motorcycle"></i><div><div className="stat-number">{totalRiders}</div><div className="stat-label">Total Riders</div></div></div>
-              <div className="stat-card rider-stat"><i className="fas fa-check-circle"></i><div><div className="stat-number">{approvedRiders}</div><div className="stat-label">Approved</div></div></div>
-              <div className="stat-card rider-stat"><i className="fas fa-clock"></i><div><div className="stat-number">{pendingRiders}</div><div className="stat-label">Pending</div></div></div>
-            </>
-          )}
-        </div>
+      {/* ── STATS CARDS (no header title) ── */}
+      <div className="users-stats-row">
+        {activeTab !== 'riders' ? (
+          <>
+            <div className="au-stat-card">
+              <div className="au-stat-icon au-stat-icon--blue"><i className="fas fa-users"></i></div>
+              <div className="au-stat-info">
+                <div className="au-stat-label">TOTAL USERS</div>
+                <div className="au-stat-number">{totalUsers}</div>
+                <div className="au-stat-sub">{pendingUsers.length > 0 ? `${pendingUsers.length} pending activation` : 'all accounts'}</div>
+              </div>
+            </div>
+            <div className="au-stat-card">
+              <div className="au-stat-icon au-stat-icon--green"><i className="fas fa-check-circle"></i></div>
+              <div className="au-stat-info">
+                <div className="au-stat-label">ACTIVE</div>
+                <div className="au-stat-number">{activeUsers}</div>
+                <div className="au-stat-sub">active accounts</div>
+              </div>
+            </div>
+            <div className="au-stat-card">
+              <div className="au-stat-icon au-stat-icon--red"><i className="fas fa-ban"></i></div>
+              <div className="au-stat-info">
+                <div className="au-stat-label">SUSPENDED</div>
+                <div className="au-stat-number">{suspendedUsers}</div>
+                <div className="au-stat-sub">{suspendedUsers === 0 ? 'no suspensions' : 'suspended accounts'}</div>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="au-stat-card">
+              <div className="au-stat-icon au-stat-icon--purple"><i className="fas fa-motorcycle"></i></div>
+              <div className="au-stat-info">
+                <div className="au-stat-label">TOTAL RIDERS</div>
+                <div className="au-stat-number">{totalRiders}</div>
+                <div className="au-stat-sub">registered riders</div>
+              </div>
+            </div>
+            <div className="au-stat-card">
+              <div className="au-stat-icon au-stat-icon--green"><i className="fas fa-check-circle"></i></div>
+              <div className="au-stat-info">
+                <div className="au-stat-label">APPROVED</div>
+                <div className="au-stat-number">{approvedRiders}</div>
+                <div className="au-stat-sub">active riders</div>
+              </div>
+            </div>
+            <div className="au-stat-card">
+              <div className="au-stat-icon au-stat-icon--yellow"><i className="fas fa-clock"></i></div>
+              <div className="au-stat-info">
+                <div className="au-stat-label">PENDING</div>
+                <div className="au-stat-number">{pendingRiders}</div>
+                <div className="au-stat-sub">{pendingRiders === 0 ? 'no pending' : 'awaiting review'}</div>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
+      {/* ── TABS ── */}
       <div className="tab-switcher">
         <button className={`tab-btn ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>
-          <i className="fas fa-user"></i> Users <span className="tab-count">{totalUsers}</span>
+          <i className="fas fa-user"></i> Users
+          <span className="au-tab-badge">{totalUsers}</span>
         </button>
         <button className={`tab-btn ${activeTab === 'pending' ? 'active' : ''}`} onClick={() => setActiveTab('pending')}>
-          <i className="fas fa-user-clock"></i> Pending Activation <span className="tab-count">{pendingUsers.length}</span>
-          {pendingUsers.length > 0 && <span className="tab-badge">{pendingUsers.length}</span>}
+          <i className="fas fa-user-clock"></i> Pending Activation
+          <span className="au-tab-badge">{pendingUsers.length}</span>
         </button>
         <button className={`tab-btn ${activeTab === 'riders' ? 'active' : ''}`} onClick={() => setActiveTab('riders')}>
-          <i className="fas fa-motorcycle"></i> Riders <span className="tab-count">{totalRiders}</span>
-          {pendingRiders > 0 && <span className="tab-badge">{pendingRiders}</span>}
+          <i className="fas fa-motorcycle"></i> Riders
+          <span className="au-tab-badge">{totalRiders}</span>
         </button>
       </div>
 
@@ -543,7 +570,6 @@ const AdminUsers = () => {
       {showSuspendModal && (
         <div className="modal-overlay" onClick={closeSuspendModal}>
           <div className="modal-content suspend-modal" onClick={e => e.stopPropagation()}>
-
             {suspendStep === STEP_CONFIGURE && (
               <>
                 <div className="modal-header suspend-modal-header">
@@ -612,7 +638,6 @@ const AdminUsers = () => {
                 </div>
               </>
             )}
-
             {suspendStep === STEP_CONFIRM && (
               <>
                 <div className="modal-header suspend-modal-header">
@@ -717,13 +742,10 @@ const AdminUsers = () => {
         </div>
       )}
 
-      {/* ══════════════════════════════════════════════════════════════════════
-          RIDER DELETE MODAL — TWO STEPS
-      ══════════════════════════════════════════════════════════════════════ */}
+      {/* ══ RIDER DELETE MODAL ════════════════════════════════════════════════ */}
       {showRiderDeleteModal && riderToDelete && (
         <div className="modal-overlay" onClick={closeRiderDeleteModal}>
           <div className="modal-content suspend-modal" onClick={e => e.stopPropagation()}>
-
             {riderDeleteStep === STEP_CONFIGURE && (
               <>
                 <div className="modal-header" style={{ background: 'linear-gradient(135deg,#dc2626,#b91c1c)' }}>
@@ -741,7 +763,6 @@ const AdminUsers = () => {
                       </span>
                     </div>
                   </div>
-
                   <div className="form-group">
                     <label><i className="fas fa-exclamation-triangle"></i> Reason for Deletion <span className="required-star">*</span></label>
                     <div className="reason-grid">
@@ -756,7 +777,6 @@ const AdminUsers = () => {
                       ))}
                     </div>
                   </div>
-
                   {riderDeleteReason && (
                     <div className="form-group">
                       <label><i className="fas fa-sticky-note"></i> Note <span className="optional-label">(optional)</span></label>
@@ -764,8 +784,6 @@ const AdminUsers = () => {
                         value={riderDeleteNote} onChange={e => setRiderDeleteNote(e.target.value)} rows={2} />
                     </div>
                   )}
-
-                  {/* Auto email info — no toggle, just informational */}
                   {riderDeleteReason && willSendEmail(riderToDelete) && (
                     <div className="suspend-warning-box temporary">
                       <i className="fas fa-envelope"></i>
@@ -774,14 +792,12 @@ const AdminUsers = () => {
                       </div>
                     </div>
                   )}
-
                   {riderDeleteReason && (
                     <div className="suspend-warning-box permanent" style={{ marginTop: 8 }}>
                       <i className="fas fa-exclamation-circle"></i>
                       <div><strong>This action is permanent.</strong> All rider data will be removed and cannot be undone.</div>
                     </div>
                   )}
-
                   <div className="modal-actions">
                     <button className="btn-cancel" onClick={closeRiderDeleteModal}>Cancel</button>
                     <button className="btn-suspend-confirm"
@@ -794,7 +810,6 @@ const AdminUsers = () => {
                 </div>
               </>
             )}
-
             {riderDeleteStep === STEP_CONFIRM && (
               <>
                 <div className="modal-header" style={{ background: 'linear-gradient(135deg,#dc2626,#b91c1c)' }}>

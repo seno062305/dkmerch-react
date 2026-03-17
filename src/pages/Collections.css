@@ -529,3 +529,117 @@
     right: 6px;
   }
 }
+
+/* ══════════════════════════════════════════
+   DAGDAG SA Collections.css
+   (i-paste sa dulo ng Collections.css)
+══════════════════════════════════════════ */
+
+/* Search bar */
+.collections-search-wrap {
+  max-width: 520px;
+  margin: 0 auto 20px;
+  padding: 0 16px;
+}
+
+.collections-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.collections-search-box i.fa-search {
+  position: absolute;
+  left: 14px;
+  color: #94a3b8;
+  font-size: 15px;
+  pointer-events: none;
+}
+
+.collections-search-box input {
+  width: 100%;
+  padding: 12px 44px 12px 42px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 12px;
+  font-size: 14px;
+  background: white;
+  transition: all 0.2s;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.collections-search-box input:focus {
+  outline: none;
+  border-color: #fc1268;
+  box-shadow: 0 0 0 3px rgba(252,18,104,0.1);
+}
+
+.collections-search-clear {
+  position: absolute;
+  right: 12px;
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px;
+  transition: color 0.2s;
+}
+
+.collections-search-clear:hover { color: #fc1268; }
+
+/* Released badge on collection card */
+.collection-released-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 2;
+  box-shadow: 0 2px 8px rgba(16,185,129,0.35);
+}
+
+.collection-released-badge i { font-size: 10px; }
+
+/* Highlight border for released cards */
+.collection-card-released {
+  border: 2px solid #10b981 !important;
+}
+
+
+/* ══════════════════════════════════════════
+   DAGDAG SA WeverseSection.css
+   (i-paste sa dulo ng WeverseSection.css)
+══════════════════════════════════════════ */
+
+/* Released badge on weverse card */
+.wv-released-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 2;
+  box-shadow: 0 2px 8px rgba(16,185,129,0.35);
+}
+
+.wv-released-badge i { font-size: 10px; }
+
+/* Highlight border for released cards */
+.wv-card-released {
+  border: 2px solid #10b981 !important;
+}

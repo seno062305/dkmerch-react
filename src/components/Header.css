@@ -637,3 +637,47 @@ header {
 
 .mobile-nav-rider-btn i { font-size: 1.1rem; }
 
+/* ══════════════════════════════════════════
+   REWARDS DROPDOWN ITEM
+══════════════════════════════════════════ */
+
+.rewards-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1.5rem;
+  color: #333;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  border: none;
+  background: linear-gradient(135deg, #fffbeb, #fdf2f8);
+  width: 100%;
+  text-align: left;
+  font-size: 0.95rem;
+  border-left: 3px solid #fc1268;
+}
+
+.rewards-dropdown-item:hover {
+  background: linear-gradient(135deg, #fef3c7, #fce7f3);
+  color: #fc1268;
+}
+
+.rewards-star-icon {
+  color: #f5a623 !important;
+  width: 20px;
+  text-align: center;
+  font-size: 1.1rem;
+}
+
+.rewards-pts-badge {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fc1268;
+  background: rgba(252, 18, 104, 0.08);
+  padding: 3px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(252, 18, 104, 0.2);
+  white-space: nowrap;
+}

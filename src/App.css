@@ -1,66 +1,118 @@
-/* ═══════════════════════════════════════════
-   STICKY FOOTER FIX
-   ═══════════════════════════════════════════ */
-html, body {
-  height: 100%;
+:root {
+  --primary-color: #fc1268;
+  --secondary-color: #9c27b0;
+  --dark-color: #22000fea;
+  --light-color: #f8f9fa;
+  --gray-color: #6c757d;
+  --success-color: #28a745;
+  --warning-color: #ffc107;
+  --danger-color: #dc3545;
+  --info-color: #17a2b8;
+  --border-radius: 8px;
+  --box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  --transition: all 0.3s ease;
+}
+
+* {
   margin: 0;
   padding: 0;
+  box-sizing: border-box;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
-#root {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
+body {
+  background-color: #ffffff;
+  color: #333;
+  line-height: 1.6;
+  overflow-x: hidden;
 }
 
-.App {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
+a {
+  text-decoration: none;
+  color: inherit;
 }
 
-.home-page {
-  flex: 1;
-}
-
-footer {
-  flex-shrink: 0;
-  margin-top: auto;
-}
-
-/* ═══════════════════════════════════════════
-   END OF FOOTER FIX
-   ═══════════════════════════════════════════ */
-
-/* Notification styles */
-.notification {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  background: var(--dark-color);
-  color: white;
-  padding: 15px 20px;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-  z-index: 3000;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  transform: translateX(120%);
-  transition: transform 0.3s ease;
-}
-
-.notification.show {
-  transform: translateX(0);
-}
-
-.notification i {
-  color: var(--success-color);
-  font-size: 20px;
-}
-
-.notification span {
+button {
+  cursor: pointer;
+  border: none;
+  outline: none;
   font-weight: 600;
+}
+
+.container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.btn {
+  padding: 12px 24px;
+  border-radius: var(--border-radius);
+  font-size: 16px;
+  transition: var(--transition);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-primary {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #e63e7d;
+  transform: translateY(-2px);
+  box-shadow: var(--box-shadow);
+}
+
+.btn-secondary {
+  background-color: var(--secondary-color);
+  color: white;
+}
+
+.btn-secondary:hover {
+  background-color: #8a24a8;
+  transform: translateY(-2px);
+}
+
+.btn-outline {
+  background-color: transparent;
+  border: 2px solid var(--primary-color);
+  color: var(--primary-color);
+}
+
+.btn-outline:hover {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.btn-small {
+  padding: 8px 16px;
+  font-size: 14px;
+}
+
+/* Page header styles — global default (dark gradient) */
+.page-header {
+  background: linear-gradient(135deg, var(--dark-color), #2a0a1e);
+  color: white;
+  padding: 60px 0;
+  margin-bottom: 40px;
+  text-align: center;
+}
+
+.page-title {
+  font-size: 48px;
+  margin-bottom: 15px;
+}
+
+.page-description {
+  font-size: 18px;
+  opacity: 0.9;
+  max-width: 600px;
+  margin: 0 auto;
 }
 
 /* Modal overlay */
@@ -90,14 +142,8 @@ footer {
 }
 
 @keyframes modalFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-50px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(-50px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 .modal-header {
@@ -135,6 +181,119 @@ footer {
   transform: scale(1.1);
 }
 
+/* ═══════════════════════════════════════════
+   STICKY FOOTER FIX
+   ═══════════════════════════════════════════ */
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.App {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.home-page {
+  flex: 1;
+}
+
+footer {
+  flex-shrink: 0;
+  margin-top: auto;
+}
+
+/* ═══════════════════════════════════════════
+   NOTIFICATION
+   ═══════════════════════════════════════════ */
+.notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: var(--dark-color);
+  color: white;
+  padding: 15px 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transform: translateX(120%);
+  transition: transform 0.3s ease;
+}
+
+.notification.show { transform: translateX(0); }
+.notification i    { color: var(--success-color); font-size: 20px; }
+.notification span { font-weight: 600; }
+
+/* ✅ HIDE PAGE HEADERS */
+.preorder-main .page-header,
+.trackorder-main .page-header,
+.wishlist-main .page-header,
+.collections-main .page-header,
+.help-main .page-header,
+.mypreorders-main .page-header {
+  display: none !important;
+}
+
+.preorder-main .preorder-page,
+.trackorder-main .track-order-page,
+.help-main .help-page,
+.mypreorders-main .mpo-page {
+  padding-top: 32px;
+}
+
+.collections-page {
+  padding-top: 0;
+}
+
+/* ══════════════════════════════════════════
+   POINTS BADGE — global, used everywhere
+   Collections, WeverseSection, CartModal,
+   ProductModal
+══════════════════════════════════════════ */
+
+.points-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: linear-gradient(135deg, #fffbeb, #fef3c7);
+  color: #92400e;
+  border: 1px solid #fde68a;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  white-space: nowrap;
+  letter-spacing: 0.2px;
+  line-height: 1.4;
+}
+
+/* Larger variant for modals / cart rows */
+.points-badge--md {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+
+/* On dark/image backgrounds */
+.points-badge--dark {
+  background: rgba(0,0,0,0.55);
+  color: #fde68a;
+  border-color: transparent;
+}
+
+/* ═══════════════════════════════════════════
+   RESPONSIVE
+   ═══════════════════════════════════════════ */
 @media (max-width: 576px) {
   .notification {
     top: 10px;
@@ -142,4 +301,20 @@ footer {
     left: 10px;
     padding: 12px 15px;
   }
+}
+
+@media (max-width: 992px) {
+  .container { padding: 0 15px; }
+  .page-title { font-size: 36px; }
+}
+
+@media (max-width: 768px) {
+  .btn { padding: 10px 20px; font-size: 14px; }
+  .page-header { padding: 40px 0; }
+  .page-title { font-size: 32px; }
+}
+
+@media (max-width: 576px) {
+  .container { padding: 0 10px; }
+  .page-title { font-size: 28px; }
 }

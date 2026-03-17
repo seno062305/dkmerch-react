@@ -160,6 +160,10 @@ export default defineSchema({
     refundPaidAt:          v.optional(v.string()),
     refundAdminNote:       v.optional(v.string()),
     refundHistory:         v.optional(v.any()),
+    pointsAwarded:         v.optional(v.boolean()),
+    // ── Reward redemption link ────────────────────────────
+    isRewardOrder:         v.optional(v.boolean()),
+    rewardTicketCode:      v.optional(v.string()),
   })
     .index("by_orderId", ["orderId"])
     .index("by_email", ["email"]),
@@ -270,11 +274,46 @@ export default defineSchema({
     read: v.boolean(),
   }).index("by_read", ["read"]),
 
-  // ── Store / Admin location settings ──────────────────────────────────────
   settings: defineTable({
     storeName:    v.optional(v.string()),
     storeAddress: v.optional(v.string()),
     storeLat:     v.optional(v.number()),
     storeLng:     v.optional(v.number()),
   }),
+
+  // ── Rewards System ────────────────────────────────────────────────────────
+  userPoints: defineTable({
+    email: v.string(),
+    userName: v.string(),
+    totalPoints: v.number(),
+    history: v.array(v.object({
+      orderId:     v.string(),
+      points:      v.number(),
+      orderTotal:  v.number(),
+      earnedAt:    v.string(),
+    })),
+  }).index("by_email", ["email"]),
+
+  rewardRedemptions: defineTable({
+    email:        v.string(),
+    userName:     v.string(),
+    rewardType:   v.string(),
+    pointsSpent:  v.number(),
+    status:       v.string(),
+    requestedAt:  v.string(),
+    resolvedAt:   v.optional(v.string()),
+    adminNote:    v.optional(v.string()),
+    ticketCode:   v.string(),
+    // ── Product selection ──
+    selectedProductId:    v.optional(v.string()),
+    selectedProductName:  v.optional(v.string()),
+    selectedProductImage: v.optional(v.string()),
+    selectedProductGroup: v.optional(v.string()),
+    productSelectedAt:    v.optional(v.string()),
+    // ── Checkout link ──
+    checkedOutOrderId:    v.optional(v.string()),
+    checkedOutAt:         v.optional(v.string()),
+  })
+    .index("by_email", ["email"])
+    .index("by_status", ["status"]),
 });
