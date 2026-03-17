@@ -177,6 +177,9 @@ const AdminPromos = () => {
     return { label: 'Active', cls: 'badge-active' };
   };
 
+  // ✅ Sort promos — pinakabago (latest _creationTime) ay nasa unahan
+  const sortedPromos = [...promos].sort((a, b) => (b._creationTime || 0) - (a._creationTime || 0));
+
   const TagIcon    = () => <svg className="tag-icon" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M17.707 9.293a1 1 0 010 1.414l-7 7a1 1 0 01-1.414 0l-7-7A.997.997 0 012 10V5a3 3 0 013-3h5c.256 0 .512.098.707.293l7 7zM5 6a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" /></svg>;
   const EditIcon   = () => <svg viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg>;
   const DeleteIcon = () => <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" /></svg>;
@@ -186,7 +189,7 @@ const AdminPromos = () => {
 
       {/* ── Desktop Table ── */}
       <div className="promos-table-container">
-        {promos.length === 0 ? (
+        {sortedPromos.length === 0 ? (
           <div className="promos-empty-state">
             <i className="fas fa-tag"></i>
             <p>No promos yet.</p>
@@ -207,7 +210,7 @@ const AdminPromos = () => {
               </tr>
             </thead>
             <tbody>
-              {promos.map(promo => {
+              {sortedPromos.map(promo => {
                 const { label, cls } = getStatus(promo);
                 return (
                   <tr key={promo._id}>
@@ -235,9 +238,9 @@ const AdminPromos = () => {
         <div className="mobile-create-row">
           <button className="create-btn" onClick={openCreate}>+ Create Promo</button>
         </div>
-        {promos.length === 0
+        {sortedPromos.length === 0
           ? <div className="empty-cards-msg">No promos yet.</div>
-          : promos.map(promo => {
+          : sortedPromos.map(promo => {
               const { label, cls } = getStatus(promo);
               return (
                 <div className="promo-card" key={promo._id}>
