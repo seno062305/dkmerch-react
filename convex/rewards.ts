@@ -17,11 +17,12 @@ const REWARD_COSTS: Record<string, number> = {
   accessories: 150,
 };
 
-const REWARD_CATEGORY_MAP: Record<string, string> = {
-  album:       'Album',
-  photocard:   'Photocard',
-  lightstick:  'Lightstick',
-  accessories: 'Accessories',
+// ── Fix: match exact category values from your products table ────────────────
+const REWARD_CATEGORY_MAP: Record<string, string[]> = {
+  album:       ['albums', 'Album', 'album'],
+  photocard:   ['photocards', 'Photocard', 'photocard'],
+  lightstick:  ['lightsticks', 'Lightstick', 'lightstick'],
+  accessories: ['accessories', 'Accessories', 'accessory'],
 };
 
 const genTicketCode = (): string => {
@@ -155,20 +156,24 @@ export const getAllRedemptions = query({
   },
 });
 
+// ── Fix: fetch ALL products then filter client-side by multiple category variants ──
 export const getProductsByRewardType = query({
   args: { rewardType: v.string() },
   handler: async ({ db }, { rewardType }) => {
-    const category = REWARD_CATEGORY_MAP[rewardType];
-    if (!category) return [];
-    return await db
+    const categories = REWARD_CATEGORY_MAP[rewardType];
+    if (!categories) return [];
+
+    // Fetch all non-archived products then filter by any matching category variant
+    const allProducts = await db
       .query("products")
-      .filter(q =>
-        q.and(
-          q.eq(q.field("category"), category),
-          q.neq(q.field("status"), "archived")
-        )
-      )
+      .filter(q => q.neq(q.field("status"), "archived"))
       .collect();
+
+    return allProducts.filter(p => {
+      if (!p.category) return false;
+      const cat = p.category.toLowerCase().trim();
+      return categories.some(c => c.toLowerCase().trim() === cat);
+    });
   },
 });
 
@@ -201,7 +206,6 @@ export const selectProductForTicket = mutation({
   },
 });
 
-// ── Mark ticket as checked out (linked to an order) ───────────────────────────
 export const markTicketCheckedOut = mutation({
   args: {
     ticketCode:        v.string(),
@@ -220,6 +224,31 @@ export const markTicketCheckedOut = mutation({
       checkedOutAt: new Date().toISOString(),
     });
 
+    return { success: true };
+  },
+});
+
+// TESTING ONLY — delete after testing
+export const addTestPoints = mutation({
+  args: { email: v.string(), points: v.number() },
+  handler: async ({ db }, { email, points }) => {
+    const existing = await db
+      .query("userPoints")
+      .withIndex("by_email", q => q.eq("email", email))
+      .first();
+
+    if (existing) {
+      await db.patch(existing._id, {
+        totalPoints: existing.totalPoints + points,
+      });
+    } else {
+      await db.insert("userPoints", {
+        email,
+        userName: "Test User",
+        totalPoints: points,
+        history: [],
+      });
+    }
     return { success: true };
   },
 });
