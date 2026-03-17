@@ -86,9 +86,9 @@ const AdminDashboard = () => {
   // ── Store Location State ───────────────────────────────────────────────
   const storeSettings  = useQuery(api.settings.getSettings);
   const updateSettings = useMutation(api.settings.updateSettings);
-  const [storeForm, setStoreForm]             = useState({ storeName: '', storeAddress: '', storeLat: '', storeLng: '' });
-  const [storeFormSaved, setStoreFormSaved]   = useState(false);
-  const [storeLocating, setStoreLocating]     = useState(false);
+  const [storeForm, setStoreForm]           = useState({ storeName: '', storeAddress: '', storeLat: '', storeLng: '' });
+  const [storeFormSaved, setStoreFormSaved] = useState(false);
+  const [storeLocating, setStoreLocating]   = useState(false);
 
   useEffect(() => {
     if (storeSettings) {
@@ -151,9 +151,11 @@ const AdminDashboard = () => {
   };
   // ──────────────────────────────────────────────────────────────────────
 
-  const allOrders   = useQuery(api.orders.getAllOrders)     ?? [];
-  const allUsers    = useQuery(api.users.getAllUsers)       ?? [];
- const allProducts = useQuery(api.products.getAllProductsAdmin) ?? [];
+  const allOrders = useQuery(api.orders.getAllOrders) ?? [];
+  const allUsers  = useQuery(api.users.getAllUsers)   ?? [];
+
+  // ✅ FIXED: use getAllProductsAdmin so out-of-stock products are included
+  const allProducts = useQuery(api.products.getAllProductsAdmin) ?? [];
 
   useEffect(() => {
     document.body.style.overflow = (showProductModal || statModal) ? 'hidden' : 'unset';
@@ -167,17 +169,13 @@ const AdminDashboard = () => {
 
   // ── STATS ─────────────────────────────────────────────────────────────────
   const stats = useMemo(() => {
-    const saleOrders = validOrders.filter(isSaleOrder);
+    const saleOrders      = validOrders.filter(isSaleOrder);
     const completedOrders = validOrders.filter(isCompleted);
-    const pendingOrders = validOrders.filter(o => {
-      const status = (o.status || '').toLowerCase();
-      const orderStatus = (o.orderStatus || '').toLowerCase();
-      const paymentStatus = (o.paymentStatus || '').toLowerCase();
-      return (
-        paymentStatus !== 'paid' &&
-        status !== 'paid' &&
-        (orderStatus === 'pending' || status === 'pending')
-      );
+
+    // ✅ CHANGED: out for delivery instead of pending
+    const outForDeliveryOrders = validOrders.filter(o => {
+      const s = (o.orderStatus || o.status || '').toLowerCase().replace(/\s+/g, '_');
+      return s === 'out_for_delivery';
     });
 
     const inventoryCosting = allProducts.reduce((sum, p) =>
@@ -185,18 +183,18 @@ const AdminDashboard = () => {
     );
 
     const lowStockProducts = allProducts.filter(p => (p.stock ?? 0) < 10);
-    const regularUsers = allUsers.filter(u => u.role !== 'admin');
+    const regularUsers     = allUsers.filter(u => u.role !== 'admin');
 
     return {
       inventoryCosting,
-      totalOrders: validOrders.length,
-      pendingOrders: pendingOrders.length,
-      saleOrders: saleOrders.length,
+      totalOrders:    validOrders.length,
+      outForDelivery: outForDeliveryOrders.length,   // ✅ replaced pendingOrders
+      saleOrders:     saleOrders.length,
       completedOrders: completedOrders.length,
-      totalUsers: regularUsers.length,
-      totalProducts: allProducts.length,
+      totalUsers:     regularUsers.length,
+      totalProducts:  allProducts.length,
       lowStockProducts: lowStockProducts.length,
-      outOfStock: allProducts.filter(p => (p.stock ?? 0) === 0).length,
+      outOfStock:     allProducts.filter(p => (p.stock ?? 0) === 0).length,
     };
   }, [validOrders, allUsers, allProducts]);
 
@@ -211,10 +209,10 @@ const AdminDashboard = () => {
         iconColor: '#ee4d2d',
         explanation: 'Total estimated value of all current stock. Computed by multiplying each product\'s current stock quantity by its selling price, then summing all products.',
         breakdown: [
-          { label: 'Total Products',        value: stats.totalProducts },
-          { label: 'Low Stock Items',        value: stats.lowStockProducts,  color: '#d97706' },
-          { label: 'Out of Stock Items',     value: stats.outOfStock,        color: '#dc2626' },
-          { label: 'Total Inventory Value',  value: `₱${stats.inventoryCosting.toLocaleString()}`, color: '#ee4d2d' },
+          { label: 'Total Products',       value: stats.totalProducts },
+          { label: 'Low Stock Items',       value: stats.lowStockProducts,     color: '#d97706' },
+          { label: 'Out of Stock Items',    value: stats.outOfStock,           color: '#dc2626' },
+          { label: 'Total Inventory Value', value: `₱${stats.inventoryCosting.toLocaleString()}`, color: '#ee4d2d' },
         ],
       });
     } else if (type === 'orders') {
@@ -226,10 +224,11 @@ const AdminDashboard = () => {
         iconColor: '#3b82f6',
         explanation: 'Total number of all orders placed in the system, regardless of status (pending, paid, completed, cancelled, etc.).',
         breakdown: [
-          { label: 'All Orders',       value: stats.totalOrders },
-          { label: 'Pending Orders',   value: stats.pendingOrders,   color: '#d97706' },
-          { label: 'Paid Orders',      value: stats.saleOrders,      color: '#2563eb' },
-          { label: 'Completed Orders', value: stats.completedOrders, color: '#16a34a' },
+          { label: 'All Orders',         value: stats.totalOrders },
+          // ✅ CHANGED: Out for Delivery instead of Pending Orders
+          { label: 'Out for Delivery',   value: stats.outForDelivery,   color: '#f97316' },
+          { label: 'Paid Orders',        value: stats.saleOrders,       color: '#2563eb' },
+          { label: 'Completed Orders',   value: stats.completedOrders,  color: '#16a34a' },
         ],
       });
     } else if (type === 'completed') {
@@ -426,7 +425,8 @@ const AdminDashboard = () => {
           <div className="stat-details">
             <h3>Total Orders</h3>
             <p className="stat-value">{stats.totalOrders}</p>
-            <span className="stat-label">{stats.pendingOrders} pending orders</span>
+            {/* ✅ CHANGED: out for delivery instead of pending orders */}
+            <span className="stat-label">{stats.outForDelivery} out for delivery</span>
           </div>
           <div className="card-click-hint"><i className="fas fa-info-circle"></i></div>
         </div>
