@@ -1,0 +1,18 @@
+[
+  {
+    "_creationTime": 1773541243296.5942,
+    "_id": "jd7ccwsx8d91j2g8e6d3dv4qax82zce3",
+    "approvedAt": "2026-03-15T02:21:01.521Z",
+    "customerName": "seno",
+    "orderId": "DK-1773514871226-SZ8LJK",
+    "requestedAt": "2026-03-15T02:20:42.836Z",
+    "riderEmail": "nabel.leal04@gmail.com",
+    "riderId": "jn70xt92xxenn1cbhwe9mpd1mx82w5js",
+    "riderName": "samantha",
+    "riderPhone": "09614336575",
+    "riderPlate": "PRO 1234",
+    "riderVehicle": "motorcycle",
+    "status": "out_for_delivery",
+    "total": 1354
+  }
+]
