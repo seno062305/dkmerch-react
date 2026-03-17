@@ -129,6 +129,29 @@ const parseBackupTs = (content) => {
   return result;
 };
 
+// ── Confirmation Modal ────────────────────────────────────────────────────────
+const ConfirmModal = ({ title, message, confirmLabel, confirmColor = '#6a0dad', onConfirm, onClose }) => (
+  <div className="ab-confirm-overlay" onClick={onClose}>
+    <div className="ab-confirm-modal" onClick={e => e.stopPropagation()}>
+      <div className="ab-confirm-icon">
+        <i className="fas fa-exclamation-triangle"></i>
+      </div>
+      <h3 className="ab-confirm-title">{title}</h3>
+      <p className="ab-confirm-message">{message}</p>
+      <div className="ab-confirm-actions">
+        <button className="ab-confirm-cancel" onClick={onClose}>Cancel</button>
+        <button
+          className="ab-confirm-proceed"
+          style={{ background: confirmColor }}
+          onClick={() => { onConfirm(); onClose(); }}
+        >
+          {confirmLabel}
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
 // ── Cell renderer ─────────────────────────────────────────────────────────────
 const CellValue = ({ value }) => {
   if (value === null || value === undefined) return <span className="ab-cell-null">—</span>;
@@ -370,8 +393,10 @@ const ImportTab = () => {
 const BackupTab = () => {
   const convex = useConvex();
   const { allData, loadStatus, lastFetched, updateTable, setTableStatus, resetAll, setLastFetched } = useBackup();
-  const [modalTable,   setModalTable]   = useState(null);
-  const [downloading,  setDownloading]  = useState(false);
+  const [modalTable,      setModalTable]      = useState(null);
+  const [downloading,     setDownloading]     = useState(false);
+  const [showRefreshConfirm, setShowRefreshConfirm] = useState(false);
+  const [showExportConfirm,  setShowExportConfirm]  = useState(false);
 
   const loadedKeys   = Object.keys(allData).filter(k => loadStatus[k] === 'done');
   const allLoaded    = loadedKeys.length === TABLES.length;
@@ -381,7 +406,6 @@ const BackupTab = () => {
 
   const handleFetchAll = async () => {
     resetAll(TABLES.map(t => t.key));
-
     await Promise.all(
       TABLES.map(async (t) => {
         try {
@@ -393,7 +417,6 @@ const BackupTab = () => {
         }
       })
     );
-
     setLastFetched(new Date().toLocaleString('en-PH', {
       month: 'short', day: 'numeric', year: 'numeric',
       hour: '2-digit', minute: '2-digit', second: '2-digit',
@@ -410,18 +433,52 @@ const BackupTab = () => {
 
   return (
     <>
+      {/* ── Confirmation Modals ── */}
+      {showRefreshConfirm && (
+        <ConfirmModal
+          title={hasCached ? 'Refresh All Tables?' : 'Load All Tables?'}
+          message={
+            hasCached
+              ? `This will re-fetch all ${TABLES.length} tables from the live database and replace the current cached data. Continue?`
+              : `This will fetch a snapshot of all ${TABLES.length} tables from the live database. Continue?`
+          }
+          confirmLabel={hasCached ? '🔄 Yes, Refresh' : '📥 Yes, Load'}
+          confirmColor="linear-gradient(135deg, #6a0dad, #9b30ff)"
+          onConfirm={handleFetchAll}
+          onClose={() => setShowRefreshConfirm(false)}
+        />
+      )}
+
+      {showExportConfirm && (
+        <ConfirmModal
+          title="Export All Tables?"
+          message={`This will download a .ts backup file containing all ${totalRecords.toLocaleString()} records from ${loadedKeys.length} table${loadedKeys.length !== 1 ? 's' : ''}. Continue?`}
+          confirmLabel="📥 Yes, Export"
+          confirmColor="linear-gradient(135deg, #6a0dad, #9b30ff)"
+          onConfirm={handleDownloadAll}
+          onClose={() => setShowExportConfirm(false)}
+        />
+      )}
+
       <div className="ab-controls">
-        <button className={`ab-fetch-btn ${isLoading ? 'loading' : ''}`} onClick={handleFetchAll} disabled={isLoading}>
+        {/* ✅ Refresh button — shows confirmation first */}
+        <button
+          className={`ab-fetch-btn ${isLoading ? 'loading' : ''}`}
+          onClick={() => setShowRefreshConfirm(true)}
+          disabled={isLoading}
+        >
           {isLoading
             ? <><span className="ab-spinner ab-spinner--white"></span> Fetching…</>
             : <><i className="fas fa-sync-alt"></i> {!hasCached ? 'Load All Tables' : 'Refresh All Tables'}</>
           }
         </button>
+
+        {/* ✅ Export button — shows confirmation first */}
         {hasCached && (
           <button
             className={`ab-download-all-btn ${downloading ? 'loading' : ''}`}
-            onClick={handleDownloadAll}
-            disabled={downloading}
+            onClick={() => setShowExportConfirm(true)}
+            disabled={downloading || isLoading}
           >
             {downloading
               ? <><span className="ab-spinner ab-spinner--white"></span> Preparing…</>
@@ -429,7 +486,6 @@ const BackupTab = () => {
             }
           </button>
         )}
-
       </div>
 
       {lastFetched && (
@@ -439,7 +495,6 @@ const BackupTab = () => {
         </p>
       )}
 
-      {/* ✅ Show empty state only when truly no data and not loading */}
       {!hasCached && !isLoading && (
         <div className="ab-empty-state">
           <div className="ab-empty-icon"><i className="fas fa-database"></i></div>
@@ -448,7 +503,6 @@ const BackupTab = () => {
         </div>
       )}
 
-      {/* ✅ Always show summary + cards when there's data (even while refreshing) */}
       {hasCached && (
         <div className="ab-summary">
           <div className="ab-stat">
