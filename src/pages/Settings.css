@@ -134,30 +134,53 @@
 
 .email-change-note i { margin-right: 4px; }
 
-/* Verification code row */
+/* ── Verification code row ── */
 .input-with-badge {
   display: flex;
   gap: 10px;
-  align-items: center;
+  align-items: stretch;
 }
 
-.input-with-badge .form-control { flex: 1; }
+/* ✅ Input takes most of the space, never shrinks below 120px */
+.input-with-badge .form-control {
+  flex: 1 1 auto;
+  min-width: 120px;
+  width: 0; /* ✅ forces flex to control width, not content */
+}
 
+/* ✅ Button is fixed width — never expands, never shrinks */
 .verify-btn {
-  padding: 10px 20px;
+  flex: 0 0 130px;
+  width: 130px;
+  padding: 0 16px;
+  min-height: 48px;
   background: var(--primary-color);
   color: white;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.verify-btn:hover:not(:disabled) { background: #e63e7d; transform: translateY(-2px); }
-.verify-btn:disabled { background: #ccc; cursor: not-allowed; transform: none; }
+.verify-btn:hover:not(:disabled) {
+  background: #e63e7d;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(252,18,104,0.3);
+}
+
+.verify-btn:disabled {
+  background: #d1d5db;
+  color: #9ca3af;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
 
 /* ── Password input with show/hide toggle ── */
 .pw-input-wrapper {
@@ -320,8 +343,8 @@
   .settings-tab { padding: 15px 10px; font-size: 14px; flex-direction: column; gap: 5px; }
   .settings-content { padding: 25px 20px; border-radius: 0 0 8px 8px; }
   .settings-form h2 { font-size: 20px; }
-  .input-with-badge { flex-direction: column; align-items: stretch; }
-  .verify-btn { width: 100%; justify-content: center; }
+  .input-with-badge { flex-direction: row; align-items: stretch; }
+  .verify-btn { width: auto; padding: 0 16px; }
   .btn-save { width: 100%; justify-content: center; }
 }
 
@@ -332,6 +355,7 @@
   .settings-content { padding: 20px 15px; }
   .settings-tab { padding: 12px 8px; font-size: 12px; }
   .form-control { padding: 10px 14px; font-size: 14px; }
-  .verify-btn { padding: 8px 16px; font-size: 13px; }
+  .input-with-badge { flex-direction: column; align-items: stretch; }
+  .verify-btn { width: 100%; min-height: 44px; padding: 12px 16px; font-size: 14px; }
   .btn-save { padding: 12px 24px; font-size: 14px; }
 }
