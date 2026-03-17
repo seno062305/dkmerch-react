@@ -950,11 +950,6 @@ const RegisterModal = ({ onClose }) => {
                 )}
               </div>
 
-              <div className="forgot-password-wrapper">
-                <button type="button" className="forgot-password-link" onClick={() => setView("forgot")}>
-                  Forgot Password?
-                </button>
-              </div>
 
               <button type="submit" className="register-submit-btn"
                 disabled={!isPasswordValid() || !passwordsMatch || isLoading}>
