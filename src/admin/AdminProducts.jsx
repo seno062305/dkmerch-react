@@ -50,6 +50,19 @@ const formatReleaseDateTime = (dateStr, timeStr) => {
   });
 };
 
+const msAfterRelease = (product) => {
+  if (!product.isPreOrder || !product.releaseDate) return -1;
+  const rt = product.releaseTime || '00:00';
+  return Date.now() - new Date(`${product.releaseDate}T${rt}:00+08:00`).getTime();
+};
+
+const isReleased = (product) => msAfterRelease(product) >= 0;
+
+const showReleasedBadge = (product) => {
+  const ms = msAfterRelease(product);
+  return ms >= 0 && ms < 60 * 60 * 1000;
+};
+
 // ══════════════════════════════════════════════════════════════════════════
 //  PRODUCT MODAL
 // ══════════════════════════════════════════════════════════════════════════
@@ -107,7 +120,6 @@ const ProductModal = ({ editingId, initialForm, onClose, onSubmit, submitting })
       <div className="pm-modal" onClick={e => e.stopPropagation()}>
         <div className="pm-header">
           <div className="pm-title-row">
-            <div className="pm-icon"><i className={editingId ? 'fas fa-edit' : 'fas fa-plus'}></i></div>
             <div>
               <h2>{editingId ? 'Edit Product' : 'Add New Product'}</h2>
               <p>{editingId ? 'Update product details below' : 'Fill in the details to add a new product'}</p>
@@ -291,9 +303,8 @@ const StockManagement = ({ products, updateProduct, onAddProduct }) => {
     return { label: 'In Stock', cls: 'in-stock' };
   };
 
-  const startEdit = (productId, currentStock) => {
-    setEditingStock(productId); setStockValue(String(currentStock)); setStockError('');
-  };
+  const startEdit  = (productId, currentStock) => { setEditingStock(productId); setStockValue(String(currentStock)); setStockError(''); };
+  const cancelEdit = () => { setEditingStock(null); setStockValue(''); setStockError(''); };
 
   const saveEdit = async (productId) => {
     const val = stockValue.trim();
@@ -306,14 +317,10 @@ const StockManagement = ({ products, updateProduct, onAddProduct }) => {
     setEditingStock(null); setStockValue(''); setStockError('');
   };
 
-  const cancelEdit = () => { setEditingStock(null); setStockValue(''); setStockError(''); };
-
   const displayList = activeTab === 'low' ? lowStockProducts : sortedFiltered;
 
   return (
     <div className="stock-section">
-
-      {/* Stats */}
       <div className="stock-stats">
         <div className="stat-card">
           <div className="stat-icon blue"><i className="fas fa-boxes"></i></div>
@@ -333,7 +340,6 @@ const StockManagement = ({ products, updateProduct, onAddProduct }) => {
         </div>
       </div>
 
-      {/* Tabs */}
       <div className="stock-tabs">
         <button className={`tab-btn${activeTab === 'all' ? ' active' : ''}`} onClick={() => setActiveTab('all')}>
           <i className="fas fa-warehouse"></i> All Stock Levels
@@ -344,7 +350,6 @@ const StockManagement = ({ products, updateProduct, onAddProduct }) => {
         </button>
       </div>
 
-      {/* Filters */}
       <div className="stock-filters">
         <div className="search-box">
           <i className="fas fa-search"></i>
@@ -359,7 +364,6 @@ const StockManagement = ({ products, updateProduct, onAddProduct }) => {
         </select>
       </div>
 
-      {/* Table Card */}
       <div className="stock-table-card">
         {activeTab === 'low' && lowStockProducts.length === 0 ? (
           <div className="empty-state success">
@@ -464,8 +468,7 @@ const AdminProducts = () => {
 
   const showSuccess = (msg) => { setSuccessMsg(msg); setTimeout(() => setSuccessMsg(''), 3200); };
 
-  const openAdd = () => { setEditingId(null); setModalForm(emptyForm); setShowModal(true); };
-
+  const openAdd  = () => { setEditingId(null); setModalForm(emptyForm); setShowModal(true); };
   const openEdit = (product) => {
     setModalForm({
       name: product.name || '', category: product.category || 'albums',
@@ -478,7 +481,6 @@ const AdminProducts = () => {
     setEditingId(product._id);
     setShowModal(true);
   };
-
   const closeModal = () => { setShowModal(false); setEditingId(null); };
 
   const handleModalSubmit = async (form) => {
@@ -520,39 +522,34 @@ const AdminProducts = () => {
     showSuccess('Product deleted.');
   };
 
-  const filteredProducts = products.filter(p => {
-    const matchSearch =
-      p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.kpopGroup?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchCat = filterCategory === 'all' || p.category === filterCategory;
-    return matchSearch && matchCat;
-  });
-
-  const isReleased = (product) => {
-    if (!product.isPreOrder || !product.releaseDate) return false;
-    const rt = product.releaseTime || '00:00';
-    return Date.now() >= new Date(`${product.releaseDate}T${rt}:00+08:00`).getTime();
-  };
+  // ✅ Sort by newest first (latest _creationTime sa unahan)
+  const filteredProducts = products
+    .filter(p => {
+      const matchSearch =
+        p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.kpopGroup?.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchCat = filterCategory === 'all' || p.category === filterCategory;
+      return matchSearch && matchCat;
+    })
+    .sort((a, b) => (b._creationTime || 0) - (a._creationTime || 0));
 
   const lowStockCount = products.filter(p => p.stock <= 10).length;
 
   return (
     <div className="admin-products-page">
-
       {successMsg && (
         <div className="success-toast">
           <i className="fas fa-check-circle"></i> {successMsg}
         </div>
       )}
 
-      {/* ── View Toggle Row — toggle left, Add Product right (same row always) ── */}
       <div className="view-toggle-row">
         <div className="view-toggle">
           <button className={`view-btn${activeView === 'products' ? ' active' : ''}`} onClick={() => setActiveView('products')}>
-            <i className="fas fa-th-large"></i> Product Catalog
+            <i className=""></i> Product Catalog
           </button>
           <button className={`view-btn${activeView === 'stock' ? ' active' : ''}`} onClick={() => setActiveView('stock')}>
-            <i className="fas fa-warehouse"></i> Stock Management
+            <i className=""></i> Stock Management
             {lowStockCount > 0 && <span className="low-pill">{lowStockCount}</span>}
           </button>
         </div>
@@ -561,7 +558,6 @@ const AdminProducts = () => {
         </button>
       </div>
 
-      {/* ── Product Catalog ── */}
       {activeView === 'products' && (
         <div className="admin-product-list">
           <div className="list-header">
@@ -590,14 +586,15 @@ const AdminProducts = () => {
           ) : (
             <div className="product-grid">
               {filteredProducts.map(product => {
-                const released = isReleased(product);
+                const released  = isReleased(product);
+                const showBadge = showReleasedBadge(product);
                 return (
                   <div key={product._id} className="product-card">
                     <div className="product-image">
                       <img src={product.image} alt={product.name} />
                       <div className="product-badges">
-                        {product.isPreOrder && released  && <span className="badge released"><i className="fas fa-check-circle"></i> Released</span>}
-                        {product.isPreOrder && !released && <span className="badge pre-order"><i className="fas fa-clock"></i> Pre-Order</span>}
+                        {product.isPreOrder && showBadge  && <span className="badge released"><i className="fas fa-check-circle"></i> Released</span>}
+                        {product.isPreOrder && !released  && <span className="badge pre-order"><i className="fas fa-clock"></i> Pre-Order</span>}
                         {product.isSale && !product.isPreOrder && <span className="badge sale"><i className="fas fa-tag"></i> Sale</span>}
                       </div>
                     </div>
@@ -636,7 +633,6 @@ const AdminProducts = () => {
         </div>
       )}
 
-      {/* ── Stock Management ── */}
       {activeView === 'stock' && (
         <StockManagement products={products} updateProduct={updateProduct} onAddProduct={openAdd} />
       )}
