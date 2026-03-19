@@ -13,21 +13,7 @@ const TermsAndConditions = () => {
           </div>
           <h1>{activeTab === 'terms' ? 'Terms and Conditions' : 'Privacy Policy'}</h1>
           <p className="legal-updated">Last updated: March 2026</p>
-
-          <div className="legal-tabs">
-            <button
-              className={`legal-tab-btn ${activeTab === 'terms' ? 'active' : ''}`}
-              onClick={() => setActiveTab('terms')}
-            >
-              <i className="fas fa-file-contract"></i> Terms & Conditions
-            </button>
-            <button
-              className={`legal-tab-btn ${activeTab === 'privacy' ? 'active' : ''}`}
-              onClick={() => setActiveTab('privacy')}
-            >
-              <i className="fas fa-shield-alt"></i> Privacy Policy
-            </button>
-          </div>
+          {/* Tab buttons removed — navigation handled via footer links */}
         </div>
 
         {/* ══ TERMS AND CONDITIONS TAB ══ */}
@@ -182,7 +168,6 @@ const TermsAndConditions = () => {
         {activeTab === 'privacy' && (
           <div className="legal-content">
 
-            {/* RA 10173 Compliance Banner */}
             <div className="legal-privacy-banner">
               <div className="legal-privacy-banner-icon">
                 <i className="fas fa-balance-scale"></i>
