@@ -111,6 +111,19 @@ export const loginUser = mutation({
           : `Your account is suspended until ${until}. Please contact support.`;
         return { success: false, user: null, message: msg };
       }
+
+      // ── Self-deactivated: prompt reactivation ──
+      if (user.status === "self_deactivated") {
+        return {
+          success: false,
+          user: null,
+          message: "self_deactivated",
+          deactivated: true,
+          userEmail: user.email,
+          userName: user.name,
+        };
+      }
+
       if (user.status === "pending_activation") {
         return { success: false, user: null, message: "Your account is pending activation by an administrator." };
       }
@@ -603,5 +616,110 @@ export const resetPasswordByEmail = mutation({
     if (!user) return { success: false, message: "No account found with that email." };
     await db.patch(user._id, { password: newPassword });
     return { success: true, message: "Password reset successfully!" };
+  },
+});
+
+// ════════════════════════════════════════════════════════════════════
+//  ACCOUNT MANAGEMENT — Self-service deactivation & reactivation
+// ════════════════════════════════════════════════════════════════════
+
+// ── Deactivate own account (temporary — reactivatable via OTP) ───────────────
+export const deactivateOwnAccount = mutation({
+  args: {
+    id: v.id("users"),
+    reason: v.string(),
+    note: v.optional(v.string()),
+  },
+  handler: async ({ db }, { id, reason, note }) => {
+    await db.patch(id, {
+      status: "self_deactivated",
+      suspendReason: reason,
+      suspendNote: note ?? undefined,
+      suspendedAt: Date.now(),
+      // No suspendedUntil — self-deactivated is permanent until user reactivates
+    });
+    return { success: true };
+  },
+});
+
+// ── Generate + store a reactivation OTP on the user record ───────────────────
+export const generateReactivationOtp = mutation({
+  args: { email: v.string() },
+  handler: async ({ db }, { email }) => {
+    const user = await db
+      .query("users")
+      .withIndex("by_email", q => q.eq("email", email))
+      .first();
+
+    if (!user) return { success: false, message: "Account not found." };
+    if (user.status !== "self_deactivated") {
+      return { success: false, message: "Account is not deactivated." };
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpiresAt = Date.now() + 1000 * 60 * 10; // 10 minutes
+
+    await db.patch(user._id, {
+      reactivationOtp: otp,
+      reactivationOtpExpiresAt: otpExpiresAt,
+    } as any);
+
+    return { success: true, otp, userName: user.name, userId: user._id };
+  },
+});
+
+// ── Verify OTP and reactivate the account ────────────────────────────────────
+export const reactivateAccount = mutation({
+  args: {
+    email: v.string(),
+    otp: v.string(),
+  },
+  handler: async ({ db }, { email, otp }) => {
+    const user = await db
+      .query("users")
+      .withIndex("by_email", q => q.eq("email", email))
+      .first() as any;
+
+    if (!user) return { success: false, message: "Account not found." };
+    if (user.status !== "self_deactivated") {
+      return { success: false, message: "Account is not deactivated." };
+    }
+    if (!user.reactivationOtp) {
+      return { success: false, message: "No OTP found. Please request a new one." };
+    }
+    if (Date.now() > user.reactivationOtpExpiresAt) {
+      return { success: false, message: "OTP has expired. Please request a new one.", expired: true };
+    }
+    if (user.reactivationOtp !== otp) {
+      return { success: false, message: "Incorrect OTP. Please try again." };
+    }
+
+    await db.patch(user._id, {
+      status: "active",
+      suspendReason: undefined,
+      suspendNote: undefined,
+      suspendedAt: undefined,
+      reactivationOtp: undefined,
+      reactivationOtpExpiresAt: undefined,
+    } as any);
+
+    return { success: true, user: { ...user, status: "active" } };
+  },
+});
+
+// ── I-paste ito sa dulo ng convex/users.ts ───────────────────────────────────
+// Server-side password verification — hindi kailangan i-expose ang password
+// sa client para ma-compare
+
+export const verifyUserPassword = mutation({
+  args: {
+    id: v.id("users"),
+    password: v.string(),
+  },
+  handler: async ({ db }, { id, password }) => {
+    const user = await db.get(id);
+    if (!user) return { success: false, message: "User not found." };
+    if (user.password !== password) return { success: false, message: "Incorrect password." };
+    return { success: true };
   },
 });

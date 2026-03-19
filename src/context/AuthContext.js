@@ -23,7 +23,6 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const storedUser = JSON.parse(localStorage.getItem("authUser") || "null");
     if (storedUser) {
-      // ✅ All roles — restore from localStorage directly, no sessionStorage needed
       setUser(storedUser);
       setRole(storedUser.role);
       setIsAuthenticated(true);
@@ -59,7 +58,6 @@ export const AuthProvider = ({ children }) => {
           sessionId: riderResult.sessionId,
         };
 
-        // ✅ Store everything in localStorage so it persists after app close
         localStorage.setItem("authUser", JSON.stringify(sessionRider));
         setUser(sessionRider);
         setRole("rider");
@@ -73,6 +71,7 @@ export const AuthProvider = ({ children }) => {
       if (mode === "user" || !mode) {
         const result = await loginUserMutation({ identifier, password });
 
+        // ── Successful login ──
         if (result.success && result.user) {
           const sessionUser = {
             _id:      result.user._id,
@@ -88,6 +87,18 @@ export const AuthProvider = ({ children }) => {
           setRole(sessionUser.role);
           setIsAuthenticated(true);
           return { success: true, role: sessionUser.role };
+        }
+
+        // ── Self-deactivated account — pass through the flag so LoginModal
+        //    can show the reactivation flow instead of the generic error ──
+        if (result.deactivated) {
+          return {
+            success:   false,
+            deactivated: true,
+            userEmail: result.userEmail,
+            userName:  result.userName,
+            message:   result.message,
+          };
         }
 
         if (mode === "user") {

@@ -26,7 +26,6 @@ function recordFailedAttempt() {
 
   let lockoutSecs = 0;
   if (attempts >= 5) {
-    // 5th fail → 60s, 6th → 90s, 7th → 120s, ...
     lockoutSecs = BASE_LOCKOUT + Math.max(0, attempts - 5) * EXTRA_PER_FAIL;
   }
 
@@ -54,6 +53,7 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
   const { login } = useAuth();
   const navigate = useNavigate();
 
+  // view: "login" | "forgot" | "reactivate"
   const [view, setView] = useState("login");
 
   const [formData, setFormData] = useState({ email: "", password: "" });
@@ -63,9 +63,10 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
   const [error, setError] = useState("");
 
   // ── Rate limit state ──
-  const [loginCooldown, setLoginCooldown]     = useState(0);
-  const [loginAttempts, setLoginAttempts]     = useState(0);
+  const [loginCooldown, setLoginCooldown] = useState(0);
+  const [loginAttempts, setLoginAttempts] = useState(0);
 
+  // ── Forgot password state ──
   const [forgotEmail, setForgotEmail] = useState("");
   const [verificationCode, setVerificationCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -85,8 +86,22 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
     hasNumber: false, hasSymbol: false
   });
 
-  const resetPasswordByEmail = useMutation(api.users.resetPasswordByEmail);
+  // ── Reactivation state ──
+  const [reactivateEmail, setReactivateEmail]       = useState("");
+  const [reactivateUserName, setReactivateUserName] = useState("");
+  const [reactivateOtp, setReactivateOtp]           = useState("");
+  const [reactivateSentOtp, setReactivateSentOtp]   = useState("");
+  const [reactivateMsg, setReactivateMsg]           = useState("");
+  const [reactivateSending, setReactivateSending]   = useState(false);
+  const [reactivateLoading, setReactivateLoading]   = useState(false);
+  const [reactivateCooldown, setReactivateCooldown] = useState(0);
+  const [reactivateStep, setReactivateStep]         = useState(0); // 0=confirm, 1=send code, 2=enter code
+
+  const resetPasswordByEmail  = useMutation(api.users.resetPasswordByEmail);
   const sendPasswordResetCode = useAction(api.sendEmail.sendPasswordResetCode);
+  const generateReactivationOtp = useMutation(api.users.generateReactivationOtp);
+  const reactivateAccount     = useMutation(api.users.reactivateAccount);
+  const sendReactivationOTP   = useAction(api.sendEmail.sendReactivationOTP);
 
   // ── On mount: restore any existing lockout from sessionStorage ──
   useEffect(() => {
@@ -104,6 +119,13 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
     const t = setTimeout(() => setLoginCooldown(c => c - 1), 1000);
     return () => clearTimeout(t);
   }, [loginCooldown]);
+
+  // ── Tick down reactivation cooldown ──
+  useEffect(() => {
+    if (reactivateCooldown <= 0) return;
+    const t = setTimeout(() => setReactivateCooldown(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [reactivateCooldown]);
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -133,15 +155,14 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
 
   useEffect(() => {
     if (view === "forgot") {
-      setForgotEmail("");
-      setVerificationCode("");
-      setNewPassword("");
-      setConfirmNewPassword("");
-      setSentCode("");
-      setCodeMsg("");
-      setResetMsg("");
-      setPasswordCooldown(0);
-      setPasswordAttempts(0);
+      setForgotEmail(""); setVerificationCode(""); setNewPassword("");
+      setConfirmNewPassword(""); setSentCode(""); setCodeMsg("");
+      setResetMsg(""); setPasswordCooldown(0); setPasswordAttempts(0);
+    }
+    if (view === "reactivate") {
+      setReactivateOtp(""); setReactivateMsg("");
+      setReactivateSentOtp(""); setReactivateCooldown(0);
+      setReactivateStep(0);
     }
   }, [view]);
 
@@ -164,7 +185,6 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
   const accentGradient = "linear-gradient(135deg, #ec4899, #f472b6)";
   const accentShadow   = "rgba(236,72,153,0.3)";
 
-  // ── Format cooldown nicely: "1:30" or "45s" ──
   const formatCooldown = (secs) => {
     if (secs >= 60) {
       const m = Math.floor(secs / 60);
@@ -212,11 +232,11 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
     </div>
   );
 
+  // ── LOGIN SUBMIT ──────────────────────────────────────────────────────────
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
 
-    // ── Block if still locked out ──
     const remaining = getRemainingLockout();
     if (remaining > 0) {
       setLoginCooldown(remaining);
@@ -227,8 +247,17 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
     setIsLoading(true);
     try {
       const result = await login(formData.email, formData.password, "user");
+
+      // ── Deactivated account → show reactivation flow ──
+      if (!result.success && result.deactivated) {
+        setReactivateEmail(result.userEmail || formData.email);
+        setReactivateUserName(result.userName || "");
+        setView("reactivate");
+        setIsLoading(false);
+        return;
+      }
+
       if (!result.success) {
-        // Record failed attempt
         const { attempts, lockoutSecs } = recordFailedAttempt();
         setLoginAttempts(attempts);
 
@@ -240,17 +269,16 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
               : `Account temporarily locked. Please wait ${formatCooldown(lockoutSecs)}.`
           );
         } else {
-          const remaining = 5 - attempts;
+          const rem = 5 - attempts;
           setError(
-            remaining > 0
-              ? `${result.message} (${remaining} attempt${remaining !== 1 ? "s" : ""} left before lockout)`
+            rem > 0
+              ? `${result.message} (${rem} attempt${rem !== 1 ? "s" : ""} left before lockout)`
               : result.message
           );
         }
         return;
       }
 
-      // ── Success: clear rate limit ──
       resetRLState();
       setLoginAttempts(0);
       setLoginCooldown(0);
@@ -281,6 +309,7 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
 
   const handleRegisterSuccess = () => setShowRegister(false);
 
+  // ── FORGOT PASSWORD ───────────────────────────────────────────────────────
   const handleSendCode = async () => {
     if (passwordCooldown > 0) return;
     if (!forgotEmail.trim() || !/\S+@\S+\.\S+/.test(forgotEmail)) {
@@ -298,11 +327,7 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
     setSendingCode(true);
     setCodeMsg("");
     try {
-      const result = await sendPasswordResetCode({
-        to: forgotEmail,
-        code,
-        accountType: "customer",
-      });
+      const result = await sendPasswordResetCode({ to: forgotEmail, code, accountType: "customer" });
       if (result?.success) {
         setCodeMsg(`✅ Code sent to ${forgotEmail}! Check your inbox.`);
       } else {
@@ -325,19 +350,12 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
     setResetMsg("");
     if (!sentCode) { setResetMsg("❌ Please request a verification code first."); return; }
     if (verificationCode !== sentCode) { setResetMsg("❌ Invalid verification code."); return; }
-    if (!isNewPwValid()) {
-      setResetMsg("❌ Password does not meet all requirements.");
-      return;
-    }
+    if (!isNewPwValid()) { setResetMsg("❌ Password does not meet all requirements."); return; }
     if (!newPasswordsMatch) { setResetMsg("❌ Passwords do not match."); return; }
 
     setResetLoading(true);
     try {
-      const result = await resetPasswordByEmail({
-        email: forgotEmail,
-        newPassword: newPassword,
-        accountType: "customer",
-      });
+      const result = await resetPasswordByEmail({ email: forgotEmail, newPassword, accountType: "customer" });
       if (result?.success) {
         setResetMsg("✅ Password reset successful! You can now log in.");
         setTimeout(() => {
@@ -355,11 +373,78 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
     }
   };
 
+  // ── REACTIVATION ──────────────────────────────────────────────────────────
+  const handleSendReactivationOtp = async () => {
+    if (reactivateCooldown > 0) return;
+    setReactivateSending(true);
+    setReactivateMsg("");
+    try {
+      // Generate OTP in DB
+      const result = await generateReactivationOtp({ email: reactivateEmail });
+      if (!result.success) {
+        setReactivateMsg(`❌ ${result.message}`);
+        setReactivateSending(false);
+        return;
+      }
+      // Send OTP via email
+      const emailResult = await sendReactivationOTP({
+        to: reactivateEmail,
+        name: reactivateUserName || result.userName || "there",
+        otp: result.otp,
+      });
+      if (emailResult?.success) {
+        setReactivateSentOtp(result.otp);
+        setReactivateStep(2);
+        setReactivateMsg(`✅ Verification code sent to ${reactivateEmail}!`);
+        setReactivateCooldown(60);
+      } else {
+        setReactivateMsg("❌ Failed to send email. Please try again.");
+      }
+    } catch {
+      setReactivateMsg("❌ Something went wrong. Please try again.");
+    } finally {
+      setReactivateSending(false);
+    }
+  };
+
+  const handleReactivate = async (e) => {
+    e.preventDefault();
+    setReactivateMsg("");
+    if (!reactivateSentOtp) { setReactivateMsg("❌ Please request a verification code first."); return; }
+    if (reactivateOtp.length !== 6) { setReactivateMsg("❌ Please enter the full 6-digit code."); return; }
+
+    setReactivateLoading(true);
+    try {
+      const result = await reactivateAccount({ email: reactivateEmail, otp: reactivateOtp });
+      if (result.success) {
+        // ── Don't auto-login — send back to login view so they log in manually ──
+        setReactivateMsg("✅ Account reactivated! Please log in to continue.");
+        setTimeout(() => {
+          setView("login");
+          setFormData({ email: "", password: "" });
+          setError("✅ Account reactivated successfully! Please log in.");
+        }, 1500);
+      } else {
+        setReactivateMsg(`❌ ${result.message}`);
+        if (result.expired) {
+          setReactivateSentOtp("");
+          setReactivateStep(0);
+        }
+      }
+    } catch {
+      setReactivateMsg("❌ Failed to reactivate. Please try again.");
+    } finally {
+      setReactivateLoading(false);
+    }
+  };
+
   if (showRegister) return <RegisterModal onClose={handleRegisterSuccess} />;
 
-  // Is the login button currently locked?
   const isLockedOut = loginCooldown > 0;
 
+  // ════════════════════════════════════════════════════════════════════
+  //  RENDER
+  // ════════════════════════════════════════════════════════════════════
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="login-modal-content" onClick={(e) => e.stopPropagation()}>
@@ -369,7 +454,171 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
           </svg>
         </button>
 
-        {view === "forgot" ? (
+        {/* ── REACTIVATION VIEW ─────────────────────────────────────── */}
+        {view === "reactivate" && (
+          <>
+            <div className="login-modal-header">
+              <div className="login-icon" style={{ background: "linear-gradient(135deg, #22c55e, #16a34a)", boxShadow: "0 10px 25px rgba(34,197,94,0.3)" }}>
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
+                </svg>
+              </div>
+              <h2 style={{ background: "linear-gradient(135deg, #22c55e, #16a34a)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
+                Reactivate Account
+              </h2>
+              <p className="login-subtitle">
+                {reactivateStep === 0 ? "Your account is deactivated" : `Verification code sent to ${reactivateEmail}`}
+              </p>
+            </div>
+
+            <form onSubmit={handleReactivate} className="login-form">
+
+              {/* ── STEP 0: Confirmation ── */}
+              {reactivateStep === 0 && (
+                <>
+                  <div className="reactivate-confirm-card">
+                    <div className="reactivate-confirm-icon">
+                      <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: 28, height: 28, color: "#16a34a" }}>
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
+                      </svg>
+                    </div>
+                    <div className="reactivate-confirm-info">
+                      <div className="reactivate-confirm-label">Account</div>
+                      <div className="reactivate-confirm-value">{reactivateEmail}</div>
+                    </div>
+                  </div>
+
+                  <div className="reactivate-info-banner" style={{ marginBottom: 24 }}>
+                    <svg viewBox="0 0 20 20" fill="currentColor" style={{ width: 18, height: 18, flexShrink: 0, color: "#0369a1" }}>
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                    <span>
+                      Are you sure you want to reactivate this account? We'll send a 6-digit verification code to <strong>{reactivateEmail}</strong> to confirm your identity.
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="login-submit-btn"
+                    style={{ background: "linear-gradient(135deg, #22c55e, #16a34a)", boxShadow: "0 4px 12px rgba(34,197,94,0.35)" }}
+                    onClick={() => setReactivateStep(1)}
+                  >
+                    <svg viewBox="0 0 20 20" fill="currentColor" style={{ width: 20, height: 20 }}>
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    Yes, Reactivate My Account
+                  </button>
+                </>
+              )}
+
+              {/* ── STEP 1: Send code ── */}
+              {reactivateStep === 1 && (
+                <div style={{ marginBottom: 24 }}>
+                  <div className="reactivate-info-banner" style={{ marginBottom: 20 }}>
+                    <svg viewBox="0 0 20 20" fill="currentColor" style={{ width: 18, height: 18, flexShrink: 0, color: "#0369a1" }}>
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                    <span>Click the button below to send a 6-digit code to <strong>{reactivateEmail}</strong>.</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="login-submit-btn"
+                    style={{
+                      background: reactivateCooldown > 0 || reactivateSending ? "#9ca3af" : "linear-gradient(135deg, #22c55e, #16a34a)",
+                      boxShadow: reactivateCooldown > 0 ? "none" : "0 4px 12px rgba(34,197,94,0.35)",
+                    }}
+                    onClick={handleSendReactivationOtp}
+                    disabled={reactivateCooldown > 0 || reactivateSending}
+                  >
+                    {reactivateSending ? (
+                      <><svg className="spinner" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>Sending...</>
+                    ) : reactivateCooldown > 0 ? (
+                      `Resend in ${reactivateCooldown}s`
+                    ) : (
+                      <><svg viewBox="0 0 20 20" fill="currentColor" style={{ width: 20, height: 20 }}><path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z"/><path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z"/></svg>Send Verification Code</>
+                    )}
+                  </button>
+                  {reactivateMsg && (
+                    <div className={`forgot-msg ${reactivateMsg.startsWith("✅") ? "success" : "error"}`} style={{ marginTop: 12 }}>
+                      {reactivateMsg}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── STEP 2: Enter code ── */}
+              {reactivateStep === 2 && (
+                <>
+                  <div className="input-group">
+                    <label>Verification Code</label>
+                    <div className="forgot-code-row">
+                      <div className="input-wrapper" style={{ flex: 1 }}>
+                        <svg className="input-icon" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                        </svg>
+                        <input
+                          type="text"
+                          placeholder="Enter 6-digit code"
+                          className="form-input"
+                          value={reactivateOtp}
+                          onChange={(e) => {
+                            const d = e.target.value.replace(/\D/g, "");
+                            if (d.length <= 6) setReactivateOtp(d);
+                          }}
+                          maxLength="6"
+                          required
+                          autoFocus
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        className="send-code-btn"
+                        style={{ background: reactivateCooldown > 0 ? "#d1d5db" : "linear-gradient(135deg, #22c55e, #16a34a)" }}
+                        onClick={handleSendReactivationOtp}
+                        disabled={reactivateCooldown > 0 || reactivateSending}
+                      >
+                        {reactivateSending ? "Sending..." : reactivateCooldown > 0 ? `${reactivateCooldown}s` : "Resend"}
+                      </button>
+                    </div>
+                    {reactivateMsg && (
+                      <div className={`forgot-msg ${reactivateMsg.startsWith("✅") ? "success" : "error"}`} style={{ marginTop: 10 }}>
+                        {reactivateMsg}
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="login-submit-btn"
+                    style={{
+                      background: reactivateLoading ? "#9ca3af" : "linear-gradient(135deg, #22c55e, #16a34a)",
+                      boxShadow: "0 4px 12px rgba(34,197,94,0.35)",
+                    }}
+                    disabled={reactivateOtp.length !== 6 || reactivateLoading}
+                  >
+                    {reactivateLoading ? (
+                      <><svg className="spinner" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>Reactivating...</>
+                    ) : (
+                      <><svg viewBox="0 0 20 20" fill="currentColor" style={{ width: 20, height: 20 }}><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>Reactivate My Account</>
+                    )}
+                  </button>
+                </>
+              )}
+
+              <div className="divider"><span>OR</span></div>
+              <div className="signup-section">
+                <p>
+                  <button type="button" className="signup-link" style={{ color: accentColor }} onClick={() => setView("login")}>
+                    ← Back to Login
+                  </button>
+                </p>
+              </div>
+            </form>
+          </>
+        )}
+
+        {/* ── FORGOT PASSWORD VIEW ──────────────────────────────────── */}
+        {view === "forgot" && (
           <>
             <div className="login-modal-header">
               <div className="login-icon" style={{ background: accentGradient, boxShadow: `0 10px 25px ${accentShadow}` }}>
@@ -462,7 +711,6 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
                     <PwToggleIcon show={showNewPw} />
                   </button>
                 </div>
-
                 {newPassword && (
                   <div className="password-strength-container">
                     <div className="password-strength-bar">
@@ -472,12 +720,9 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
                   </div>
                 )}
                 {showNewPwReqs && <PwRequirements validation={newPwValidation} />}
-
                 {isNewPwValid() && newPassword && (
                   <div className="password-success-message">
-                    <svg viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
+                    <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
                     <span>Great! Your password is strong</span>
                   </div>
                 )}
@@ -503,9 +748,7 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
                 </div>
                 {newPasswordsMatch && (
                   <div className="password-match-success">
-                    <svg viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
+                    <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
                     <span>Passwords match!</span>
                   </div>
                 )}
@@ -524,20 +767,9 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
                 disabled={!isNewPwValid() || !newPasswordsMatch || !sentCode || resetLoading}
               >
                 {resetLoading ? (
-                  <>
-                    <svg className="spinner" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
-                    Resetting...
-                  </>
+                  <><svg className="spinner" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>Resetting...</>
                 ) : (
-                  <>
-                    <svg viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                    </svg>
-                    Reset Password
-                  </>
+                  <><svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" /></svg>Reset Password</>
                 )}
               </button>
 
@@ -551,8 +783,10 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
               </div>
             </form>
           </>
+        )}
 
-        ) : (
+        {/* ── LOGIN VIEW ───────────────────────────────────────────── */}
+        {view === "login" && (
           <>
             <div className="login-modal-header">
               <div className="login-icon" style={{ background: accentGradient, boxShadow: `0 10px 25px ${accentShadow}` }}>
@@ -567,25 +801,27 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
             </div>
 
             <form onSubmit={handleSubmit} className="login-form">
-              {/* ── Lockout warning banner ── */}
               {isLockedOut && (
                 <div className="error-banner lockout-banner">
                   <svg viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
                   </svg>
-                  <span>
-                    Too many failed attempts. Try again in{" "}
-                    <strong>{formatCooldown(loginCooldown)}</strong>
-                  </span>
+                  <span>Too many failed attempts. Try again in <strong>{formatCooldown(loginCooldown)}</strong></span>
                 </div>
               )}
 
               {error && !isLockedOut && (
-                <div className="error-banner">
-                  <svg viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                  </svg>
-                  <span>{error}</span>
+                <div className={`error-banner ${error.startsWith("✅") ? "success-banner" : ""}`}>
+                  {error.startsWith("✅") ? (
+                    <svg viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                  <span>{error.startsWith("✅") ? error.replace("✅ ", "") : error}</span>
                 </div>
               )}
 
@@ -623,13 +859,12 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
                     required autoComplete="current-password"
                     disabled={isLockedOut}
                   />
-                  <button type="button" className="password-toggle" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? "Hide password" : "Show password"}>
+                  <button type="button" className="password-toggle" onClick={() => setShowPassword(!showPassword)}>
                     <PwToggleIcon show={showPassword} />
                   </button>
                 </div>
               </div>
 
-              {/* Attempts warning (before lockout) */}
               {!isLockedOut && loginAttempts >= 3 && loginAttempts < 5 && (
                 <div className="login-attempts-warning">
                   <svg viewBox="0 0 20 20" fill="currentColor">
@@ -655,27 +890,11 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
                 disabled={isLoading || isLockedOut}
               >
                 {isLockedOut ? (
-                  <>
-                    <svg viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                    </svg>
-                    Locked — {formatCooldown(loginCooldown)}
-                  </>
+                  <><svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" /></svg>Locked — {formatCooldown(loginCooldown)}</>
                 ) : isLoading ? (
-                  <>
-                    <svg className="spinner" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
-                    Logging in...
-                  </>
+                  <><svg className="spinner" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>Logging in...</>
                 ) : (
-                  <>
-                    <svg viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M3 3a1 1 0 011 1v12a1 1 0 11-2 0V4a1 1 0 011-1zm7.707 3.293a1 1 0 010 1.414L9.414 9H17a1 1 0 110 2H9.414l1.293 1.293a1 1 0 01-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                    Log In
-                  </>
+                  <><svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 3a1 1 0 011 1v12a1 1 0 11-2 0V4a1 1 0 011-1zm7.707 3.293a1 1 0 010 1.414L9.414 9H17a1 1 0 110 2H9.414l1.293 1.293a1 1 0 01-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0z" clipRule="evenodd" /></svg>Log In</>
                 )}
               </button>
 

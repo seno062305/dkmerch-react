@@ -704,3 +704,74 @@ body.login-modal-open {
   cursor: not-allowed;
   border-color: #e5e7eb;
 }
+
+/* ── Append these to the END of your existing LoginModal.css ── */
+
+/* Reactivation info banner */
+/* ── Append these to the END of your existing LoginModal.css ── */
+
+/* Reactivation info banner */
+.reactivate-info-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #e0f2fe;
+  border: 1px solid #bae6fd;
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin: 0 40px 4px;
+  font-size: 13px;
+  color: #0369a1;
+  line-height: 1.6;
+}
+
+@media (max-width: 576px) {
+  .reactivate-info-banner {
+    margin: 0 24px 4px;
+  }
+}
+
+/* Reactivation confirm card — account info display */
+.reactivate-confirm-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: #f0fdf4;
+  border: 1.5px solid #86efac;
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+.reactivate-confirm-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: #dcfce7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.reactivate-confirm-info { flex: 1; }
+.reactivate-confirm-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #16a34a;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 3px;
+}
+.reactivate-confirm-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #166534;
+  word-break: break-all;
+}
+
+/* Green success banner on login view (after reactivation) */
+.error-banner.success-banner {
+  background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+  border-color: #6ee7b7;
+}
+.error-banner.success-banner svg { color: #059669; }
+.error-banner.success-banner span { color: #065f46; }
