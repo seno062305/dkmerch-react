@@ -18,6 +18,7 @@ const RegisterModal = ({ onClose }) => {
   const [passwordFocused, setPasswordFocused] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [consentChecked, setConsentChecked] = useState(false);
   const [passwordValidation, setPasswordValidation] = useState({
     minLength: false, hasUppercase: false, hasLowercase: false,
     hasNumber: false, hasSymbol: false
@@ -112,7 +113,6 @@ const RegisterModal = ({ onClose }) => {
     return () => clearTimeout(t);
   }, [resendCooldown]);
 
-  // Auto-focus first OTP input when entering OTP view
   useEffect(() => {
     if (view === "otp") {
       setTimeout(() => otpRefs.current[0]?.focus(), 100);
@@ -273,15 +273,10 @@ const RegisterModal = ({ onClose }) => {
     try {
       const result = await resendOtpMutation({ email: pendingEmail });
       if (result.success) {
-        // Send the NEW otp from result — old OTP is already invalidated in DB
-        await sendRegistrationOTP({
-          to: pendingEmail,
-          name: pendingName,
-          otp: result.otp,
-        });
+        await sendRegistrationOTP({ to: pendingEmail, name: pendingName, otp: result.otp });
         setOtpDigits(["", "", "", "", "", ""]);
         setOtpSuccess("✅ New code sent! Check your inbox.");
-        setResendCooldown(60); // ← 60 second cooldown
+        setResendCooldown(60);
         setTimeout(() => otpRefs.current[0]?.focus(), 100);
       } else {
         setOtpError(result.message || "Failed to resend. Please try again.");
@@ -329,6 +324,8 @@ const RegisterModal = ({ onClose }) => {
 
     if (formData.password !== formData.confirmPassword) newErrors.confirmPassword = "Passwords do not match";
 
+    if (!consentChecked) newErrors.consent = "You must agree to the Privacy Policy and Terms to continue.";
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -353,20 +350,13 @@ const RegisterModal = ({ onClose }) => {
         return;
       }
 
-      // Send OTP email
-      await sendRegistrationOTP({
-        to: formData.email,
-        name: formData.name,
-        otp: result.otp,
-      });
-
-      // Switch to OTP view
+      await sendRegistrationOTP({ to: formData.email, name: formData.name, otp: result.otp });
       setPendingEmail(formData.email);
       setPendingName(formData.name);
       setOtpDigits(["", "", "", "", "", ""]);
       setOtpError("");
       setOtpSuccess("");
-      setResendCooldown(60); // ← 60 second cooldown after first send
+      setResendCooldown(60);
       setView("otp");
 
     } catch (err) {
@@ -389,12 +379,10 @@ const RegisterModal = ({ onClose }) => {
       setPasswordAttempts(0);
       return;
     }
-
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     setSentCode(code);
     setSendingCode(true);
     setCodeMsg("");
-
     try {
       const result = await sendPasswordResetCode({ to: forgotEmail, code });
       if (result?.success) {
@@ -463,8 +451,6 @@ const RegisterModal = ({ onClose }) => {
             </div>
 
             <div style={{ padding: "0 32px 36px" }}>
-
-              {/* Email display */}
               <div style={{
                 background: "linear-gradient(135deg, #fff0f6, #f5f3ff)",
                 border: "1.5px solid #ffd6e7",
@@ -479,13 +465,7 @@ const RegisterModal = ({ onClose }) => {
                 </p>
               </div>
 
-              {/* OTP Input Boxes */}
-              <div style={{
-                display: "flex",
-                gap: "10px",
-                justifyContent: "center",
-                marginBottom: "20px"
-              }}>
+              <div style={{ display: "flex", gap: "10px", justifyContent: "center", marginBottom: "20px" }}>
                 {otpDigits.map((digit, index) => (
                   <input
                     key={index}
@@ -498,144 +478,62 @@ const RegisterModal = ({ onClose }) => {
                     onKeyDown={e => handleOtpKeyDown(index, e)}
                     onPaste={index === 0 ? handleOtpPaste : undefined}
                     style={{
-                      width: "48px",
-                      height: "56px",
-                      textAlign: "center",
-                      fontSize: "22px",
-                      fontWeight: "700",
+                      width: "48px", height: "56px", textAlign: "center",
+                      fontSize: "22px", fontWeight: "700",
                       border: `2px solid ${otpError ? "#dc2626" : digit ? "#fc1268" : "#e5e7eb"}`,
-                      borderRadius: "12px",
-                      outline: "none",
+                      borderRadius: "12px", outline: "none",
                       background: digit ? "linear-gradient(135deg, #fff0f6, #f5f3ff)" : "white",
-                      color: "#1f2937",
-                      transition: "all 0.15s ease",
-                      caretColor: "#fc1268",
+                      color: "#1f2937", transition: "all 0.15s ease", caretColor: "#fc1268",
                     }}
                     disabled={otpLoading}
                   />
                 ))}
               </div>
 
-              {/* Error / Success */}
               {otpError && (
-                <div style={{
-                  background: "#fef2f2",
-                  border: "1px solid #fecaca",
-                  borderRadius: "10px",
-                  padding: "12px 16px",
-                  marginBottom: "16px",
-                  color: "#dc2626",
-                  fontSize: "13px",
-                  fontWeight: "600",
-                  textAlign: "center"
-                }}>
+                <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "10px", padding: "12px 16px", marginBottom: "16px", color: "#dc2626", fontSize: "13px", fontWeight: "600", textAlign: "center" }}>
                   ❌ {otpError}
                 </div>
               )}
               {otpSuccess && (
-                <div style={{
-                  background: "#f0fdf4",
-                  border: "1px solid #bbf7d0",
-                  borderRadius: "10px",
-                  padding: "12px 16px",
-                  marginBottom: "16px",
-                  color: "#15803d",
-                  fontSize: "13px",
-                  fontWeight: "600",
-                  textAlign: "center"
-                }}>
+                <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "10px", padding: "12px 16px", marginBottom: "16px", color: "#15803d", fontSize: "13px", fontWeight: "600", textAlign: "center" }}>
                   {otpSuccess}
                 </div>
               )}
 
-              {/* Verify Button */}
               <button
                 type="button"
                 onClick={() => handleVerifyOtp()}
                 disabled={otpLoading || otpDigits.join("").length !== 6}
                 style={{
-                  width: "100%",
-                  padding: "14px",
-                  background: otpDigits.join("").length === 6
-                    ? "linear-gradient(135deg, #fc1268, #9c27b0)"
-                    : "linear-gradient(135deg, #d1d5db, #9ca3af)",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "12px",
-                  fontSize: "15px",
-                  fontWeight: "700",
+                  width: "100%", padding: "14px",
+                  background: otpDigits.join("").length === 6 ? "linear-gradient(135deg, #fc1268, #9c27b0)" : "linear-gradient(135deg, #d1d5db, #9ca3af)",
+                  color: "white", border: "none", borderRadius: "12px", fontSize: "15px", fontWeight: "700",
                   cursor: otpDigits.join("").length === 6 ? "pointer" : "not-allowed",
-                  marginBottom: "16px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "8px",
+                  marginBottom: "16px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
                   transition: "all 0.2s",
                   boxShadow: otpDigits.join("").length === 6 ? "0 4px 12px rgba(252,18,104,0.3)" : "none",
                 }}
               >
                 {otpLoading ? (
-                  <>
-                    <svg style={{ width: 18, height: 18, animation: "spin 1s linear infinite" }} viewBox="0 0 24 24">
-                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" style={{ opacity: 0.25 }} />
-                      <path fill="currentColor" style={{ opacity: 0.75 }} d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    Verifying...
-                  </>
+                  <><svg style={{ width: 18, height: 18, animation: "spin 1s linear infinite" }} viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" style={{ opacity: 0.25 }} /><path fill="currentColor" style={{ opacity: 0.75 }} d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Verifying...</>
                 ) : "✅ Verify Email"}
               </button>
 
-              {/* Resend */}
               <div style={{ textAlign: "center" }}>
-                <p style={{ color: "#6b7280", fontSize: "13px", margin: "0 0 8px" }}>
-                  Didn't receive the code?
-                </p>
-                <button
-                  type="button"
-                  onClick={handleResendOtp}
-                  disabled={resendCooldown > 0 || resendLoading}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: resendCooldown > 0 ? "#9ca3af" : "#fc1268",
-                    fontWeight: "700",
-                    fontSize: "14px",
-                    cursor: resendCooldown > 0 ? "not-allowed" : "pointer",
-                    padding: "4px 0",
-                    marginBottom: "16px",
-                  }}
-                >
-                  {resendLoading
-                    ? "Sending..."
-                    : resendCooldown > 0
-                    ? `Resend in ${resendCooldown}s`
-                    : "📨 Resend Code"}
+                <p style={{ color: "#6b7280", fontSize: "13px", margin: "0 0 8px" }}>Didn't receive the code?</p>
+                <button type="button" onClick={handleResendOtp} disabled={resendCooldown > 0 || resendLoading}
+                  style={{ background: "none", border: "none", color: resendCooldown > 0 ? "#9ca3af" : "#fc1268", fontWeight: "700", fontSize: "14px", cursor: resendCooldown > 0 ? "not-allowed" : "pointer", padding: "4px 0", marginBottom: "16px" }}>
+                  {resendLoading ? "Sending..." : resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "📨 Resend Code"}
                 </button>
-
                 <br />
-                <button
-                  type="button"
-                  onClick={() => setView("register")}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: "#9ca3af",
-                    fontSize: "13px",
-                    cursor: "pointer"
-                  }}
-                >
+                <button type="button" onClick={() => setView("register")}
+                  style={{ background: "none", border: "none", color: "#9ca3af", fontSize: "13px", cursor: "pointer" }}>
                   ← Back to Register
                 </button>
               </div>
 
-              {/* Expiry note */}
-              <div style={{
-                background: "#fffbeb",
-                border: "1px solid #fde68a",
-                borderRadius: "10px",
-                padding: "12px 16px",
-                marginTop: "20px"
-              }}>
+              <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "10px", padding: "12px 16px", marginTop: "20px" }}>
                 <p style={{ color: "#92400e", fontSize: "12px", margin: 0 }}>
                   ⏱ Code expires in <strong>3 minutes</strong>. Check your spam folder if you don't see it.
                 </p>
@@ -663,12 +561,8 @@ const RegisterModal = ({ onClose }) => {
                     <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
                     <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
                   </svg>
-                  <input
-                    type="email" placeholder="Enter your registered email"
-                    className="form-input" value={forgotEmail}
-                    onChange={(e) => { setForgotEmail(e.target.value); setCodeMsg(""); }}
-                    required
-                  />
+                  <input type="email" placeholder="Enter your registered email" className="form-input" value={forgotEmail}
+                    onChange={(e) => { setForgotEmail(e.target.value); setCodeMsg(""); }} required />
                 </div>
               </div>
 
@@ -679,29 +573,15 @@ const RegisterModal = ({ onClose }) => {
                     <svg className="input-icon" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
                     </svg>
-                    <input
-                      type="text" placeholder="Enter 6-digit code" className="form-input"
-                      value={verificationCode}
-                      onChange={(e) => {
-                        const digits = e.target.value.replace(/\D/g, "");
-                        if (digits.length <= 6) setVerificationCode(digits);
-                      }}
-                      maxLength="6" required
-                    />
+                    <input type="text" placeholder="Enter 6-digit code" className="form-input" value={verificationCode}
+                      onChange={(e) => { const d = e.target.value.replace(/\D/g,""); if(d.length<=6) setVerificationCode(d); }}
+                      maxLength="6" required />
                   </div>
-                  <button
-                    type="button" className="send-code-btn"
-                    onClick={handleSendCode}
-                    disabled={passwordCooldown > 0 || sendingCode}
-                  >
+                  <button type="button" className="send-code-btn" onClick={handleSendCode} disabled={passwordCooldown > 0 || sendingCode}>
                     {sendingCode ? "Sending..." : passwordCooldown > 0 ? `Wait ${passwordCooldown}s` : "Send Code"}
                   </button>
                 </div>
-                {codeMsg && (
-                  <div className={`forgot-msg ${codeMsg.startsWith("✅") ? "success" : "error"}`}>
-                    {codeMsg}
-                  </div>
-                )}
+                {codeMsg && <div className={`forgot-msg ${codeMsg.startsWith("✅") ? "success" : "error"}`}>{codeMsg}</div>}
               </div>
 
               <div className="input-group">
@@ -710,34 +590,24 @@ const RegisterModal = ({ onClose }) => {
                   <svg className="input-icon" viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
                   </svg>
-                  <input
-                    type={showNewPw ? "text" : "password"}
-                    placeholder="Create a strong password"
+                  <input type={showNewPw ? "text" : "password"} placeholder="Create a strong password"
                     className={`form-input password-input ${isNewPwValid() && newPassword ? "valid" : ""}`}
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    onFocus={() => setNewPwFocused(true)}
-                    onBlur={() => setNewPwFocused(false)}
-                    required
-                  />
+                    value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
+                    onFocus={() => setNewPwFocused(true)} onBlur={() => setNewPwFocused(false)} required />
                   <button type="button" className="password-toggle" onClick={() => setShowNewPw(p => !p)}>
                     <PwToggleIcon show={showNewPw} />
                   </button>
                 </div>
                 {newPassword && (
                   <div className="password-strength-container">
-                    <div className="password-strength-bar">
-                      <div className="password-strength-fill" style={{ width: `${newPwStrength.percentage}%`, backgroundColor: newPwStrength.color }} />
-                    </div>
+                    <div className="password-strength-bar"><div className="password-strength-fill" style={{ width: `${newPwStrength.percentage}%`, backgroundColor: newPwStrength.color }} /></div>
                     {newPwStrength.text && <div className="password-strength-label" style={{ color: newPwStrength.color }}>{newPwStrength.text}</div>}
                   </div>
                 )}
                 {showNewPwReqs && <PwRequirements validation={newPwValidation} />}
                 {isNewPwValid() && newPassword && (
                   <div className="password-success-message">
-                    <svg viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
+                    <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
                     <span>Great! Your password is strong</span>
                   </div>
                 )}
@@ -749,63 +619,34 @@ const RegisterModal = ({ onClose }) => {
                   <svg className="input-icon" viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                   </svg>
-                  <input
-                    type={showConfirmNewPw ? "text" : "password"}
-                    placeholder="Confirm your new password"
+                  <input type={showConfirmNewPw ? "text" : "password"} placeholder="Confirm your new password"
                     className={`form-input password-input ${newPasswordsMatch ? "valid" : ""}`}
-                    value={confirmNewPassword}
-                    onChange={(e) => setConfirmNewPassword(e.target.value)}
-                    required
-                  />
+                    value={confirmNewPassword} onChange={(e) => setConfirmNewPassword(e.target.value)} required />
                   <button type="button" className="password-toggle" onClick={() => setShowConfirmNewPw(p => !p)}>
                     <PwToggleIcon show={showConfirmNewPw} />
                   </button>
                 </div>
                 {newPasswordsMatch && (
                   <div className="password-match-success">
-                    <svg viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
+                    <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
                     <span>Passwords match!</span>
                   </div>
                 )}
               </div>
 
-              {resetMsg && (
-                <div className={`forgot-msg ${resetMsg.startsWith("✅") ? "success" : "error"}`} style={{ marginBottom: "12px" }}>
-                  {resetMsg}
-                </div>
-              )}
+              {resetMsg && <div className={`forgot-msg ${resetMsg.startsWith("✅") ? "success" : "error"}`} style={{ marginBottom: "12px" }}>{resetMsg}</div>}
 
-              <button
-                type="submit" className="register-submit-btn"
-                disabled={!isNewPwValid() || !newPasswordsMatch || !sentCode || resetLoading}
-              >
+              <button type="submit" className="register-submit-btn" disabled={!isNewPwValid() || !newPasswordsMatch || !sentCode || resetLoading}>
                 {resetLoading ? (
-                  <>
-                    <svg className="spinner" viewBox="0 0 24 24">
-                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" style={{ opacity: 0.25 }} />
-                      <path fill="currentColor" style={{ opacity: 0.75 }} d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    Resetting...
-                  </>
+                  <><svg className="spinner" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" style={{ opacity: 0.25 }} /><path fill="currentColor" style={{ opacity: 0.75 }} d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Resetting...</>
                 ) : (
-                  <>
-                    <svg viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                    </svg>
-                    Reset Password
-                  </>
+                  <><svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" /></svg>Reset Password</>
                 )}
               </button>
 
               <div className="divider"><span>OR</span></div>
               <div className="login-section">
-                <p>
-                  <button type="button" className="login-link" onClick={() => setView("register")}>
-                    ← Back to Register
-                  </button>
-                </p>
+                <p><button type="button" className="login-link" onClick={() => setView("register")}>← Back to Register</button></p>
               </div>
             </form>
           </>
@@ -839,13 +680,9 @@ const RegisterModal = ({ onClose }) => {
                   <svg className="input-icon" viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
                   </svg>
-                  <input
-                    type="text" id="name" name="name"
-                    placeholder="Enter your full name"
+                  <input type="text" id="name" name="name" placeholder="Enter your full name"
                     className={`form-input ${errors.name ? "error" : ""}`}
-                    value={formData.name} onChange={handleChange}
-                    maxLength={MAX_NAME_LENGTH} required
-                  />
+                    value={formData.name} onChange={handleChange} maxLength={MAX_NAME_LENGTH} required />
                 </div>
                 {errors.name && <span className="error-text">{errors.name}</span>}
               </div>
@@ -856,13 +693,9 @@ const RegisterModal = ({ onClose }) => {
                   <svg className="input-icon" viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-6-3a2 2 0 11-4 0 2 2 0 014 0zm-2 4a5 5 0 00-4.546 2.916A5.986 5.986 0 0010 16a5.986 5.986 0 004.546-2.084A5 5 0 0010 11z" clipRule="evenodd" />
                   </svg>
-                  <input
-                    type="text" id="username" name="username"
-                    placeholder="Choose a username"
+                  <input type="text" id="username" name="username" placeholder="Choose a username"
                     className={`form-input ${errors.username ? "error" : ""}`}
-                    value={formData.username} onChange={handleChange}
-                    maxLength={MAX_USERNAME_LENGTH} required
-                  />
+                    value={formData.username} onChange={handleChange} maxLength={MAX_USERNAME_LENGTH} required />
                 </div>
                 {errors.username && <span className="error-text">{errors.username}</span>}
               </div>
@@ -874,13 +707,9 @@ const RegisterModal = ({ onClose }) => {
                     <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
                     <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
                   </svg>
-                  <input
-                    type="email" id="email" name="email"
-                    placeholder="Enter your Gmail (max 25 chars before @)"
+                  <input type="email" id="email" name="email" placeholder="Enter your Gmail (max 25 chars before @)"
                     className={`form-input ${errors.email ? "error" : ""}`}
-                    value={formData.email} onChange={handleChange}
-                    onBlur={handleEmailBlur} required
-                  />
+                    value={formData.email} onChange={handleChange} onBlur={handleEmailBlur} required />
                 </div>
                 {errors.email && <span className="error-text">{errors.email}</span>}
               </div>
@@ -891,14 +720,11 @@ const RegisterModal = ({ onClose }) => {
                   <svg className="input-icon" viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
                   </svg>
-                  <input
-                    type={showPassword ? "text" : "password"} id="password" name="password"
+                  <input type={showPassword ? "text" : "password"} id="password" name="password"
                     placeholder="Create a strong password"
                     className={`form-input password-input ${errors.password ? "error" : ""} ${isPasswordValid() && formData.password ? "valid" : ""}`}
                     value={formData.password} onChange={handleChange}
-                    onFocus={() => setPasswordFocused(true)}
-                    onBlur={() => setPasswordFocused(false)} required
-                  />
+                    onFocus={() => setPasswordFocused(true)} onBlur={() => setPasswordFocused(false)} required />
                   <button type="button" className="password-toggle" onClick={() => setShowPassword(p => !p)}>
                     <PwToggleIcon show={showPassword} />
                   </button>
@@ -906,18 +732,14 @@ const RegisterModal = ({ onClose }) => {
                 {errors.password && <span className="error-text">{errors.password}</span>}
                 {formData.password && (
                   <div className="password-strength-container">
-                    <div className="password-strength-bar">
-                      <div className="password-strength-fill" style={{ width: `${strength.percentage}%`, backgroundColor: strength.color }} />
-                    </div>
+                    <div className="password-strength-bar"><div className="password-strength-fill" style={{ width: `${strength.percentage}%`, backgroundColor: strength.color }} /></div>
                     {strength.text && <div className="password-strength-label" style={{ color: strength.color }}>{strength.text}</div>}
                   </div>
                 )}
                 {showPwReqs && <PwRequirements validation={passwordValidation} />}
                 {isPasswordValid() && formData.password && (
                   <div className="password-success-message">
-                    <svg viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
+                    <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
                     <span>Great! Your password is strong</span>
                   </div>
                 )}
@@ -929,12 +751,10 @@ const RegisterModal = ({ onClose }) => {
                   <svg className="input-icon" viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                   </svg>
-                  <input
-                    type={showConfirmPassword ? "text" : "password"} id="confirmPassword"
-                    name="confirmPassword" placeholder="Confirm your password"
+                  <input type={showConfirmPassword ? "text" : "password"} id="confirmPassword" name="confirmPassword"
+                    placeholder="Confirm your password"
                     className={`form-input password-input ${errors.confirmPassword ? "error" : ""} ${passwordsMatch ? "valid" : ""}`}
-                    value={formData.confirmPassword} onChange={handleChange} required
-                  />
+                    value={formData.confirmPassword} onChange={handleChange} required />
                   <button type="button" className="password-toggle" onClick={() => setShowConfirmPassword(p => !p)}>
                     <PwToggleIcon show={showConfirmPassword} />
                   </button>
@@ -942,41 +762,72 @@ const RegisterModal = ({ onClose }) => {
                 {errors.confirmPassword && <span className="error-text">{errors.confirmPassword}</span>}
                 {passwordsMatch && (
                   <div className="password-match-success">
-                    <svg viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
+                    <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
                     <span>Passwords match!</span>
                   </div>
                 )}
               </div>
 
+              {/* ── PRIVACY CONSENT ── */}
+              <div className="reg-consent-box">
+                <div className="reg-consent-notice">
+                  <div className="reg-consent-notice-icon">🔒</div>
+                  <div className="reg-consent-notice-text">
+                    <strong>Data Privacy Notice</strong>
+                    <p>
+                      In compliance with the <strong>Data Privacy Act of 2012 (RA 10173)</strong>, DKMerch collects and processes
+                      your personal information (name, email, phone, address) solely for account management, order processing,
+                      and delivery coordination. Your data will not be shared with third parties without your consent.
+                      You have the right to access, correct, and request deletion of your data at any time.
+                    </p>
+                  </div>
+                </div>
+
+                <label className="reg-consent-label">
+                  <input
+                    type="checkbox"
+                    className="reg-consent-checkbox"
+                    checked={consentChecked}
+                    onChange={e => {
+                      setConsentChecked(e.target.checked);
+                      setErrors(prev => ({ ...prev, consent: "" }));
+                    }}
+                  />
+                  <span>
+                    I have read and agree to the{" "}
+                    <a href="/privacy-policy" target="_blank" rel="noopener noreferrer" className="reg-consent-link">
+                      Privacy Policy
+                    </a>{" "}
+                    and{" "}
+                    <a href="/terms-and-conditions" target="_blank" rel="noopener noreferrer" className="reg-consent-link">
+                      Terms & Conditions
+                    </a>.
+                    I consent to the collection and use of my personal data as described above.
+                  </span>
+                </label>
+                {errors.consent && (
+                  <div className="reg-consent-error">
+                    <svg viewBox="0 0 20 20" fill="currentColor" style={{ width: 14, height: 14, flexShrink: 0 }}>
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                    {errors.consent}
+                  </div>
+                )}
+              </div>
 
               <button type="submit" className="register-submit-btn"
-                disabled={!isPasswordValid() || !passwordsMatch || isLoading}>
+                disabled={!isPasswordValid() || !passwordsMatch || isLoading || !consentChecked}>
                 {isLoading ? (
-                  <>
-                    <svg className="spinner" viewBox="0 0 24 24">
-                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" style={{ opacity: 0.25 }} />
-                      <path fill="currentColor" style={{ opacity: 0.75 }} d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    Sending Code...
-                  </>
+                  <><svg className="spinner" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" style={{ opacity: 0.25 }} /><path fill="currentColor" style={{ opacity: 0.75 }} d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Sending Code...</>
                 ) : (
-                  <>
-                    <svg viewBox="0 0 20 20" fill="currentColor">
-                      <path d="M8 9a3 3 0 100-6 3 3 0 000 6zM8 11a6 6 0 016 6H2a6 6 0 016-6zM16 7a1 1 0 10-2 0v1h-1a1 1 0 100 2h1v1a1 1 0 102 0v-1h1a1 1 0 100-2h-1V7z" />
-                    </svg>
-                    Create Account
-                  </>
+                  <><svg viewBox="0 0 20 20" fill="currentColor"><path d="M8 9a3 3 0 100-6 3 3 0 000 6zM8 11a6 6 0 016 6H2a6 6 0 016-6zM16 7a1 1 0 10-2 0v1h-1a1 1 0 100 2h1v1a1 1 0 102 0v-1h1a1 1 0 100-2h-1V7z" /></svg>Create Account</>
                 )}
               </button>
 
               <div className="divider"><span>OR</span></div>
               <div className="login-section">
                 <p>Already have an account?{" "}
-                  <button type="button" className="login-link" onClick={onClose}>
-                    Log in here
-                  </button>
+                  <button type="button" className="login-link" onClick={onClose}>Log in here</button>
                 </p>
               </div>
             </form>

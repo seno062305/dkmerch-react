@@ -196,14 +196,7 @@ const CropModal = ({ imageSrc, onCropDone, onCancel }) => {
 // ─────────────────────────────────────────────
 // FORMAT HELPERS
 // ─────────────────────────────────────────────
-
-/**
- * Plate format: ABC 1234
- * - 3 uppercase letters + space + 4 digits
- * - Blocks letters in the number portion
- */
 const formatPlateNumber = (raw) => {
-  // Strip everything except letters and digits
   const cleaned = raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
   const letters = cleaned.replace(/[^A-Z]/g, '').slice(0, 3);
   const numbers = cleaned.replace(/[^0-9]/g, '').slice(0, 4);
@@ -213,22 +206,14 @@ const formatPlateNumber = (raw) => {
   return `${letters} ${numbers}`;
 };
 
-/**
- * License format: N01-23-456789
- * - 1 letter + 2 digits - 2 digits - 6 digits
- * Total: 13 chars (with dashes)
- */
 const formatLicenseNumber = (raw) => {
   const cleaned = raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  // Part 1: 1 letter
   const letter = cleaned.slice(0, 1).replace(/[^A-Z]/g, '');
   if (!letter) return '';
-  // Part 2: up to 2 digits after the letter
   const rest = cleaned.slice(1).replace(/[^0-9]/g, '');
   const p2 = rest.slice(0, 2);
   const p3 = rest.slice(2, 4);
   const p4 = rest.slice(4, 10);
-
   let result = letter;
   if (p2.length > 0) result += p2;
   if (p2.length === 2) {
@@ -239,7 +224,7 @@ const formatLicenseNumber = (raw) => {
   return result;
 };
 
-const PLATE_REGEX = /^[A-Z]{3} \d{4}$/;
+const PLATE_REGEX   = /^[A-Z]{3} \d{4}$/;
 const LICENSE_REGEX = /^[A-Z]\d{2}-\d{2}-\d{6}$/;
 
 // ─────────────────────────────────────────────
@@ -250,24 +235,25 @@ const RiderRegistrationModal = ({ onClose }) => {
 
   const [form, setForm] = useState({
     fullName: '', email: '', phone: '', address: '',
-    vehicleType: 'motorcycle', // ← fixed to motorcycle
+    vehicleType: 'motorcycle',
     plateNumber: '', licenseNumber: '',
     password: '', confirmPassword: '',
   });
 
-  const [photos, setPhotos] = useState({ riderPhoto: null, validId1: null, validId2: null });
+  const [photos, setPhotos]               = useState({ riderPhoto: null, validId1: null, validId2: null });
   const [photoPreviews, setPhotoPreviews] = useState({ riderPhoto: null, validId1: null, validId2: null });
-  const [cropSrc, setCropSrc] = useState(null);
-  const [showCrop, setShowCrop] = useState(false);
-  const [errors, setErrors] = useState({});
-  const [submitted, setSubmitted] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
+  const [cropSrc, setCropSrc]             = useState(null);
+  const [showCrop, setShowCrop]           = useState(false);
+  const [errors, setErrors]               = useState({});
+  const [submitted, setSubmitted]         = useState(false);
+  const [isLoading, setIsLoading]         = useState(false);
+  const [showPassword, setShowPassword]               = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [consentChecked, setConsentChecked]           = useState(false);
 
   const riderPhotoRef = useRef();
-  const validId1Ref = useRef();
-  const validId2Ref = useRef();
+  const validId1Ref   = useRef();
+  const validId2Ref   = useRef();
 
   useEffect(() => {
     document.body.style.overflow = 'hidden';
@@ -290,70 +276,39 @@ const RiderRegistrationModal = ({ onClose }) => {
     return 'invalid';
   };
 
-  // ── PLATE NUMBER KEY HANDLER ──
-  // Blocks typing letters once 3 letters are already entered (the number section)
   const handlePlateKeyDown = (e) => {
     const { value } = e.target;
     const letters = value.replace(/[^A-Z]/g, '');
     const isLetter = /^[a-zA-Z]$/.test(e.key);
-    const isDigit = /^[0-9]$/.test(e.key);
+    const isDigit  = /^[0-9]$/.test(e.key);
     const allowedKeys = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'];
-
     if (allowedKeys.includes(e.key)) return;
-
-    // If 3 letters already typed, block additional letters
-    if (letters.length >= 3 && isLetter) {
-      e.preventDefault();
-      return;
-    }
-
-    // If still in the letters section (less than 3 letters), block digits
-    if (letters.length < 3 && isDigit) {
-      e.preventDefault();
-      return;
-    }
+    if (letters.length >= 3 && isLetter) { e.preventDefault(); return; }
+    if (letters.length < 3 && isDigit)   { e.preventDefault(); return; }
   };
 
-  // ── LICENSE NUMBER KEY HANDLER ──
-  // Allows only: 1 letter at start, then digits only
   const handleLicenseKeyDown = (e) => {
     const { value } = e.target;
     const allowedKeys = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'];
     if (allowedKeys.includes(e.key)) return;
-
     const cleaned = value.toUpperCase().replace(/[^A-Z0-9]/g, '');
     const isLetter = /^[a-zA-Z]$/.test(e.key);
-    const isDigit = /^[0-9]$/.test(e.key);
-
-    // First char must be a letter
+    const isDigit  = /^[0-9]$/.test(e.key);
     if (cleaned.length === 0 && !isLetter) { e.preventDefault(); return; }
-    // After first char, only digits allowed
-    if (cleaned.length >= 1 && isLetter) { e.preventDefault(); return; }
-    // Max raw digits = 10 (1 letter + 10 digits = full license)
-    if (cleaned.length >= 11) { e.preventDefault(); return; }
-    // Must be letter or digit
-    if (!isLetter && !isDigit) { e.preventDefault(); return; }
+    if (cleaned.length >= 1 && isLetter)   { e.preventDefault(); return; }
+    if (cleaned.length >= 11)              { e.preventDefault(); return; }
+    if (!isLetter && !isDigit)             { e.preventDefault(); return; }
   };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     const next = { ...form };
-
-    if (name === 'phone') {
-      next.phone = value.replace(/\D/g, '').slice(0, 11);
-    } else if (name === 'plateNumber') {
-      next.plateNumber = formatPlateNumber(value);
-    } else if (name === 'licenseNumber') {
-      next.licenseNumber = formatLicenseNumber(value);
-    } else if (name === 'password') {
-      next.password = value.slice(0, 10);
-    } else if (name === 'vehicleType') {
-      // vehicleType is fixed to motorcycle, ignore changes
-      return;
-    } else {
-      next[name] = value;
-    }
-
+    if (name === 'phone')              { next.phone         = value.replace(/\D/g, '').slice(0, 11); }
+    else if (name === 'plateNumber')   { next.plateNumber   = formatPlateNumber(value); }
+    else if (name === 'licenseNumber') { next.licenseNumber = formatLicenseNumber(value); }
+    else if (name === 'password')      { next.password      = value.slice(0, 10); }
+    else if (name === 'vehicleType')   { return; }
+    else                               { next[name] = value; }
     setForm(next);
     setErrors(prev => ({ ...prev, [name]: '' }));
   };
@@ -439,8 +394,6 @@ const RiderRegistrationModal = ({ onClose }) => {
     if (!form.address.trim()) e.address = 'Address is required.';
     else if (form.address.trim().length < 10) e.address = 'Please enter a complete address.';
 
-    // Vehicle type is always motorcycle — no validation needed
-
     if (!form.plateNumber.trim()) {
       e.plateNumber = 'Plate number is required.';
     } else if (!PLATE_REGEX.test(form.plateNumber)) {
@@ -453,13 +406,13 @@ const RiderRegistrationModal = ({ onClose }) => {
       e.licenseNumber = 'Format must be N01-23-456789 (e.g. A12-34-567890).';
     }
 
-    // selfie is optional — no validation
-
     const pwErrs = validateRiderPassword(form.password);
     if (pwErrs.length) e.password = pwErrs[0];
 
     if (!form.confirmPassword) e.confirmPassword = 'Please confirm your password.';
     else if (form.password !== form.confirmPassword) e.confirmPassword = 'Passwords do not match.';
+
+    if (!consentChecked) e.consent = 'You must agree to the Privacy Policy and Terms to continue.';
 
     return e;
   };
@@ -471,13 +424,17 @@ const RiderRegistrationModal = ({ onClose }) => {
     setIsLoading(true);
     try {
       const result = await createRider({
-        fullName: form.fullName, email: form.email, phone: form.phone,
-        address: form.address, vehicleType: form.vehicleType,
-        plateNumber: form.plateNumber, licenseNumber: form.licenseNumber,
-        password: form.password,
-        riderPhoto: photos.riderPhoto ?? undefined,
-        validId1: photos.validId1 ?? undefined,
-        validId2: photos.validId2 ?? undefined,
+        fullName:      form.fullName,
+        email:         form.email,
+        phone:         form.phone,
+        address:       form.address,
+        vehicleType:   form.vehicleType,
+        plateNumber:   form.plateNumber,
+        licenseNumber: form.licenseNumber,
+        password:      form.password,
+        riderPhoto:    photos.riderPhoto ?? undefined,
+        validId1:      photos.validId1   ?? undefined,
+        validId2:      photos.validId2   ?? undefined,
       });
       if (!result.success) { setErrors({ email: result.message }); return; }
       setSubmitted(true);
@@ -500,7 +457,6 @@ const RiderRegistrationModal = ({ onClose }) => {
         <div className="rider-modal-container" onClick={(e) => e.stopPropagation()}>
           <button className="rider-modal-close" onClick={onClose}>✕</button>
 
-          {/* ── HEADER ── */}
           <div className="rider-modal-header">
             <h2 className="rider-modal-title">🛵 Rider Application</h2>
             <p className="rider-modal-subtitle">Apply to be a DKMerch delivery rider</p>
@@ -517,7 +473,6 @@ const RiderRegistrationModal = ({ onClose }) => {
             <form onSubmit={handleSubmit} className="rider-form" noValidate>
               {errors.submit && <div className="rider-submit-error">⚠ {errors.submit}</div>}
 
-              {/* ── TWO COLUMN BODY ── */}
               <div className="rider-form-columns">
 
                 {/* ══ LEFT: Form Fields ══ */}
@@ -557,7 +512,6 @@ const RiderRegistrationModal = ({ onClose }) => {
                   </div>
 
                   <div className="rider-form-row">
-                    {/* ── VEHICLE TYPE: Fixed to Motorcycle ── */}
                     <div className="rider-form-group">
                       <label>Vehicle Type</label>
                       <div className="rider-vehicle-fixed">
@@ -566,39 +520,23 @@ const RiderRegistrationModal = ({ onClose }) => {
                       </div>
                     </div>
 
-                    {/* ── PLATE NUMBER: ABC 1234 format ── */}
                     <div className="rider-form-group">
                       <label>Plate Number</label>
-                      <input
-                        name="plateNumber"
-                        type="text"
-                        placeholder="ABC 1234"
-                        value={form.plateNumber}
-                        onChange={handleChange}
-                        onKeyDown={handlePlateKeyDown}
-                        maxLength={8}
-                        autoComplete="off"
-                        className={errors.plateNumber ? 'input-error' : ''}
-                      />
+                      <input name="plateNumber" type="text" placeholder="ABC 1234"
+                        value={form.plateNumber} onChange={handleChange}
+                        onKeyDown={handlePlateKeyDown} maxLength={8} autoComplete="off"
+                        className={errors.plateNumber ? 'input-error' : ''} />
                       <span className="field-format-hint">Format: ABC 1234</span>
                       {errors.plateNumber && <span className="error-msg">⚠ {errors.plateNumber}</span>}
                     </div>
                   </div>
 
-                  {/* ── LICENSE NUMBER: N01-23-456789 format ── */}
                   <div className="rider-form-group">
                     <label>Driver's License Number</label>
-                    <input
-                      name="licenseNumber"
-                      type="text"
-                      placeholder="N01-23-456789"
-                      value={form.licenseNumber}
-                      onChange={handleChange}
-                      onKeyDown={handleLicenseKeyDown}
-                      maxLength={13}
-                      autoComplete="off"
-                      className={errors.licenseNumber ? 'input-error' : ''}
-                    />
+                    <input name="licenseNumber" type="text" placeholder="N01-23-456789"
+                      value={form.licenseNumber} onChange={handleChange}
+                      onKeyDown={handleLicenseKeyDown} maxLength={13} autoComplete="off"
+                      className={errors.licenseNumber ? 'input-error' : ''} />
                     <span className="field-format-hint">Format: A00-00-000000 (1 letter + 10 digits)</span>
                     {errors.licenseNumber && <span className="error-msg">⚠ {errors.licenseNumber}</span>}
                   </div>
@@ -616,7 +554,7 @@ const RiderRegistrationModal = ({ onClose }) => {
                     </div>
                     {form.password && (
                       <div className={`rider-pw-strength ${passwordStrength}`}>
-                        {passwordStrength === 'valid' && '✅ Password looks good!'}
+                        {passwordStrength === 'valid'   && '✅ Password looks good!'}
                         {passwordStrength === 'partial' && '⚠️ Add more chars after @rider'}
                         {passwordStrength === 'invalid' && '❌ Must start with @rider'}
                       </div>
@@ -744,8 +682,59 @@ const RiderRegistrationModal = ({ onClose }) => {
                 </div>
               </div>
 
+              {/* ── PRIVACY CONSENT ── */}
+              <div className="reg-consent-box" style={{ margin: '0 32px 0 32px' }}>
+                <div className="reg-consent-notice">
+                  <div className="reg-consent-notice-icon">🔒</div>
+                  <div className="reg-consent-notice-text">
+                    <strong>Data Privacy Notice (RA 10173)</strong>
+                    <p>
+                      In compliance with the <strong>Data Privacy Act of 2012 (RA 10173)</strong>, DKMerch collects
+                      your personal information (name, email, phone, address, valid IDs, and selfie photo) for
+                      rider identity verification, delivery coordination, and account management. Your data will
+                      not be shared with third parties without your consent. You have the right to access, correct,
+                      and request deletion of your data at any time via{' '}
+                      <a href="mailto:dkmerchtest@gmail.com" className="reg-consent-link">dkmerchtest@gmail.com</a>.
+                    </p>
+                  </div>
+                </div>
+
+                <label className="reg-consent-label">
+                  <input
+                    type="checkbox"
+                    className="reg-consent-checkbox"
+                    checked={consentChecked}
+                    onChange={e => {
+                      setConsentChecked(e.target.checked);
+                      setErrors(prev => ({ ...prev, consent: '' }));
+                    }}
+                  />
+                  <span>
+                    I have read and agree to the{' '}
+                    <a href="/privacy-policy" target="_blank" rel="noopener noreferrer" className="reg-consent-link">
+                      Privacy Policy
+                    </a>{' '}
+                    and{' '}
+                    <a href="/terms-and-conditions" target="_blank" rel="noopener noreferrer" className="reg-consent-link">
+                      Terms & Conditions
+                    </a>.
+                    I consent to the collection and use of my personal data including uploaded photos for
+                    identity verification purposes.
+                  </span>
+                </label>
+
+                {errors.consent && (
+                  <div className="reg-consent-error">
+                    <svg viewBox="0 0 20 20" fill="currentColor" style={{ width: 14, height: 14, flexShrink: 0 }}>
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                    {errors.consent}
+                  </div>
+                )}
+              </div>
+
               {/* ── SUBMIT ── */}
-              <button type="submit" className="rider-submit-btn" disabled={isLoading}>
+              <button type="submit" className="rider-submit-btn" disabled={isLoading || !consentChecked}>
                 {isLoading
                   ? <span className="rider-submit-loading"><span className="rider-spinner" /> Submitting...</span>
                   : 'Submit Application'}

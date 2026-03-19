@@ -663,3 +663,104 @@
   font-style: italic;
   letter-spacing: 0.2px;
 }
+/* ══════════════════════════════════════════════════
+   PRIVACY CONSENT BOX — RiderRegistrationModal
+   ══════════════════════════════════════════════════ */
+
+.reg-consent-box {
+  background: #f8fafc;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 0;
+}
+
+.reg-consent-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 14px;
+}
+
+.reg-consent-notice-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+  line-height: 1;
+  margin-top: 1px;
+}
+
+.reg-consent-notice-text strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e40af;
+  margin-bottom: 6px;
+}
+
+.reg-consent-notice-text p {
+  font-size: 12px;
+  color: #1e40af;
+  line-height: 1.65;
+  margin: 0;
+  opacity: 0.9;
+}
+
+.reg-consent-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.reg-consent-checkbox {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+  margin-top: 2px;
+  accent-color: #6a0dad;
+  cursor: pointer;
+}
+
+.reg-consent-label span {
+  font-size: 12.5px;
+  color: #374151;
+  line-height: 1.65;
+  font-weight: 500;
+}
+
+.reg-consent-link {
+  color: #6a0dad;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color 0.2s;
+}
+
+.reg-consent-link:hover {
+  color: #520a99;
+}
+
+.reg-consent-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  color: #dc2626;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+@media (max-width: 700px) {
+  .reg-consent-box {
+    margin: 0 20px;
+  }
+}
