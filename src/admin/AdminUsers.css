@@ -896,3 +896,29 @@
   .duration-chip { padding: 6px 10px; font-size: 11px; }
   .reason-chip { padding: 8px 10px; font-size: 11px; }
 }
+
+/* ── Append these to the END of AdminUsers.css ── */
+
+/* Self-deactivated status badge — amber/yellow tone */
+.status-badge.self-deactivated {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+.status-badge.self-deactivated i { font-size: 10px; }
+
+/* Info chip shown under the deactivated badge */
+.deactivated-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #eff6ff;
+  color: #1e40af;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 20px;
+  border: 1px solid #bfdbfe;
+  white-space: nowrap;
+}
+.deactivated-chip i { font-size: 9px; }

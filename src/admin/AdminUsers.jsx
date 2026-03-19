@@ -88,6 +88,7 @@ const AdminUsers = () => {
   };
 
   const pendingUsers = users.filter(u => u.status === 'pending_activation');
+  // regularUsers includes self_deactivated — they're real accounts, not pending
   const regularUsers = users.filter(u => u.status !== 'pending_activation');
 
   const filteredUsers = regularUsers.filter(u => {
@@ -266,10 +267,32 @@ const AdminUsers = () => {
     RIDER_DELETE_REASONS.find(r => r.value === riderDeleteReason)?.label || riderDeleteReason || '—';
 
   const getRoleBadgeClass        = (role)   => role === 'admin' ? 'role-badge admin' : 'role-badge user';
-  const getStatusBadgeClass      = (status) => `status-badge ${status || 'active'}`;
   const getRiderStatusBadgeClass = (status) => {
-    const map = { pending: 'rider-status-badge pending', approved: 'rider-status-badge approved', rejected: 'rider-status-badge rejected', suspended: 'rider-status-badge suspended' };
+    const map = {
+      pending:   'rider-status-badge pending',
+      approved:  'rider-status-badge approved',
+      rejected:  'rider-status-badge rejected',
+      suspended: 'rider-status-badge suspended',
+    };
     return map[status] || 'rider-status-badge pending';
+  };
+
+  // ── Status badge class — handles self_deactivated ─────────────────────────
+  const getStatusBadgeClass = (status) => {
+    const s = status || 'active';
+    if (s === 'self_deactivated') return 'status-badge self-deactivated';
+    return `status-badge ${s}`;
+  };
+
+  // ── Status display label + icon ───────────────────────────────────────────
+  const getStatusDisplay = (status) => {
+    const s = status || 'active';
+    switch (s) {
+      case 'active':           return { label: 'Active',      icon: 'fa-check-circle' };
+      case 'suspended':        return { label: 'Suspended',   icon: 'fa-ban'          };
+      case 'self_deactivated': return { label: 'Deactivated', icon: 'fa-pause-circle' };
+      default:                 return { label: s,             icon: 'fa-circle'       };
+    }
   };
 
   const formatDate = (ts) => {
@@ -284,19 +307,21 @@ const AdminUsers = () => {
     return `${diffDays}d left`;
   };
 
-  const getReasonLabel  = (val) => SUSPEND_REASONS.find(r => r.value === val)?.label || val || '—';
+  const getReasonLabel   = (val) => SUSPEND_REASONS.find(r => r.value === val)?.label || val || '—';
   const getDurationLabel = () => {
     if (suspendDays === null) return 'Permanent';
     if (suspendDays === 1) return '1 Day';
     return `${suspendDays} Days`;
   };
 
-  const totalUsers     = regularUsers.length;
-  const activeUsers    = regularUsers.filter(u => (u.status || 'active') === 'active').length;
-  const suspendedUsers = regularUsers.filter(u => u.status === 'suspended').length;
-  const totalRiders    = riders.length;
-  const approvedRiders = riders.filter(r => r.status === 'approved').length;
-  const pendingRiders  = riders.filter(r => r.status === 'pending').length;
+  // ── Stats ─────────────────────────────────────────────────────────────────
+  const totalUsers        = regularUsers.length;
+  const activeUsers       = regularUsers.filter(u => (u.status || 'active') === 'active').length;
+  const suspendedUsers    = regularUsers.filter(u => u.status === 'suspended').length;
+  const deactivatedUsers  = regularUsers.filter(u => u.status === 'self_deactivated').length;
+  const totalRiders       = riders.length;
+  const approvedRiders    = riders.filter(r => r.status === 'approved').length;
+  const pendingRiders     = riders.filter(r => r.status === 'pending').length;
 
   return (
     <div className="admin-users">
@@ -311,7 +336,7 @@ const AdminUsers = () => {
         </div>
       )}
 
-      {/* ── STATS CARDS (no header title) ── */}
+      {/* ── STATS CARDS ── */}
       <div className="users-stats-row">
         {activeTab !== 'riders' ? (
           <>
@@ -339,6 +364,16 @@ const AdminUsers = () => {
                 <div className="au-stat-sub">{suspendedUsers === 0 ? 'no suspensions' : 'suspended accounts'}</div>
               </div>
             </div>
+            {deactivatedUsers > 0 && (
+              <div className="au-stat-card">
+                <div className="au-stat-icon au-stat-icon--yellow"><i className="fas fa-pause-circle"></i></div>
+                <div className="au-stat-info">
+                  <div className="au-stat-label">DEACTIVATED</div>
+                  <div className="au-stat-number">{deactivatedUsers}</div>
+                  <div className="au-stat-sub">self-deactivated</div>
+                </div>
+              </div>
+            )}
           </>
         ) : (
           <>
@@ -397,57 +432,96 @@ const AdminUsers = () => {
               {searchTerm && <button className="clear-search" onClick={() => setSearchTerm('')}><i className="fas fa-times"></i></button>}
             </div>
             <div className="status-filter">
-              {['all', 'active', 'suspended'].map(s => (
+              {['all', 'active', 'suspended', 'self_deactivated'].map(s => (
                 <button key={s} className={`filter-btn ${filterStatus === s ? 'active' : ''}`} onClick={() => setFilterStatus(s)}>
-                  {s.charAt(0).toUpperCase() + s.slice(1)}
+                  {s === 'self_deactivated' ? 'Deactivated' : s.charAt(0).toUpperCase() + s.slice(1)}
                 </button>
               ))}
             </div>
           </div>
+
           <div className="users-table-container">
             {filteredUsers.length === 0 ? (
               <div className="no-users"><i className="fas fa-user-slash"></i><p>No users found</p></div>
             ) : (
               <table className="users-table">
-                <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
+                <thead>
+                  <tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr>
+                </thead>
                 <tbody>
-                  {filteredUsers.map(user => (
-                    <tr key={user._id}>
-                      <td className="user-name"><i className="fas fa-user-circle"></i>{user.name}</td>
-                      <td>@{user.username}</td>
-                      <td>{user.email}</td>
-                      <td><span className={getRoleBadgeClass(user.role)}><i className={`fas ${user.role === 'admin' ? 'fa-shield-alt' : 'fa-user'}`}></i>{user.role}</span></td>
-                      <td>
-                        <div className="status-cell">
-                          <span className={getStatusBadgeClass(user.status)}>
-                            <i className={`fas ${(user.status || 'active') === 'active' ? 'fa-check-circle' : 'fa-ban'}`}></i>
-                            {(user.status || 'active') === 'active' ? 'Active' : 'Suspended'}
+                  {filteredUsers.map(user => {
+                    const { label: statusLabel, icon: statusIcon } = getStatusDisplay(user.status);
+                    const isActive      = (user.status || 'active') === 'active';
+                    const isSuspended   = user.status === 'suspended';
+                    const isDeactivated = user.status === 'self_deactivated';
+                    const isAdmin       = user.email === 'admin' || user.role === 'admin';
+
+                    return (
+                      <tr key={user._id}>
+                        <td className="user-name"><i className="fas fa-user-circle"></i>{user.name}</td>
+                        <td>@{user.username}</td>
+                        <td>{user.email}</td>
+                        <td>
+                          <span className={getRoleBadgeClass(user.role)}>
+                            <i className={`fas ${user.role === 'admin' ? 'fa-shield-alt' : 'fa-user'}`}></i>
+                            {user.role}
                           </span>
-                          {user.status === 'suspended' && (
-                            <span className="suspend-meta">
-                              <span className="suspend-duration-chip"><i className="fas fa-clock"></i>{getSuspendUntilLabel(user)}</span>
-                              {user.suspendReason && <span className="suspend-reason-chip">{getReasonLabel(user.suspendReason)}</span>}
+                        </td>
+                        <td>
+                          <div className="status-cell">
+                            <span className={getStatusBadgeClass(user.status)}>
+                              <i className={`fas ${statusIcon}`}></i>
+                              {statusLabel}
                             </span>
+
+                            {/* Suspended meta chips */}
+                            {isSuspended && (
+                              <span className="suspend-meta">
+                                <span className="suspend-duration-chip">
+                                  <i className="fas fa-clock"></i>{getSuspendUntilLabel(user)}
+                                </span>
+                                {user.suspendReason && (
+                                  <span className="suspend-reason-chip">{getReasonLabel(user.suspendReason)}</span>
+                                )}
+                              </span>
+                            )}
+
+                            {/* Deactivated info chip */}
+                            {isDeactivated && (
+                              <span className="deactivated-chip">
+                                <i className="fas fa-info-circle"></i>Self-deactivated · Can reactivate via login
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="actions-cell">
+                          {!isAdmin && (
+                            <>
+                              {isActive && (
+                                <button className="btn-suspend" onClick={() => openSuspendModal(user)} title="Suspend user">
+                                  <i className="fas fa-ban"></i>
+                                </button>
+                              )}
+                              {isSuspended && (
+                                <button className="btn-suspend btn-activate"
+                                  onClick={() => { setUserToUnsuspend(user); setShowUnsuspendConfirm(true); }}
+                                  title="Unsuspend user">
+                                  <i className="fas fa-check-circle"></i>
+                                </button>
+                              )}
+                              {isDeactivated && (
+                                <button className="btn-suspend btn-activate"
+                                  onClick={() => { setUserToUnsuspend(user); setShowUnsuspendConfirm(true); }}
+                                  title="Reactivate account">
+                                  <i className="fas fa-play-circle"></i>
+                                </button>
+                              )}
+                            </>
                           )}
-                        </div>
-                      </td>
-                      <td className="actions-cell">
-                        {user.email !== 'admin' && user.role !== 'admin' && (
-                          (user.status || 'active') === 'active' ? (
-                            <button className="btn-suspend" onClick={() => openSuspendModal(user)} title="Suspend user">
-                              <i className="fas fa-ban"></i>
-                            </button>
-                          ) : (
-                            <button className="btn-suspend btn-activate"
-                              onClick={() => { setUserToUnsuspend(user); setShowUnsuspendConfirm(true); }}
-                              title="Unsuspend user">
-                              <i className="fas fa-check-circle"></i>
-                            </button>
-                          )
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
@@ -694,17 +768,24 @@ const AdminUsers = () => {
         </div>
       )}
 
-      {/* ══ UNSUSPEND CONFIRM ══════════════════════════════════════════════════ */}
+      {/* ══ UNSUSPEND / REACTIVATE CONFIRM ════════════════════════════════════ */}
       {showUnsuspendConfirm && (
         <div className="modal-overlay" onClick={() => setShowUnsuspendConfirm(false)}>
           <div className="modal-content confirm-modal" onClick={e => e.stopPropagation()}>
             <div className="confirm-icon activate"><i className="fas fa-check-circle"></i></div>
-            <h2>Unsuspend Account?</h2>
+            <h2>{userToUnsuspend?.status === 'self_deactivated' ? 'Reactivate Account?' : 'Unsuspend Account?'}</h2>
             <p>Restore access for <strong>{userToUnsuspend?.name}</strong>?</p>
-            <p className="success-text">They will be able to log in immediately.</p>
+            <p className="success-text">
+              {userToUnsuspend?.status === 'self_deactivated'
+                ? 'Their account will be restored and they can log in immediately.'
+                : 'They will be able to log in immediately.'}
+            </p>
             <div className="modal-actions">
               <button className="btn-cancel" onClick={() => setShowUnsuspendConfirm(false)}>Cancel</button>
-              <button className="btn-activate-confirm" onClick={confirmUnsuspend}><i className="fas fa-check-circle"></i> Unsuspend</button>
+              <button className="btn-activate-confirm" onClick={confirmUnsuspend}>
+                <i className="fas fa-check-circle"></i>
+                {userToUnsuspend?.status === 'self_deactivated' ? 'Reactivate' : 'Unsuspend'}
+              </button>
             </div>
           </div>
         </div>
