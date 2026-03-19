@@ -22,6 +22,9 @@ export default defineSchema({
     zipCode: v.optional(v.string()),
     addressLat: v.optional(v.number()),
     addressLng: v.optional(v.number()),
+    // ── Self-reactivation OTP ─────────────────
+    reactivationOtp:          v.optional(v.string()),
+    reactivationOtpExpiresAt: v.optional(v.number()),
   })
     .index("by_email", ["email"])
     .index("by_username", ["username"]),
@@ -161,7 +164,6 @@ export default defineSchema({
     refundAdminNote:       v.optional(v.string()),
     refundHistory:         v.optional(v.any()),
     pointsAwarded:         v.optional(v.boolean()),
-    // ── Reward redemption link ────────────────────────────
     isRewardOrder:         v.optional(v.boolean()),
     rewardTicketCode:      v.optional(v.string()),
   })
@@ -304,13 +306,11 @@ export default defineSchema({
     resolvedAt:   v.optional(v.string()),
     adminNote:    v.optional(v.string()),
     ticketCode:   v.string(),
-    // ── Product selection ──
     selectedProductId:    v.optional(v.string()),
     selectedProductName:  v.optional(v.string()),
     selectedProductImage: v.optional(v.string()),
     selectedProductGroup: v.optional(v.string()),
     productSelectedAt:    v.optional(v.string()),
-    // ── Checkout link ──
     checkedOutOrderId:    v.optional(v.string()),
     checkedOutAt:         v.optional(v.string()),
   })
