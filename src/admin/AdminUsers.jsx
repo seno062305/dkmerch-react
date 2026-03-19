@@ -281,6 +281,7 @@ const AdminUsers = () => {
   const getStatusBadgeClass = (status) => {
     const s = status || 'active';
     if (s === 'self_deactivated') return 'status-badge self-deactivated';
+    if (s === 'deleted')          return 'status-badge deleted';
     return `status-badge ${s}`;
   };
 
@@ -291,6 +292,7 @@ const AdminUsers = () => {
       case 'active':           return { label: 'Active',      icon: 'fa-check-circle' };
       case 'suspended':        return { label: 'Suspended',   icon: 'fa-ban'          };
       case 'self_deactivated': return { label: 'Deactivated', icon: 'fa-pause-circle' };
+      case 'deleted':          return { label: 'Deleted',     icon: 'fa-trash-alt'    };
       default:                 return { label: s,             icon: 'fa-circle'       };
     }
   };
@@ -319,6 +321,7 @@ const AdminUsers = () => {
   const activeUsers       = regularUsers.filter(u => (u.status || 'active') === 'active').length;
   const suspendedUsers    = regularUsers.filter(u => u.status === 'suspended').length;
   const deactivatedUsers  = regularUsers.filter(u => u.status === 'self_deactivated').length;
+  const deletedUsers      = regularUsers.filter(u => u.status === 'deleted').length;
   const totalRiders       = riders.length;
   const approvedRiders    = riders.filter(r => r.status === 'approved').length;
   const pendingRiders     = riders.filter(r => r.status === 'pending').length;
@@ -341,14 +344,6 @@ const AdminUsers = () => {
         {activeTab !== 'riders' ? (
           <>
             <div className="au-stat-card">
-              <div className="au-stat-icon au-stat-icon--blue"><i className="fas fa-users"></i></div>
-              <div className="au-stat-info">
-                <div className="au-stat-label">TOTAL USERS</div>
-                <div className="au-stat-number">{totalUsers}</div>
-                <div className="au-stat-sub">{pendingUsers.length > 0 ? `${pendingUsers.length} pending activation` : 'all accounts'}</div>
-              </div>
-            </div>
-            <div className="au-stat-card">
               <div className="au-stat-icon au-stat-icon--green"><i className="fas fa-check-circle"></i></div>
               <div className="au-stat-info">
                 <div className="au-stat-label">ACTIVE</div>
@@ -359,21 +354,24 @@ const AdminUsers = () => {
             <div className="au-stat-card">
               <div className="au-stat-icon au-stat-icon--red"><i className="fas fa-ban"></i></div>
               <div className="au-stat-info">
-                <div className="au-stat-label">SUSPENDED</div>
-                <div className="au-stat-number">{suspendedUsers}</div>
-                <div className="au-stat-sub">{suspendedUsers === 0 ? 'no suspensions' : 'suspended accounts'}</div>
-              </div>
-            </div>
-            {deactivatedUsers > 0 && (
-              <div className="au-stat-card">
-                <div className="au-stat-icon au-stat-icon--yellow"><i className="fas fa-pause-circle"></i></div>
-                <div className="au-stat-info">
-                  <div className="au-stat-label">DEACTIVATED</div>
-                  <div className="au-stat-number">{deactivatedUsers}</div>
-                  <div className="au-stat-sub">self-deactivated</div>
+                <div className="au-stat-label">SUSPENDED / DELETED</div>
+                <div className="au-stat-number">{suspendedUsers + deletedUsers}</div>
+                <div className="au-stat-sub">
+                  {suspendedUsers > 0 && `${suspendedUsers} suspended`}
+                  {suspendedUsers > 0 && deletedUsers > 0 && ' · '}
+                  {deletedUsers > 0 && `${deletedUsers} deleted`}
+                  {suspendedUsers === 0 && deletedUsers === 0 && 'none'}
                 </div>
               </div>
-            )}
+            </div>
+            <div className="au-stat-card">
+              <div className="au-stat-icon au-stat-icon--yellow"><i className="fas fa-pause-circle"></i></div>
+              <div className="au-stat-info">
+                <div className="au-stat-label">DEACTIVATED</div>
+                <div className="au-stat-number">{deactivatedUsers}</div>
+                <div className="au-stat-sub">{deactivatedUsers === 0 ? 'none' : 'self-deactivated'}</div>
+              </div>
+            </div>
           </>
         ) : (
           <>
@@ -432,7 +430,7 @@ const AdminUsers = () => {
               {searchTerm && <button className="clear-search" onClick={() => setSearchTerm('')}><i className="fas fa-times"></i></button>}
             </div>
             <div className="status-filter">
-              {['all', 'active', 'suspended', 'self_deactivated'].map(s => (
+              {['all', 'active', 'suspended', 'self_deactivated', 'deleted'].map(s => (
                 <button key={s} className={`filter-btn ${filterStatus === s ? 'active' : ''}`} onClick={() => setFilterStatus(s)}>
                   {s === 'self_deactivated' ? 'Deactivated' : s.charAt(0).toUpperCase() + s.slice(1)}
                 </button>
@@ -454,6 +452,7 @@ const AdminUsers = () => {
                     const isActive      = (user.status || 'active') === 'active';
                     const isSuspended   = user.status === 'suspended';
                     const isDeactivated = user.status === 'self_deactivated';
+                    const isDeleted     = user.status === 'deleted';
                     const isAdmin       = user.email === 'admin' || user.role === 'admin';
 
                     return (
@@ -492,16 +491,26 @@ const AdminUsers = () => {
                                 <i className="fas fa-info-circle"></i>Self-deactivated · Can reactivate via login
                               </span>
                             )}
+
+                            {/* Deleted info chip */}
+                            {isDeleted && (
+                              <span className="deleted-chip">
+                                <i className="fas fa-trash-alt"></i>Self-deleted · Admin can permanently remove
+                              </span>
+                            )}
                           </div>
                         </td>
                         <td className="actions-cell">
                           {!isAdmin && (
                             <>
+                              {/* Active — can suspend */}
                               {isActive && (
                                 <button className="btn-suspend" onClick={() => openSuspendModal(user)} title="Suspend user">
                                   <i className="fas fa-ban"></i>
                                 </button>
                               )}
+
+                              {/* Suspended — can unsuspend */}
                               {isSuspended && (
                                 <button className="btn-suspend btn-activate"
                                   onClick={() => { setUserToUnsuspend(user); setShowUnsuspendConfirm(true); }}
@@ -509,11 +518,20 @@ const AdminUsers = () => {
                                   <i className="fas fa-check-circle"></i>
                                 </button>
                               )}
+
+                              {/* Deactivated — no admin action, customer reactivates via login OTP */}
                               {isDeactivated && (
-                                <button className="btn-suspend btn-activate"
-                                  onClick={() => { setUserToUnsuspend(user); setShowUnsuspendConfirm(true); }}
-                                  title="Reactivate account">
-                                  <i className="fas fa-play-circle"></i>
+                                <span className="au-no-action-tip">
+                                  <i className="fas fa-info-circle"></i> Reactivated by customer
+                                </span>
+                              )}
+
+                              {/* Deleted — remove record permanently */}
+                              {isDeleted && (
+                                <button className="btn-remove"
+                                  onClick={() => { setUserToDelete(user); setShowDeleteConfirm(true); }}
+                                  title="Permanently remove record">
+                                  <i className="fas fa-trash-alt"></i> Remove
                                 </button>
                               )}
                             </>
@@ -773,18 +791,13 @@ const AdminUsers = () => {
         <div className="modal-overlay" onClick={() => setShowUnsuspendConfirm(false)}>
           <div className="modal-content confirm-modal" onClick={e => e.stopPropagation()}>
             <div className="confirm-icon activate"><i className="fas fa-check-circle"></i></div>
-            <h2>{userToUnsuspend?.status === 'self_deactivated' ? 'Reactivate Account?' : 'Unsuspend Account?'}</h2>
+            <h2>Unsuspend Account?</h2>
             <p>Restore access for <strong>{userToUnsuspend?.name}</strong>?</p>
-            <p className="success-text">
-              {userToUnsuspend?.status === 'self_deactivated'
-                ? 'Their account will be restored and they can log in immediately.'
-                : 'They will be able to log in immediately.'}
-            </p>
+            <p className="success-text">They will be able to log in immediately.</p>
             <div className="modal-actions">
               <button className="btn-cancel" onClick={() => setShowUnsuspendConfirm(false)}>Cancel</button>
               <button className="btn-activate-confirm" onClick={confirmUnsuspend}>
-                <i className="fas fa-check-circle"></i>
-                {userToUnsuspend?.status === 'self_deactivated' ? 'Reactivate' : 'Unsuspend'}
+                <i className="fas fa-check-circle"></i> Unsuspend
               </button>
             </div>
           </div>
@@ -812,12 +825,17 @@ const AdminUsers = () => {
         <div className="modal-overlay" onClick={() => setShowDeleteConfirm(false)}>
           <div className="modal-content confirm-modal" onClick={e => e.stopPropagation()}>
             <div className="confirm-icon suspend"><i className="fas fa-trash"></i></div>
-            <h2>Delete User?</h2>
-            <p>Permanently delete <strong>{userToDelete?.name}</strong>?</p>
+            <h2>{userToDelete?.status === 'deleted' ? 'Permanently Remove Record?' : 'Delete User?'}</h2>
+            <p>
+              {userToDelete?.status === 'deleted'
+                ? <>Permanently remove <strong>{userToDelete?.name}</strong>'s record from the database?</>
+                : <>Permanently delete <strong>{userToDelete?.name}</strong>?</>
+              }
+            </p>
             <p className="warning-text">This action cannot be undone.</p>
             <div className="modal-actions">
               <button className="btn-cancel" onClick={() => setShowDeleteConfirm(false)}>Cancel</button>
-              <button className="btn-suspend-confirm" onClick={confirmDeleteUser}><i className="fas fa-trash"></i> Delete</button>
+              <button className="btn-suspend-confirm" onClick={confirmDeleteUser}><i className="fas fa-trash"></i> {userToDelete?.status === 'deleted' ? 'Remove Permanently' : 'Delete'}</button>
             </div>
           </div>
         </div>
