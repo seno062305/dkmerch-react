@@ -5,116 +5,360 @@ import { useMutation, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import './Settings.css';
 
+const DELETE_REASONS = [
+  'I no longer want to use DKMerch',
+  'Privacy concerns',
+  'I have a duplicate account',
+  'Unsatisfied with the service',
+  'Other',
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  DEACTIVATE MODAL — defined OUTSIDE Settings to prevent re-mount on each
+//  parent render (which caused the flicker/popup on every keystroke)
+// ─────────────────────────────────────────────────────────────────────────────
+const DeactivateModal = ({
+  user,
+  deactStep,     onProceed, onGoBack,
+  deactPassword, setDeactPassword,
+  deactShowPw,   setDeactShowPw,
+  deactLoading,
+  deactError,
+  onConfirm,
+  onClose,
+}) => (
+  <div className="settings-modal-overlay" onClick={onClose}>
+    <div className="settings-modal" onClick={e => e.stopPropagation()}>
+
+      {/* ── STEP 1: Password entry ── */}
+      {deactStep === 1 && (
+        <>
+          <div className="settings-modal-header" style={{ background: '#f59e0b' }}>
+            <div className="settings-modal-icon"><i className="fas fa-lock"></i></div>
+            <div className="settings-modal-header-text">
+              <h3>Verify Your Identity</h3>
+              <p>Enter your password to continue.</p>
+            </div>
+            <button className="settings-modal-close" onClick={onClose}><i className="fas fa-times"></i></button>
+          </div>
+
+          <div className="settings-modal-body">
+            <div className="settings-deact-info">
+              <i className="fas fa-info-circle"></i>
+              <span>
+                This is <strong>temporary</strong>. To reactivate, simply log in again —
+                we'll send a verification code to <strong>{user?.email}</strong> to confirm your identity.
+              </span>
+            </div>
+
+            <div className="settings-note-group">
+              <label>Confirm with your password</label>
+              <div className="settings-pw-input-row">
+                <input
+                  type={deactShowPw ? 'text' : 'password'}
+                  className="settings-pw-input"
+                  placeholder="Enter your current password"
+                  value={deactPassword}
+                  onChange={e => setDeactPassword(e.target.value)}
+                  autoFocus
+                />
+                <button type="button" className="settings-pw-toggle" onClick={() => setDeactShowPw(p => !p)}>
+                  <i className={`fas ${deactShowPw ? 'fa-eye-slash' : 'fa-eye'}`}></i>
+                </button>
+              </div>
+            </div>
+
+            {deactError && (
+              <div className="settings-modal-error">
+                <i className="fas fa-exclamation-circle"></i> {deactError}
+              </div>
+            )}
+          </div>
+
+          <div className="settings-modal-footer">
+            <button className="settings-modal-btn-cancel" onClick={onClose}>Cancel</button>
+            <button
+              className="settings-modal-btn-primary"
+              style={{ background: '#f59e0b' }}
+              onClick={onProceed}
+              disabled={!deactPassword.trim() || deactLoading}
+            >
+              {deactLoading
+                ? <><i className="fas fa-spinner fa-spin"></i> Verifying...</>
+                : <>Continue <i className="fas fa-arrow-right"></i></>}
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* ── STEP 2: Final confirmation ── */}
+      {deactStep === 2 && (
+        <>
+          <div className="settings-modal-header" style={{ background: '#f59e0b' }}>
+            <div className="settings-modal-icon"><i className="fas fa-exclamation-triangle"></i></div>
+            <div className="settings-modal-header-text">
+              <h3>Confirm Deactivation</h3>
+              <p>Please review before confirming.</p>
+            </div>
+            <button className="settings-modal-close" onClick={onClose} disabled={deactLoading}><i className="fas fa-times"></i></button>
+          </div>
+
+          <div className="settings-modal-body">
+            <div className="settings-confirm-summary">
+              <div className="settings-confirm-row"><span>Account</span><strong>{user?.name}</strong></div>
+              <div className="settings-confirm-row"><span>Email</span><strong>{user?.email}</strong></div>
+              <div className="settings-confirm-row"><span>Action</span><strong style={{ color: '#f59e0b' }}>Temporary deactivation</strong></div>
+            </div>
+
+            <div className="settings-confirm-warning" style={{ borderColor: '#f59e0b', background: '#fef3c712', color: '#92400e' }}>
+              <i className="fas fa-exclamation-triangle"></i>
+              You will be logged out immediately. To reactivate, log in again — we'll send a verification code to <strong>{user?.email}</strong>.
+            </div>
+
+            {deactError && (
+              <div className="settings-modal-error">
+                <i className="fas fa-exclamation-circle"></i> {deactError}
+              </div>
+            )}
+          </div>
+
+          <div className="settings-modal-footer">
+            <button className="settings-modal-btn-cancel" onClick={onGoBack} disabled={deactLoading}>
+              <i className="fas fa-arrow-left"></i> Go Back
+            </button>
+            <button
+              className="settings-modal-btn-primary"
+              style={{ background: '#f59e0b' }}
+              onClick={onConfirm}
+              disabled={deactLoading}
+            >
+              {deactLoading
+                ? <><i className="fas fa-spinner fa-spin"></i> Processing...</>
+                : <><i className="fas fa-pause-circle"></i> Yes, Deactivate</>}
+            </button>
+          </div>
+        </>
+      )}
+
+    </div>
+  </div>
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  DELETE MODAL — also outside Settings
+// ─────────────────────────────────────────────────────────────────────────────
+const DeleteModal = ({
+  user,
+  deleteStep,    setDeleteStep,
+  deleteReason,  setDeleteReason,
+  deleteNote,    setDeleteNote,
+  deleteLoading,
+  deleteError,
+  onConfirm,
+  onClose,
+}) => (
+  <div className="settings-modal-overlay" onClick={onClose}>
+    <div className="settings-modal" onClick={e => e.stopPropagation()}>
+
+      {deleteStep === 1 && (
+        <>
+          <div className="settings-modal-header" style={{ background: '#dc2626' }}>
+            <div className="settings-modal-icon"><i className="fas fa-trash-alt"></i></div>
+            <div className="settings-modal-header-text">
+              <h3>Delete Account</h3>
+              <p>This action is permanent and cannot be undone.</p>
+            </div>
+            <button className="settings-modal-close" onClick={onClose}><i className="fas fa-times"></i></button>
+          </div>
+
+          <div className="settings-modal-body">
+            <p className="settings-modal-label">Why are you deleting your account?</p>
+            <div className="settings-reason-list">
+              {DELETE_REASONS.map(r => (
+                <button
+                  key={r}
+                  className={`settings-reason-btn ${deleteReason === r ? 'active' : ''}`}
+                  style={deleteReason === r ? { borderColor: '#dc2626', background: '#fee2e218', color: '#dc2626' } : {}}
+                  onClick={() => setDeleteReason(r)}
+                >
+                  {deleteReason === r && <i className="fas fa-check-circle" style={{ color: '#dc2626' }}></i>}
+                  {r}
+                </button>
+              ))}
+            </div>
+            <div className="settings-note-group">
+              <label>Additional details <span className="settings-optional">(optional)</span></label>
+              <textarea
+                className="settings-note-input"
+                placeholder="Tell us more..."
+                value={deleteNote}
+                onChange={e => setDeleteNote(e.target.value)}
+                rows={2}
+              />
+            </div>
+          </div>
+
+          <div className="settings-modal-footer">
+            <button className="settings-modal-btn-cancel" onClick={onClose}>Cancel</button>
+            <button
+              className="settings-modal-btn-primary"
+              style={{ background: '#dc2626' }}
+              disabled={!deleteReason}
+              onClick={() => setDeleteStep(2)}
+            >
+              Continue <i className="fas fa-arrow-right"></i>
+            </button>
+          </div>
+        </>
+      )}
+
+      {deleteStep === 2 && (
+        <>
+          <div className="settings-modal-header" style={{ background: '#dc2626' }}>
+            <div className="settings-modal-icon"><i className="fas fa-exclamation-circle"></i></div>
+            <div className="settings-modal-header-text">
+              <h3>Confirm Deletion</h3>
+              <p>Please review before confirming.</p>
+            </div>
+            <button className="settings-modal-close" onClick={onClose}><i className="fas fa-times"></i></button>
+          </div>
+
+          <div className="settings-modal-body">
+            <div className="settings-confirm-summary">
+              <div className="settings-confirm-row"><span>Account</span><strong>{user?.name} ({user?.email})</strong></div>
+              <div className="settings-confirm-row"><span>Reason</span><strong>{deleteReason}</strong></div>
+              <div className="settings-confirm-row"><span>Action</span><strong style={{ color: '#dc2626' }}>Permanent deletion</strong></div>
+            </div>
+            <div className="settings-confirm-warning" style={{ borderColor: '#dc2626', background: '#fee2e212', color: '#991b1b' }}>
+              <i className="fas fa-exclamation-circle"></i>
+              Your account and all associated data will be <strong>permanently deleted</strong>. This cannot be undone.
+            </div>
+            {deleteError && (
+              <div className="settings-modal-error">
+                <i className="fas fa-exclamation-circle"></i> {deleteError}
+              </div>
+            )}
+          </div>
+
+          <div className="settings-modal-footer">
+            <button className="settings-modal-btn-cancel" onClick={() => setDeleteStep(1)} disabled={deleteLoading}>
+              <i className="fas fa-arrow-left"></i> Go Back
+            </button>
+            <button
+              className="settings-modal-btn-primary"
+              style={{ background: '#dc2626' }}
+              onClick={onConfirm}
+              disabled={deleteLoading}
+            >
+              {deleteLoading
+                ? <><i className="fas fa-spinner fa-spin"></i> Deleting...</>
+                : <><i className="fas fa-trash-alt"></i> Yes, Delete</>}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  </div>
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  MAIN SETTINGS COMPONENT
+// ─────────────────────────────────────────────────────────────────────────────
 const Settings = () => {
-  const { user, isAuthenticated, updateUser } = useAuth();
+  const { user, isAuthenticated, updateUser, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [activeTab, setActiveTab] = useState('details');
+  const [activeTab,            setActiveTab]            = useState('details');
   const [isForgotPasswordFlow, setIsForgotPasswordFlow] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [sendingCode, setSendingCode] = useState(false);
-  const [saveMsg, setSaveMsg] = useState('');
-  const [codeMsg, setCodeMsg] = useState('');
+  const [saving,               setSaving]               = useState(false);
+  const [sendingCode,          setSendingCode]          = useState(false);
+  const [saveMsg,              setSaveMsg]              = useState('');
+  const [codeMsg,              setCodeMsg]              = useState('');
 
-  const [accountForm, setAccountForm] = useState({
-    name: '', username: '', email: '', phone: '',
-  });
+  // ── Modal visibility ──
+  const [showDeactModal,  setShowDeactModal]  = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+
+  // ── Deactivation state ──
+  const [deactStep,     setDeactStep]     = useState(1);
+  const [deactPassword, setDeactPassword] = useState('');
+  const [deactShowPw,   setDeactShowPw]   = useState(false);
+  const [deactLoading,  setDeactLoading]  = useState(false);
+  const [deactError,    setDeactError]    = useState('');
+
+  // ── Delete state ──
+  const [deleteStep,    setDeleteStep]    = useState(1);
+  const [deleteReason,  setDeleteReason]  = useState('');
+  const [deleteNote,    setDeleteNote]    = useState('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError,   setDeleteError]   = useState('');
+
+  // ── Account details form ──
+  const [accountForm, setAccountForm] = useState({ name: '', username: '', email: '', phone: '' });
   const [emailChanged, setEmailChanged] = useState(false);
 
-  const [passwordForm, setPasswordForm] = useState({
-    email: '',
-    verificationCode: '',
-    newPassword: '',
-    confirmPassword: '',
-  });
-
-  const [passwordFocused, setPasswordFocused] = useState(false);
-  const [showNewPassword, setShowNewPassword] = useState(false);
+  // ── Password form ──
+  const [passwordForm, setPasswordForm] = useState({ email: '', verificationCode: '', newPassword: '', confirmPassword: '' });
+  const [passwordFocused,     setPasswordFocused]     = useState(false);
+  const [showNewPassword,     setShowNewPassword]     = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [passwordValidation, setPasswordValidation] = useState({
-    minLength: false,
-    hasUppercase: false,
-    hasLowercase: false,
-    hasNumber: false,
-    hasSymbol: false,
-  });
-
-  const [sentCode, setSentCode] = useState('');
+  const [passwordValidation,  setPasswordValidation]  = useState({ minLength: false, hasUppercase: false, hasLowercase: false, hasNumber: false, hasSymbol: false });
+  const [sentCode,         setSentCode]         = useState('');
   const [passwordCooldown, setPasswordCooldown] = useState(0);
   const [passwordAttempts, setPasswordAttempts] = useState(0);
 
-  const updateUserProfile = useMutation(api.users.updateUserProfile);
-  const updatePassword = useMutation(api.users.updateUserProfile);
+  const updateUserProfile     = useMutation(api.users.updateUserProfile);
   const sendPasswordResetCode = useAction(api.sendEmail.sendPasswordResetCode);
+  const deactivateOwnAccount  = useMutation(api.users.deactivateOwnAccount);
+  const deleteUser            = useMutation(api.users.deleteUser);
+  const verifyUserPassword    = useMutation(api.users.verifyUserPassword);
 
   useEffect(() => {
     const p = passwordForm.newPassword;
     setPasswordValidation({
-      minLength: p.length >= 8,
+      minLength:    p.length >= 8,
       hasUppercase: /[A-Z]/.test(p),
       hasLowercase: /[a-z]/.test(p),
-      hasNumber: /[0-9]/.test(p),
-      hasSymbol: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(p),
+      hasNumber:    /[0-9]/.test(p),
+      hasSymbol:    /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(p),
     });
   }, [passwordForm.newPassword]);
 
-  const isPasswordValid = () => Object.values(passwordValidation).every(v => v === true);
+  const isPasswordValid = () => Object.values(passwordValidation).every(Boolean);
 
   const getPasswordStrength = () => {
-    const count = Object.values(passwordValidation).filter(v => v).length;
-    if (count === 0) return { text: '', percentage: 0, color: '' };
-    if (count <= 2) return { text: 'Weak', percentage: 20, color: '#dc3545' };
-    if (count === 3) return { text: 'Fair', percentage: 40, color: '#ffc107' };
-    if (count === 4) return { text: 'Good', percentage: 70, color: '#17a2b8' };
-    return { text: 'Strong', percentage: 100, color: '#28a745' };
+    const c = Object.values(passwordValidation).filter(Boolean).length;
+    if (c === 0) return { text: '', percentage: 0,   color: '' };
+    if (c <= 2)  return { text: 'Weak',   percentage: 20,  color: '#dc3545' };
+    if (c === 3) return { text: 'Fair',   percentage: 40,  color: '#ffc107' };
+    if (c === 4) return { text: 'Good',   percentage: 70,  color: '#17a2b8' };
+    return             { text: 'Strong', percentage: 100, color: '#28a745' };
   };
 
   const strength = getPasswordStrength();
   const passwordsMatch = passwordForm.confirmPassword && passwordForm.newPassword === passwordForm.confirmPassword;
   const showPasswordRequirements = (passwordFocused || passwordForm.newPassword) && !isPasswordValid();
 
-  // ✅ FIXED: Check localStorage (not sessionStorage) + location.state
   useEffect(() => {
-    // ✅ Check both localStorage AND location.state
-    const forgotFlag = localStorage.getItem('dkmerch_forgot_password');
+    const forgotFlag     = localStorage.getItem('dkmerch_forgot_password');
     const forgotPassword = location.state?.forgotPassword;
     const activeTabState = location.state?.activeTab;
-
     if (forgotFlag === 'true' || forgotPassword) {
-      setIsForgotPasswordFlow(true);
-      setActiveTab('password');
-      // ✅ Clean up after reading
+      setIsForgotPasswordFlow(true); setActiveTab('password');
       localStorage.removeItem('dkmerch_forgot_password');
-      window.history.replaceState({}, document.title);
-      return;
+      window.history.replaceState({}, document.title); return;
     }
-
-    if (activeTabState === 'password') {
-      setActiveTab('password');
-      window.history.replaceState({}, document.title);
-    }
+    if (activeTabState === 'password') { setActiveTab('password'); window.history.replaceState({}, document.title); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
 
-  // ✅ FIXED: Auth check AFTER forgot password check so it doesn't redirect too early
   useEffect(() => {
-    if (isForgotPasswordFlow) return; // ✅ Skip auth check if forgot password flow
-    if (!isAuthenticated) {
-      navigate('/');
-      return;
-    }
-    if (user) {
-      setAccountForm({
-        name: user.name || '',
-        username: user.username || '',
-        email: user.email || '',
-        phone: user.phone || '',
-      });
-    }
+    if (isForgotPasswordFlow) return;
+    if (!isAuthenticated) { navigate('/'); return; }
+    if (user) setAccountForm({ name: user.name || '', username: user.username || '', email: user.email || '', phone: user.phone || '' });
   }, [user, isAuthenticated, navigate, isForgotPasswordFlow]);
 
-  // Cooldown timer
   useEffect(() => {
     if (passwordCooldown <= 0) return;
     const t = setTimeout(() => setPasswordCooldown(c => c - 1), 1000);
@@ -123,112 +367,114 @@ const Settings = () => {
 
   const handleAccountChange = (e) => {
     const { name, value } = e.target;
-    if (name === 'phone') {
-      const digits = value.replace(/\D/g, '');
-      if (digits.length > 11) return;
-      setAccountForm(prev => ({ ...prev, phone: digits }));
-      return;
-    }
+    if (name === 'phone') { const d = value.replace(/\D/g, ''); if (d.length > 11) return; setAccountForm(p => ({ ...p, phone: d })); return; }
     if (name === 'email') setEmailChanged(value !== (user?.email || ''));
-    setAccountForm(prev => ({ ...prev, [name]: value }));
+    setAccountForm(p => ({ ...p, [name]: value }));
   };
 
   const handlePasswordFormChange = (e) => {
     const { name, value } = e.target;
-    if (name === 'verificationCode') {
-      const digits = value.replace(/\D/g, '');
-      if (digits.length > 6) return;
-      setPasswordForm(prev => ({ ...prev, verificationCode: digits }));
-      return;
-    }
-    setPasswordForm(prev => ({ ...prev, [name]: value }));
+    if (name === 'verificationCode') { const d = value.replace(/\D/g, ''); if (d.length > 6) return; setPasswordForm(p => ({ ...p, verificationCode: d })); return; }
+    setPasswordForm(p => ({ ...p, [name]: value }));
   };
 
   const handleAccountSubmit = async (e) => {
     e.preventDefault();
     if (!user?._id && !user?.id) { setSaveMsg('❌ User not found.'); return; }
-    if (accountForm.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(accountForm.email)) {
-      setSaveMsg('❌ Please enter a valid email address.'); return;
-    }
-
-    setSaving(true);
-    setSaveMsg('');
+    if (accountForm.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(accountForm.email)) { setSaveMsg('❌ Please enter a valid email address.'); return; }
+    setSaving(true); setSaveMsg('');
     try {
-      const userId = user._id || user.id;
-      await updateUserProfile({ id: userId, name: accountForm.name, username: accountForm.username, email: accountForm.email, phone: accountForm.phone });
+      const uid = user._id || user.id;
+      await updateUserProfile({ id: uid, name: accountForm.name, username: accountForm.username, email: accountForm.email, phone: accountForm.phone });
       if (updateUser) await updateUser({ name: accountForm.name, username: accountForm.username, email: accountForm.email, phone: accountForm.phone });
-      setEmailChanged(false);
-      setSaveMsg('✅ Account details saved successfully!');
-    } catch {
-      setSaveMsg('❌ Failed to save. Please try again.');
-    } finally {
-      setSaving(false);
-      setTimeout(() => setSaveMsg(''), 4000);
-    }
+      setEmailChanged(false); setSaveMsg('✅ Account details saved successfully!');
+    } catch { setSaveMsg('❌ Failed to save. Please try again.'); }
+    finally { setSaving(false); setTimeout(() => setSaveMsg(''), 4000); }
   };
 
   const handleSendCode = async () => {
     if (passwordCooldown > 0) return;
-    if (passwordAttempts >= 3) {
-      setCodeMsg('❌ Maximum attempts reached. Try again later.');
-      setPasswordCooldown(300);
-      setPasswordAttempts(0);
-      return;
-    }
-
+    if (passwordAttempts >= 3) { setCodeMsg('❌ Maximum attempts reached.'); setPasswordCooldown(300); setPasswordAttempts(0); return; }
     const targetEmail = isForgotPasswordFlow ? passwordForm.email : user?.email;
     if (!targetEmail) { setCodeMsg('❌ No email address found.'); return; }
-
     const code = Math.floor(100000 + Math.random() * 900000).toString();
-    setSentCode(code);
-    setSendingCode(true);
-    setCodeMsg('');
-
+    setSentCode(code); setSendingCode(true); setCodeMsg('');
     try {
       const result = await sendPasswordResetCode({ to: targetEmail, code, name: user?.name || undefined });
-      if (result?.success) {
-        setCodeMsg(`✅ Code sent to ${targetEmail}! Check your inbox.`);
-      } else {
-        setCodeMsg(`❌ Failed to send: ${result?.message || 'Unknown error'}`);
-        setSentCode('');
-      }
-    } catch (err) {
-      setCodeMsg('❌ Failed to send email. Check your Convex RESEND_API_KEY.');
-      setSentCode('');
-    } finally {
+      if (result?.success) setCodeMsg(`✅ Code sent to ${targetEmail}!`);
+      else { setCodeMsg(`❌ Failed: ${result?.message || 'Unknown error'}`); setSentCode(''); }
+    } catch { setCodeMsg('❌ Failed to send email.'); setSentCode(''); }
+    finally {
       setSendingCode(false);
-      const newCooldown = passwordAttempts === 0 ? 60 : passwordAttempts === 1 ? 120 : 180;
-      setPasswordCooldown(newCooldown);
-      setPasswordAttempts(prev => prev + 1);
+      setPasswordCooldown(passwordAttempts === 0 ? 60 : passwordAttempts === 1 ? 120 : 180);
+      setPasswordAttempts(p => p + 1);
     }
   };
 
   const handlePasswordSubmit = async (e) => {
-    e.preventDefault();
-    setSaveMsg('');
-
-    if (!sentCode) { setSaveMsg('❌ Please request a verification code first.'); return; }
+    e.preventDefault(); setSaveMsg('');
+    if (!sentCode)                                  { setSaveMsg('❌ Please request a code first.'); return; }
     if (passwordForm.verificationCode !== sentCode) { setSaveMsg('❌ Invalid verification code.'); return; }
-    if (!isPasswordValid()) { setSaveMsg('❌ Password does not meet all requirements.'); return; }
-    if (!passwordsMatch) { setSaveMsg('❌ Passwords do not match.'); return; }
-
+    if (!isPasswordValid())                         { setSaveMsg('❌ Password does not meet requirements.'); return; }
+    if (!passwordsMatch)                            { setSaveMsg('❌ Passwords do not match.'); return; }
     setSaving(true);
     try {
-      const userId = user?._id || user?.id;
-      if (userId) {
-        await updatePassword({ id: userId, password: passwordForm.newPassword });
-        if (updateUser) await updateUser({ password: passwordForm.newPassword });
-      }
+      const uid = user?._id || user?.id;
+      if (uid) { await updateUserProfile({ id: uid, password: passwordForm.newPassword }); if (updateUser) await updateUser({ password: passwordForm.newPassword }); }
       setSaveMsg('✅ Password updated successfully!');
-      setPasswordForm({ email: '', verificationCode: '', newPassword: '', confirmPassword: '' });
-      setSentCode('');
+      setPasswordForm({ email: '', verificationCode: '', newPassword: '', confirmPassword: '' }); setSentCode('');
       if (isForgotPasswordFlow) setTimeout(() => navigate('/'), 1500);
-    } catch {
-      setSaveMsg('❌ Failed to update password. Please try again.');
-    } finally {
-      setSaving(false);
-      setTimeout(() => setSaveMsg(''), 4000);
-    }
+    } catch { setSaveMsg('❌ Failed to update password.'); }
+    finally { setSaving(false); setTimeout(() => setSaveMsg(''), 4000); }
+  };
+
+  // ── Deactivate ────────────────────────────────────────────────────────────
+  const openDeact = () => {
+    setDeactStep(1); setDeactPassword(''); setDeactError(''); setDeactShowPw(false);
+    setShowDeactModal(true);
+  };
+  const closeDeact = () => {
+    setShowDeactModal(false); setDeactStep(1); setDeactPassword(''); setDeactError(''); setDeactShowPw(false);
+  };
+  // Called when clicking "Continue" on step 1 — verify password first
+  const handleVerifyAndProceed = async () => {
+    if (!deactPassword.trim()) { setDeactError('Please enter your password.'); return; }
+    setDeactLoading(true); setDeactError('');
+    try {
+      const uid = user._id || user.id;
+      const verified = await verifyUserPassword({ id: uid, password: deactPassword });
+      if (!verified.success) { setDeactError('Incorrect password. Please try again.'); return; }
+      setDeactStep(2);
+    } catch { setDeactError('Failed to verify. Please try again.'); }
+    finally { setDeactLoading(false); }
+  };
+
+  // Called on step 2 "Yes, Deactivate" — actually deactivate
+  const handleDeactivate = async () => {
+    setDeactLoading(true); setDeactError('');
+    try {
+      const uid = user._id || user.id;
+      await deactivateOwnAccount({ id: uid, reason: 'self_deactivated', note: undefined });
+      logout(); navigate('/');
+    } catch { setDeactError('Failed to deactivate. Please try again.'); }
+    finally { setDeactLoading(false); }
+  };
+
+  // ── Delete ────────────────────────────────────────────────────────────────
+  const openDelete = () => {
+    setDeleteReason(''); setDeleteNote(''); setDeleteError(''); setDeleteStep(1);
+    setShowDeleteModal(true);
+  };
+  const closeDelete = () => {
+    setShowDeleteModal(false); setDeleteReason(''); setDeleteNote(''); setDeleteError(''); setDeleteStep(1);
+  };
+  const handleDelete = async () => {
+    setDeleteLoading(true); setDeleteError('');
+    try {
+      await deleteUser({ id: user._id || user.id });
+      logout(); navigate('/');
+    } catch { setDeleteError('Failed to delete account. Please try again.'); }
+    finally { setDeleteLoading(false); }
   };
 
   return (
@@ -247,15 +493,18 @@ const Settings = () => {
             <button className={`settings-tab ${activeTab === 'password' ? 'active' : ''}`} onClick={() => setActiveTab('password')}>
               <i className="fas fa-lock"></i> Change Password
             </button>
+            <button className={`settings-tab ${activeTab === 'manage' ? 'active' : ''}`} onClick={() => setActiveTab('manage')}>
+              <i className="fas fa-shield-alt"></i> Account Management
+            </button>
           </div>
         )}
 
         <div className="settings-content">
 
+          {/* ── ACCOUNT DETAILS ── */}
           {activeTab === 'details' && !isForgotPasswordFlow && (
             <form onSubmit={handleAccountSubmit} className="settings-form">
               <h2>Personal Information</h2>
-
               <div className="form-group">
                 <label>Full Name</label>
                 <input type="text" name="name" className="form-control" value={accountForm.name} onChange={handleAccountChange} required />
@@ -267,57 +516,41 @@ const Settings = () => {
               <div className="form-group">
                 <label>Email Address</label>
                 <input type="email" name="email" className="form-control" value={accountForm.email} onChange={handleAccountChange} required />
-                {emailChanged && (
-                  <small className="email-change-note">
-                    <i className="fas fa-info-circle"></i> Changing your email will update your login credentials.
-                  </small>
-                )}
+                {emailChanged && <small className="email-change-note"><i className="fas fa-info-circle"></i> Changing your email will update your login credentials.</small>}
               </div>
               <div className="form-group">
                 <label>Phone Number</label>
                 <input type="tel" name="phone" className="form-control" placeholder="09XXXXXXXXX" value={accountForm.phone} onChange={handleAccountChange} maxLength="11" />
-                <small>Auto-filled from checkout info. Changes here will reflect on your next order.</small>
+                <small>Auto-filled from checkout info.</small>
               </div>
-
               {saveMsg && <div className={`save-message ${saveMsg.startsWith('✅') ? 'success' : 'error'}`}>{saveMsg}</div>}
-
               <button type="submit" className="btn btn-primary btn-save" disabled={saving}>
                 <i className="fas fa-save"></i> {saving ? 'Saving...' : 'Save Changes'}
               </button>
             </form>
           )}
 
+          {/* ── PASSWORD ── */}
           {(activeTab === 'password' || isForgotPasswordFlow) && (
             <form onSubmit={handlePasswordSubmit} className="settings-form">
               <h2>{isForgotPasswordFlow ? 'Reset Your Password' : 'Change Password'}</h2>
-              <p className="form-description">
-                {isForgotPasswordFlow ? "Enter your email and we'll send you a verification code" : `We'll send a verification code to ${user?.email}`}
-              </p>
-
+              <p className="form-description">{isForgotPasswordFlow ? "Enter your email and we'll send you a verification code" : `We'll send a verification code to ${user?.email}`}</p>
               {isForgotPasswordFlow && (
                 <div className="form-group">
                   <label>Email Address</label>
                   <input type="email" name="email" className="form-control" placeholder="Enter your registered email" value={passwordForm.email} onChange={handlePasswordFormChange} required />
                 </div>
               )}
-
               <div className="form-group">
                 <label>Verification Code</label>
                 <div className="input-with-badge">
-                  <input
-                    type="text" name="verificationCode" className="form-control"
-                    placeholder="Enter 6-digit code"
-                    value={passwordForm.verificationCode}
-                    onChange={handlePasswordFormChange}
-                    maxLength="6" required
-                  />
+                  <input type="text" name="verificationCode" className="form-control" placeholder="Enter 6-digit code" value={passwordForm.verificationCode} onChange={handlePasswordFormChange} maxLength="6" required />
                   <button type="button" className="verify-btn" onClick={handleSendCode} disabled={passwordCooldown > 0 || sendingCode}>
                     {sendingCode ? 'Sending...' : passwordCooldown > 0 ? `Wait ${passwordCooldown}s` : 'Send Code'}
                   </button>
                 </div>
                 {codeMsg && <div className={`save-message ${codeMsg.startsWith('✅') ? 'success' : 'error'}`} style={{ marginTop: '10px' }}>{codeMsg}</div>}
               </div>
-
               <div className="form-group">
                 <label>New Password</label>
                 <div className="pw-input-wrapper">
@@ -332,30 +565,26 @@ const Settings = () => {
                     onBlur={() => setPasswordFocused(false)}
                     required
                   />
-                  <button type="button" className="pw-toggle-btn" onClick={() => setShowNewPassword(p => !p)} aria-label="Toggle password">
+                  <button type="button" className="pw-toggle-btn" onClick={() => setShowNewPassword(p => !p)}>
                     <i className={`fas ${showNewPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
                   </button>
                 </div>
-
                 {passwordForm.newPassword && (
                   <div className="pw-strength-wrap">
-                    <div className="pw-strength-bar">
-                      <div className="pw-strength-fill" style={{ width: `${strength.percentage}%`, backgroundColor: strength.color }} />
-                    </div>
+                    <div className="pw-strength-bar"><div className="pw-strength-fill" style={{ width: `${strength.percentage}%`, backgroundColor: strength.color }} /></div>
                     {strength.text && <span className="pw-strength-label" style={{ color: strength.color }}>{strength.text}</span>}
                   </div>
                 )}
-
                 {showPasswordRequirements && (
                   <div className="pw-requirements">
                     <div className="pw-req-title">Password must contain:</div>
                     <div className="pw-req-list">
                       {[
-                        { key: 'minLength', label: 'At least 8 characters' },
+                        { key: 'minLength',    label: 'At least 8 characters' },
                         { key: 'hasUppercase', label: 'One uppercase letter' },
                         { key: 'hasLowercase', label: 'One lowercase letter' },
-                        { key: 'hasNumber', label: 'One number' },
-                        { key: 'hasSymbol', label: 'One special character' },
+                        { key: 'hasNumber',    label: 'One number' },
+                        { key: 'hasSymbol',    label: 'One special character' },
                       ].map(({ key, label }) => (
                         <div key={key} className={`pw-req-item ${passwordValidation[key] ? 'pw-req-valid' : ''}`}>
                           <i className={`fas ${passwordValidation[key] ? 'fa-check-circle' : 'fa-times-circle'}`}></i>
@@ -365,15 +594,10 @@ const Settings = () => {
                     </div>
                   </div>
                 )}
-
                 {isPasswordValid() && passwordForm.newPassword && (
-                  <div className="pw-success-msg">
-                    <i className="fas fa-check-circle"></i>
-                    <span>Great! Your password is strong</span>
-                  </div>
+                  <div className="pw-success-msg"><i className="fas fa-check-circle"></i><span>Great! Your password is strong</span></div>
                 )}
               </div>
-
               <div className="form-group">
                 <label>Confirm New Password</label>
                 <div className="pw-input-wrapper">
@@ -386,25 +610,16 @@ const Settings = () => {
                     onChange={handlePasswordFormChange}
                     required
                   />
-                  <button type="button" className="pw-toggle-btn" onClick={() => setShowConfirmPassword(p => !p)} aria-label="Toggle confirm password">
+                  <button type="button" className="pw-toggle-btn" onClick={() => setShowConfirmPassword(p => !p)}>
                     <i className={`fas ${showConfirmPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
                   </button>
                 </div>
-                {passwordsMatch && (
-                  <div className="pw-match-msg">
-                    <i className="fas fa-check-circle"></i>
-                    <span>Passwords match!</span>
-                  </div>
-                )}
+                {passwordsMatch && <div className="pw-match-msg"><i className="fas fa-check-circle"></i><span>Passwords match!</span></div>}
               </div>
-
               {saveMsg && <div className={`save-message ${saveMsg.startsWith('✅') ? 'success' : 'error'}`}>{saveMsg}</div>}
-
               <button type="submit" className="btn btn-primary btn-save" disabled={saving || !isPasswordValid() || !passwordsMatch}>
-                <i className="fas fa-key"></i>
-                {saving ? 'Saving...' : isForgotPasswordFlow ? 'Reset Password' : 'Update Password'}
+                <i className="fas fa-key"></i> {saving ? 'Saving...' : isForgotPasswordFlow ? 'Reset Password' : 'Update Password'}
               </button>
-
               {isForgotPasswordFlow && (
                 <button type="button" className="btn btn-save" onClick={() => navigate('/')} style={{ marginTop: '10px', background: '#6c757d', color: 'white' }}>
                   <i className="fas fa-arrow-left"></i> Back to Login
@@ -413,8 +628,68 @@ const Settings = () => {
             </form>
           )}
 
+          {/* ── ACCOUNT MANAGEMENT ── */}
+          {activeTab === 'manage' && !isForgotPasswordFlow && (
+            <div className="settings-form">
+              <h2>Account Management</h2>
+              <p className="form-description">Manage your account status. These actions will log you out immediately.</p>
+
+              <div className="settings-acct-card settings-acct-card--warn">
+                <div className="settings-acct-card-icon"><i className="fas fa-pause-circle"></i></div>
+                <div className="settings-acct-card-info">
+                  <h4>Deactivate Account</h4>
+                  <p>Temporarily suspend your account. You can reactivate anytime by logging in again — we'll verify your identity via email OTP.</p>
+                </div>
+                <button className="settings-acct-btn settings-acct-btn--warn" onClick={openDeact}>Deactivate</button>
+              </div>
+
+              <div className="settings-acct-card settings-acct-card--danger">
+                <div className="settings-acct-card-icon"><i className="fas fa-trash-alt"></i></div>
+                <div className="settings-acct-card-info">
+                  <h4>Delete Account</h4>
+                  <p>Permanently delete your account and all associated data. This cannot be undone.</p>
+                </div>
+                <button className="settings-acct-btn settings-acct-btn--danger" onClick={openDelete}>Delete</button>
+              </div>
+            </div>
+          )}
+
         </div>
       </div>
+
+      {/* ── MODALS — rendered at root level, not inside a re-rendering subtree ── */}
+      {showDeactModal && (
+        <DeactivateModal
+          user={user}
+          deactStep={deactStep}
+          onProceed={handleVerifyAndProceed}
+          onGoBack={() => setDeactStep(1)}
+          deactPassword={deactPassword}
+          setDeactPassword={setDeactPassword}
+          deactShowPw={deactShowPw}
+          setDeactShowPw={setDeactShowPw}
+          deactLoading={deactLoading}
+          deactError={deactError}
+          onConfirm={handleDeactivate}
+          onClose={closeDeact}
+        />
+      )}
+
+      {showDeleteModal && (
+        <DeleteModal
+          user={user}
+          deleteStep={deleteStep}
+          setDeleteStep={setDeleteStep}
+          deleteReason={deleteReason}
+          setDeleteReason={setDeleteReason}
+          deleteNote={deleteNote}
+          setDeleteNote={setDeleteNote}
+          deleteLoading={deleteLoading}
+          deleteError={deleteError}
+          onConfirm={handleDelete}
+          onClose={closeDelete}
+        />
+      )}
     </div>
   );
 };
