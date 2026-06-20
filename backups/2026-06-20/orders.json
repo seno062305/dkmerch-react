@@ -1,0 +1,212 @@
+[
+  {
+    "_creationTime": 1773514871281.8516,
+    "_id": "j977g6ekand6pz84dqpedw07ph82whrh",
+    "addressLat": 14.6767494,
+    "addressLng": 120.9807766,
+    "confirmedAt": "2026-03-14T19:27:10.825Z",
+    "customerName": "seno",
+    "email": "justinetrajano023@gmail.com",
+    "items": [
+      {
+        "id": "k176spz4j1z015d24wmcers38d82hbdd",
+        "image": "/images/BTSPHOTOCARDS.jpg",
+        "isPreOrder": false,
+        "name": "BTS PHOTOCARDS",
+        "price": 475,
+        "quantity": 1,
+        "releaseDate": null
+      },
+      {
+        "id": "k172b0hdxxbnxtsknxvh14615582h95c",
+        "image": "/images/NewJeans - NJ Get Up PHOTOCARD SET.png",
+        "isPreOrder": false,
+        "name": "[SHOCKING SALE] NewJeans - NJ Get Up PHOTOCARD SET",
+        "price": 750,
+        "quantity": 1,
+        "releaseDate": null
+      }
+    ],
+    "notes": "",
+    "orderId": "DK-1773514871226-SZ8LJK",
+    "orderStatus": "out_for_delivery",
+    "outForDeliveryAt": "2026-03-15T03:44:24.560Z",
+    "paidAt": "2026-03-14T19:01:47.041Z",
+    "paymentLinkId": "cs_b9e171a48858a0f2a976d169",
+    "paymentLinkUrl": "https://checkout.paymongo.com/b9e171a48858a0f2a976d169",
+    "paymentMethod": "GCash",
+    "paymentStatus": "paid",
+    "phone": "09614336575",
+    "riderInfo": {
+      "name": "samantha",
+      "phone": "09614336575",
+      "plate": "PRO 1234",
+      "vehicle": "motorcycle"
+    },
+    "shippingAddress": "Datamex Computer College, MacArthur Highway, Elysian, Marulas, 2nd District, Valenzuela, Northern Manila District, Metro Manila, 1475, Philippines, Valenzuela, 1475",
+    "shippingFee": 129,
+    "status": "Out for Delivery",
+    "subtotal": 1225,
+    "total": 1354
+  },
+  {
+    "_creationTime": 1773575144405.6907,
+    "_id": "j972qwgexqxyncpmzbh9jsrbk582yrnm",
+    "addressLat": 14.6898323,
+    "addressLng": 120.9986926,
+    "customerName": "seno",
+    "email": "justinetrajano023@gmail.com",
+    "items": [
+      {
+        "id": "k17dk5y1cvekkkfk3qxeyq8jwd82g8t1",
+        "image": "/images/REDVELVETACCESSORIES.jpg",
+        "isPreOrder": false,
+        "name": "Red Velvet – Cosmic Keychain Ver.",
+        "price": 199,
+        "quantity": 1,
+        "releaseDate": null
+      }
+    ],
+    "notes": "",
+    "orderId": "DK-1773575144869-CKIH8I",
+    "orderStatus": "pending",
+    "paidAt": "2026-03-15T11:46:18.078Z",
+    "paymentLinkId": "cs_b64ba5d9dd9bcd83a97e09ae",
+    "paymentLinkUrl": "https://checkout.paymongo.com/b64ba5d9dd9bcd83a97e09ae",
+    "paymentMethod": "Maya",
+    "paymentStatus": "paid",
+    "phone": "09614336575",
+    "shippingAddress": "Demetillo Street, Jim Homes, General T. de Leon, 2nd District, Valenzuela, Northern Manila District, Metro Manila, 1442, Philippines, Valenzuela, 1442",
+    "shippingFee": 49,
+    "status": "Pending Payment",
+    "subtotal": 199,
+    "total": 248
+  },
+  {
+    "_creationTime": 1773747370707.2246,
+    "_id": "j97apypet49ctcdvwpdapapsth833w9g",
+    "addressLat": 14.6898323,
+    "addressLng": 120.9986926,
+    "customerName": "seno",
+    "email": "justinetrajano023@gmail.com",
+    "items": [
+      {
+        "id": "k175dx46rpnzwtnjx66r1x4p7d82ewqa",
+        "image": "/images/STRAYKIDSALBUM.jpg",
+        "isPreOrder": false,
+        "name": "Stray Kids - SKZ IT TAPE DO IT Album ( IT Ver. )",
+        "price": 3999,
+        "quantity": 1,
+        "releaseDate": null
+      },
+      {
+        "id": "k17cf5f66rwh5k8ysd0zrebr7h82e02w",
+        "image": "/images/SEVENTEENACCESORIES.jpg",
+        "isPreOrder": false,
+        "name": "SEVENTEEN X TEDDY TALES - BONGBONG BEAR (XS)",
+        "price": 1599,
+        "quantity": 1,
+        "releaseDate": null
+      }
+    ],
+    "notes": "",
+    "orderId": "DK-1773747370783-6ZQQPZ",
+    "orderStatus": "pending",
+    "paidAt": "2026-03-17T11:37:07.493Z",
+    "paymentLinkId": "cs_b3d647c37aff6f017f09188e",
+    "paymentLinkUrl": "https://checkout.paymongo.com/b3d647c37aff6f017f09188e",
+    "paymentMethod": "GCash",
+    "paymentStatus": "paid",
+    "phone": "09614336575",
+    "shippingAddress": "Demetillo Street, Jim Homes, General T. de Leon, 2nd District, Valenzuela, Northern Manila District, Metro Manila, 1442, Philippines, Valenzuela, 1442",
+    "shippingFee": 59,
+    "status": "Pending Payment",
+    "subtotal": 5598,
+    "total": 5657
+  },
+  {
+    "_creationTime": 1773757425137.8909,
+    "_id": "j973xd68231rnaw0zr30ttvv2s833c2w",
+    "addressLat": 14.601026485432076,
+    "addressLng": 120.99983723346661,
+    "confirmedAt": "2026-03-17T14:29:46.824Z",
+    "customerName": "Sobel",
+    "deliveryConfirmedAt": "2026-03-17T15:02:15.959Z",
+    "deliveryOtp": "2935",
+    "deliveryOtpVerified": true,
+    "email": "sobel1146@gmail.com",
+    "items": [
+      {
+        "id": "k175hzyf4nz3g78ap82x1x68dx82ge6t",
+        "image": "/images/Light Stick Parts (HEART & STAR).webp",
+        "isPreOrder": true,
+        "name": "Light Stick Parts (HEART & STAR)",
+        "price": 399,
+        "quantity": 6,
+        "releaseDate": "2026-03-12"
+      }
+    ],
+    "notes": "",
+    "orderId": "DK-1773757424295-VRAH78",
+    "orderStatus": "completed",
+    "outForDeliveryAt": "2026-03-17T14:57:39.952Z",
+    "paidAt": "2026-03-17T14:25:08.155Z",
+    "paymentLinkId": "cs_a48f82c4e60d2589c4dd0f59",
+    "paymentLinkUrl": "https://checkout.paymongo.com/a48f82c4e60d2589c4dd0f59",
+    "paymentMethod": "GCash",
+    "paymentStatus": "paid",
+    "phone": "09817263546",
+    "riderInfo": {
+      "name": "samantha",
+      "phone": "09614336575",
+      "plate": "PRO 1234",
+      "vehicle": "motorcycle"
+    },
+    "shippingAddress": "Magsaysay Boulevard, Santa Mesa, Sixth District, Manila, Capital District, Metro Manila, 1213, Philippines, Manila, 1213",
+    "shippingFee": 179,
+    "status": "Delivered",
+    "subtotal": 2394,
+    "total": 2573
+  },
+  {
+    "_creationTime": 1773760138711.5078,
+    "_id": "j970rgkhs3yge1rwghechggpnn832f0z",
+    "addressLat": 14.601026485432076,
+    "addressLng": 120.99983723346661,
+    "confirmedAt": "2026-03-17T15:09:56.194Z",
+    "customerName": "Sobel",
+    "email": "sobel1146@gmail.com",
+    "items": [
+      {
+        "id": "k1721htvrbec96kmr71ek93edn82hyzp",
+        "image": "/images/REDVELVETPHOTOCARDS.jpg",
+        "isPreOrder": false,
+        "name": "Red Velvet Photocards",
+        "price": 320,
+        "quantity": 1,
+        "releaseDate": null
+      }
+    ],
+    "notes": "",
+    "orderId": "DK-1773760137841-WOKMCL",
+    "orderStatus": "out_for_delivery",
+    "outForDeliveryAt": "2026-03-17T15:10:57.961Z",
+    "paidAt": "2026-03-17T15:09:27.766Z",
+    "paymentLinkId": "cs_a1024a99b65142cc41cdf107",
+    "paymentLinkUrl": "https://checkout.paymongo.com/a1024a99b65142cc41cdf107",
+    "paymentMethod": "Maya",
+    "paymentStatus": "paid",
+    "phone": "09817263546",
+    "riderInfo": {
+      "name": "samantha",
+      "phone": "09614336575",
+      "plate": "PRO 1234",
+      "vehicle": "motorcycle"
+    },
+    "shippingAddress": "Magsaysay Boulevard, Santa Mesa, Sixth District, Manila, Capital District, Metro Manila, 1213, Philippines, Manila, 1213",
+    "shippingFee": 129,
+    "status": "Out for Delivery",
+    "subtotal": 320,
+    "total": 449
+  }
+]
