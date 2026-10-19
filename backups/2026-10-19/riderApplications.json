@@ -1,0 +1,20 @@
+[
+  {
+    "_creationTime": 1773512358926.0256,
+    "_id": "jn70xt92xxenn1cbhwe9mpd1mx82w5js",
+    "activeDeviceAt": 1773764185300,
+    "activeSessionId": "1773764185300-zjuklvt3-w0pa5iv7",
+    "address": "dito lang ako",
+    "appliedAt": "2026-03-14T18:19:18.926Z",
+    "dkRiderId": "DKR-2026-0002",
+    "dkRiderIdGeneratedAt": "2026-03-14T19:27:03.952Z",
+    "email": "nabel.leal04@gmail.com",
+    "fullName": "samantha",
+    "licenseNumber": "N01-12-345678",
+    "password": "@ridersam",
+    "phone": "09614336575",
+    "plateNumber": "PRO 1234",
+    "status": "approved",
+    "vehicleType": "motorcycle"
+  }
+]
