@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { useProducts, usePreOrderProducts, useUpdateProduct, useCollectionProducts } from '../utils/productStorage';
 import { useCreateOrder } from '../utils/orderStorage';
-import { useCart, useClearCart } from '../context/cartUtils';
+import { useCart, useClearCart, useRemoveFromCartById } from '../context/cartUtils';
 import { useMutation, useQuery, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import './Checkout.css';
@@ -552,10 +552,11 @@ const Checkout = () => {
   });
   const products = Array.from(allProductsMap.values());
 
-  const cartItems     = useCart();
-  const createOrder   = useCreateOrder();
-  const clearCart     = useClearCart();
-  const updateProduct = useUpdateProduct();
+  const cartItems          = useCart();
+  const createOrder        = useCreateOrder();
+  const clearCart          = useClearCart();
+  const removeFromCartById = useRemoveFromCartById();
+  const updateProduct      = useUpdateProduct();
 
   const storeSettings    = useQuery(api.settings.getSettings);
   const hasStoreLocation = !!(storeSettings?.storeLat && storeSettings?.storeLng);
@@ -574,6 +575,14 @@ const Checkout = () => {
   // ── Reward order state ────────────────────────────────────────────────────
   const [rewardOrder, setRewardOrder] = useState(location.state?.rewardOrder || null);
 
+  // TikTok-style: only checkout items selected in cart modal
+  const selectedCartIds = location.state?.selectedCartIds || null;
+  const checkoutItems = rewardOrder
+    ? []
+    : (selectedCartIds?.length
+        ? cartItems.filter(i => selectedCartIds.includes(i._id))
+        : cartItems);
+
   const [loading,           setLoading]           = useState(false);
   const [isEditingContact,  setIsEditingContact]  = useState(false);
   const [isEditingAddress,  setIsEditingAddress]  = useState(false);
@@ -590,7 +599,7 @@ const Checkout = () => {
   // ── For reward orders, use 1 qty item for shipping calc ──────────────────
   const shippingCartItems = rewardOrder
     ? [{ qty: 1, productId: rewardOrder.productId }]
-    : cartItems;
+    : checkoutItems;
 
   const shippingInfo = addressCoords && !isOutsideNCR
     ? calcLalamoveShipping(STORE_LAT, STORE_LNG, addressCoords.lat, addressCoords.lng, shippingCartItems, products)
@@ -630,11 +639,15 @@ const Checkout = () => {
   // ── Cart empty guard — skip for reward orders ─────────────────────────────
   useEffect(() => {
     if (rewardOrder) return;
-    if (cartItems.length === 0 && products.length > 0) {
-      showNotification('Your cart is empty', 'warning');
+    if (products.length === 0) return;
+    if (cartItems.length === 0 || checkoutItems.length === 0) {
+      showNotification(
+        cartItems.length === 0 ? 'Your cart is empty' : 'No items selected for checkout',
+        'warning'
+      );
       navigate('/collections');
     }
-  }, [cartItems.length, products.length, rewardOrder]);
+  }, [cartItems.length, checkoutItems.length, products.length, rewardOrder]);
 
   const getProductById    = (id) => products.find(p => p._id?.toString() === id?.toString() || p.id === id);
   const getQty            = (item) => item.qty ?? item.quantity ?? 1;
@@ -647,7 +660,7 @@ const Checkout = () => {
   // ── Subtotal: 0 for reward orders ────────────────────────────────────────
   const calculateSubtotal = () => {
     if (rewardOrder) return 0;
-    return cartItems.reduce((total, item) => {
+    return checkoutItems.reduce((total, item) => {
       const product = getProductById(item.productId || item.id);
       return total + getEffectivePrice(item, product) * getQty(item);
     }, 0);
@@ -655,7 +668,7 @@ const Checkout = () => {
 
   const calculateTotalDiscount = () => {
     if (rewardOrder) return 0;
-    return cartItems.reduce((total, item) => {
+    return checkoutItems.reduce((total, item) => {
       if (!item.promoCode) return total;
       const product       = getProductById(item.productId || item.id);
       const originalPrice = product?.price ?? item.price ?? 0;
@@ -760,10 +773,9 @@ const Checkout = () => {
       showNotification('Products are still loading. Please wait a moment and try again.', 'warning');
       return;
     }
-
     // Stock check — skip for reward orders
     if (!rewardOrder) {
-      for (const item of cartItems) {
+      for (const item of checkoutItems) {
         const product = getProductById(item.productId || item.id);
         if (!product) continue;
         if (product.stock !== undefined && product.stock < getQty(item)) {
@@ -790,7 +802,7 @@ const Checkout = () => {
             isPreOrder:  false,
             releaseDate: null,
           }]
-        : cartItems.map(item => {
+        : checkoutItems.map(item => {
             const product = getProductById(item.productId || item.id);
             return {
               id:          item.productId || item.id,
@@ -805,12 +817,12 @@ const Checkout = () => {
 
       const originalSubtotal = rewardOrder
         ? 0
-        : cartItems.reduce((total, item) => {
+        : checkoutItems.reduce((total, item) => {
             const product = getProductById(item.productId || item.id);
             return total + (product?.price ?? 0) * getQty(item);
           }, 0);
 
-      const promoItem = rewardOrder ? null : cartItems.find(i => i.promoCode);
+      const promoItem = rewardOrder ? null : checkoutItems.find(i => i.promoCode);
 
       const addressParts = [savedAddress.address];
       if (savedAddress.city)    addressParts.push(savedAddress.city);
@@ -856,7 +868,7 @@ const Checkout = () => {
         } catch (e) { console.warn('markTicketCheckedOut failed:', e); }
       }
 
-      // ── Payment link ───────────────────────────────────────────────────
+      // ── Payment link — PayMongo hosted checkout (GCash / Maya picker) ───
       let paymentLinkUrl;
       try {
         const result = await createPaymentLink({
@@ -879,7 +891,7 @@ const Checkout = () => {
 
       // ── Stock update — skip for reward orders ──────────────────────────
       if (!rewardOrder) {
-        for (const item of cartItems) {
+        for (const item of checkoutItems) {
           const product = getProductById(item.productId || item.id);
           if (product) {
             try {
@@ -924,8 +936,16 @@ const Checkout = () => {
         });
       } catch (emailErr) { console.warn('Email failed:', emailErr); }
 
-      // ── Clear cart only for non-reward orders ──────────────────────────
-      if (!rewardOrder) await clearCart();
+      // ── Remove checked-out items only (keep unselected in cart) ────────
+      if (!rewardOrder) {
+        if (selectedCartIds?.length) {
+          for (const id of selectedCartIds) {
+            try { await removeFromCartById(id); } catch { /* non-critical */ }
+          }
+        } else {
+          await clearCart();
+        }
+      }
 
       setLoading(false);
       window.location.href = paymentLinkUrl;
@@ -937,8 +957,8 @@ const Checkout = () => {
     }
   };
 
-  const promoCartItems    = rewardOrder ? [] : cartItems.filter(i => !!i.promoCode);
-  const nonPromoCartItems = rewardOrder ? [] : cartItems.filter(i => !i.promoCode);
+  const promoCartItems    = rewardOrder ? [] : checkoutItems.filter(i => !!i.promoCode);
+  const nonPromoCartItems = rewardOrder ? [] : checkoutItems.filter(i => !i.promoCode);
 
   const renderSummaryItem = (item) => {
     const product = getProductById(item.productId || item.id);
@@ -1135,9 +1155,9 @@ const Checkout = () => {
                     <div className="promo-applied-left">
                       <span className="promo-applied-icon">🎉</span>
                       <div>
-                        <span className="promo-applied-code">{cartItems.find(i => i.promoCode)?.promoCode}</span>
+                        <span className="promo-applied-code">{checkoutItems.find(i => i.promoCode)?.promoCode}</span>
                         <span className="promo-applied-desc">
-                          {cartItems.find(i => i.promoCode)?.promoDiscount}% off applied on promo items ·{' '}
+                          {checkoutItems.find(i => i.promoCode)?.promoDiscount}% off applied on promo items ·{' '}
                           <strong style={{ color: '#16a34a' }}>You save ₱{totalDiscount.toLocaleString()}</strong>
                         </span>
                       </div>
@@ -1339,11 +1359,7 @@ const Checkout = () => {
                       ? <><i className="fas fa-ban"></i> Address Outside NCR</>
                       : !isFormReady()
                         ? <><i className="fas fa-lock"></i> Complete Your Info First</>
-                        : shippingInfo
-                          ? rewardOrder
-                            ? <><i className="fas fa-motorcycle"></i> Pay Shipping ₱{finalTotal.toLocaleString()}</>
-                            : <>Pay ₱{finalTotal.toLocaleString()} Securely</>
-                          : <>Pay Securely</>
+                        : <>Pay</>
                   }
                 </button>
 

@@ -1,5 +1,5 @@
 // DKMerch Service Worker — PWA support
-const CACHE_NAME = 'dkmerch-v1';
+const CACHE_NAME = 'dkmerch-v2-cart-select';
 
 // Only cache essential static assets
 const STATIC_ASSETS = [

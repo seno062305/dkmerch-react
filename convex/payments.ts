@@ -22,7 +22,9 @@ function toBase64(str: string): string {
   return result;
 }
 
-// Create a PayMongo checkout session and save to order
+// Create a PayMongo checkout session and save to order.
+// Pass paymentMethodType ("gcash" | "paymaya") so hosted checkout skips the
+// method picker and goes straight to that wallet authorize page.
 export const createPaymentLink = action({
   args: {
     orderId: v.string(),
@@ -32,13 +34,17 @@ export const createPaymentLink = action({
     customerEmail: v.optional(v.string()),
     customerPhone: v.optional(v.string()),
     remarks: v.optional(v.string()),
+    paymentMethodType: v.optional(v.union(v.literal("gcash"), v.literal("paymaya"))),
   },
-  handler: async (ctx, { orderId, amount, description, customerName, customerEmail, customerPhone, remarks }) => {
+  handler: async (ctx, { orderId, amount, description, customerName, customerEmail, customerPhone, remarks, paymentMethodType }) => {
     const secretKey = process.env.PAYMONGO_SECRET_KEY;
     if (!secretKey) throw new Error("PayMongo secret key not configured");
 
     const encoded = toBase64(`${secretKey}:`);
     const baseUrl = process.env.SITE_URL || "https://dkmerchwebsite.vercel.app";
+    const methodTypes = paymentMethodType
+      ? [paymentMethodType]
+      : ["gcash", "paymaya"];
 
     const response = await fetch("https://api.paymongo.com/v1/checkout_sessions", {
       method: "POST",
@@ -61,7 +67,7 @@ export const createPaymentLink = action({
               name:        description,
               quantity:    1,
             }],
-            payment_method_types: ["gcash", "paymaya"],
+            payment_method_types: methodTypes,
             success_url: `${baseUrl}/order-success?orderId=${orderId}`,
             cancel_url:  `${baseUrl}/checkout`,
             description: remarks || orderId,

@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../context/NotificationContext';
 import { useProducts, usePreOrderProducts, useCollectionProducts } from '../utils/productStorage';
-import { useUpdateCartQtyById, useRemoveFromCartById } from '../context/cartUtils';
+import { useUpdateCartQtyById, useRemoveFromCartById, useClearCart } from '../context/cartUtils';
 import { getPointsForPrice } from '../utils/pointsUtils';
 import './CartModal.css';
 
@@ -21,8 +21,27 @@ const CartModal = ({ cart, onClose }) => {
 
   const updateQtyById      = useUpdateCartQtyById();
   const removeFromCartById = useRemoveFromCartById();
+  const clearCart          = useClearCart();
 
-  React.useEffect(() => {
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const prevCartIdsRef = useRef([]);
+
+  // Keep selection in sync — new items auto-selected (TikTok-style)
+  const cartIdsKey = cart.map(i => String(i._id)).join('|');
+  useEffect(() => {
+    const ids = cart.map(i => String(i._id));
+    const prevIds = prevCartIdsRef.current;
+    setSelectedIds(prev => {
+      const next = new Set();
+      ids.forEach(id => {
+        if (prev.has(id) || !prevIds.includes(id)) next.add(id);
+      });
+      return next;
+    });
+    prevCartIdsRef.current = ids;
+  }, [cartIdsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
     const scrollY = window.scrollY;
     document.body.style.position = 'fixed';
     document.body.style.top      = `-${scrollY}px`;
@@ -49,14 +68,18 @@ const CartModal = ({ cart, onClose }) => {
     return product?.price ?? item.price ?? 0;
   };
 
+  const selectedItems = cart.filter(i => selectedIds.has(String(i._id)));
+  const allSelected   = cart.length > 0 && selectedIds.size === cart.length;
+  const someSelected  = selectedIds.size > 0 && !allSelected;
+
   const calculateSubtotal = () =>
-    cart.reduce((total, item) => {
+    selectedItems.reduce((total, item) => {
       const product = findProduct(item.productId || item.id);
       return total + getEffectivePrice(item, product) * getQty(item);
     }, 0);
 
   const calculateTotalDiscount = () =>
-    cart.reduce((total, item) => {
+    selectedItems.reduce((total, item) => {
       if (!item.promoCode) return total;
       const product       = findProduct(item.productId || item.id);
       const originalPrice = product?.price ?? item.price ?? 0;
@@ -67,14 +90,13 @@ const CartModal = ({ cart, onClose }) => {
   const subtotal      = calculateSubtotal();
   const totalDiscount = calculateTotalDiscount();
 
-  const promoItems = cart.filter(i => i.promoCode);
+  const promoItems = selectedItems.filter(i => i.promoCode);
   const cartPromo  = promoItems.length > 0 ? {
     code:           promoItems[0].promoCode,
     discount:       promoItems[0].promoDiscount,
     discountAmount: totalDiscount,
   } : null;
 
-  // ✅ Points earned for this order (based on subtotal after discount)
   const orderTotal   = subtotal;
   const pointsToEarn = getPointsForPrice(orderTotal);
 
@@ -96,10 +118,47 @@ const CartModal = ({ cart, onClose }) => {
     return `${fmt(earliest)} – ${fmt(latest)}`;
   };
 
+  const toggleItem = (id, e) => {
+    if (e) e.stopPropagation();
+    const key = String(id);
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (allSelected) setSelectedIds(new Set());
+    else setSelectedIds(new Set(cart.map(i => String(i._id))));
+  };
+
   const handleRemoveItem = async (item) => {
     if (window.confirm('Remove this item from cart?')) {
       await removeFromCartById(item._id);
     }
+  };
+
+  const handleRemoveSelected = async () => {
+    if (selectedIds.size === 0) {
+      showNotification('Select items to remove', 'warning');
+      return;
+    }
+    if (!window.confirm(`Remove ${selectedIds.size} selected item(s) from cart?`)) return;
+    const ids = [...selectedIds];
+    for (const id of ids) {
+      await removeFromCartById(id);
+    }
+    showNotification('Selected items removed', 'success');
+  };
+
+  const handleRemoveAll = async () => {
+    if (cart.length === 0) return;
+    if (!window.confirm('Remove all items from cart?')) return;
+    await clearCart();
+    setSelectedIds(new Set());
+    showNotification('Cart cleared', 'success');
   };
 
   const handleUpdateQty = async (item, change) => {
@@ -116,7 +175,11 @@ const CartModal = ({ cart, onClose }) => {
   };
 
   const handleCheckout = () => {
-    const hasStockIssue = cart.some(item => {
+    if (selectedItems.length === 0) {
+      showNotification('Select at least one item to checkout', 'warning');
+      return;
+    }
+    const hasStockIssue = selectedItems.some(item => {
       const product = findProduct(item.productId || item.id);
       return product && getQty(item) > product.stock;
     });
@@ -125,7 +188,12 @@ const CartModal = ({ cart, onClose }) => {
       return;
     }
     onClose();
-    navigate('/checkout', { state: { appliedPromo: cartPromo } });
+    navigate('/checkout', {
+      state: {
+        appliedPromo: cartPromo,
+        selectedCartIds: selectedItems.map(i => i._id),
+      },
+    });
   };
 
   const renderCartItem = (item) => {
@@ -145,9 +213,38 @@ const CartModal = ({ cart, onClose }) => {
     const itemTotal      = effectivePrice * qty;
     const originalTotal  = (product?.price ?? item.price ?? 0) * qty;
     const savedAmount    = hasPromo ? originalTotal - itemTotal : 0;
+    const itemKey   = String(item._id);
+    const isChecked = selectedIds.has(itemKey);
 
     return (
-      <div key={item._id} className={`cart-item${hasPromo ? ' cart-item-promo' : ''}`}>
+      <div
+        key={itemKey}
+        role="button"
+        tabIndex={0}
+        className={`cart-item${hasPromo ? ' cart-item-promo' : ''}${isChecked ? ' cart-item-selected' : ''}`}
+        onClick={() => toggleItem(itemKey)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            toggleItem(itemKey);
+          }
+        }}
+      >
+        <div
+          className={`cart-item-check${isChecked ? ' is-checked' : ''}`}
+          onClick={(e) => toggleItem(itemKey, e)}
+          role="checkbox"
+          aria-checked={isChecked}
+          aria-label={`Select ${displayName}`}
+        >
+          <input
+            type="checkbox"
+            checked={isChecked}
+            onChange={(e) => toggleItem(itemKey, e)}
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+
         <div className="cart-item-image">
           <img src={displayImage} alt={displayName} />
           {hasPromo && (
@@ -192,17 +289,18 @@ const CartModal = ({ cart, onClose }) => {
             </div>
           )}
 
-          <div className="cart-item-actions">
+          <div className="cart-item-actions" onClick={(e) => e.stopPropagation()}>
             <div className="quantity-controls">
-              <button className="quantity-btn minus" onClick={() => handleUpdateQty(item, -1)}>-</button>
+              <button type="button" className="quantity-btn minus" onClick={() => handleUpdateQty(item, -1)}>-</button>
               <span className="quantity-display">{qty}</span>
               <button
+                type="button"
                 className={`quantity-btn plus${atMaxStock ? ' disabled' : ''}`}
                 onClick={() => handleUpdateQty(item, 1)}
                 disabled={atMaxStock}
               >+</button>
             </div>
-            <button className="remove-item" onClick={() => handleRemoveItem(item)}>
+            <button type="button" className="remove-item" onClick={() => handleRemoveItem(item)}>
               <i className="fas fa-trash"></i> Remove
             </button>
           </div>
@@ -231,6 +329,42 @@ const CartModal = ({ cart, onClose }) => {
             </div>
           ) : (
             <>
+              <div className="cart-select-bar">
+                <button
+                  type="button"
+                  className={`cart-select-all${allSelected ? ' is-checked' : ''}${someSelected ? ' is-partial' : ''}`}
+                  onClick={handleSelectAll}
+                >
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    ref={el => { if (el) el.indeterminate = someSelected; }}
+                    onChange={handleSelectAll}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <span className="cart-select-all-label">
+                    Select All ({selectedIds.size}/{cart.length})
+                  </span>
+                </button>
+                <div className="cart-select-actions">
+                  <button
+                    type="button"
+                    className="cart-bulk-btn"
+                    onClick={handleRemoveSelected}
+                    disabled={selectedIds.size === 0}
+                  >
+                    <i className="fas fa-trash-alt"></i> Remove Selected
+                  </button>
+                  <button
+                    type="button"
+                    className="cart-bulk-btn cart-bulk-btn-danger"
+                    onClick={handleRemoveAll}
+                  >
+                    <i className="fas fa-times-circle"></i> Remove All
+                  </button>
+                </div>
+              </div>
+
               <div className="cart-items">
                 {nonPromoCartItems.length > 0 && (
                   <>
@@ -253,7 +387,6 @@ const CartModal = ({ cart, onClose }) => {
               </div>
 
               <div className="cart-summary">
-                {/* ── Estimated Delivery Banner ── */}
                 <div className="cart-estimated-delivery">
                   <div className="cart-delivery-icon">
                     <i className="fas fa-truck"></i>
@@ -270,55 +403,58 @@ const CartModal = ({ cart, onClose }) => {
                   <span>Shipping fee calculated at checkout based on your address.</span>
                 </div>
 
-                {totalDiscount > 0 && (
-                  <div className="summary-row cart-original-row">
-                    <span>Original Price:</span>
-                    <span className="cart-original-amount">
-                      ₱{(subtotal + totalDiscount).toLocaleString()}
-                    </span>
+                {selectedItems.length === 0 ? (
+                  <div className="cart-none-selected">
+                    <i className="fas fa-info-circle"></i>
+                    Select items to checkout — unchecked items stay in your cart.
                   </div>
+                ) : (
+                  <>
+                    {totalDiscount > 0 && (
+                      <div className="summary-row cart-original-row">
+                        <span>Original Price:</span>
+                        <span className="cart-original-amount">
+                          ₱{(subtotal + totalDiscount).toLocaleString()}
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="summary-row" style={{ fontSize: '12px', color: '#888', fontStyle: 'italic' }}>
+                      <span>Shipping:</span>
+                      <span>Calculated at checkout</span>
+                    </div>
+
+                    {totalDiscount > 0 && (
+                      <div className="summary-row cart-discount-row">
+                        <span>
+                          <i className="fas fa-tag" style={{ marginRight: '5px', color: '#ec4899' }}></i>
+                          Promo Discount:
+                        </span>
+                        <span className="cart-discount-amount">−₱{totalDiscount.toLocaleString()}</span>
+                      </div>
+                    )}
+
+                    <div className="summary-row summary-total">
+                      <span>Total Amount ({selectedItems.length}):</span>
+                      <span>₱{subtotal.toLocaleString()}</span>
+                    </div>
+
+                    {totalDiscount > 0 && (
+                      <div className="cart-savings-badge">
+                        <i className="fas fa-piggy-bank"></i>
+                        You're saving <strong>₱{totalDiscount.toLocaleString()}</strong> with your promo!
+                      </div>
+                    )}
+
+                    <div className="cart-points-banner">
+                      <span className="cart-points-icon">⭐</span>
+                      <span>
+                        Complete this order to earn <strong>{pointsToEarn} pts</strong>
+                        {' '}toward a free reward!
+                      </span>
+                    </div>
+                  </>
                 )}
-
-                <div className="summary-row">
-                  <span>Subtotal:</span>
-                  <span>₱{subtotal.toLocaleString()}</span>
-                </div>
-
-                <div className="summary-row" style={{ fontSize: '12px', color: '#888', fontStyle: 'italic' }}>
-                  <span>Shipping:</span>
-                  <span>Calculated at checkout</span>
-                </div>
-
-                {totalDiscount > 0 && (
-                  <div className="summary-row cart-discount-row">
-                    <span>
-                      <i className="fas fa-tag" style={{ marginRight: '5px', color: '#ec4899' }}></i>
-                      Promo Discount:
-                    </span>
-                    <span className="cart-discount-amount">−₱{totalDiscount.toLocaleString()}</span>
-                  </div>
-                )}
-
-                <div className="summary-row summary-total">
-                  <span>Subtotal:</span>
-                  <span>₱{subtotal.toLocaleString()}</span>
-                </div>
-
-                {totalDiscount > 0 && (
-                  <div className="cart-savings-badge">
-                    <i className="fas fa-piggy-bank"></i>
-                    You're saving <strong>₱{totalDiscount.toLocaleString()}</strong> with your promo!
-                  </div>
-                )}
-
-                {/* ✅ Points banner — shown above checkout button */}
-                <div className="cart-points-banner">
-                  <span className="cart-points-icon">⭐</span>
-                  <span>
-                    Complete this order to earn <strong>{pointsToEarn} pts</strong>
-                    {' '}toward a free reward!
-                  </span>
-                </div>
               </div>
             </>
           )}
@@ -326,8 +462,12 @@ const CartModal = ({ cart, onClose }) => {
 
         {cart.length > 0 && (
           <div className="modal-footer">
-            <button className="btn btn-primary" onClick={handleCheckout}>
-              Proceed to Checkout
+            <button
+              className="btn btn-primary"
+              onClick={handleCheckout}
+              disabled={selectedItems.length === 0}
+            >
+              Checkout{selectedItems.length > 0 ? ` (${selectedItems.length})` : ''}
             </button>
           </div>
         )}
