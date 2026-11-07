@@ -92,11 +92,10 @@ const AdminSidebar = ({ onLinkClick, onClose, onToggleCollapse }) => {
   const newOrderCount = validOrders.filter(o => o.orderStatus === 'pending' || o.orderStatus === 'confirmed').length;
   const refundCount   = validOrders.filter(o => o.refundStatus === 'requested').length;
 
-  const allRiders         = useQuery(api.riders.getAllRiders)                ?? [];
   const allPickupRequests = useQuery(api.pickupRequests.getAllPickupRequests) ?? [];
-  const pendingApplications = allRiders.filter(r => r.status === 'pending').length;
-  const pendingPickups      = allPickupRequests.filter(p => p.status === 'pending').length;
-  const riderBadgeCount     = pendingApplications + pendingPickups;
+  const riderBadgeCount = allPickupRequests.filter(
+    p => p.status === 'approved' || p.status === 'out_for_delivery'
+  ).length;
 
   // ✅ Rewards pending redemptions badge
   const allRedemptions  = useQuery(api.rewards.getAllRedemptions) ?? [];

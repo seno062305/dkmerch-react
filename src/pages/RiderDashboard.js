@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
+import WaybillScannerModal from '../components/WaybillScannerModal';
 import './RiderDashboard.css';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -787,13 +788,15 @@ const RiderDashboard = () => {
     user?.email && user?.sessionId ? { email: user.email, sessionId: user.sessionId } : 'skip'
   );
 
-  const createPickupRequest = useMutation(api.pickupRequests.createPickupRequest);
+  const claimOrderByWaybill = useMutation(api.pickupRequests.claimOrderByWaybill);
   const updateOrderFields   = useMutation(api.orders.updateOrderFields);
   const updatePickupStatus  = useMutation(api.pickupRequests.updatePickupStatus);
   const deletePickupRequest = useMutation(api.pickupRequests.deletePickupRequest);
   const updateRiderLocation = useMutation(api.riders.updateRiderLocation);
   const stopRiderTracking   = useMutation(api.riders.stopRiderTracking);
   const setRiderKickedAt    = useMutation(api.riders.setRiderKickedAt);
+  const [showWaybillScanner, setShowWaybillScanner] = useState(false);
+  const [scanTargetOrderId, setScanTargetOrderId]   = useState(null);
 
   useEffect(() => { if (GPS.isActive()) GPS.updateSendFn(updateRiderLocation); });
 
@@ -828,10 +831,12 @@ const RiderDashboard = () => {
     }
   }, [riderInfo]);
 
+  const claimedStatuses = ['approved', 'out_for_delivery', 'completed'];
+
   const confirmedOrders = allOrders
     .filter(o =>
       (o.orderStatus === 'confirmed' || o.status === 'Confirmed') &&
-      !allPickups.some(p => p.orderId === o.orderId && p.status === 'approved')
+      !allPickups.some(p => p.orderId === o.orderId && claimedStatuses.includes(p.status))
     )
     .sort((a, b) => {
       const aTime = a.confirmedAt ? new Date(a.confirmedAt).getTime() : (a._creationTime || 0);
@@ -840,7 +845,7 @@ const RiderDashboard = () => {
     });
 
   const myPickups = allPickups
-    .filter(p => p.riderEmail === user?.email)
+    .filter(p => p.riderEmail === user?.email && claimedStatuses.includes(p.status))
     .sort((a, b) => {
       const t = p => p.approvedAt ? new Date(p.approvedAt).getTime() : p.requestedAt ? new Date(p.requestedAt).getTime() : (p._creationTime || 0);
       return t(b) - t(a);
@@ -854,7 +859,7 @@ const RiderDashboard = () => {
       return (new Date(b.requestedAt).getTime()) - (new Date(a.requestedAt).getTime());
     });
 
-  const pendingPickupsCount   = myPickups.filter(p => p.status === 'pending').length;
+  const activePickupsCount    = myPickups.filter(p => p.status === 'approved' || p.status === 'out_for_delivery').length;
   const activeDeliveriesCount = myDeliveries.length;
 
   useEffect(() => {
@@ -931,9 +936,8 @@ const RiderDashboard = () => {
   const stopTrackingOnDelivery = useCallback(async () => { await GPS.stopOnDelivery(stopRiderTracking); setTrackingOrderId(null); setCurrentPosition(null); }, [stopRiderTracking]);
 
   const toggleExpanded     = (id, setFn) => setFn(prev => ({ ...prev, [id]: !prev[id] }));
-  const getMyRequestStatus = (orderId) => { const r = myPickups.find(p => p.orderId === orderId); return r ? r.status : null; };
-  const getPickupStatusStyle = (status) => ({ pending: { bg: '#fff3cd', color: '#856404' }, approved: { bg: '#d1fae5', color: '#0f5132' }, rejected: { bg: '#fee2e2', color: '#991b1b' }, out_for_delivery: { bg: '#dbeafe', color: '#1e40af' }, completed: { bg: '#d1fae5', color: '#065f46' } }[status] || { bg: '#e2e8f0', color: '#475569' });
-  const getStatusLabel     = (status) => ({ pending: '⏳ Pending', approved: '✅ Approved', rejected: '❌ Rejected', out_for_delivery: '🚚 Out for Delivery', completed: '🎉 Delivered' }[status] || status);
+  const getPickupStatusStyle = (status) => ({ approved: { bg: '#d1fae5', color: '#0f5132' }, out_for_delivery: { bg: '#dbeafe', color: '#1e40af' }, completed: { bg: '#d1fae5', color: '#065f46' } }[status] || { bg: '#e2e8f0', color: '#475569' });
+  const getStatusLabel     = (status) => ({ approved: '✅ Scanned', out_for_delivery: '🚚 Out for Delivery', completed: '🎉 Delivered' }[status] || status);
 
   const closeSidebar  = useCallback(() => { setSidebarOpen(false); setTimeout(() => window.dispatchEvent(new Event('rider-sidebar-closed')), 350); }, []);
   const handleLogout  = async () => {
@@ -949,14 +953,50 @@ const RiderDashboard = () => {
     navigate('/', { replace: true });
   };
 
-  const requestPickup = async (order) => {
-    if (!riderInfo) return;
-    if (allPickups.find(p => p.orderId === order.orderId && p.status === 'approved')) { alert('❌ Sorry! Another rider was already approved for this order.'); return; }
-    if (myPickups.find(p => p.orderId === order.orderId && p.status === 'pending'))   { alert('You already have a pending request for this order.'); return; }
+  const openWaybillScanner = (orderId = null) => {
+    setScanTargetOrderId(orderId);
+    setShowWaybillScanner(true);
+  };
+
+  const handleWaybillScan = async (scannedId) => {
+    if (!riderInfo) return false;
+    if (scanTargetOrderId) {
+      const target = scanTargetOrderId;
+      const shortTarget = target.slice(-8).toUpperCase();
+      const shortScanned = scannedId.slice(-8).toUpperCase();
+      const matches =
+        scannedId === target ||
+        shortScanned === shortTarget ||
+        target.endsWith(scannedId) ||
+        scannedId.endsWith(shortTarget);
+      if (!matches) return false;
+    }
     try {
-      await createPickupRequest({ orderId: order.orderId, riderId: riderInfo._id, riderName: riderInfo.fullName, riderEmail: user.email, riderPhone: riderInfo.phone || '', riderVehicle: riderInfo.vehicleType || '', riderPlate: riderInfo.plateNumber || '', customerName: order.customerName || order.name || '', total: order.total || 0, requestedAt: new Date().toISOString(), status: 'pending' });
-      alert('✅ Pickup request sent! Waiting for admin approval.');
-    } catch (err) { console.error(err); alert('Failed to send pickup request. Please try again.'); }
+      const result = await claimOrderByWaybill({
+        orderId: scanTargetOrderId || scannedId,
+        riderId: riderInfo._id,
+        riderName: riderInfo.fullName,
+        riderEmail: user.email,
+        riderPhone: riderInfo.phone || '',
+        riderVehicle: riderInfo.vehicleType || 'motorcycle',
+        riderPlate: riderInfo.plateNumber || '',
+      });
+      if (!result?.success) {
+        alert(result?.message || 'Failed to claim order.');
+        return false;
+      }
+      setShowWaybillScanner(false);
+      setScanTargetOrderId(null);
+      setTab('my-pickups');
+      alert(result.alreadyClaimed
+        ? '✅ This order is already in My Pickups.'
+        : '✅ Waybill verified! Order moved to My Pickups.');
+      return true;
+    } catch (err) {
+      console.error(err);
+      alert('Failed to verify waybill. Please try again.');
+      return false;
+    }
   };
 
   const notifyCustomer = async (delivery) => {
@@ -1107,7 +1147,7 @@ const RiderDashboard = () => {
           </button>
           <button className={`rider-nav-link ${tab === 'my-pickups' ? 'active' : ''}`} onClick={() => handleNavClick('my-pickups')}>
             <i className="fas fa-truck-pickup"></i><span>My Pickups</span>
-            {pendingPickupsCount > 0 && <span className={`rider-nav-badge ${newPickupsCount > 0 ? 'rider-nav-badge-new' : ''}`}>{pendingPickupsCount}</span>}
+            {activePickupsCount > 0 && <span className={`rider-nav-badge ${newPickupsCount > 0 ? 'rider-nav-badge-new' : ''}`}>{activePickupsCount}</span>}
           </button>
           <button className={`rider-nav-link ${tab === 'deliver'    ? 'active' : ''}`} onClick={() => handleNavClick('deliver')}>
             <i className="fas fa-shipping-fast"></i><span>Deliver</span>
@@ -1148,13 +1188,15 @@ const RiderDashboard = () => {
           <div className="rider-content">
             <div className="rider-live-pill-row">
               <div className="rider-live-badge"><span className="sync-dot"></span>Live Updates</div>
+              <button type="button" className="rider-scan-waybill-btn" onClick={() => openWaybillScanner(null)}>
+                <i className="fas fa-camera"></i> Scan Waybill
+              </button>
             </div>
             {confirmedOrders.length === 0 ? (
-              <div className="rider-empty"><i className="fas fa-box-open"></i><p>No confirmed orders available right now.</p><span>Updates are real-time via Convex.</span></div>
+              <div className="rider-empty"><i className="fas fa-box-open"></i><p>No confirmed orders available right now.</p><span>Scan a waybill anytime to claim a paid order.</span></div>
             ) : (
               <div className="rider-compact-list">
                 {confirmedOrders.map((order, idx) => {
-                  const reqStatus  = getMyRequestStatus(order.orderId);
                   const isExpanded = expandedOrders[order.orderId];
                   const isNewest   = idx === 0;
                   return (
@@ -1164,15 +1206,12 @@ const RiderDashboard = () => {
                         <div className="rider-compact-left">
                           <span className="rider-order-id">#{order.orderId?.slice(-8)}</span>
                           <span className="rider-compact-customer"><i className="fas fa-user"></i> {order.customerName || order.name || 'N/A'}</span>
-                          <span className="rider-compact-total">₱{(order.total || 0).toLocaleString()}</span>
+                          <span className="rider-compact-total">₱{(order.finalTotal ?? order.total ?? 0).toLocaleString()}</span>
                         </div>
                         <div className="rider-compact-right">
-                          {reqStatus === 'pending'          && <span className="rider-req-badge pending">⏳ Pending</span>}
-                          {reqStatus === 'approved'         && <span className="rider-req-badge approved">✅ Assigned</span>}
-                          {reqStatus === 'rejected'         && <span className="rider-req-badge rejected">❌ Rejected</span>}
-                          {reqStatus === 'out_for_delivery' && <span className="rider-req-badge out-delivery">🚚 On Way</span>}
-                          {reqStatus === 'completed'        && <span className="rider-req-badge completed-badge">✅ Done</span>}
-                          {!reqStatus && <button className="rider-pickup-btn-sm" onClick={() => requestPickup(order)}><i className="fas fa-truck-pickup"></i> Request</button>}
+                          <button className="rider-pickup-btn-sm" onClick={() => openWaybillScanner(order.orderId)}>
+                            <i className="fas fa-qrcode"></i> Scan
+                          </button>
                           <button className="rider-view-btn" onClick={() => toggleExpanded(order.orderId, setExpandedOrders)}>
                             <i className={`fas fa-chevron-${isExpanded ? 'up' : 'down'}`}></i> {isExpanded ? 'Hide' : 'View'}
                           </button>
@@ -1187,6 +1226,19 @@ const RiderDashboard = () => {
                             {order.phone && <a href={`tel:${order.phone}`} className="rider-call-btn"><i className="fas fa-phone-alt"></i> Call</a>}
                           </div>
                           <div className="rider-info-row"><i className="fas fa-box"></i><span><strong>Items:</strong> {order.items?.length || 0} item(s)</span></div>
+                          {order.items?.length > 0 && (
+                            <div className="rider-items-verify">
+                              {order.items.map((item, i) => (
+                                <div key={`${item.id || item.name}-${i}`} className="rider-item-row">
+                                  {item.image ? <img src={item.image} alt="" className="rider-item-thumb" /> : <div className="rider-item-thumb placeholder">📦</div>}
+                                  <div className="rider-item-meta">
+                                    <strong>{item.name}</strong>
+                                    <span>×{item.quantity} · ₱{(item.price || 0).toLocaleString()}</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                           <div className="rider-info-row"><i className="fas fa-calendar"></i><span><strong>Date:</strong> {new Date(order._creationTime).toLocaleDateString('en-PH')}</span></div>
                           {order.confirmedAt && <div className="rider-info-row"><i className="fas fa-check-circle"></i><span><strong>Confirmed:</strong> {new Date(order.confirmedAt).toLocaleString('en-PH')}</span></div>}
                         </div>
@@ -1202,21 +1254,26 @@ const RiderDashboard = () => {
         {/* ── MY PICKUPS — no subtitle ── */}
         {tab === 'my-pickups' && (
           <div className="rider-content">
-
+            <div className="rider-live-pill-row">
+              <button type="button" className="rider-scan-waybill-btn" onClick={() => openWaybillScanner(null)}>
+                <i className="fas fa-camera"></i> Scan Waybill
+              </button>
+            </div>
             {myPickups.length === 0 ? (
-              <div className="rider-empty"><i className="fas fa-truck-pickup"></i><p>No pickup requests yet.</p><span>Go to Available Orders to request your first pickup!</span></div>
+              <div className="rider-empty"><i className="fas fa-truck-pickup"></i><p>No pickups yet.</p><span>Scan a waybill from Available Orders to claim a package.</span></div>
             ) : (
               <div className="rider-compact-list">
                 {myPickups.map(req => {
                   const style      = getPickupStatusStyle(req.status);
                   const isExpanded = expandedPickups[req._id];
+                  const order      = allOrders.find(o => o.orderId === req.orderId);
                   return (
                     <div key={req._id} className="rider-compact-card">
                       <div className="rider-compact-row">
                         <div className="rider-compact-left">
                           <span className="rider-order-id">#{req.orderId?.slice(-8)}</span>
-                          <span className="rider-compact-customer"><i className="fas fa-user"></i> {req.customerName}</span>
-                          <span className="rider-compact-total">₱{(req.total || 0).toLocaleString()}</span>
+                          <span className="rider-compact-customer"><i className="fas fa-user"></i> {req.customerName || order?.customerName || 'Customer'}</span>
+                          <span className="rider-compact-total">₱{(req.total || order?.finalTotal || order?.total || 0).toLocaleString()}</span>
                         </div>
                         <div className="rider-compact-right">
                           <span className="rider-status-pill" style={{ background: style.bg, color: style.color }}>{getStatusLabel(req.status)}</span>
@@ -1227,12 +1284,33 @@ const RiderDashboard = () => {
                       </div>
                       {isExpanded && (
                         <div className="rider-expanded-body">
-                          <div className="rider-info-row"><i className="fas fa-calendar"></i><span><strong>Requested:</strong> {new Date(req.requestedAt).toLocaleDateString('en-PH')}</span></div>
-                          {req.status === 'approved'         && <div className="rider-approved-notice">🎉 Pickup approved! Go to the <strong>Deliver</strong> tab to notify the customer.</div>}
-                          {req.status === 'rejected'         && <div className="rider-rejected-notice">This pickup request was not approved. You may request other available orders.</div>}
-                          {req.status === 'out_for_delivery' && <div className="rider-ofd-notice">🚚 Customer notified. Go to <strong>Deliver</strong> tab to confirm delivery.</div>}
+                          <div className="rider-info-row"><i className="fas fa-map-marker-alt"></i><span><strong>Address:</strong> {order?.shippingAddress || order?.address || 'N/A'}</span></div>
+                          <div className="rider-info-row">
+                            <i className="fas fa-phone"></i>
+                            <span><strong>Phone:</strong> {order?.phone || 'N/A'}</span>
+                            {order?.phone && <a href={`tel:${order.phone}`} className="rider-call-btn"><i className="fas fa-phone-alt"></i> Call</a>}
+                          </div>
+                          <div className="rider-info-row"><i className="fas fa-calendar"></i><span><strong>Scanned:</strong> {new Date(req.approvedAt || req.requestedAt).toLocaleString('en-PH')}</span></div>
+                          <div className="rider-expanded-section-title" style={{ marginTop: 10 }}><i className="fas fa-box"></i> Verify Items</div>
+                          {order?.items?.length ? (
+                            <div className="rider-items-verify">
+                              {order.items.map((item, i) => (
+                                <div key={`${item.id || item.name}-${i}`} className="rider-item-row">
+                                  {item.image ? <img src={item.image} alt="" className="rider-item-thumb" /> : <div className="rider-item-thumb placeholder">📦</div>}
+                                  <div className="rider-item-meta">
+                                    <strong>{item.name}</strong>
+                                    <span>×{item.quantity} · ₱{(item.price || 0).toLocaleString()}</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="rider-info-row"><span>Item details unavailable.</span></div>
+                          )}
+                          {req.status === 'approved'         && <div className="rider-approved-notice">✅ Waybill verified. Check items above, then go to <strong>Deliver</strong> to notify the customer.</div>}
+                          {req.status === 'out_for_delivery' && <div className="rider-ofd-notice">🚚 Customer notified. Continue in the <strong>Deliver</strong> tab (map + OTP).</div>}
                           {req.status === 'completed'        && <div className="rider-completed-notice">🎉 Delivery confirmed and completed!</div>}
-                          {['completed', 'rejected', 'pending'].includes(req.status) && (
+                          {req.status === 'completed' && (
                             <button className="rider-delete-btn" onClick={() => handleDeletePickup(req._id, req.status, req.orderId)}>
                               <i className="fas fa-trash-alt"></i> Remove from List
                             </button>
@@ -1257,7 +1335,7 @@ const RiderDashboard = () => {
               </div>
             )}
             {myDeliveries.length === 0 ? (
-              <div className="rider-empty"><i className="fas fa-shipping-fast"></i><p>No deliveries ready yet.</p><span>Approved pickups will appear here once admin approves your request.</span></div>
+              <div className="rider-empty"><i className="fas fa-shipping-fast"></i><p>No deliveries ready yet.</p><span>Scan a waybill first — verified pickups appear here with the map.</span></div>
             ) : (
               <div className="rider-compact-list">
                 {myDeliveries.map(delivery => {
@@ -1281,7 +1359,7 @@ const RiderDashboard = () => {
                         </div>
                         <div className="rider-compact-right">
                           <span className={`rider-delivery-badge ${isOutForDelivery ? 'badge-ofd' : ''}`}>
-                            {isOutForDelivery ? '🚚 On the Way' : '✅ Pickup Approved'}
+                            {isOutForDelivery ? '🚚 On the Way' : '✅ Ready to Deliver'}
                           </span>
                           {isThisBeingTracked && <span className="rider-gps-active-badge"><span className="rider-gps-dot"></span> GPS On</span>}
                           <button className="rider-view-btn" onClick={() => toggleExpanded(delivery._id, setExpandedDeliveries)}>
@@ -1407,6 +1485,16 @@ const RiderDashboard = () => {
           </div>
         )}
       </main>
+
+      {showWaybillScanner && (
+        <WaybillScannerModal
+          onClose={() => { setShowWaybillScanner(false); setScanTargetOrderId(null); }}
+          onScan={handleWaybillScan}
+          hint={scanTargetOrderId
+            ? `Scan the waybill for order #${scanTargetOrderId.slice(-8).toUpperCase()} to claim it.`
+            : 'Point your camera at the waybill QR. Verified orders go to My Pickups.'}
+        />
+      )}
     </div>
   );
 };

@@ -1,8 +1,86 @@
 // src/admin/AdminUsers.jsx
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import './AdminUsers.css';
-import { useQuery, useMutation } from 'convex/react';
+import { useQuery, useMutation, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
+import { useConfirm } from '../context/ConfirmContext';
+
+const RiderViewModal = ({ rider, onClose }) => {
+  const cardRef = useRef();
+  const handlePrint = () => {
+    if (!cardRef.current) return;
+    const win = window.open('', '_blank', 'width=500,height=320');
+    if (!win) return;
+    win.document.write(`<html><head><title>DKMerch Rider ID</title><style>body{margin:0;padding:20px;font-family:'Segoe UI',sans-serif;background:#f0f0f0;}</style></head><body>${cardRef.current.innerHTML}</body></html>`);
+    win.document.close();
+    win.focus();
+    win.print();
+    win.close();
+  };
+
+  return (
+    <div className="au-rider-view-overlay" onClick={onClose}>
+      <div className="au-rider-view-modal" onClick={e => e.stopPropagation()}>
+        <button className="au-rider-view-close" onClick={onClose}>&times;</button>
+        <h3 className="au-rider-view-title"><i className="fas fa-id-card"></i> Rider Details</h3>
+        <p className="au-rider-view-sub">{rider.dkRiderId ? 'Official rider ID card' : 'Rider profile information'}</p>
+
+        <div ref={cardRef}>
+          <div className="au-dk-id-card">
+            <div className="au-dk-id-header">
+              <span className="au-dk-id-logo">🛵</span>
+              <div>
+                <div className="au-dk-id-brand">DKMerch</div>
+                <div className="au-dk-id-brand-sub">Official Delivery Rider</div>
+              </div>
+            </div>
+            <div className="au-dk-id-body">
+              {rider.riderPhoto
+                ? <img src={rider.riderPhoto} alt={rider.fullName} className="au-dk-id-photo" />
+                : <div className="au-dk-id-photo-placeholder">👤</div>}
+              <div className="au-dk-id-info">
+                <div className="au-dk-id-name">{rider.fullName}</div>
+                <div className="au-dk-id-role">Delivery Rider · Motorcycle</div>
+                <div className="au-dk-id-details">
+                  <div>📞 {rider.phone || '—'}</div>
+                  <div>✉️ {rider.email || '—'}</div>
+                  {rider.plateNumber && <div>🔢 Plate: {rider.plateNumber}</div>}
+                  {rider.licenseNumber && <div>🪪 License: {rider.licenseNumber}</div>}
+                  {rider.address && <div>📍 {rider.address}</div>}
+                </div>
+              </div>
+            </div>
+            <div className="au-dk-id-footer">
+              <div>
+                <div className="au-dk-id-number">{rider.dkRiderId || 'Pending ID'}</div>
+                <div className="au-dk-id-number-label">Rider ID</div>
+              </div>
+              <div className="au-dk-id-valid">
+                {rider.dkRiderIdGeneratedAt || rider.appliedAt
+                  ? new Date(rider.dkRiderIdGeneratedAt || rider.appliedAt).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })
+                  : '—'}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="au-rider-view-meta">
+          <span className={`au-rider-view-status status-${rider.status}`}>{rider.status}</span>
+          {rider.vehicleType && <span>Vehicle: Motorcycle</span>}
+        </div>
+
+        <div className="au-rider-view-actions">
+          {rider.dkRiderId && (
+            <button type="button" className="au-btn-secondary" onClick={handlePrint}>
+              <i className="fas fa-print"></i> Print ID Card
+            </button>
+          )}
+          <button type="button" className="au-btn-primary" onClick={onClose}>Done</button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const SUSPEND_REASONS = [
   { value: 'abusive_behavior', label: 'Abusive / Harassing Behavior', defaultDays: 3 },
@@ -38,7 +116,20 @@ const RIDER_DELETE_REASONS = [
   { value: 'other',             label: 'Other Reason',         hint: 'Specify reason in the note field' },
 ];
 
+const EMPTY_RIDER_FORM = {
+  fullName: '',
+  email: '',
+  phone: '',
+  address: '',
+  vehicleType: 'motorcycle',
+  plateNumber: '',
+  licenseNumber: '',
+  password: '',
+  confirmPassword: '',
+};
+
 const AdminUsers = () => {
+  const { confirm } = useConfirm();
   const [activeTab, setActiveTab] = useState('users');
 
   const users  = useQuery(api.users.getAllUsers)   ?? [];
@@ -49,6 +140,10 @@ const AdminUsers = () => {
   const deleteUserMutation    = useMutation(api.users.deleteUser);
   const activateUserMutation  = useMutation(api.users.activateUser);
   const deleteRiderMutation   = useMutation(api.riders.deleteRider);
+  const adminCreateRider      = useMutation(api.riders.adminCreateRider);
+  const approveRiderMutation  = useMutation(api.riders.approveRider);
+  const rejectRiderMutation   = useMutation(api.riders.rejectRiderApplication);
+  const sendRiderApprovedEmail = useAction(api.sendEmail.sendRiderApprovedEmail);
 
   const [searchTerm, setSearchTerm]     = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -79,6 +174,12 @@ const AdminUsers = () => {
   const [riderDeleteReason, setRiderDeleteReason]       = useState('');
   const [riderDeleteNote, setRiderDeleteNote]           = useState('');
   const [riderDeleteLoading, setRiderDeleteLoading]     = useState(false);
+
+  const [riderForm, setRiderForm]         = useState(EMPTY_RIDER_FORM);
+  const [riderFormError, setRiderFormError] = useState('');
+  const [riderFormLoading, setRiderFormLoading] = useState(false);
+  const [showRiderPw, setShowRiderPw]     = useState(false);
+  const [viewingRider, setViewingRider]   = useState(null);
 
   const [notification, setNotification] = useState({ show: false, message: '', type: '' });
 
@@ -124,6 +225,123 @@ const AdminUsers = () => {
       r.vehicleType?.toLowerCase().includes(q)
     );
   });
+
+  const pendingApplications = riders.filter(r => r.status === 'pending');
+
+  const handleRiderFormChange = (e) => {
+    const { name, value } = e.target;
+    let next = value;
+    if (name === 'phone') next = value.replace(/\D/g, '').slice(0, 11);
+    if (name === 'password' || name === 'confirmPassword') next = value.slice(0, 10);
+    setRiderForm(prev => ({ ...prev, [name]: next }));
+    setRiderFormError('');
+  };
+
+  const handleAdminCreateRider = async (e) => {
+    e.preventDefault();
+    setRiderFormError('');
+    const { fullName, email, phone, address, plateNumber, licenseNumber, password, confirmPassword } = riderForm;
+    if (!fullName.trim() || !email.trim() || !phone.trim() || !password) {
+      setRiderFormError('Full name, email, phone, and password are required.');
+      return;
+    }
+    if (!/\S+@\S+\.\S+/.test(email.trim())) {
+      setRiderFormError('Please enter a valid email address.');
+      return;
+    }
+    if (!password.startsWith('@rider') || password.length < 7 || password.length > 10) {
+      setRiderFormError('Password must start with @rider and be 7–10 characters (e.g. @rider1).');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setRiderFormError('Passwords do not match.');
+      return;
+    }
+
+    setRiderFormLoading(true);
+    try {
+      const result = await adminCreateRider({
+        fullName: fullName.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        address: address.trim() || undefined,
+        vehicleType: 'motorcycle',
+        plateNumber: plateNumber.trim() || undefined,
+        licenseNumber: licenseNumber.trim() || undefined,
+        password,
+      });
+      if (!result.success) {
+        setRiderFormError(result.message || 'Failed to create rider.');
+        return;
+      }
+      try {
+        await sendRiderApprovedEmail({
+          to: result.email,
+          riderName: result.fullName,
+          dkRiderId: result.dkRiderId,
+          email: result.email,
+          vehicleType: 'motorcycle',
+          plateNumber: plateNumber.trim() || undefined,
+        });
+      } catch (mailErr) {
+        console.warn('Rider welcome email failed:', mailErr);
+      }
+      setRiderForm(EMPTY_RIDER_FORM);
+      showNotification(`Rider created: ${result.dkRiderId}`, 'success');
+      setActiveTab('riders');
+      setRiderFilterStatus('approved');
+    } catch (err) {
+      console.error(err);
+      setRiderFormError('Failed to create rider. Please try again.');
+    } finally {
+      setRiderFormLoading(false);
+    }
+  };
+
+  const handleApprovePendingRider = async (app) => {
+    const ok = await confirm({
+      title: 'Approve rider?',
+      message: `Approve "${app.fullName}" as a rider?\n\nEmail: ${app.email}`,
+      confirmLabel: 'Approve',
+      variant: 'primary',
+      icon: 'fa-user-check',
+    });
+    if (!ok) return;
+    try {
+      const result = await approveRiderMutation({ id: app._id });
+      try {
+        await sendRiderApprovedEmail({
+          to: app.email,
+          riderName: app.fullName,
+          dkRiderId: result.dkRiderId,
+          email: app.email,
+          vehicleType: 'motorcycle',
+          plateNumber: app.plateNumber,
+        });
+      } catch (e) { console.warn(e); }
+      showNotification(`Approved ${app.fullName} (${result.dkRiderId})`, 'success');
+    } catch (err) {
+      console.error(err);
+      showNotification('Failed to approve rider.', 'error');
+    }
+  };
+
+  const handleRejectPendingRider = async (app) => {
+    const ok = await confirm({
+      title: 'Reject application?',
+      message: `Reject and delete application for "${app.fullName}"?`,
+      confirmLabel: 'Reject',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    try {
+      await rejectRiderMutation({ id: app._id, reason: 'other', note: 'Rejected by admin' });
+      showNotification(`Rejected ${app.fullName}`, 'success');
+    } catch (err) {
+      console.error(err);
+      showNotification('Failed to reject application.', 'error');
+    }
+  };
 
   const openSuspendModal = (user) => {
     setUserToSuspend(user);
@@ -341,7 +559,34 @@ const AdminUsers = () => {
 
       {/* ── STATS CARDS ── */}
       <div className="users-stats-row">
-        {activeTab !== 'riders' ? (
+        {activeTab === 'riders' || activeTab === 'applications' ? (
+          <>
+            <div className="au-stat-card">
+              <div className="au-stat-icon au-stat-icon--purple"><i className="fas fa-motorcycle"></i></div>
+              <div className="au-stat-info">
+                <div className="au-stat-label">TOTAL RIDERS</div>
+                <div className="au-stat-number">{totalRiders}</div>
+                <div className="au-stat-sub">registered riders</div>
+              </div>
+            </div>
+            <div className="au-stat-card">
+              <div className="au-stat-icon au-stat-icon--green"><i className="fas fa-check-circle"></i></div>
+              <div className="au-stat-info">
+                <div className="au-stat-label">APPROVED</div>
+                <div className="au-stat-number">{approvedRiders}</div>
+                <div className="au-stat-sub">active riders</div>
+              </div>
+            </div>
+            <div className="au-stat-card">
+              <div className="au-stat-icon au-stat-icon--yellow"><i className="fas fa-clock"></i></div>
+              <div className="au-stat-info">
+                <div className="au-stat-label">PENDING</div>
+                <div className="au-stat-number">{pendingRiders}</div>
+                <div className="au-stat-sub">{pendingRiders === 0 ? 'no pending' : 'awaiting review'}</div>
+              </div>
+            </div>
+          </>
+        ) : (
           <>
             <div className="au-stat-card">
               <div className="au-stat-icon au-stat-icon--green"><i className="fas fa-check-circle"></i></div>
@@ -373,33 +618,6 @@ const AdminUsers = () => {
               </div>
             </div>
           </>
-        ) : (
-          <>
-            <div className="au-stat-card">
-              <div className="au-stat-icon au-stat-icon--purple"><i className="fas fa-motorcycle"></i></div>
-              <div className="au-stat-info">
-                <div className="au-stat-label">TOTAL RIDERS</div>
-                <div className="au-stat-number">{totalRiders}</div>
-                <div className="au-stat-sub">registered riders</div>
-              </div>
-            </div>
-            <div className="au-stat-card">
-              <div className="au-stat-icon au-stat-icon--green"><i className="fas fa-check-circle"></i></div>
-              <div className="au-stat-info">
-                <div className="au-stat-label">APPROVED</div>
-                <div className="au-stat-number">{approvedRiders}</div>
-                <div className="au-stat-sub">active riders</div>
-              </div>
-            </div>
-            <div className="au-stat-card">
-              <div className="au-stat-icon au-stat-icon--yellow"><i className="fas fa-clock"></i></div>
-              <div className="au-stat-info">
-                <div className="au-stat-label">PENDING</div>
-                <div className="au-stat-number">{pendingRiders}</div>
-                <div className="au-stat-sub">{pendingRiders === 0 ? 'no pending' : 'awaiting review'}</div>
-              </div>
-            </div>
-          </>
         )}
       </div>
 
@@ -416,6 +634,10 @@ const AdminUsers = () => {
         <button className={`tab-btn ${activeTab === 'riders' ? 'active' : ''}`} onClick={() => setActiveTab('riders')}>
           <i className="fas fa-motorcycle"></i> Riders
           <span className="au-tab-badge">{totalRiders}</span>
+        </button>
+        <button className={`tab-btn ${activeTab === 'applications' ? 'active' : ''}`} onClick={() => setActiveTab('applications')}>
+          <i className="fas fa-id-card"></i> Rider Applications
+          <span className="au-tab-badge">{pendingRiders}</span>
         </button>
       </div>
 
@@ -626,14 +848,30 @@ const AdminUsers = () => {
               <div className="no-users"><i className="fas fa-motorcycle"></i><p>No riders found</p></div>
             ) : (
               <table className="users-table">
-                <thead><tr><th>Full Name</th><th>Email</th><th>Phone</th><th>Vehicle</th><th>Status</th><th>Applied</th><th>Actions</th></tr></thead>
+                <thead>
+                  <tr>
+                    <th>Full Name</th>
+                    <th>Email</th>
+                    <th>Phone</th>
+                    <th>Vehicle</th>
+                    <th>Rider ID</th>
+                    <th>Status</th>
+                    <th>Applied</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {filteredRiders.map(rider => (
                     <tr key={rider._id}>
                       <td className="user-name"><i className="fas fa-motorcycle" style={{ color: '#7c3aed' }}></i>{rider.fullName}</td>
                       <td>{rider.email}</td>
                       <td>{rider.phone}</td>
-                      <td style={{ textTransform: 'capitalize' }}>{rider.vehicleType}</td>
+                      <td>Motorcycle</td>
+                      <td>
+                        {rider.dkRiderId
+                          ? <span className="au-rider-id-chip">{rider.dkRiderId}</span>
+                          : <span style={{ color: '#9ca3af', fontSize: 12 }}>—</span>}
+                      </td>
                       <td>
                         <span className={getRiderStatusBadgeClass(rider.status)}>
                           {rider.status === 'approved'  && <i className="fas fa-check-circle"></i>}
@@ -645,6 +883,13 @@ const AdminUsers = () => {
                       </td>
                       <td className="date-cell">{formatDate(rider.appliedAt)}</td>
                       <td className="actions-cell">
+                        <button
+                          className="btn-suspend btn-activate"
+                          onClick={() => setViewingRider(rider)}
+                          title="View rider"
+                        >
+                          <i className="fas fa-eye"></i>
+                        </button>
                         <button className="btn-delete" onClick={() => openRiderDeleteModal(rider)} title="Delete">
                           <i className="fas fa-trash"></i>
                         </button>
@@ -653,6 +898,128 @@ const AdminUsers = () => {
                   ))}
                 </tbody>
               </table>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* ══ RIDER APPLICATIONS TAB ═════════════════════════════════════════════ */}
+      {activeTab === 'applications' && (
+        <>
+          <div className="au-rider-app-card">
+            <div className="au-rider-app-header">
+              <div>
+                <h3><i className="fas fa-user-plus"></i> Add Rider</h3>
+                <p>Admin fills rider details. Account is created as approved and can log in at /rider.</p>
+              </div>
+            </div>
+            <form className="au-rider-app-form" onSubmit={handleAdminCreateRider}>
+              <div className="au-rider-form-grid">
+                <div className="form-group">
+                  <label>Full Name *</label>
+                  <input name="fullName" value={riderForm.fullName} onChange={handleRiderFormChange} placeholder="Juan Dela Cruz" required />
+                </div>
+                <div className="form-group">
+                  <label>Email (login) *</label>
+                  <input name="email" type="email" value={riderForm.email} onChange={handleRiderFormChange} placeholder="rider@email.com" required />
+                </div>
+                <div className="form-group">
+                  <label>Phone *</label>
+                  <input name="phone" value={riderForm.phone} onChange={handleRiderFormChange} placeholder="09XXXXXXXXX" required />
+                </div>
+                <div className="form-group">
+                  <label>Vehicle Type</label>
+                  <input value="Motorcycle" disabled readOnly className="au-vehicle-fixed" />
+                  <input type="hidden" name="vehicleType" value="motorcycle" />
+                </div>
+                <div className="form-group">
+                  <label>Plate Number</label>
+                  <input name="plateNumber" value={riderForm.plateNumber} onChange={handleRiderFormChange} placeholder="ABC 1234" />
+                </div>
+                <div className="form-group">
+                  <label>License Number</label>
+                  <input name="licenseNumber" value={riderForm.licenseNumber} onChange={handleRiderFormChange} placeholder="N01-23-456789" />
+                </div>
+                <div className="form-group au-rider-form-span2">
+                  <label>Address</label>
+                  <input name="address" value={riderForm.address} onChange={handleRiderFormChange} placeholder="Delivery area / home address" />
+                </div>
+                <div className="form-group">
+                  <label>Password * <span className="au-field-hint">must start with @rider</span></label>
+                  <div className="au-pw-row">
+                    <input
+                      name="password"
+                      type={showRiderPw ? 'text' : 'password'}
+                      value={riderForm.password}
+                      onChange={handleRiderFormChange}
+                      placeholder="@rider1"
+                      required
+                    />
+                    <button type="button" className="au-pw-toggle" onClick={() => setShowRiderPw(p => !p)}>
+                      <i className={`fas ${showRiderPw ? 'fa-eye-slash' : 'fa-eye'}`}></i>
+                    </button>
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label>Confirm Password *</label>
+                  <input
+                    name="confirmPassword"
+                    type={showRiderPw ? 'text' : 'password'}
+                    value={riderForm.confirmPassword}
+                    onChange={handleRiderFormChange}
+                    placeholder="Repeat password"
+                    required
+                  />
+                </div>
+              </div>
+              {riderFormError && (
+                <div className="au-rider-form-error"><i className="fas fa-exclamation-circle"></i> {riderFormError}</div>
+              )}
+              <div className="au-rider-form-actions">
+                <button type="button" className="au-btn-secondary" onClick={() => { setRiderForm(EMPTY_RIDER_FORM); setRiderFormError(''); }} disabled={riderFormLoading}>
+                  Clear
+                </button>
+                <button type="submit" className="au-btn-primary" disabled={riderFormLoading}>
+                  {riderFormLoading ? <><i className="fas fa-spinner fa-spin"></i> Creating...</> : <><i className="fas fa-user-check"></i> Create & Approve Rider</>}
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <div className="au-rider-pending-block">
+            <h4><i className="fas fa-inbox"></i> Pending Applications ({pendingApplications.length})</h4>
+            {pendingApplications.length === 0 ? (
+              <div className="no-users" style={{ padding: '28px 16px' }}>
+                <i className="fas fa-check-circle" style={{ color: '#16a34a' }}></i>
+                <p>No pending applications</p>
+              </div>
+            ) : (
+              <div className="users-table-container" style={{ marginTop: 12 }}>
+                <table className="users-table">
+                  <thead>
+                    <tr><th>Full Name</th><th>Email</th><th>Phone</th><th>Vehicle</th><th>Applied</th><th>Actions</th></tr>
+                  </thead>
+                  <tbody>
+                    {pendingApplications.map(app => (
+                      <tr key={app._id}>
+                        <td className="user-name">{app.fullName}</td>
+                        <td>{app.email}</td>
+                        <td>{app.phone}</td>
+                        <td>Motorcycle</td>
+                        <td className="date-cell">{formatDate(app.appliedAt)}</td>
+                        <td className="actions-cell">
+                          <button className="btn-suspend btn-activate" title="Approve" onClick={() => handleApprovePendingRider(app)}>
+                            <i className="fas fa-check-circle"></i>
+                          </button>
+                          <button className="btn-delete" title="Reject" onClick={() => handleRejectPendingRider(app)}>
+                            <i className="fas fa-times-circle"></i>
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         </>
@@ -839,6 +1206,10 @@ const AdminUsers = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {viewingRider && (
+        <RiderViewModal rider={viewingRider} onClose={() => setViewingRider(null)} />
       )}
 
       {/* ══ RIDER DELETE MODAL ════════════════════════════════════════════════ */}

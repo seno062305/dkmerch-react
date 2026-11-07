@@ -6,8 +6,6 @@ import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import RiderRegistrationModal from "./RiderRegistrationModal";
-
 // ── Rate limit helpers ─────────────────────────────────────────────────────
 const RL_KEY_ATTEMPTS = "dkmerch_rider_login_attempts";
 const RL_KEY_LOCKOUT  = "dkmerch_rider_login_lockout_until";
@@ -59,7 +57,7 @@ const RiderLoginModal = ({ onClose, onLoginSuccess }) => {
   const { login } = useAuth();
   const navigate  = useNavigate();
 
-  // view: "login" | "forgot" | "register"
+  // view: "login" | "forgot"
   const [view, setView] = useState("login");
 
   // ── Login state ──────────────────────────────────────────────
@@ -259,15 +257,6 @@ const RiderLoginModal = ({ onClose, onLoginSuccess }) => {
   };
 
   // ── Show registration modal ───────────────────────────────────
-  if (view === "register") {
-    return (
-      <RiderRegistrationModal
-        onClose={() => setView("login")}
-        onSubmitSuccess={() => setView("login")}
-      />
-    );
-  }
-
   // ═══════════════════════════════════════════
   // FORGOT PASSWORD VIEW
   // ═══════════════════════════════════════════
@@ -564,16 +553,9 @@ const RiderLoginModal = ({ onClose, onLoginSuccess }) => {
             )}
           </button>
 
-          <div className="divider"><span>OR</span></div>
-          <div className="signup-section">
-            <p>
-              New rider?{" "}
-              <button type="button" className="signup-link rider-signup-link"
-                onClick={() => setView("register")}>
-                Apply / Create Account
-              </button>
-            </p>
-          </div>
+          <p style={{ marginTop: 14, fontSize: 12, color: '#9ca3af', textAlign: 'center', lineHeight: 1.45 }}>
+            Rider accounts are created by DKMerch admin. Contact support if you need access.
+          </p>
         </form>
       </div>
     </div>

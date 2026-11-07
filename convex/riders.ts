@@ -95,6 +95,51 @@ export const approveRider = mutation({
   },
 });
 
+// Admin fills rider details and creates an already-approved rider account
+export const adminCreateRider = mutation({
+  args: {
+    fullName: v.string(),
+    email: v.string(),
+    phone: v.string(),
+    address: v.optional(v.string()),
+    vehicleType: v.optional(v.string()),
+    plateNumber: v.optional(v.string()),
+    licenseNumber: v.optional(v.string()),
+    password: v.string(),
+  },
+  handler: async ({ db }, args) => {
+    const email = args.email.trim().toLowerCase();
+    const existing = await db
+      .query("riderApplications")
+      .withIndex("by_email", q => q.eq("email", email))
+      .first();
+    if (existing) {
+      return { success: false, message: "A rider with this email already exists." };
+    }
+
+    const allRiders = await db.query("riderApplications").collect();
+    const approvedCount = allRiders.filter(r => r.dkRiderId).length;
+    const dkRiderId = generateDkRiderId(approvedCount + 1);
+
+    const id = await db.insert("riderApplications", {
+      fullName: args.fullName.trim(),
+      email,
+      phone: args.phone.trim(),
+      address: args.address?.trim() || undefined,
+      vehicleType: args.vehicleType || "motorcycle",
+      plateNumber: args.plateNumber?.trim() || undefined,
+      licenseNumber: args.licenseNumber?.trim() || undefined,
+      password: args.password,
+      status: "approved",
+      appliedAt: new Date().toISOString(),
+      dkRiderId,
+      dkRiderIdGeneratedAt: new Date().toISOString(),
+    });
+
+    return { success: true, id, dkRiderId, email, fullName: args.fullName.trim() };
+  },
+});
+
 export const updateRiderStatus = mutation({
   args: { id: v.id("riderApplications"), status: v.string() },
   handler: async ({ db }, { id, status }) => {

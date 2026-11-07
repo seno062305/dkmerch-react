@@ -113,6 +113,11 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
   const handleLoginClick  = () => window.dispatchEvent(new Event('openLoginModal'));
   const closeMobileMenu   = () => setShowMobileMenu(false);
 
+  const handleRiderLoginSuccess = (role) => {
+    setShowRiderModal(false);
+    if (role === 'rider') navigate('/rider', { replace: true });
+  };
+
   const handleHomeClick = (e) => {
     e.preventDefault(); closeMobileMenu();
     if (location.pathname === '/') window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -152,11 +157,6 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
         ? <span key={i} className="highlight">{part}</span>
         : part
     );
-  };
-
-  const handleRiderLoginSuccess = (role) => {
-    setShowRiderModal(false);
-    if (role === 'rider') navigate('/rider', { replace: true });
   };
 
   return (

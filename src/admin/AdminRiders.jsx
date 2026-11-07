@@ -1,10 +1,8 @@
 // src/admin/AdminRiders.jsx
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import './AdminRiders.css';
-import { useQuery, useMutation, useAction } from 'convex/react';
+import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
-import { useConfirm } from '../context/ConfirmContext';
-
 const SITE_URL = process.env.REACT_APP_SITE_URL || 'https://dkmerchwebsite.vercel.app';
 
 const toDateStr = (ms) => new Date(ms).toISOString().split('T')[0];
@@ -762,37 +760,20 @@ const CompletedOrderCard = ({ order, onRemove }) => {
 // MAIN COMPONENT
 // ─────────────────────────────────────────────────────────────
 const AdminRiders = () => {
-  const { confirm } = useConfirm();
-  const [selectedApp,     setSelectedApp]     = useState(null);
-  const [approvedRider,   setApprovedRider]   = useState(null);
-  const [rejectTarget,    setRejectTarget]    = useState(null);
   const [removeTarget,    setRemoveTarget]    = useState(null);
   const [mapOrder,        setMapOrder]        = useState(null);
   const [mapFullscreen,   setMapFullscreen]   = useState(false);
   const [collapsed,       setCollapsed]       = useState({});
   const [hiddenCompleted, setHiddenCompleted] = useState([]);
-  const [tab, setTab] = useState('applications');
+  const [tab, setTab] = useState('delivery');
 
   const [startDate, setStartDate] = useState('');
   const [endDate,   setEndDate]   = useState('');
   const clearDateFilter = () => { setStartDate(''); setEndDate(''); };
 
-  const allRiders         = useQuery(api.riders.getAllRiders)                ?? [];
   const allPickupRequests = useQuery(api.pickupRequests.getAllPickupRequests) ?? [];
   const allOrders         = useQuery(api.orders.getAllOrders)                 ?? [];
 
-  const approveRiderMutation         = useMutation(api.riders.approveRider);
-  const updateRiderStatusMutation    = useMutation(api.riders.updateRiderStatus);
-  const deleteRiderMutation          = useMutation(api.riders.deleteRider);
-  const approvePickupMutation        = useMutation(api.pickupRequests.approvePickupRequest);
-  const rejectPickupMutation         = useMutation(api.pickupRequests.rejectPickupRequest);
-  const updateFields                 = useMutation(api.orders.updateOrderFields);
-  const sendRiderApprovedEmailAction = useAction(api.sendEmail.sendRiderApprovedEmail);
-  const sendRiderRejectedEmailAction = useAction(api.sendEmail.sendRiderRejectedEmail);
-
-  const applications   = allRiders.filter(r => r.status === 'pending');
-  const approvedRiders = allRiders.filter(r => r.status === 'approved');
-  const pendingPickups = allPickupRequests.filter(p => p.status === 'pending');
   const completedStatuses = ['completed', 'delivered'];
 
   const matchesDateFilter = (order) => {
@@ -821,74 +802,9 @@ const AdminRiders = () => {
     .filter(o => matchesDateFilter(o))
     .sort((a, b) => (b.deliveryConfirmedAt || b._creationTime || 0) - (a.deliveryConfirmedAt || a._creationTime || 0));
 
-  const handleApproveRider = async (app) => {
-    const ok = await confirm({
-      title: 'Approve rider?',
-      message: `Approve "${app.fullName}" as a rider?\n\nEmail: ${app.email}\nVehicle: ${app.vehicleType || 'N/A'}`,
-      confirmLabel: 'Approve',
-      variant: 'primary',
-      icon: 'fa-user-check',
-    });
-    if (!ok) return;
-    try {
-      const result = await approveRiderMutation({ id: app._id });
-      try { await sendRiderApprovedEmailAction({ to: app.email, riderName: app.fullName, dkRiderId: result.dkRiderId, email: app.email, vehicleType: app.vehicleType, plateNumber: app.plateNumber }); } catch(e) { console.error(e); }
-      setApprovedRider({ ...app, dkRiderId: result.dkRiderId, dkRiderIdGeneratedAt: new Date().toISOString() });
-    } catch (err) { console.error(err); alert('Failed to approve rider.'); }
-  };
-
-  const handleRejectWithReason = (app) => setRejectTarget(app);
-
-  const handleConfirmReject = async (id, name, reason, note) => {
-    try {
-      await deleteRiderMutation({ id });
-      const app = allRiders.find(r => r._id === id);
-      if (app?.email) { try { await sendRiderRejectedEmailAction({ to: app.email, riderName: app.fullName, reason, note: note || undefined }); } catch(e) { console.error(e); } }
-      setRejectTarget(null);
-    } catch (err) { console.error(err); alert('Failed to reject rider.'); }
-  };
-
-  const handleRevokeRider = async (id, name) => {
-    const ok = await confirm({
-      title: 'Revoke approval?',
-      message: `Revoke approval for "${name}"?`,
-      confirmLabel: 'Revoke',
-      variant: 'danger',
-    });
-    if (!ok) return;
-    try { await updateRiderStatusMutation({ id, status: 'pending' }); } catch(err) { console.error(err); }
-  };
-
-  const approvePickup = async (requestId, riderName) => {
-    const ok = await confirm({
-      title: 'Approve pickup?',
-      message: `Approve pickup request for rider "${riderName}"?`,
-      confirmLabel: 'Approve',
-      variant: 'primary',
-      icon: 'fa-check',
-    });
-    if (!ok) return;
-    try { await approvePickupMutation({ requestId }); alert(`✅ Pickup approved for ${riderName}!`); }
-    catch(err) { console.error(err); alert('Failed to approve pickup.'); }
-  };
-
-  const rejectPickup = async (requestId) => {
-    const ok = await confirm({
-      title: 'Reject pickup?',
-      message: 'Reject this pickup request?',
-      confirmLabel: 'Reject',
-      variant: 'danger',
-    });
-    if (!ok) return;
-    try { await rejectPickupMutation({ requestId }); } catch(err) { console.error(err); }
-  };
-
   const handleToggleCollapse = (orderId) => setCollapsed(p => ({ ...p, [orderId]: !p[orderId] }));
   const confirmRemove        = ()         => { if (!removeTarget) return; setHiddenCompleted(p => [...p, removeTarget._id]); setRemoveTarget(null); };
   const openMap              = (order, full = false) => { setMapOrder(order); setMapFullscreen(full); };
-
-  const getPickupStatusColor = (s) => ({ pending: '#ffc107', approved: '#28a745', rejected: '#dc3545', out_for_delivery: '#6366f1', completed: '#059669' }[s] || '#6c757d');
-  const getPickupStatusLabel = (s) => ({ pending: '⏳ Pending', approved: '✅ Approved', rejected: '❌ Rejected', out_for_delivery: '🚚 Out for Delivery', completed: '🎉 Delivered' }[s] || s);
 
   const DateFilter = () => (
     <div className="ar-date-filter">
@@ -908,12 +824,8 @@ const AdminRiders = () => {
   );
 
   const tabs = [
-    { key: 'applications', label: 'Pending Applications', count: applications.length },
-    { key: 'approved',     label: 'Approved Riders',      count: approvedRiders.length },
-    { key: 'pickups',      label: 'Pickup Requests',      count: pendingPickups.length },
-    { key: 'all-pickups',  label: 'All Pickups',          count: allPickupRequests.length },
-    { key: 'delivery',     label: '📦 Active Delivery',   count: activeDeliveryItems.length },
-    { key: 'completed',    label: '✅ Completed',         count: completedOrders.length, green: true },
+    { key: 'delivery',  label: '📦 Active Delivery', count: activeDeliveryItems.length },
+    { key: 'completed', label: '✅ Completed',       count: completedOrders.length, green: true },
   ];
 
   return (
@@ -928,118 +840,11 @@ const AdminRiders = () => {
         <div className="ar-bell-tab-slot"><NotificationBell /></div>
       </div>
 
-      {tab === 'applications' && (
-        applications.length === 0 ? <p className="riders-empty">No pending applications.</p> : (
-          <div className="riders-table-wrapper">
-            <table className="riders-table">
-              <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Vehicle</th><th>Date Applied</th><th>Photos</th><th>Actions</th></tr></thead>
-              <tbody>
-                {applications.map(app => (
-                  <tr key={app._id}>
-                    <td>{app.fullName}</td><td>{app.email}</td><td>{app.phone}</td>
-                    <td style={{ textTransform: 'capitalize' }}>{app.vehicleType || '—'}</td>
-                    <td>{app.appliedAt ? new Date(app.appliedAt).toLocaleDateString('en-PH') : 'N/A'}</td>
-                    <td><div className="riders-photo-indicators"><span className={`photo-dot ${app.riderPhoto ? 'has-photo' : 'no-photo'}`}>🤳</span><span className={`photo-dot ${app.validId1 ? 'has-photo' : 'no-photo'}`}>🪪</span><span className={`photo-dot ${app.validId2 ? 'has-photo' : 'no-photo'}`}>🪪</span></div></td>
-                    <td className="riders-actions">
-                      <button className="riders-btn view" onClick={() => setSelectedApp(app)}>👁 View</button>
-                      <button className="riders-btn approve" onClick={() => handleApproveRider(app)}>✅ Approve</button>
-                      <button className="riders-btn reject" onClick={() => handleRejectWithReason(app)}>❌ Reject</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )
-      )}
-
-      {tab === 'approved' && (
-        approvedRiders.length === 0 ? <p className="riders-empty">No approved riders yet.</p> : (
-          <div className="riders-table-wrapper">
-            <table className="riders-table">
-              <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Vehicle</th><th>DK Rider ID</th><th>Date Applied</th><th>Action</th></tr></thead>
-              <tbody>
-                {approvedRiders.map(rider => (
-                  <tr key={rider._id}>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {rider.riderPhoto
-                          ? <img src={rider.riderPhoto} alt={rider.fullName} style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', border: '2px solid #e2e8f0', flexShrink: 0 }} />
-                          : <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>👤</div>}
-                        {rider.fullName}
-                      </div>
-                    </td>
-                    <td>{rider.email}</td><td>{rider.phone}</td>
-                    <td style={{ textTransform: 'capitalize' }}>{rider.vehicleType || '—'}</td>
-                    <td>{rider.dkRiderId ? <span className="dk-rider-id-badge">{rider.dkRiderId}</span> : '—'}</td>
-                    <td>{rider.appliedAt ? new Date(rider.appliedAt).toLocaleDateString('en-PH') : 'N/A'}</td>
-                    <td className="riders-actions">
-                      {rider.dkRiderId && <button className="riders-btn view" onClick={() => setApprovedRider(rider)}>🪪 View ID</button>}
-                      <button className="riders-btn reject" onClick={() => handleRevokeRider(rider._id, rider.fullName)}>Revoke</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )
-      )}
-
-      {tab === 'pickups' && (
-        pendingPickups.length === 0 ? <p className="riders-empty">No pending pickup requests.</p> : (
-          <div className="riders-table-wrapper">
-            <table className="riders-table">
-              <thead><tr><th>Order ID</th><th>Rider</th><th>Phone</th><th>Vehicle / Plate</th><th>Customer</th><th>Total</th><th>Requested</th><th>Actions</th></tr></thead>
-              <tbody>
-                {pendingPickups.map(req => (
-                  <tr key={req._id}>
-                    <td><strong>#{req.orderId?.slice(-8)}</strong></td>
-                    <td><strong>{req.riderName}</strong><div style={{ fontSize: 12, color: '#888' }}>{req.riderEmail}</div></td>
-                    <td>{req.riderPhone || '—'}</td>
-                    <td><span style={{ textTransform: 'capitalize' }}>{req.riderVehicle || '—'}</span>{req.riderPlate && <span style={{ display: 'block', fontSize: 12, color: '#666' }}>{req.riderPlate}</span>}</td>
-                    <td>{req.customerName || '—'}</td>
-                    <td>₱{(req.total || 0).toLocaleString()}</td>
-                    <td>{new Date(req.requestedAt).toLocaleDateString('en-PH')}</td>
-                    <td className="riders-actions">
-                      <button className="riders-btn approve" onClick={() => approvePickup(req._id, req.riderName)}>✅ Approve</button>
-                      <button className="riders-btn reject" onClick={() => rejectPickup(req._id)}>❌ Reject</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )
-      )}
-
-      {tab === 'all-pickups' && (
-        allPickupRequests.length === 0 ? <p className="riders-empty">No pickup requests yet.</p> : (
-          <div className="riders-table-wrapper">
-            <table className="riders-table">
-              <thead><tr><th>Order ID</th><th>Rider</th><th>Customer</th><th>Total</th><th>Status</th><th>Requested</th><th>Resolved</th></tr></thead>
-              <tbody>
-                {allPickupRequests.map(req => (
-                  <tr key={req._id}>
-                    <td><strong>#{req.orderId?.slice(-8)}</strong></td>
-                    <td><strong>{req.riderName}</strong><div style={{ fontSize: 12, color: '#888' }}>{req.riderEmail}</div></td>
-                    <td>{req.customerName || '—'}</td>
-                    <td>₱{(req.total || 0).toLocaleString()}</td>
-                    <td><span className="rider-badge" style={{ backgroundColor: getPickupStatusColor(req.status), color: 'white' }}>{getPickupStatusLabel(req.status)}</span></td>
-                    <td>{new Date(req.requestedAt).toLocaleDateString('en-PH')}</td>
-                    <td>{req.approvedAt ? new Date(req.approvedAt).toLocaleDateString('en-PH') : req.rejectedAt ? new Date(req.rejectedAt).toLocaleDateString('en-PH') : '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )
-      )}
-
       {tab === 'delivery' && (
         <>
           <DateFilter />
           {activeDeliveryItems.length === 0
-            ? <div className="ar-empty"><div className="ar-empty-icon">📭</div><p>No active deliveries{(startDate || endDate) ? ' for selected dates' : ''}.</p><span>Approved pickup orders appear here.</span></div>
+            ? <div className="ar-empty"><div className="ar-empty-icon">📭</div><p>No active deliveries{(startDate || endDate) ? ' for selected dates' : ''}.</p><span>Orders claimed by riders after waybill scan appear here.</span></div>
             : <div className="ar-orders-list">{activeDeliveryItems.map(o => <ActiveOrderCard key={o._id} order={o} collapsed={!!collapsed[o.orderId]} onToggleCollapse={handleToggleCollapse} onOpenMap={openMap} />)}</div>
           }
         </>
@@ -1055,9 +860,6 @@ const AdminRiders = () => {
         </>
       )}
 
-      {selectedApp   && <ApplicationDetailModal app={selectedApp} onClose={() => setSelectedApp(null)} onApprove={handleApproveRider} onRejectWithReason={handleRejectWithReason} />}
-      {approvedRider && <RiderIdCardModal rider={approvedRider} onClose={() => setApprovedRider(null)} />}
-      {rejectTarget  && <RejectApplicationModal app={rejectTarget} onConfirm={handleConfirmReject} onClose={() => setRejectTarget(null)} />}
       {removeTarget  && <RemoveConfirmModal order={removeTarget} onConfirm={confirmRemove} onClose={() => setRemoveTarget(null)} />}
       {mapOrder      && <LiveMapModal orderId={mapOrder.orderId} order={mapOrder} onClose={() => { setMapOrder(null); setMapFullscreen(false); }} fullscreen={mapFullscreen} />}
     </div>
