@@ -327,7 +327,7 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
     setSendingCode(true);
     setCodeMsg("");
     try {
-      const result = await sendPasswordResetCode({ to: forgotEmail, code, accountType: "customer" });
+      const result = await sendPasswordResetCode({ to: forgotEmail, code });
       if (result?.success) {
         setCodeMsg(`✅ Code sent to ${forgotEmail}! Check your inbox.`);
       } else {
@@ -355,7 +355,7 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
 
     setResetLoading(true);
     try {
-      const result = await resetPasswordByEmail({ email: forgotEmail, newPassword, accountType: "customer" });
+      const result = await resetPasswordByEmail({ email: forgotEmail, newPassword });
       if (result?.success) {
         setResetMsg("✅ Password reset successful! You can now log in.");
         setTimeout(() => {

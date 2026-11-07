@@ -217,7 +217,7 @@ const RiderLoginModal = ({ onClose, onLoginSuccess }) => {
     setSentCode(code); setSendingCode(true); setCodeMsg("");
     try {
       const result = await sendPasswordResetCode({
-        to: forgotEmail, code, accountType: "rider",
+        to: forgotEmail, code,
       });
       if (result?.success) {
         setCodeMsg(`✅ Code sent to ${forgotEmail}! Check your inbox.`);
