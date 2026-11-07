@@ -388,7 +388,7 @@ const TermsAndConditions = () => {
                 a complaint with the <strong>National Privacy Commission (NPC)</strong> of the Philippines:
               </p>
               <ul>
-                <li><strong>Website:</strong> <a href="https://www.privacy.gov.ph" target="_blank" rel="noopener noreferrer">www.privacy.gov.ph</a></li>
+                <li><strong>Website:</strong> <a href="https://www.privacy.gov.ph">www.privacy.gov.ph</a></li>
                 <li><strong>Email:</strong> info@privacy.gov.ph</li>
                 <li><strong>Hotline:</strong> (02) 8234-2228</li>
               </ul>

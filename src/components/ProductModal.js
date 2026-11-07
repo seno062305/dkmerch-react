@@ -3,6 +3,7 @@ import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
+import { useConfirm } from '../context/ConfirmContext';
 import { useNavigate } from 'react-router-dom';
 import LoginModal from './LoginModal';
 import PromoCodeInput from './PromoCodeInput';
@@ -14,6 +15,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
   const { isAuthenticated, user } = useAuth();
   const allPromos = useQuery(api.promos.getAllPromos) ?? [];
   const { showNotification } = useNotification();
+  const { confirm } = useConfirm();
   const navigate = useNavigate();
 
   const [rating, setRating]           = useState(0);
@@ -32,6 +34,25 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
     api.reviews.getProductReviews,
     productId ? { productId } : 'skip'
   ) ?? [];
+
+  const userOrders = useQuery(
+    api.orders.getOrdersByEmail,
+    isAuthenticated && user?.email ? { email: user.email } : 'skip'
+  );
+
+  const hasPurchased = (() => {
+    if (!isAuthenticated || !user?.email || !productId) return false;
+    if (userOrders === undefined) return undefined;
+    const pid = String(productId);
+    return userOrders.some((order) => {
+      const status = String(order.orderStatus || order.status || '').toLowerCase();
+      if (!status || status.includes('cancel')) return false;
+      return (order.items || []).some((item) => {
+        const itemId = String(item.id || item.productId || '');
+        return itemId === pid;
+      });
+    });
+  })();
 
   const submitReviewMutation = useMutation(api.reviews.submitReview);
   const deleteReviewMutation = useMutation(api.reviews.deleteReview);
@@ -81,7 +102,14 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
   }, [productId]);
 
   const handleDeleteReview = async (reviewId) => {
-    if (!window.confirm('Delete your review?')) return;
+    const ok = await confirm({
+      title: 'Delete review?',
+      message: 'This will permanently remove your review for this product.',
+      confirmLabel: 'Delete',
+      variant: 'danger',
+      icon: 'fa-trash-alt',
+    });
+    if (!ok) return;
     try {
       await deleteReviewMutation({ reviewId, userEmail: user.email });
       showNotification('Review deleted.', 'success');
@@ -106,6 +134,10 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
       setShowLoginModal(true);
       return;
     }
+    if (!hasPurchased) {
+      showNotification('You can only review products you have purchased.', 'error');
+      return;
+    }
     if (rating === 0) { showNotification('Please select a rating', 'error'); return; }
     if (review.trim() === '') { showNotification('Please write a review', 'error'); return; }
     if (review.length > 250) { showNotification('Review must be 250 characters or less', 'error'); return; }
@@ -121,8 +153,9 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
       showNotification(result.updated ? 'Review updated!' : 'Review submitted!', 'success');
       setRating(0);
       setReview('');
-    } catch {
-      showNotification('Failed to submit review. Please try again.', 'error');
+    } catch (err) {
+      const msg = err?.data || err?.message || 'Failed to submit review. Please try again.';
+      showNotification(String(msg).replace(/^.*Error:\s*/i, '') || 'Failed to submit review. Please try again.', 'error');
     }
   };
 
@@ -131,7 +164,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
     setTimeout(() => setCartToast(false), 2200);
   };
 
-  const handleAddToCartClick = () => {
+  const handleAddToCartClick = async () => {
     if (!isAuthenticated) {
       showNotification('Please login to add to cart', 'error');
       setHideProductModal(true);
@@ -141,19 +174,33 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
     const priceDisplay = appliedPromo
       ? `₱${discountedPrice.toLocaleString()} (${appliedPromo.discount}% off)`
       : `₱${product.price.toLocaleString()}`;
-    if (!window.confirm(`Add "${product.name}" to cart?\n\nPrice: ${priceDisplay}`)) return;
+    const ok = await confirm({
+      title: 'Add to cart?',
+      message: `Add "${product.name}" to cart?\n\nPrice: ${priceDisplay}`,
+      confirmLabel: 'Add to Cart',
+      variant: 'primary',
+      icon: 'fa-shopping-cart',
+    });
+    if (!ok) return;
     onAddToCart({ ...product, appliedPromo, finalPrice: discountedPrice });
     triggerCartToast();
   };
 
-  const handlePreOrderClick = () => {
+  const handlePreOrderClick = async () => {
     if (!isAuthenticated) {
       showNotification('Please login to pre-order', 'error');
       setHideProductModal(true);
       setShowLoginModal(true);
       return;
     }
-    if (!window.confirm(`Pre-order "${product.name}"?\n\nPrice: ₱${product.price.toLocaleString()}\n\nYou'll be notified via email when this item is available.`)) return;
+    const ok = await confirm({
+      title: 'Place pre-order?',
+      message: `Pre-order "${product.name}"?\n\nPrice: ₱${product.price.toLocaleString()}\n\nYou'll be notified via email when this item is available.`,
+      confirmLabel: 'Pre-Order',
+      variant: 'primary',
+      icon: 'fa-clock',
+    });
+    if (!ok) return;
     onAddToCart({ ...product, appliedPromo, finalPrice: discountedPrice });
     triggerCartToast();
   };
@@ -234,7 +281,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
               {/* ── Customer Reviews list ── */}
               {convexReviews.length > 0 && (
                 <div className="modal-left-reviews">
-                  {convexReviews.slice(0, 3).map(rev => {
+                  {convexReviews.map(rev => {
                     const isLong = rev.review.length > REVIEW_CHAR_LIMIT;
                     const isExpanded = expandedReviews[rev._id];
                     return (
@@ -369,6 +416,16 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
                   <div className="login-to-review">
                     <i className="fas fa-lock"></i>
                     <p>Please login to leave a review</p>
+                  </div>
+                ) : hasPurchased === false ? (
+                  <div className="login-to-review">
+                    <i className="fas fa-shopping-bag"></i>
+                    <p>Only customers who bought this item can leave a review</p>
+                  </div>
+                ) : hasPurchased === undefined ? (
+                  <div className="login-to-review">
+                    <i className="fas fa-spinner fa-spin"></i>
+                    <p>Checking purchase history...</p>
                   </div>
                 ) : (
                   <>

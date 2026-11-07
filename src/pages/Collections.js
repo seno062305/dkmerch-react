@@ -5,6 +5,7 @@ import { api } from '../../convex/_generated/api';
 import { useAddToCart } from '../context/cartUtils';
 import { useWishlist, useToggleWishlist } from '../context/wishlistUtils';
 import { useNotification } from '../context/NotificationContext';
+import { useConfirm } from '../context/ConfirmContext';
 import ProductModal from '../components/ProductModal';
 import { PointsBadge } from '../utils/pointsUtils';
 import './Collections.css';
@@ -27,6 +28,7 @@ const Collections = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { showNotification } = useNotification();
+  const { confirm } = useConfirm();
 
   const [selectedCategory, setSelectedCategory]         = useState('all');
   const [selectedGroup, setSelectedGroup]               = useState('all');
@@ -68,12 +70,16 @@ const Collections = () => {
     const filterGroup = location.state?.filterGroup;
     const scrollToTop = location.state?.scrollToTop;
     if (filterGroup) {
-      setSelectedGroup(filterGroup);
+      // Match casing against known groups / product data
+      const known = ['BTS', 'BLACKPINK', 'TWICE', 'SEVENTEEN', 'STRAY KIDS', 'EXO', 'RED VELVET', 'NEWJEANS'];
+      const matched =
+        known.find(g => g.toUpperCase() === String(filterGroup).trim().toUpperCase()) ||
+        filterGroup;
+      setSelectedGroup(matched);
       if (scrollToTop) window.scrollTo({ top: 0, behavior: 'smooth' });
       window.history.replaceState({}, document.title);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname]);
+  }, [location.pathname, location.state]);
 
   useEffect(() => {
     const productId = searchParams.get('product');
@@ -123,7 +129,7 @@ const Collections = () => {
     showNotification(`${product.name} added to cart!`, 'success');
   };
 
-  const handleCardWishlist = (e, product) => {
+  const handleCardWishlist = async (e, product) => {
     e.stopPropagation();
     const pid = product._id || product.id;
     const alreadyWishlisted = isWishlisted(pid);
@@ -131,10 +137,16 @@ const Collections = () => {
       showNotification(`Favorites limit reached (max ${MAX_WISHLIST}). Remove an item first.`, 'error');
       return;
     }
-    const msg = alreadyWishlisted
-      ? `Remove "${product.name}" from Favorites?`
-      : `Add "${product.name}" to Favorites?`;
-    if (!window.confirm(msg)) return;
+    const ok = await confirm({
+      title: alreadyWishlisted ? 'Remove favorite?' : 'Add to favorites?',
+      message: alreadyWishlisted
+        ? `Remove "${product.name}" from Favorites?`
+        : `Add "${product.name}" to Favorites?`,
+      confirmLabel: alreadyWishlisted ? 'Remove' : 'Add',
+      variant: alreadyWishlisted ? 'danger' : 'primary',
+      icon: 'fa-star',
+    });
+    if (!ok) return;
     toggleWishlistMutation(product);
     showNotification(
       alreadyWishlisted ? `${product.name} removed from favorites!` : `${product.name} added to favorites!`,
@@ -142,17 +154,23 @@ const Collections = () => {
     );
   };
 
-  const handleAddToWishlist = (product) => {
+  const handleAddToWishlist = async (product) => {
     const pid = product._id || product.id;
     const alreadyWishlisted = isWishlisted(pid);
     if (!alreadyWishlisted && wishlistItems.length >= MAX_WISHLIST) {
       showNotification(`Favorites limit reached (max ${MAX_WISHLIST}). Remove an item first.`, 'error');
       return;
     }
-    const msg = alreadyWishlisted
-      ? `Remove "${product.name}" from Favorites?`
-      : `Add "${product.name}" to Favorites?`;
-    if (!window.confirm(msg)) return;
+    const ok = await confirm({
+      title: alreadyWishlisted ? 'Remove favorite?' : 'Add to favorites?',
+      message: alreadyWishlisted
+        ? `Remove "${product.name}" from Favorites?`
+        : `Add "${product.name}" to Favorites?`,
+      confirmLabel: alreadyWishlisted ? 'Remove' : 'Add',
+      variant: alreadyWishlisted ? 'danger' : 'primary',
+      icon: 'fa-star',
+    });
+    if (!ok) return;
     toggleWishlistMutation(product);
     showNotification(
       alreadyWishlisted ? `${product.name} removed from favorites!` : `${product.name} added to favorites!`,

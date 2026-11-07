@@ -185,8 +185,20 @@ const HeroCarousel = ({ slides }) => {
   const [currentSlide, setCurrentSlide]   = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [pendingPromoGroup, setPendingPromoGroup] = useState(null);
 
   const totalSlides = slides.length;
+
+  const goToPromoGroup = useCallback((groupName) => {
+    if (groupName) {
+      navigate('/collections', {
+        state: { filterGroup: groupName, scrollToTop: true },
+      });
+    } else {
+      navigate('/collections');
+    }
+    setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 100);
+  }, [navigate]);
 
   const goToSlide = useCallback((index) => {
     let i = index;
@@ -212,9 +224,12 @@ const HeroCarousel = ({ slides }) => {
 
   const handleButtonClick = (slide, slideIndex) => {
     if (slide.isPromo) {
-      if (!isAuthenticated) { setShowLoginModal(true); return; }
-      navigate('/collections');
-      setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 100);
+      if (!isAuthenticated) {
+        setPendingPromoGroup(slide.promoGroup || null);
+        setShowLoginModal(true);
+        return;
+      }
+      goToPromoGroup(slide.promoGroup);
       return;
     }
     const hasPromo = slides[0]?.isPromo;
@@ -230,6 +245,18 @@ const HeroCarousel = ({ slides }) => {
       navigate('/collections');
       setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 100);
     }
+  };
+
+  const handlePromoLoginSuccess = () => {
+    const group = pendingPromoGroup;
+    setPendingPromoGroup(null);
+    setShowLoginModal(false);
+    goToPromoGroup(group);
+  };
+
+  const handlePromoLoginClose = () => {
+    setShowLoginModal(false);
+    setPendingPromoGroup(null);
   };
 
   return (
@@ -339,7 +366,12 @@ const HeroCarousel = ({ slides }) => {
         </div>
       </section>
 
-      {showLoginModal && <LoginModal onClose={() => setShowLoginModal(false)} />}
+      {showLoginModal && (
+        <LoginModal
+          onClose={handlePromoLoginClose}
+          onLoginSuccess={handlePromoLoginSuccess}
+        />
+      )}
     </>
   );
 };

@@ -2,6 +2,41 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 
+const CANCELLED_STATUSES = new Set(["cancelled", "canceled"]);
+
+function orderContainsProduct(order: any, productId: string): boolean {
+  if (!order?.items?.length || !productId) return false;
+  return order.items.some((item: any) => {
+    const itemId = String(item.id || item.productId || "");
+    return itemId === String(productId);
+  });
+}
+
+function isEligiblePurchaseOrder(order: any): boolean {
+  const status = String(order.orderStatus || order.status || "").toLowerCase().trim();
+  if (!status) return false;
+  if (CANCELLED_STATUSES.has(status)) return false;
+  if (status.includes("cancel")) return false;
+  return true;
+}
+
+async function userHasPurchasedProduct(
+  db: any,
+  userEmail: string,
+  productId: string
+): Promise<boolean> {
+  if (!userEmail || !productId) return false;
+  const orders = await db
+    .query("orders")
+    .withIndex("by_email", (q: any) => q.eq("email", userEmail))
+    .collect();
+
+  return orders.some(
+    (order: any) =>
+      isEligiblePurchaseOrder(order) && orderContainsProduct(order, productId)
+  );
+}
+
 // ── GET: All reviews for a specific product ──
 export const getProductReviews = query({
   args: { productId: v.string() },
@@ -11,6 +46,17 @@ export const getProductReviews = query({
       .withIndex("by_product", (q) => q.eq("productId", productId))
       .order("desc")
       .collect();
+  },
+});
+
+// ── GET: Whether the logged-in user bought this product ──
+export const hasUserPurchasedProduct = query({
+  args: {
+    productId: v.string(),
+    userEmail: v.string(),
+  },
+  handler: async ({ db }, { productId, userEmail }) => {
+    return await userHasPurchasedProduct(db, userEmail, productId);
   },
 });
 
@@ -24,6 +70,11 @@ export const submitReview = mutation({
     review: v.string(),
   },
   handler: async ({ db }, { productId, userEmail, userName, rating, review }) => {
+    const purchased = await userHasPurchasedProduct(db, userEmail, productId);
+    if (!purchased) {
+      throw new Error("You can only review products you have purchased.");
+    }
+
     // Check if user already reviewed this product
     const existing = await db
       .query("reviews")

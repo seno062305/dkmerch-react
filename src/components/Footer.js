@@ -37,7 +37,7 @@ const Footer = () => {
             <p>Your trusted source for authentic K-Pop merchandise from your favorite groups.</p>
             <div className="social-links">
               {socialLinks.map((social, index) => (
-                <a key={index} href={social.url} target="_blank" rel="noopener noreferrer" aria-label={social.label}>
+                <a key={index} href={social.url} aria-label={social.label}>
                   <i className={`fab fa-${social.icon}`}></i>
                 </a>
               ))}

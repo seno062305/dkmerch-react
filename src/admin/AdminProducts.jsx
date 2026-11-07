@@ -3,6 +3,7 @@ import './AdminProducts.css';
 import { useQuery, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useAddProduct, useUpdateProduct, useDeleteProduct } from '../utils/productStorage';
+import { useConfirm } from '../context/ConfirmContext';
 
 const ALLOWED_IMAGE_TYPES = [
   'image/jpeg', 'image/jpg', 'image/png',
@@ -130,128 +131,139 @@ const ProductModal = ({ editingId, initialForm, onClose, onSubmit, submitting })
 
         <div className="pm-body">
           <form id="pm-form" onSubmit={handleSubmit} noValidate>
-            <div className="form-grid">
-              <div className={`form-group full-width${errors.name ? ' has-error' : ''}`}>
-                <label><i className="fas fa-tag"></i> Product Name <span className="req">*</span></label>
-                <input name="name" placeholder="Enter product name" value={form.name} onChange={handleChange} maxLength={120} />
-                {errors.name && <span className="field-error"><i className="fas fa-exclamation-circle"></i> {errors.name}</span>}
-              </div>
-              <div className="form-group">
-                <label><i className="fas fa-folder"></i> Category <span className="req">*</span></label>
-                <select name="category" value={form.category} onChange={handleChange}>
-                  <option value="albums">Albums</option>
-                  <option value="photocards">Photocards</option>
-                  <option value="lightsticks">Lightsticks</option>
-                  <option value="accessories">Accessories</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label><i className="fas fa-users"></i> K-Pop Group <span className="req">*</span></label>
-                <select name="kpopGroup" value={form.kpopGroup} onChange={handleChange}>
-                  <option>BTS</option><option>BLACKPINK</option><option>TWICE</option>
-                  <option>SEVENTEEN</option><option>STRAY KIDS</option><option>EXO</option>
-                  <option>RED VELVET</option><option>NEWJEANS</option>
-                </select>
-              </div>
-              <div className={`form-group${errors.price ? ' has-error' : ''}`}>
-                <label><i className="fas fa-money-bill-wave"></i> Price <span className="req">*</span></label>
-                <input type="number" name="price" placeholder="0.00" value={form.price} onChange={handleChange} min="0.01" step="0.01" />
-                {errors.price && <span className="field-error"><i className="fas fa-exclamation-circle"></i> {errors.price}</span>}
-              </div>
-              <div className={`form-group${errors.originalPrice ? ' has-error' : ''}${!form.isSale ? ' field-disabled' : ''}`}>
-                <label>
-                  <i className="fas fa-strikethrough"></i> Original Price
-                  {form.isSale ? <span className="req">*</span> : <span className="opt">— enable "On Sale" first</span>}
-                </label>
-                <input type="number" name="originalPrice" placeholder="0.00" value={form.originalPrice}
-                  onChange={handleChange} min="0" step="0.01" disabled={!form.isSale} />
-                {errors.originalPrice && <span className="field-error"><i className="fas fa-exclamation-circle"></i> {errors.originalPrice}</span>}
-              </div>
-              <div className={`form-group${errors.stock ? ' has-error' : ''}`}>
-                <label><i className="fas fa-warehouse"></i> Stock Quantity <span className="req">*</span></label>
-                <input type="text" inputMode="numeric" pattern="[0-9]*" name="stock"
-                  placeholder="0–999" value={form.stock} maxLength={3}
-                  onChange={e => {
-                    const v = e.target.value.replace(/[^0-9]/g, '').slice(0, 3);
-                    setForm(prev => ({ ...prev, stock: v }));
-                    if (errors.stock) setErrors(prev => ({ ...prev, stock: '' }));
-                  }}
-                  onKeyPress={e => { if (!/[0-9]/.test(e.key)) e.preventDefault(); }}
-                />
-                {errors.stock && <span className="field-error"><i className="fas fa-exclamation-circle"></i> {errors.stock}</span>}
-              </div>
-              <div className={`form-group full-width${errors.image ? ' has-error' : ''}`}>
-                <label><i className="fas fa-image"></i> Product Image <span className="req">*</span></label>
-                <div className="image-input-row">
-                  <input name="image" placeholder="/images/product.jpg" value={form.image} onChange={handleImagePath} />
-                  <button type="button" className="browse-btn" onClick={() => fileInputRef.current.click()}>
-                    <i className="fas fa-folder-open"></i> Browse
-                  </button>
-                </div>
-                <input ref={fileInputRef} type="file"
-                  accept="image/jpeg,image/jpg,image/png,image/gif,image/webp,image/svg+xml,image/bmp"
-                  style={{ display: 'none' }} onChange={handleFileSelect} />
-                {errors.image
-                  ? <span className="field-error"><i className="fas fa-exclamation-circle"></i> {errors.image}</span>
-                  : <small className="helper-text"><i className="fas fa-info-circle"></i> Allowed: JPG, PNG, GIF, WEBP, SVG, BMP.</small>}
-                {form.image && !errors.image && (
-                  <div className="image-preview">
-                    <img src={form.image} alt="Preview" onError={e => e.target.style.display = 'none'} />
+            <div className="pm-split">
+              <div className="pm-pane pm-pane--main">
+                <div className="pm-pane-title"><i className="fas fa-box-open"></i> Basic Info</div>
+                <div className="form-grid">
+                  <div className={`form-group full-width${errors.name ? ' has-error' : ''}`}>
+                    <label><i className="fas fa-tag"></i> Product Name <span className="req">*</span></label>
+                    <input name="name" placeholder="Enter product name" value={form.name} onChange={handleChange} maxLength={120} />
+                    {errors.name && <span className="field-error"><i className="fas fa-exclamation-circle"></i> {errors.name}</span>}
                   </div>
-                )}
-              </div>
-              <div className="form-group full-width">
-                <label><i className="fas fa-align-left"></i> Description <span className="opt">(optional)</span></label>
-                <textarea name="description" placeholder="Enter product description..."
-                  value={form.description} onChange={handleChange} rows="3" maxLength={1000} />
-                <small className="helper-text" style={{ justifyContent: 'flex-end' }}>{form.description.length}/1000</small>
-              </div>
-              <div className="form-group full-width">
-                <div className="checkbox-group">
-                  <label className="checkbox-label">
-                    <input type="checkbox" name="isSale" checked={form.isSale} onChange={handleChange} />
-                    <span className="checkbox-custom"></span>
-                    <span className="checkbox-text"><i className="fas fa-percent"></i> On Sale</span>
-                  </label>
-                  <label className="checkbox-label">
-                    <input type="checkbox" name="isPreOrder" checked={form.isPreOrder} onChange={handleChange} />
-                    <span className="checkbox-custom"></span>
-                    <span className="checkbox-text"><i className="fas fa-clock"></i> Pre-Order</span>
-                  </label>
+                  <div className="form-group">
+                    <label><i className="fas fa-folder"></i> Category <span className="req">*</span></label>
+                    <select name="category" value={form.category} onChange={handleChange}>
+                      <option value="albums">Albums</option>
+                      <option value="photocards">Photocards</option>
+                      <option value="lightsticks">Lightsticks</option>
+                      <option value="accessories">Accessories</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label><i className="fas fa-users"></i> K-Pop Group <span className="req">*</span></label>
+                    <select name="kpopGroup" value={form.kpopGroup} onChange={handleChange}>
+                      <option>BTS</option><option>BLACKPINK</option><option>TWICE</option>
+                      <option>SEVENTEEN</option><option>STRAY KIDS</option><option>EXO</option>
+                      <option>RED VELVET</option><option>NEWJEANS</option>
+                    </select>
+                  </div>
+                  <div className={`form-group full-width${errors.image ? ' has-error' : ''}`}>
+                    <label><i className="fas fa-image"></i> Product Image <span className="req">*</span></label>
+                    <div className="image-input-row">
+                      <input name="image" placeholder="/images/product.jpg" value={form.image} onChange={handleImagePath} />
+                      <button type="button" className="browse-btn" onClick={() => fileInputRef.current.click()}>
+                        <i className="fas fa-folder-open"></i> Browse
+                      </button>
+                    </div>
+                    <input ref={fileInputRef} type="file"
+                      accept="image/jpeg,image/jpg,image/png,image/gif,image/webp,image/svg+xml,image/bmp"
+                      style={{ display: 'none' }} onChange={handleFileSelect} />
+                    {errors.image
+                      ? <span className="field-error"><i className="fas fa-exclamation-circle"></i> {errors.image}</span>
+                      : <small className="helper-text"><i className="fas fa-info-circle"></i> Allowed: JPG, PNG, GIF, WEBP, SVG, BMP.</small>}
+                    {form.image && !errors.image && (
+                      <div className="image-preview">
+                        <img src={form.image} alt="Preview" onError={e => e.target.style.display = 'none'} />
+                      </div>
+                    )}
+                  </div>
+                  <div className="form-group full-width">
+                    <label><i className="fas fa-align-left"></i> Description <span className="opt">(optional)</span></label>
+                    <textarea name="description" placeholder="Enter product description..."
+                      value={form.description} onChange={handleChange} rows="3" maxLength={1000} />
+                    <small className="helper-text" style={{ justifyContent: 'flex-end' }}>{form.description.length}/1000</small>
+                  </div>
                 </div>
               </div>
-              {form.isPreOrder && (
-                <>
-                  <div className={`form-group${errors.releaseDate ? ' has-error' : ''}`}>
-                    <label><i className="fas fa-calendar-alt"></i> Release Date <span className="req">*</span></label>
-                    <input type="date" name="releaseDate" value={form.releaseDate} onChange={handleChange} min={today} max="9999-12-31" />
-                    {errors.releaseDate && <span className="field-error"><i className="fas fa-exclamation-circle"></i> {errors.releaseDate}</span>}
+
+              <div className="pm-pane pm-pane--side">
+                <div className="pm-pane-title"><i className="fas fa-sliders-h"></i> Pricing & Options</div>
+                <div className="form-grid">
+                  <div className={`form-group${errors.price ? ' has-error' : ''}`}>
+                    <label><i className="fas fa-money-bill-wave"></i> Price <span className="req">*</span></label>
+                    <input type="number" name="price" placeholder="0.00" value={form.price} onChange={handleChange} min="0.01" step="0.01" />
+                    {errors.price && <span className="field-error"><i className="fas fa-exclamation-circle"></i> {errors.price}</span>}
                   </div>
-                  <div className={`form-group${errors.releaseTime ? ' has-error' : ''}`}>
-                    <label><i className="fas fa-clock"></i> Release Time <span className="req">*</span></label>
-                    <input type="time" name="releaseTime" value={form.releaseTime} onChange={handleChange} />
-                    {errors.releaseTime
-                      ? <span className="field-error"><i className="fas fa-exclamation-circle"></i> {errors.releaseTime}</span>
-                      : <small className="helper-text"><i className="fas fa-info-circle"></i> Philippine Time (PHT).</small>}
+                  <div className={`form-group${errors.stock ? ' has-error' : ''}`}>
+                    <label><i className="fas fa-warehouse"></i> Stock Quantity <span className="req">*</span></label>
+                    <input type="text" inputMode="numeric" pattern="[0-9]*" name="stock"
+                      placeholder="0–999" value={form.stock} maxLength={3}
+                      onChange={e => {
+                        const v = e.target.value.replace(/[^0-9]/g, '').slice(0, 3);
+                        setForm(prev => ({ ...prev, stock: v }));
+                        if (errors.stock) setErrors(prev => ({ ...prev, stock: '' }));
+                      }}
+                      onKeyPress={e => { if (!/[0-9]/.test(e.key)) e.preventDefault(); }}
+                    />
+                    {errors.stock && <span className="field-error"><i className="fas fa-exclamation-circle"></i> {errors.stock}</span>}
                   </div>
-                  {form.releaseDate && form.releaseTime && (
-                    <div className="form-group full-width">
-                      <div className="release-preview">
-                        <i className="fas fa-bell"></i>
-                        <span>Users will be notified on <strong>{formatReleaseDateTime(form.releaseDate, form.releaseTime)}</strong></span>
-                      </div>
+                  <div className={`form-group full-width${errors.originalPrice ? ' has-error' : ''}${!form.isSale ? ' field-disabled' : ''}`}>
+                    <label>
+                      <i className="fas fa-strikethrough"></i> Original Price
+                      {form.isSale ? <span className="req">*</span> : <span className="opt">— enable "On Sale" first</span>}
+                    </label>
+                    <input type="number" name="originalPrice" placeholder="0.00" value={form.originalPrice}
+                      onChange={handleChange} min="0" step="0.01" disabled={!form.isSale} />
+                    {errors.originalPrice && <span className="field-error"><i className="fas fa-exclamation-circle"></i> {errors.originalPrice}</span>}
+                  </div>
+                  <div className="form-group full-width">
+                    <div className="checkbox-group">
+                      <label className="checkbox-label">
+                        <input type="checkbox" name="isSale" checked={form.isSale} onChange={handleChange} />
+                        <span className="checkbox-custom"></span>
+                        <span className="checkbox-text"><i className="fas fa-percent"></i> On Sale</span>
+                      </label>
+                      <label className="checkbox-label">
+                        <input type="checkbox" name="isPreOrder" checked={form.isPreOrder} onChange={handleChange} />
+                        <span className="checkbox-custom"></span>
+                        <span className="checkbox-text"><i className="fas fa-clock"></i> Pre-Order</span>
+                      </label>
                     </div>
-                  )}
-                  {!editingId && (
-                    <div className="form-group full-width">
-                      <div className="email-notice">
-                        <i className="fas fa-envelope"></i>
-                        <span>📧 All registered users will receive an email announcement when this pre-order is added.</span>
+                  </div>
+                  {form.isPreOrder && (
+                    <>
+                      <div className={`form-group${errors.releaseDate ? ' has-error' : ''}`}>
+                        <label><i className="fas fa-calendar-alt"></i> Release Date <span className="req">*</span></label>
+                        <input type="date" name="releaseDate" value={form.releaseDate} onChange={handleChange} min={today} max="9999-12-31" />
+                        {errors.releaseDate && <span className="field-error"><i className="fas fa-exclamation-circle"></i> {errors.releaseDate}</span>}
                       </div>
-                    </div>
+                      <div className={`form-group${errors.releaseTime ? ' has-error' : ''}`}>
+                        <label><i className="fas fa-clock"></i> Release Time <span className="req">*</span></label>
+                        <input type="time" name="releaseTime" value={form.releaseTime} onChange={handleChange} />
+                        {errors.releaseTime
+                          ? <span className="field-error"><i className="fas fa-exclamation-circle"></i> {errors.releaseTime}</span>
+                          : <small className="helper-text"><i className="fas fa-info-circle"></i> Philippine Time (PHT).</small>}
+                      </div>
+                      {form.releaseDate && form.releaseTime && (
+                        <div className="form-group full-width">
+                          <div className="release-preview">
+                            <i className="fas fa-bell"></i>
+                            <span>Users will be notified on <strong>{formatReleaseDateTime(form.releaseDate, form.releaseTime)}</strong></span>
+                          </div>
+                        </div>
+                      )}
+                      {!editingId && (
+                        <div className="form-group full-width">
+                          <div className="email-notice">
+                            <i className="fas fa-envelope"></i>
+                            <span>📧 All registered users will receive an email announcement when this pre-order is added.</span>
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
-                </>
-              )}
+                </div>
+              </div>
             </div>
           </form>
         </div>
@@ -451,6 +463,7 @@ const StockManagement = ({ products, updateProduct, onAddProduct }) => {
 //  MAIN COMPONENT
 // ══════════════════════════════════════════════════════════════════════════
 const AdminProducts = () => {
+  const { confirm } = useConfirm();
   const products        = useQuery(api.products.getAllProductsAdmin) || [];
   const addProduct      = useAddProduct();
   const updateProduct   = useUpdateProduct();
@@ -517,7 +530,13 @@ const AdminProducts = () => {
   };
 
   const handleDelete = async (id, name) => {
-    if (!window.confirm(`Delete "${name}"? This cannot be undone.`)) return;
+    const ok = await confirm({
+      title: 'Delete product?',
+      message: `Delete "${name}"? This cannot be undone.`,
+      confirmLabel: 'Delete',
+      variant: 'danger',
+    });
+    if (!ok) return;
     await deleteProduct({ id });
     showSuccess('Product deleted.');
   };

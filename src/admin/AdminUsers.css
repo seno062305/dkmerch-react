@@ -502,24 +502,25 @@
 .modal-overlay {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.5);
+  background: rgba(15,10,20,0.55);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
   animation: fadeIn 0.2s ease;
-  backdrop-filter: blur(2px);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
   padding: 16px;
   box-sizing: border-box;
 }
 
 .modal-content {
   background: white;
-  border-radius: 16px;
+  border-radius: 18px;
   padding: 0;
   width: 100%;
-  max-width: 500px;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+  max-width: 520px;
+  box-shadow: 0 24px 70px rgba(252,18,104,0.12), 0 10px 28px rgba(0,0,0,0.18);
   animation: slideUp 0.25s ease;
   max-height: 92vh;
   overflow-y: auto;

@@ -121,21 +121,51 @@
 .riders-loading, .riders-empty { color: #888; font-size: 15px; padding: 20px 0; }
 
 /* Application Detail Modal */
-.id-card-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 16px; overflow-y: auto; }
-.app-detail-modal { background: white; border-radius: 16px; padding: 28px; width: 100%; max-width: 560px; position: relative; box-shadow: 0 20px 60px rgba(0,0,0,0.2); max-height: 90vh; overflow-y: auto; }
-.app-detail-title { font-size: 20px; font-weight: 700; color: #1a1f36; margin-bottom: 18px; padding-right: 36px; }
-.app-detail-section { background: #f8fafc; border-radius: 10px; padding: 14px; margin-bottom: 18px; border: 1px solid #e2e8f0; }
+.id-card-overlay {
+  position: fixed; inset: 0; background: rgba(15,10,20,0.55);
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  z-index: 10000; display: flex; align-items: center; justify-content: center;
+  padding: 16px; overflow-y: auto;
+}
+.app-detail-modal {
+  background: white; border-radius: 20px; padding: 24px 24px 20px; width: 100%;
+  max-width: 860px; position: relative;
+  box-shadow: 0 24px 70px rgba(252,18,104,0.14), 0 10px 28px rgba(0,0,0,0.18);
+  max-height: 90vh; overflow-y: auto;
+}
+.app-detail-title { font-size: 18px; font-weight: 800; color: #1a1f36; margin-bottom: 16px; padding-right: 36px; }
+.app-detail-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.app-detail-pane { min-width: 0; }
+.app-detail-pane--photos {
+  background: #fafafa;
+  border: 1px solid #f1f5f9;
+  border-radius: 14px;
+  padding: 12px;
+}
+.app-detail-section { background: #f8fafc; border-radius: 12px; padding: 14px; margin-bottom: 0; border: 1px solid #e2e8f0; }
 .app-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .app-detail-label { display: block; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
 .app-detail-value { font-size: 13px; color: #374151; word-break: break-all; }
-.app-detail-photos-header { font-size: 14px; font-weight: 700; color: #1a1f36; margin-bottom: 10px; }
-.app-detail-photos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px; }
+.app-detail-photos-header { font-size: 13px; font-weight: 800; color: #1a1f36; margin-bottom: 10px; }
+.app-detail-photos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 0; }
 .app-photo-box { display: flex; flex-direction: column; gap: 6px; }
 .app-photo-label { font-size: 11px; font-weight: 600; color: #64748b; }
-.app-photo-img { width: 100%; aspect-ratio: 3/4; object-fit: cover; border-radius: 8px; border: 2px solid #e2e8f0; cursor: pointer; transition: all 0.2s; }
+.app-photo-img { width: 100%; aspect-ratio: 3/4; object-fit: cover; border-radius: 10px; border: 2px solid #e2e8f0; cursor: pointer; transition: all 0.2s; }
 .app-photo-img:hover { border-color: #fc1268; transform: scale(1.02); }
-.app-photo-missing { width: 100%; aspect-ratio: 3/4; background: #f3f4f6; border-radius: 8px; border: 2px dashed #d1d5db; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #9ca3af; text-align: center; padding: 8px; }
-.app-detail-actions { display: flex; gap: 10px; padding-top: 4px; }
+.app-photo-missing { width: 100%; aspect-ratio: 3/4; background: #f3f4f6; border-radius: 10px; border: 2px dashed #d1d5db; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #9ca3af; text-align: center; padding: 8px; }
+.app-detail-actions {
+  display: flex; gap: 10px; padding-top: 12px;
+  border-top: 1px solid #f1f5f9; justify-content: flex-end;
+}
+@media (max-width: 760px) {
+  .app-detail-split { grid-template-columns: 1fr; }
+  .app-detail-modal { max-width: 100%; border-radius: 18px; }
+}
 .img-viewer-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 11000; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; }
 .img-viewer-img { max-width: 90vw; max-height: 85vh; object-fit: contain; border-radius: 8px; }
 .img-viewer-hint { color: rgba(255,255,255,0.6); font-size: 13px; margin-top: 12px; }

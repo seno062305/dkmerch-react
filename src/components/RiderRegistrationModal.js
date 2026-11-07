@@ -721,11 +721,11 @@ const RiderRegistrationModal = ({ onClose }) => {
                   />
                   <span>
                     I have read and agree to the{' '}
-                    <a href="/privacy-policy" target="_blank" rel="noopener noreferrer" className="reg-consent-link">
+                    <a href="/privacy-policy" className="reg-consent-link">
                       Privacy Policy
                     </a>{' '}
                     and{' '}
-                    <a href="/terms-and-conditions" target="_blank" rel="noopener noreferrer" className="reg-consent-link">
+                    <a href="/terms-and-conditions" className="reg-consent-link">
                       Terms & Conditions
                     </a>.
                     I consent to the collection and use of my personal data including uploaded photos for

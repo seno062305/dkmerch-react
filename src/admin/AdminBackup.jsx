@@ -836,7 +836,6 @@ const BackupTab = () => {
               <div
                 key={t.key}
                 className={`ab-card ${(!data || !data.length) && s !== 'loading' ? 'ab-card--disabled' : ''}`}
-                onClick={() => data?.length && s !== 'loading' && setModalTable({ table: t, data })}
               >
                 <div className="ab-card-header">
                   <div className="ab-card-left">
@@ -862,23 +861,24 @@ const BackupTab = () => {
                             <button
                               className="ab-dl-btn"
                               title="Download password-locked Excel"
-                              onClick={e => {
-                                e.stopPropagation();
-                                setPasswordAction({ type: 'export-table', table: t, data });
-                              }}
+                              onClick={() => setPasswordAction({ type: 'export-table', table: t, data })}
                             >
                               <i className="fas fa-download"></i>
                             </button>
-                            <span className="ab-view-btn"><i className="fas fa-eye"></i> View</span>
+                            <button
+                              type="button"
+                              className="ab-view-btn"
+                              title="View records"
+                              onClick={() => setModalTable({ table: t, data })}
+                            >
+                              <i className="fas fa-eye"></i>
+                            </button>
                           </>
                         )}
                         <button
                           className="ab-wipe-btn"
                           title="Permanently delete live table data"
-                          onClick={e => {
-                            e.stopPropagation();
-                            setPasswordAction({ type: 'wipe', table: t });
-                          }}
+                          onClick={() => setPasswordAction({ type: 'wipe', table: t })}
                         >
                           <i className="fas fa-trash-alt"></i>
                         </button>

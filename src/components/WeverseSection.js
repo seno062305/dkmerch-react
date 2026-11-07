@@ -4,6 +4,7 @@ import { useCollectionProducts } from '../utils/productStorage';
 import { useWishlist, useToggleWishlist } from '../context/wishlistUtils';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
+import { useConfirm } from '../context/ConfirmContext';
 import { PointsBadge } from '../utils/pointsUtils';
 import LoginModal from './LoginModal';
 import './WeverseSection.css';
@@ -26,6 +27,7 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
   const { showNotification } = useNotification();
+  const { confirm } = useConfirm();
 
   const products       = useCollectionProducts();
   const wishlistItems  = useWishlist();
@@ -57,7 +59,7 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
     })
     .slice(0, 8);
 
-  const handleWishlistClick = (e, product) => {
+  const handleWishlistClick = async (e, product) => {
     e.stopPropagation();
     if (!isAuthenticated) {
       setShowLoginModal(true);
@@ -70,10 +72,16 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
       showNotification(`Favorites limit reached (max ${MAX_WISHLIST}). Remove an item first.`, 'error');
       return;
     }
-    const msg = alreadyWishlisted
-      ? `Remove "${product.name}" from Favorites?`
-      : `Add "${product.name}" to Favorites?`;
-    if (!window.confirm(msg)) return;
+    const ok = await confirm({
+      title: alreadyWishlisted ? 'Remove favorite?' : 'Add to favorites?',
+      message: alreadyWishlisted
+        ? `Remove "${product.name}" from Favorites?`
+        : `Add "${product.name}" to Favorites?`,
+      confirmLabel: alreadyWishlisted ? 'Remove' : 'Add',
+      variant: alreadyWishlisted ? 'danger' : 'primary',
+      icon: 'fa-star',
+    });
+    if (!ok) return;
     toggleWishlist(product);
     showNotification(
       alreadyWishlisted ? `${product.name} removed from favorites!` : `${product.name} added to favorites!`,

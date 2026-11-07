@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useConfirm } from '../context/ConfirmContext';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import './Header.css';
@@ -9,6 +10,7 @@ import RewardsModal from './RewardsModal';
 
 const Header = ({ cartCount, wishlistCount, onCartClick }) => {
   const { user, isAuthenticated, logout } = useAuth();
+  const { confirm } = useConfirm();
   const navigate = useNavigate();
   const location = useLocation();
   const [showAccountDropdown, setShowAccountDropdown] = useState(false);
@@ -94,10 +96,18 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
 
-  const handleLogout = () => {
-    if (window.confirm('Are you sure you want to logout?')) {
-      logout(); setShowAccountDropdown(false); navigate('/');
-    }
+  const handleLogout = async () => {
+    const ok = await confirm({
+      title: 'Logout?',
+      message: 'Are you sure you want to logout?',
+      confirmLabel: 'Logout',
+      variant: 'warning',
+      icon: 'fa-sign-out-alt',
+    });
+    if (!ok) return;
+    logout();
+    setShowAccountDropdown(false);
+    navigate('/');
   };
 
   const handleLoginClick  = () => window.dispatchEvent(new Event('openLoginModal'));
@@ -183,25 +193,29 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
                 <li><Link to="/collections" onClick={closeMobileMenu}>Collections</Link></li>
                 <li><Link to="/preorder" onClick={closeMobileMenu}>Pre-Order</Link></li>
                 <li><Link to="/track-order" onClick={closeMobileMenu}>Track Order</Link></li>
-                <li className="mobile-nav-rider-item">
-                  <button
-                    className="mobile-nav-rider-btn"
-                    onClick={() => { closeMobileMenu(); setShowRiderModal(true); }}
-                  >
-                    <i className="fas fa-motorcycle"></i>
-                    <span>Rider</span>
-                  </button>
-                </li>
+                {!isAuthenticated && (
+                  <li className="mobile-nav-rider-item">
+                    <button
+                      className="mobile-nav-rider-btn"
+                      onClick={() => { closeMobileMenu(); setShowRiderModal(true); }}
+                    >
+                      <i className="fas fa-motorcycle"></i>
+                      <span>Rider</span>
+                    </button>
+                  </li>
+                )}
               </ul>
             </nav>
 
             {/* RIGHT: Actions */}
             <div className="header-actions">
 
-              <button className="header-action-item" onClick={() => setShowRiderModal(true)}>
-                <span className="icon-wrapper"><i className="fas fa-motorcycle"></i></span>
-                <span>Rider</span>
-              </button>
+              {!isAuthenticated && (
+                <button className="header-action-item" onClick={() => setShowRiderModal(true)}>
+                  <span className="icon-wrapper"><i className="fas fa-motorcycle"></i></span>
+                  <span>Rider</span>
+                </button>
+              )}
 
               <button className="header-action-item" onClick={() => setShowSearch(true)}>
                 <span className="icon-wrapper"><i className="fas fa-search"></i></span>

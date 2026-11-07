@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../context/NotificationContext';
+import { useConfirm } from '../context/ConfirmContext';
 import { useProducts, usePreOrderProducts, useCollectionProducts } from '../utils/productStorage';
 import { useUpdateCartQtyById, useRemoveFromCartById, useClearCart } from '../context/cartUtils';
 import { getPointsForPrice } from '../utils/pointsUtils';
@@ -9,6 +10,7 @@ import './CartModal.css';
 const CartModal = ({ cart, onClose }) => {
   const navigate = useNavigate();
   const { showNotification } = useNotification();
+  const { confirm } = useConfirm();
 
   const regularProducts    = useProducts() || [];
   const preOrderProducts   = usePreOrderProducts() || [];
@@ -135,9 +137,14 @@ const CartModal = ({ cart, onClose }) => {
   };
 
   const handleRemoveItem = async (item) => {
-    if (window.confirm('Remove this item from cart?')) {
-      await removeFromCartById(item._id);
-    }
+    const ok = await confirm({
+      title: 'Remove item?',
+      message: 'Remove this item from your cart?',
+      confirmLabel: 'Remove',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    await removeFromCartById(item._id);
   };
 
   const handleRemoveSelected = async () => {
@@ -145,7 +152,13 @@ const CartModal = ({ cart, onClose }) => {
       showNotification('Select items to remove', 'warning');
       return;
     }
-    if (!window.confirm(`Remove ${selectedIds.size} selected item(s) from cart?`)) return;
+    const ok = await confirm({
+      title: 'Remove selected?',
+      message: `Remove ${selectedIds.size} selected item(s) from cart?`,
+      confirmLabel: 'Remove',
+      variant: 'danger',
+    });
+    if (!ok) return;
     const ids = [...selectedIds];
     for (const id of ids) {
       await removeFromCartById(id);
@@ -155,7 +168,13 @@ const CartModal = ({ cart, onClose }) => {
 
   const handleRemoveAll = async () => {
     if (cart.length === 0) return;
-    if (!window.confirm('Remove all items from cart?')) return;
+    const ok = await confirm({
+      title: 'Clear cart?',
+      message: 'Remove all items from cart?',
+      confirmLabel: 'Clear Cart',
+      variant: 'danger',
+    });
+    if (!ok) return;
     await clearCart();
     setSelectedIds(new Set());
     showNotification('Cart cleared', 'success');

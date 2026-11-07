@@ -100,7 +100,7 @@ export const createPromo = mutation({
     code: v.string(),
     name: v.string(),
     discount: v.number(),
-    maxDiscount: v.number(),
+    maxDiscount: v.optional(v.number()),
     startDate: v.optional(v.string()),
     startTime: v.optional(v.string()),
     endDate: v.optional(v.string()),
@@ -116,24 +116,42 @@ export const createPromo = mutation({
       .first();
     if (existing) return { success: false, message: "Promo code already exists." };
 
+    const maxDiscount = typeof args.maxDiscount === "number" && args.maxDiscount > 0
+      ? args.maxDiscount
+      : 999999;
+
     const id = await db.insert("promos", {
-      ...args,
       code: args.code.toUpperCase().trim(),
+      name: args.name,
+      discount: args.discount,
+      maxDiscount,
+      startDate: args.startDate,
+      startTime: args.startTime,
+      endDate: args.endDate,
+      endTime: args.endTime,
+      minOrder: args.minOrder,
+      maxUses: args.maxUses,
+      isActive: args.isActive,
       type: "percentage",
       usedCount: 0,
     });
 
     // Fire-and-forget: email all users about the new promo
-    await scheduler.runAfter(0, internal.sendEmail.sendPromoNotificationToAllUsers, {
-      promoCode:   args.code.toUpperCase().trim(),
-      promoName:   args.name,
-      discount:    args.discount,
-      maxDiscount: args.maxDiscount,
-      startDate:   args.startDate,
-      startTime:   args.startTime,
-      endDate:     args.endDate,
-      endTime:     args.endTime,
-    });
+    try {
+      await scheduler.runAfter(0, internal.sendEmail.sendPromoNotificationToAllUsers, {
+        promoCode:   args.code.toUpperCase().trim(),
+        promoName:   args.name,
+        discount:    args.discount,
+        maxDiscount,
+        startDate:   args.startDate,
+        startTime:   args.startTime,
+        endDate:     args.endDate,
+        endTime:     args.endTime,
+      });
+    } catch (err) {
+      // Promo is already created — don't fail the admin action if email scheduling fails
+      console.error("Failed to schedule promo email blast:", err);
+    }
 
     return { success: true, id };
   },

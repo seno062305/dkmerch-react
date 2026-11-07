@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import './AdminRiders.css';
 import { useQuery, useMutation, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
+import { useConfirm } from '../context/ConfirmContext';
 
 const SITE_URL = process.env.REACT_APP_SITE_URL || 'https://dkmerchwebsite.vercel.app';
 
@@ -106,26 +107,32 @@ const ApplicationDetailModal = ({ app, onClose, onApprove, onRejectWithReason })
       <div className="app-detail-modal" onClick={e => e.stopPropagation()}>
         <button className="id-card-close" onClick={onClose}>✕</button>
         <h3 className="app-detail-title">📋 Application Details</h3>
-        <div className="app-detail-section">
-          <div className="app-detail-grid">
-            <div><span className="app-detail-label">Full Name</span><span className="app-detail-value">{app.fullName}</span></div>
-            <div><span className="app-detail-label">Email</span><span className="app-detail-value">{app.email}</span></div>
-            <div><span className="app-detail-label">Phone</span><span className="app-detail-value">{app.phone}</span></div>
-            <div><span className="app-detail-label">Address</span><span className="app-detail-value">{app.address || '—'}</span></div>
-            <div><span className="app-detail-label">Vehicle</span><span className="app-detail-value" style={{ textTransform: 'capitalize' }}>{app.vehicleType || '—'}</span></div>
-            <div><span className="app-detail-label">Plate No.</span><span className="app-detail-value">{app.plateNumber || '—'}</span></div>
-            <div><span className="app-detail-label">License No.</span><span className="app-detail-value">{app.licenseNumber || '—'}</span></div>
-            <div><span className="app-detail-label">Applied</span><span className="app-detail-value">{app.appliedAt ? new Date(app.appliedAt).toLocaleDateString('en-PH') : 'N/A'}</span></div>
-          </div>
-        </div>
-        <div className="app-detail-photos-header">📸 Submitted Photos</div>
-        <div className="app-detail-photos">
-          {[{ key: 'riderPhoto', label: '🤳 Selfie' }, { key: 'validId1', label: '🪪 Valid ID #1' }, { key: 'validId2', label: '🪪 Valid ID #2' }].map(({ key, label }) => (
-            <div key={key} className="app-photo-box">
-              <div className="app-photo-label">{label}</div>
-              {app[key] ? <img src={app[key]} alt={label} className="app-photo-img" onClick={() => setViewImg(app[key])} /> : <div className="app-photo-missing">No photo</div>}
+        <div className="app-detail-split">
+          <div className="app-detail-pane">
+            <div className="app-detail-section">
+              <div className="app-detail-grid">
+                <div><span className="app-detail-label">Full Name</span><span className="app-detail-value">{app.fullName}</span></div>
+                <div><span className="app-detail-label">Email</span><span className="app-detail-value">{app.email}</span></div>
+                <div><span className="app-detail-label">Phone</span><span className="app-detail-value">{app.phone}</span></div>
+                <div><span className="app-detail-label">Address</span><span className="app-detail-value">{app.address || '—'}</span></div>
+                <div><span className="app-detail-label">Vehicle</span><span className="app-detail-value" style={{ textTransform: 'capitalize' }}>{app.vehicleType || '—'}</span></div>
+                <div><span className="app-detail-label">Plate No.</span><span className="app-detail-value">{app.plateNumber || '—'}</span></div>
+                <div><span className="app-detail-label">License No.</span><span className="app-detail-value">{app.licenseNumber || '—'}</span></div>
+                <div><span className="app-detail-label">Applied</span><span className="app-detail-value">{app.appliedAt ? new Date(app.appliedAt).toLocaleDateString('en-PH') : 'N/A'}</span></div>
+              </div>
             </div>
-          ))}
+          </div>
+          <div className="app-detail-pane app-detail-pane--photos">
+            <div className="app-detail-photos-header">📸 Submitted Photos</div>
+            <div className="app-detail-photos">
+              {[{ key: 'riderPhoto', label: '🤳 Selfie' }, { key: 'validId1', label: '🪪 Valid ID #1' }, { key: 'validId2', label: '🪪 Valid ID #2' }].map(({ key, label }) => (
+                <div key={key} className="app-photo-box">
+                  <div className="app-photo-label">{label}</div>
+                  {app[key] ? <img src={app[key]} alt={label} className="app-photo-img" onClick={() => setViewImg(app[key])} /> : <div className="app-photo-missing">No photo</div>}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
         <div className="app-detail-actions">
           <button className="riders-btn approve" onClick={() => { onClose(); onApprove(app); }}>✅ Approve</button>
@@ -745,6 +752,7 @@ const CompletedOrderCard = ({ order, onRemove }) => {
 // MAIN COMPONENT
 // ─────────────────────────────────────────────────────────────
 const AdminRiders = () => {
+  const { confirm } = useConfirm();
   const [selectedApp,     setSelectedApp]     = useState(null);
   const [approvedRider,   setApprovedRider]   = useState(null);
   const [rejectTarget,    setRejectTarget]    = useState(null);
@@ -804,7 +812,14 @@ const AdminRiders = () => {
     .sort((a, b) => (b.deliveryConfirmedAt || b._creationTime || 0) - (a.deliveryConfirmedAt || a._creationTime || 0));
 
   const handleApproveRider = async (app) => {
-    if (!window.confirm(`Approve "${app.fullName}" as a rider?\n\nEmail: ${app.email}\nVehicle: ${app.vehicleType || 'N/A'}`)) return;
+    const ok = await confirm({
+      title: 'Approve rider?',
+      message: `Approve "${app.fullName}" as a rider?\n\nEmail: ${app.email}\nVehicle: ${app.vehicleType || 'N/A'}`,
+      confirmLabel: 'Approve',
+      variant: 'primary',
+      icon: 'fa-user-check',
+    });
+    if (!ok) return;
     try {
       const result = await approveRiderMutation({ id: app._id });
       try { await sendRiderApprovedEmailAction({ to: app.email, riderName: app.fullName, dkRiderId: result.dkRiderId, email: app.email, vehicleType: app.vehicleType, plateNumber: app.plateNumber }); } catch(e) { console.error(e); }
@@ -824,18 +839,37 @@ const AdminRiders = () => {
   };
 
   const handleRevokeRider = async (id, name) => {
-    if (!window.confirm(`Revoke approval for "${name}"?`)) return;
+    const ok = await confirm({
+      title: 'Revoke approval?',
+      message: `Revoke approval for "${name}"?`,
+      confirmLabel: 'Revoke',
+      variant: 'danger',
+    });
+    if (!ok) return;
     try { await updateRiderStatusMutation({ id, status: 'pending' }); } catch(err) { console.error(err); }
   };
 
   const approvePickup = async (requestId, riderName) => {
-    if (!window.confirm(`Approve pickup request for rider "${riderName}"?`)) return;
+    const ok = await confirm({
+      title: 'Approve pickup?',
+      message: `Approve pickup request for rider "${riderName}"?`,
+      confirmLabel: 'Approve',
+      variant: 'primary',
+      icon: 'fa-check',
+    });
+    if (!ok) return;
     try { await approvePickupMutation({ requestId }); alert(`✅ Pickup approved for ${riderName}!`); }
     catch(err) { console.error(err); alert('Failed to approve pickup.'); }
   };
 
   const rejectPickup = async (requestId) => {
-    if (!window.confirm('Reject this pickup request?')) return;
+    const ok = await confirm({
+      title: 'Reject pickup?',
+      message: 'Reject this pickup request?',
+      confirmLabel: 'Reject',
+      variant: 'danger',
+    });
+    if (!ok) return;
     try { await rejectPickupMutation({ requestId }); } catch(err) { console.error(err); }
   };
 

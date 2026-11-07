@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef } from 'react';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { QRCodeSVG } from 'qrcode.react';
+import { useConfirm } from '../context/ConfirmContext';
 import './AdminOrders.css';
 
 const SITE_URL = 'https://dkmerchwebsite.vercel.app';
@@ -214,6 +215,7 @@ const WaybillModal = ({ order, onClose }) => {
    MAIN ADMIN ORDERS
 ══════════════════════════════════════ */
 const AdminOrders = () => {
+  const { confirm } = useConfirm();
   const [activeTab,     setActiveTab]     = useState('all');
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [searchTerm,    setSearchTerm]    = useState('');
@@ -294,10 +296,15 @@ const AdminOrders = () => {
   };
 
   const handleDelete = async (orderId) => {
-    if (window.confirm('Are you sure you want to delete this order?')) {
-      await deleteOrderMutation({ orderId });
-      setSelectedOrder(null);
-    }
+    const ok = await confirm({
+      title: 'Delete order?',
+      message: 'Are you sure you want to delete this order?',
+      confirmLabel: 'Delete',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    await deleteOrderMutation({ orderId });
+    setSelectedOrder(null);
   };
 
   const handleCancelWithReason = async (orderId, reason) => {
@@ -491,6 +498,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
   const [resolvingRefund,   setResolvingRefund]   = useState(false);
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
   const [showWaybill,       setShowWaybill]       = useState(false);
+  const [showItemsModal,    setShowItemsModal]    = useState(false);
 
   const refundPhotoUrl = useQuery(
     api.orders.getRefundPhotoUrl,
@@ -554,6 +562,9 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
           {isPaid && currentStatus === 'confirmed' && <div className="flow-notice info"><i className="fas fa-motorcycle"></i><div><strong>Order confirmed</strong><p>Assign a rider from the <strong>Riders</strong> tab to dispatch.</p></div></div>}
           {isRiderManaged && <div className="flow-notice purple"><i className="fas fa-shipping-fast"></i><div><strong>Rider is handling delivery</strong><p>Rider confirms via OTP + photo proof.</p></div></div>}
 
+          <div className="order-modal-split">
+          <div className="order-modal-pane order-modal-pane--left">
+
           <div className="modal-section">
             <h3><i className="fas fa-user"></i> Customer Information</h3>
             <div className="order-info-grid">
@@ -563,6 +574,30 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
               <div className="info-item"><label>Delivery Address</label><span>{order.shippingAddress || 'N/A'}</span></div>
             </div>
           </div>
+
+          <div className="modal-section">
+            <h3><i className="fas fa-info-circle"></i> Order Information</h3>
+            <div className="order-info-grid">
+              <div className="info-item"><label>Order ID</label><strong>#{order.orderId}</strong></div>
+              <div className="info-item"><label>Date</label><span>{order._creationTime ? new Date(order._creationTime).toLocaleString('en-PH') : 'N/A'}</span></div>
+              <div className="info-item"><label>Payment Method</label><span className="method-display" style={{ color: pm.color }}><i className={`fas ${pm.icon}`}></i> {pm.label}</span></div>
+              <div className="info-item"><label>Payment Status</label><span className={`payment-badge ${isPaid ? 'paid' : 'pending'}`}>{isPaid ? 'Paid' : 'Pending'}</span></div>
+            </div>
+          </div>
+
+          {hasPromo && (
+            <div className="modal-section">
+              <h3><i className="fas fa-tag"></i> Promo Applied</h3>
+              <div className="promo-admin-card">
+                <div className="promo-admin-top"><div className="promo-admin-badge"><i className="fas fa-ticket-alt"></i><span>{order.promoCode}</span></div></div>
+                <div className="promo-admin-details">
+                  {order.discountPercent > 0 && <div className="promo-admin-row"><span>Discount</span><strong>{order.discountPercent}% off</strong></div>}
+                  <div className="promo-admin-row discount"><span>Amount Saved</span><strong>−₱{discount.toLocaleString('en-PH')}</strong></div>
+                  <div className="promo-admin-row final"><span>Final Charged</span><strong>₱{finalTotal.toLocaleString('en-PH')}</strong></div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {order.riderInfo && (
             <div className="modal-section">
@@ -649,34 +684,14 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
             </div>
           )}
 
-          <div className="modal-section">
-            <h3><i className="fas fa-info-circle"></i> Order Information</h3>
-            <div className="order-info-grid">
-              <div className="info-item"><label>Order ID</label><strong>#{order.orderId}</strong></div>
-              <div className="info-item"><label>Date</label><span>{order._creationTime ? new Date(order._creationTime).toLocaleString('en-PH') : 'N/A'}</span></div>
-              <div className="info-item"><label>Payment Method</label><span className="method-display" style={{ color: pm.color }}><i className={`fas ${pm.icon}`}></i> {pm.label}</span></div>
-              <div className="info-item"><label>Payment Status</label><span className={`payment-badge ${isPaid ? 'paid' : 'pending'}`}>{isPaid ? 'Paid' : 'Pending'}</span></div>
-            </div>
-          </div>
+          </div>{/* end left pane */}
 
-          {hasPromo && (
-            <div className="modal-section">
-              <h3><i className="fas fa-tag"></i> Promo Applied</h3>
-              <div className="promo-admin-card">
-                <div className="promo-admin-top"><div className="promo-admin-badge"><i className="fas fa-ticket-alt"></i><span>{order.promoCode}</span></div></div>
-                <div className="promo-admin-details">
-                  {order.discountPercent > 0 && <div className="promo-admin-row"><span>Discount</span><strong>{order.discountPercent}% off</strong></div>}
-                  <div className="promo-admin-row discount"><span>Amount Saved</span><strong>−₱{discount.toLocaleString('en-PH')}</strong></div>
-                  <div className="promo-admin-row final"><span>Final Charged</span><strong>₱{finalTotal.toLocaleString('en-PH')}</strong></div>
-                </div>
-              </div>
-            </div>
-          )}
+          <div className="order-modal-pane order-modal-pane--right">
 
           <div className="modal-section">
             <h3><i className="fas fa-box"></i> Order Items ({order.items?.length || 0})</h3>
             <div className="order-items-list">
-              {order.items?.map((item, index) => (
+              {(order.items?.length ? [order.items[0]] : []).map((item, index) => (
                 <div key={index} className="order-item-card">
                   <div className="item-image"><img src={item.image} alt={item.name || 'Product'} onError={e => { e.target.onerror = null; e.target.src = 'https://via.placeholder.com/80x80?text=No+Image'; }} /></div>
                   <div className="item-details"><strong>{item.name || 'N/A'}</strong><p className="item-price">₱{(item.price || 0).toLocaleString('en-PH')} x {item.quantity || 0}</p></div>
@@ -684,6 +699,16 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                 </div>
               ))}
             </div>
+            {(order.items?.length || 0) > 1 && (
+              <button
+                type="button"
+                className="order-view-all-items-btn"
+                onClick={() => setShowItemsModal(true)}
+              >
+                <i className="fas fa-list"></i>
+                View all items ({order.items.length})
+              </button>
+            )}
           </div>
 
           <div className="modal-section">
@@ -758,12 +783,122 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
             )}
             <button className="delete-order-btn" onClick={() => onDelete(order.orderId)}><i className="fas fa-trash"></i> Delete Order</button>
           </div>
+
+          </div>{/* end right pane */}
+          </div>{/* end split */}
         </div>
       </div>
 
       {showCancelModal && <CancelReasonModal order={order} onConfirm={reason => { onCancelWithReason(order.orderId, reason); setShowCancelModal(false); }} onClose={() => setShowCancelModal(false)} />}
       {showRejectConfirm && <RejectConfirmDialog order={order} adminNote={refundAdminNote} onConfirm={() => handleRefundResolve('rejected')} onCancel={() => setShowRejectConfirm(false)} />}
       {showWaybill && <WaybillModal order={order} onClose={() => setShowWaybill(false)} />}
+      {showItemsModal && (
+        <OrderItemsListModal
+          order={order}
+          onClose={() => setShowItemsModal(false)}
+        />
+      )}
+    </div>
+  );
+};
+
+const OrderItemsListModal = ({ order, onClose }) => {
+  const items = order.items || [];
+  const [pageSize, setPageSize] = useState(5);
+  const [page, setPage] = useState(1);
+
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const start = (currentPage - 1) * pageSize;
+  const pageItems = items.slice(start, start + pageSize);
+  const showingFrom = items.length === 0 ? 0 : start + 1;
+  const showingTo = Math.min(start + pageSize, items.length);
+
+  const handlePageSizeChange = (e) => {
+    setPageSize(Number(e.target.value));
+    setPage(1);
+  };
+
+  return (
+    <div className="order-items-modal-overlay" onClick={onClose}>
+      <div className="order-items-modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true">
+        <div className="order-items-modal-header">
+          <div>
+            <h3><i className="fas fa-box-open"></i> All Order Items</h3>
+            <p>Order #{order.orderId?.slice(-8) || 'N/A'} · {items.length} item{items.length === 1 ? '' : 's'}</p>
+          </div>
+          <button type="button" className="close-btn" onClick={onClose} aria-label="Close">
+            <i className="fas fa-times"></i>
+          </button>
+        </div>
+        <div className="order-items-modal-body">
+          <ul className="order-items-modal-list">
+            {pageItems.map((item, index) => {
+              const absoluteIndex = start + index;
+              const lineTotal = (item.quantity || 0) * (item.price || 0);
+              return (
+                <li key={absoluteIndex} className="order-items-modal-row">
+                  <span className="order-items-modal-index">{absoluteIndex + 1}</span>
+                  <div className="order-items-modal-thumb">
+                    <img
+                      src={item.image}
+                      alt={item.name || 'Product'}
+                      onError={e => { e.target.onerror = null; e.target.src = 'https://via.placeholder.com/64x64?text=No+Image'; }}
+                    />
+                  </div>
+                  <div className="order-items-modal-info">
+                    <strong>{item.name || 'N/A'}</strong>
+                    <span>₱{(item.price || 0).toLocaleString('en-PH')} × {item.quantity || 0}</span>
+                  </div>
+                  <div className="order-items-modal-total">
+                    ₱{lineTotal.toLocaleString('en-PH')}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+        <div className="order-items-modal-footer">
+          <div className="order-items-modal-pagination">
+            <label className="order-items-page-size">
+              <span>Show</span>
+              <select value={pageSize} onChange={handlePageSizeChange}>
+                <option value={5}>5</option>
+                <option value={10}>10</option>
+                <option value={15}>15</option>
+                <option value={20}>20</option>
+              </select>
+            </label>
+            <span className="order-items-page-meta">
+              {showingFrom}–{showingTo} of {items.length}
+            </span>
+            <div className="order-items-page-nav">
+              <button
+                type="button"
+                className="order-items-page-btn"
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={currentPage <= 1}
+              >
+                <i className="fas fa-chevron-left"></i> Previous
+              </button>
+              <span className="order-items-page-indicator">
+                {currentPage} / {totalPages}
+              </span>
+              <button
+                type="button"
+                className="order-items-page-btn"
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages}
+              >
+                Next <i className="fas fa-chevron-right"></i>
+              </button>
+            </div>
+          </div>
+          <button type="button" className="order-items-modal-done" onClick={onClose}>
+            Done
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

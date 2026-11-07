@@ -4,6 +4,7 @@ import './PreOrder.css';
 import { usePreOrderProducts } from '../utils/productStorage';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
+import { useConfirm } from '../context/ConfirmContext';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import LoginModal from '../components/LoginModal';
@@ -40,6 +41,7 @@ const PreOrder = () => {
 
   const { isAuthenticated, user } = useAuth();
   const { showNotification } = useNotification();
+  const { confirm } = useConfirm();
   const placePreOrder = useMutation(api.preOrderRequests.placePreOrder);
 
   const preOrderProducts = usePreOrderProducts();
@@ -59,9 +61,14 @@ const PreOrder = () => {
   // ── Pre-Order — with confirmation ──
   const handlePreOrder = async (product) => {
     if (!isAuthenticated) { handleRequireLogin(); return; }
-    if (!window.confirm(
-      `Pre-order "${product.name}"?\n\nPrice: ₱${product.price?.toLocaleString()}\n\nYou'll be notified via email when this item is available to purchase.`
-    )) return;
+    const ok = await confirm({
+      title: 'Place pre-order?',
+      message: `Pre-order "${product.name}"?\n\nPrice: ₱${product.price?.toLocaleString()}\n\nYou'll be notified via email when this item is available to purchase.`,
+      confirmLabel: 'Pre-Order',
+      variant: 'primary',
+      icon: 'fa-clock',
+    });
+    if (!ok) return;
     setLoadingId(product._id);
     try {
       const result = await placePreOrder({

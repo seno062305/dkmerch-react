@@ -176,12 +176,9 @@
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
-  cursor: pointer;
+  cursor: default;
   user-select: none;
-  transition: background 0.15s;
 }
-
-.ab-card-header:hover { background: #faf5ff; }
 
 .ab-card-left {
   display: flex;
@@ -357,20 +354,28 @@
    DATA TABLE MODAL
 ══════════════════════════════════════════ */
 
-.ab-card { cursor: pointer; }
-.ab-card:hover { box-shadow: 0 4px 16px rgba(106,13,173,0.15); transform: translateY(-1px); transition: all 0.2s; }
+.ab-card { cursor: default; }
+.ab-card:hover { box-shadow: 0 4px 16px rgba(106,13,173,0.12); transition: box-shadow 0.2s; }
 
 .ab-view-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1.5px solid #e9d5ff;
+  background: #f3e8ff;
+  color: #6a0dad;
+  font-size: 13px;
+  cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #6a0dad;
-  background: #f3e8ff;
-  padding: 5px 10px;
-  border-radius: 6px;
-  white-space: nowrap;
+  justify-content: center;
+  padding: 0;
+  transition: all 0.2s;
+}
+.ab-view-btn:hover {
+  background: #6a0dad;
+  color: white;
+  border-color: #6a0dad;
 }
 
 /* Overlay */

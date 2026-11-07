@@ -4,12 +4,14 @@ import './WishlistPage.css';
 import { useWishlist, useRemoveFromWishlist } from '../context/wishlistUtils';
 import { useAddToCart } from '../context/cartUtils';
 import { useNotification } from '../context/NotificationContext';
+import { useConfirm } from '../context/ConfirmContext';
 
 const MAX_WISHLIST = 10;
 
 const WishlistPage = () => {
   const navigate = useNavigate();
   const { showNotification } = useNotification();
+  const { confirm } = useConfirm();
   const [lightboxImg, setLightboxImg] = useState(null);
 
   const wishlistItems = useWishlist();
@@ -20,15 +22,27 @@ const WishlistPage = () => {
   const displayItems = (wishlistItems || []).slice(0, MAX_WISHLIST);
   const count = displayItems.length;
 
-  const handleRemoveFromWishlist = (productId, productName) => {
-    if (window.confirm(`Remove "${productName}" from your favorites?`)) {
-      removeFromWishlist(productId);
-      showNotification('Removed from favorites', 'success');
-    }
+  const handleRemoveFromWishlist = async (productId, productName) => {
+    const ok = await confirm({
+      title: 'Remove favorite?',
+      message: `Remove "${productName}" from your favorites?`,
+      confirmLabel: 'Remove',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    removeFromWishlist(productId);
+    showNotification('Removed from favorites', 'success');
   };
 
-  const handleAddToCart = (item) => {
-    if (!window.confirm(`Add "${item.name}" to cart?\n\nPrice: ₱${item.price?.toLocaleString()}`)) return;
+  const handleAddToCart = async (item) => {
+    const ok = await confirm({
+      title: 'Add to cart?',
+      message: `Add "${item.name}" to cart?\n\nPrice: ₱${item.price?.toLocaleString()}`,
+      confirmLabel: 'Add to Cart',
+      variant: 'primary',
+      icon: 'fa-shopping-cart',
+    });
+    if (!ok) return;
     addToCart({
       id: item.productId,
       _id: item.productId,
@@ -39,11 +53,16 @@ const WishlistPage = () => {
     showNotification('Added to cart successfully', 'success');
   };
 
-  const handleClearWishlist = () => {
-    if (window.confirm('Are you sure you want to clear all your favorites?')) {
-      wishlistItems.forEach(item => removeFromWishlist(item.productId));
-      showNotification('Favorites cleared', 'success');
-    }
+  const handleClearWishlist = async () => {
+    const ok = await confirm({
+      title: 'Clear favorites?',
+      message: 'Are you sure you want to clear all your favorites?',
+      confirmLabel: 'Clear All',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    wishlistItems.forEach(item => removeFromWishlist(item.productId));
+    showNotification('Favorites cleared', 'success');
   };
 
   return (

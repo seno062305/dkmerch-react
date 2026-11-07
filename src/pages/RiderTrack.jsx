@@ -702,12 +702,9 @@ export default function RiderTrack() {
   const openGoogleMaps = () => {
     if (!order) return;
     const lat = order.addressLat, lng = order.addressLng;
-    window.open(
-      lat && lng
-        ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
-        : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.shippingAddress || '')}`,
-      '_blank'
-    );
+    window.location.href = lat && lng
+      ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
+      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.shippingAddress || '')}`;
   };
 
   /* ─────────────────────────────────────────

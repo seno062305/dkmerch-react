@@ -209,6 +209,131 @@
   font-weight: 500;
 }
 
+/* ── Customer reviews list (left column) ── */
+.modal-left-reviews {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  margin-top: 4px;
+  max-height: 280px;
+  overflow-y: auto;
+  text-align: left;
+}
+
+.modal-left-review-item {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 0;
+  border-bottom: 1px solid #e8e8e8;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.modal-left-review-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.modal-left-review-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.modal-left-review-user {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+}
+
+.modal-left-review-user i {
+  color: #bbb;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.modal-left-review-user span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modal-left-review-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.modal-left-review-stars {
+  display: flex;
+  gap: 2px;
+}
+
+.modal-left-review-stars i {
+  font-size: 11px;
+  color: #ddd;
+}
+
+.modal-left-review-stars i.filled {
+  color: #f5a623;
+}
+
+.modal-left-review-delete {
+  background: none;
+  border: none;
+  padding: 2px;
+  cursor: pointer;
+  color: #ccc;
+  font-size: 12px;
+  line-height: 1;
+  transition: color 0.15s;
+}
+
+.modal-left-review-delete:hover {
+  color: #dc2626;
+}
+
+.modal-left-review-text {
+  width: 100%;
+  margin: 0;
+  font-size: 13px;
+  color: #555;
+  line-height: 1.5;
+  text-align: left;
+  word-break: break-word;
+}
+
+.modal-left-review-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--primary-color, #fc1268);
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.modal-left-review-date {
+  font-size: 11px;
+  color: #bbb;
+  text-align: left;
+}
+
 /* RIGHT: details column */
 .modal-details-section {
   padding: 48px 28px 28px 28px;

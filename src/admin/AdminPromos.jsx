@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
+import { useConfirm } from '../context/ConfirmContext';
 import './AdminPromos.css';
 
 const KPOP_GROUPS = [
@@ -38,6 +39,7 @@ const toMs = (d, t) => {
 };
 
 const AdminPromos = () => {
+  const { confirm } = useConfirm();
   const promos      = useQuery(api.promos.getAllPromos) || [];
   const createPromo = useMutation(api.promos.createPromo);
   const updatePromo = useMutation(api.promos.updatePromo);
@@ -109,14 +111,16 @@ const AdminPromos = () => {
     setSubmitting(true); setServerMsg('');
     try {
       const payload = {
-        code:      formData.code.toUpperCase().trim(),
-        name:      formData.name,
-        discount:  Number(formData.discount),
-        startDate: formData.startDate || undefined,
-        startTime: formData.startTime || undefined,
-        endDate:   formData.endDate   || undefined,
-        endTime:   formData.endTime   || undefined,
-        isActive:  true,
+        code:        formData.code.toUpperCase().trim(),
+        name:        formData.name,
+        discount:    Number(formData.discount),
+        // Cap in pesos for email copy / checkout — form has no field, use a safe default
+        maxDiscount: Number(formData.maxDiscount) > 0 ? Number(formData.maxDiscount) : 999999,
+        startDate:   formData.startDate || undefined,
+        startTime:   formData.startTime || undefined,
+        endDate:     formData.endDate   || undefined,
+        endTime:     formData.endTime   || undefined,
+        isActive:    true,
       };
       if (editingPromo) {
         await updatePromo({ id: editingPromo._id, ...payload });
@@ -127,8 +131,13 @@ const AdminPromos = () => {
         setServerMsg('✅ Promo created! Email notification sent to all users automatically.');
       }
       setTimeout(resetForm, 1500);
-    } catch {
-      setServerMsg('❌ Something went wrong. Try again.');
+    } catch (err) {
+      const msg = err?.data?.message || err?.message || '';
+      if (msg.includes('maxDiscount') || msg.includes('ArgumentValidationError')) {
+        setServerMsg('❌ Promo create failed: missing/invalid fields. Please refresh and try again.');
+      } else {
+        setServerMsg(`❌ ${msg || 'Something went wrong. Try again.'}`);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -149,7 +158,13 @@ const AdminPromos = () => {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Delete this promo?')) return;
+    const ok = await confirm({
+      title: 'Delete promo?',
+      message: 'Delete this promo? This cannot be undone.',
+      confirmLabel: 'Delete',
+      variant: 'danger',
+    });
+    if (!ok) return;
     await deletePromo({ id });
   };
 

@@ -607,10 +607,9 @@ const AdminDashboard = () => {
             {storeSettings?.storeLat && storeSettings?.storeLng && (
               <a
                 href={`https://www.google.com/maps?q=${storeSettings.storeLat},${storeSettings.storeLng}`}
-                target="_blank" rel="noreferrer"
                 style={{ fontSize: '12px', color: '#2563eb', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}
               >
-                <i className="fas fa-external-link-alt"></i> View on Google Maps
+                <i className="fas fa-map-marker-alt"></i> View on Google Maps
               </a>
             )}
           </div>

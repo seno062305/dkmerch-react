@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useConfirm } from '../context/ConfirmContext';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import './RiderDashboard.css';
@@ -719,6 +720,7 @@ const useKickedCountdown = (kickedAt) => {
 // ─────────────────────────────────────────────────────────────────────────────
 const RiderDashboard = () => {
   const { user, logout } = useAuth();
+  const { confirm } = useConfirm();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -935,9 +937,16 @@ const RiderDashboard = () => {
 
   const closeSidebar  = useCallback(() => { setSidebarOpen(false); setTimeout(() => window.dispatchEvent(new Event('rider-sidebar-closed')), 350); }, []);
   const handleLogout  = async () => {
-    if (window.confirm('Are you sure you want to logout?\n\n📍 GPS tracking will continue running for the customer until delivery is confirmed.')) {
-      logout(); navigate('/', { replace: true });
-    }
+    const ok = await confirm({
+      title: 'Logout?',
+      message: 'Are you sure you want to logout?\n\n📍 GPS tracking will continue running for the customer until delivery is confirmed.',
+      confirmLabel: 'Logout',
+      variant: 'warning',
+      icon: 'fa-sign-out-alt',
+    });
+    if (!ok) return;
+    logout();
+    navigate('/', { replace: true });
   };
 
   const requestPickup = async (order) => {
@@ -951,7 +960,14 @@ const RiderDashboard = () => {
   };
 
   const notifyCustomer = async (delivery) => {
-    if (!window.confirm('Notify the customer that their order is on the way?')) return;
+    const ok = await confirm({
+      title: 'Notify customer?',
+      message: 'Notify the customer that their order is on the way?',
+      confirmLabel: 'Notify',
+      variant: 'primary',
+      icon: 'fa-bell',
+    });
+    if (!ok) return;
     setNotifyingId(delivery._id);
     try {
       await updateOrderFields({ orderId: delivery.orderId, orderStatus: 'out_for_delivery', status: 'Out for Delivery', riderInfo: { name: riderInfo.fullName, phone: riderInfo.phone, vehicle: riderInfo.vehicleType, plate: riderInfo.plateNumber } });
@@ -978,7 +994,14 @@ const RiderDashboard = () => {
     if (!inputOtp)                      { setOtpErrors(p => ({ ...p, [delivery._id]: 'Please enter the OTP from the customer.' })); return; }
     if (!order.deliveryOtp)             { setOtpErrors(p => ({ ...p, [delivery._id]: '⏳ The customer has not generated their OTP yet. Ask them to open their tracking page.' })); return; }
     if (inputOtp !== order.deliveryOtp) { setOtpErrors(p => ({ ...p, [delivery._id]: '❌ Incorrect OTP. Please ask the customer for the correct code.' })); return; }
-    if (!window.confirm('Confirm delivery? This will mark the order as Completed.')) return;
+    const ok = await confirm({
+      title: 'Confirm delivery?',
+      message: 'Confirm delivery? This will mark the order as Completed.',
+      confirmLabel: 'Confirm',
+      variant: 'primary',
+      icon: 'fa-check-circle',
+    });
+    if (!ok) return;
     setConfirmingId(delivery._id);
     try {
       await updateOrderFields({ orderId: delivery.orderId, orderStatus: 'completed', status: 'Delivered', deliveryOtpVerified: true, deliveryConfirmedAt: new Date().toISOString(), ...(photo ? { deliveryProofPhoto: photo } : {}) });
@@ -994,7 +1017,13 @@ const RiderDashboard = () => {
 
   const handleDeletePickup = async (pickupId, status, orderId) => {
     if (['approved', 'out_for_delivery'].includes(status)) { alert('❌ Cannot delete an active pickup. Complete the delivery first.'); return; }
-    if (!window.confirm('Remove this pickup record from your list?')) return;
+    const ok = await confirm({
+      title: 'Remove pickup?',
+      message: 'Remove this pickup record from your list?',
+      confirmLabel: 'Remove',
+      variant: 'danger',
+    });
+    if (!ok) return;
     try {
       await deletePickupRequest({ requestId: pickupId });
       if (GPS.activeOrderId() === orderId) { GPS.stopLocal(); setTrackingOrderId(null); setCurrentPosition(null); }

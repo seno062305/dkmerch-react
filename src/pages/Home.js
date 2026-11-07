@@ -9,6 +9,7 @@ import ProductModal from '../components/ProductModal';
 import { useAddToCart } from '../context/cartUtils';
 import { useToggleWishlist, useWishlist } from '../context/wishlistUtils';
 import { useNotification } from '../context/NotificationContext';
+import { useConfirm } from '../context/ConfirmContext';
 
 const PH_OFFSET_MS = 8 * 60 * 60 * 1000;
 
@@ -135,6 +136,7 @@ const Home = () => {
   const [highlightPromo, setHighlightPromo] = useState(null);
   const [expiredPromo, setExpiredPromo] = useState(null);
   const { showNotification } = useNotification();
+  const { confirm } = useConfirm();
   const location = useLocation();
 
   const addToCartMutation      = useAddToCart();
@@ -255,13 +257,19 @@ const Home = () => {
   };
 
   // ── Add to Wishlist — with confirmation ──
-  const handleAddToWishlist = (product) => {
+  const handleAddToWishlist = async (product) => {
     const pid = product._id || product.id;
     const alreadyWishlisted = isWishlisted(pid);
-    const msg = alreadyWishlisted
-      ? `Remove "${product.name}" from Favorites?`
-      : `Add "${product.name}" to Favorites?`;
-    if (!window.confirm(msg)) return;
+    const ok = await confirm({
+      title: alreadyWishlisted ? 'Remove favorite?' : 'Add to favorites?',
+      message: alreadyWishlisted
+        ? `Remove "${product.name}" from Favorites?`
+        : `Add "${product.name}" to Favorites?`,
+      confirmLabel: alreadyWishlisted ? 'Remove' : 'Add',
+      variant: alreadyWishlisted ? 'danger' : 'primary',
+      icon: 'fa-star',
+    });
+    if (!ok) return;
     toggleWishlistMutation(product);
     showNotification(
       alreadyWishlisted
