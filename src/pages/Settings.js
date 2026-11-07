@@ -311,7 +311,7 @@ const Settings = () => {
   const updateUserProfile     = useMutation(api.users.updateUserProfile);
   const sendPasswordResetCode = useAction(api.sendEmail.sendPasswordResetCode);
   const deactivateOwnAccount  = useMutation(api.users.deactivateOwnAccount);
-  const deleteUser            = useMutation(api.users.deleteUser);
+  const softDeleteUser        = useMutation(api.users.softDeleteUser);
   const verifyUserPassword    = useMutation(api.users.verifyUserPassword);
 
   useEffect(() => {
@@ -471,7 +471,7 @@ const Settings = () => {
   const handleDelete = async () => {
     setDeleteLoading(true); setDeleteError('');
     try {
-      await deleteUser({ id: user._id || user.id });
+      await softDeleteUser({ id: user._id || user.id });
       logout(); navigate('/');
     } catch { setDeleteError('Failed to delete account. Please try again.'); }
     finally { setDeleteLoading(false); }

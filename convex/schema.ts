@@ -25,6 +25,8 @@ export default defineSchema({
     // ── Self-reactivation OTP ─────────────────
     reactivationOtp:          v.optional(v.string()),
     reactivationOtpExpiresAt: v.optional(v.number()),
+    // ── Soft delete ────────────────────────────
+    deletedAt:                v.optional(v.number()),
   })
     .index("by_email", ["email"])
     .index("by_username", ["username"]),

@@ -124,6 +124,15 @@ export const loginUser = mutation({
         };
       }
 
+      // ── Soft-deleted: block login ──
+      if (user.status === "deleted") {
+        return {
+          success: false,
+          user: null,
+          message: "This account has been deleted and is no longer accessible.",
+        };
+      }
+
       if (user.status === "pending_activation") {
         return { success: false, user: null, message: "Your account is pending activation by an administrator." };
       }
@@ -574,6 +583,19 @@ export const updateUserProfile = mutation({
   },
 });
 
+// ── Soft delete — used by customer self-deletion (keeps record in DB) ────────
+export const softDeleteUser = mutation({
+  args: { id: v.id("users") },
+  handler: async ({ db }, { id }) => {
+    await db.patch(id, {
+      status: "deleted",
+      deletedAt: Date.now(),
+    } as any);
+    return { success: true };
+  },
+});
+
+// ── Hard delete — used by admin only (removes record entirely) ─────────────
 export const deleteUser = mutation({
   args: { id: v.id("users") },
   handler: async ({ db }, { id }) => {
@@ -707,10 +729,7 @@ export const reactivateAccount = mutation({
   },
 });
 
-// ── I-paste ito sa dulo ng convex/users.ts ───────────────────────────────────
-// Server-side password verification — hindi kailangan i-expose ang password
-// sa client para ma-compare
-
+// Server-side password verification for account deactivation/delete flows
 export const verifyUserPassword = mutation({
   args: {
     id: v.id("users"),

@@ -900,6 +900,9 @@
 /* ── Append these to the END of AdminUsers.css ── */
 
 /* Self-deactivated status badge — amber/yellow tone */
+/* ── Append these to the END of AdminUsers.css ── */
+
+/* Self-deactivated status badge — amber/yellow tone */
 .status-badge.self-deactivated {
   background: #fef3c7;
   color: #92400e;
@@ -922,3 +925,29 @@
   white-space: nowrap;
 }
 .deactivated-chip i { font-size: 9px; }
+
+/* Deleted status badge — red/muted */
+.status-badge.deleted {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+  text-decoration: line-through;
+  opacity: 0.85;
+}
+.status-badge.deleted i { font-size: 10px; }
+
+/* Info chip shown under deleted badge */
+.deleted-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #fef2f2;
+  color: #991b1b;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 20px;
+  border: 1px solid #fecaca;
+  white-space: nowrap;
+}
+.deleted-chip i { font-size: 9px; }

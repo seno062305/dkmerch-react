@@ -21,9 +21,10 @@ export const sendEmail = internalAction({
     { to, subject, html }: { to: string; subject: string; html: string }
   ): Promise<{ success: boolean; message?: string; id?: string }> => {
     const BREVO_API_KEY = process.env.BREVO_API_KEY;
+    const RESEND_API_KEY = process.env.RESEND_API_KEY;
 
-    if (!BREVO_API_KEY) {
-      console.error("BREVO_API_KEY not set.");
+    if (!BREVO_API_KEY && !RESEND_API_KEY) {
+      console.error("No email API key set (BREVO_API_KEY / RESEND_API_KEY).");
       return { success: false, message: "Email service not configured." };
     }
 
@@ -37,32 +38,70 @@ export const sendEmail = internalAction({
       console.log(`[TEST MODE] Redirecting email from "${to}" → "${TEST_EMAIL}"`);
     }
 
-    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+    // ── Try Brevo first (if key present) ──
+    if (BREVO_API_KEY) {
+      try {
+        const brevoRes = await fetch("https://api.brevo.com/v3/smtp/email", {
+          method: "POST",
+          headers: {
+            "api-key": BREVO_API_KEY,
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            sender: {
+              name: "DKMerch",
+              email: "dkmerchtest@gmail.com",
+            },
+            to: [{ email: actualTo }],
+            subject: actualSubject,
+            htmlContent: html,
+          }),
+        });
+
+        const brevoData = await brevoRes.json();
+
+        if (brevoRes.ok) {
+          return { success: true, id: brevoData.messageId };
+        }
+
+        console.error("Brevo error:", brevoData);
+        // Fall through to Resend if key is invalid / send failed
+      } catch (err) {
+        console.error("Brevo request failed:", err);
+      }
+    }
+
+    // ── Fallback: Resend ──
+    if (!RESEND_API_KEY) {
+      return { success: false, message: "Failed to send email." };
+    }
+
+    const resendRes = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
-        "api-key": BREVO_API_KEY,
+        Authorization: `Bearer ${RESEND_API_KEY}`,
         "Content-Type": "application/json",
-        Accept: "application/json",
       },
       body: JSON.stringify({
-        sender: {
-          name: "DKMerch",
-          email: "dkmerchtest@gmail.com",
-        },
-        to: [{ email: actualTo }],
+        from: "DKMerch <onboarding@resend.dev>",
+        to: [actualTo],
         subject: actualSubject,
-        htmlContent: html,
+        html,
       }),
     });
 
-    const data = await response.json();
+    const resendData = await resendRes.json();
 
-    if (!response.ok) {
-      console.error("Brevo error:", data);
-      return { success: false, message: data.message || "Failed to send email." };
+    if (!resendRes.ok) {
+      console.error("Resend error:", resendData);
+      return {
+        success: false,
+        message: resendData.message || "Failed to send email.",
+      };
     }
 
-    return { success: true, id: data.messageId };
+    return { success: true, id: resendData.id };
   },
 });
 
@@ -1469,6 +1508,79 @@ export const sendPaymentReceivedEmail = action({
       subject: hasPromo
         ? `💳 Payment Received (saved ₱${discountAmount!.toLocaleString()}!) — Order #${shortId} | DKMerch`
         : `💳 Payment Received — Order #${shortId} | DKMerch`,
+      html,
+    });
+  },
+});
+
+// ── ACCOUNT REACTIVATION OTP EMAIL ───────────────────────────────────────────
+// I-paste ito sa dulo ng convex/sendEmail.ts (bago ang last closing brace kung meron)
+
+export const sendReactivationOTP = action({
+  args: {
+    to: v.string(),
+    name: v.string(),
+    otp: v.string(),
+  },
+  handler: async (
+    ctx,
+    { to, name, otp }: { to: string; name: string; otp: string }
+  ): Promise<{ success: boolean; message?: string; id?: string }> => {
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Reactivate Your DKMerch Account</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:32px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:white;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+        <tr><td style="background:linear-gradient(135deg,#42011e,#fc1268);padding:36px 32px;text-align:center;">
+          <div style="font-size:32px;font-weight:900;color:white;letter-spacing:1px;">DKMerch</div>
+          <div style="color:#ffd6e7;font-size:13px;margin-top:6px;">Your K-Pop Paradise</div>
+        </td></tr>
+        <tr><td style="background:#f0fdf4;padding:28px 32px;text-align:center;border-bottom:1px solid #bbf7d0;">
+          <div style="font-size:52px;margin-bottom:10px;">🔓</div>
+          <div style="font-size:22px;font-weight:800;color:#065f46;">Account Reactivation</div>
+          <div style="font-size:14px;color:#047857;margin-top:6px;">Enter this code to restore your account</div>
+        </td></tr>
+        <tr><td style="padding:32px 36px;">
+          <p style="font-size:16px;color:#374151;margin:0 0 16px;">Hi <strong>${name}</strong>! 👋</p>
+          <p style="font-size:14px;color:#6b7280;line-height:1.7;margin:0 0 28px;">
+            We received a request to reactivate your DKMerch account. Use the code below to confirm and restore full access to your account.
+          </p>
+          <div style="background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:2px dashed #22c55e;border-radius:16px;padding:28px;text-align:center;margin:0 0 28px;">
+            <p style="font-size:12px;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:1px;margin:0 0 10px;">Your Reactivation Code</p>
+            <div style="font-size:48px;font-weight:900;letter-spacing:12px;color:#16a34a;margin:8px 0;">${otp}</div>
+            <p style="font-size:13px;color:#6b7280;margin:10px 0 0;">
+              ⏱ This code expires in <strong style="color:#16a34a;">10 minutes</strong>
+            </p>
+          </div>
+          <div style="background:#fffbeb;border-radius:10px;border:1px solid #fde68a;padding:14px 18px;margin-bottom:24px;">
+            <p style="font-size:13px;color:#92400e;margin:0;line-height:1.6;">
+              🔒 <strong>Security tip:</strong> Never share this code with anyone. DKMerch will never ask for your OTP via chat or call.
+            </p>
+          </div>
+          <div style="background:#eff6ff;border-radius:10px;border:1px solid #bfdbfe;padding:14px 18px;">
+            <p style="font-size:13px;color:#1e40af;margin:0;line-height:1.6;">
+              ✅ Go back to the DKMerch login page and enter this code to reactivate your account. If you did not request this, you can safely ignore this email.
+            </p>
+          </div>
+        </td></tr>
+        <tr><td style="background:#fafafa;border-top:1px solid #e5e7eb;padding:20px 36px;text-align:center;">
+          <p style="color:#aaa;font-size:12px;margin:0;">© 2026 DKMerch · K-Pop Paradise · All rights reserved</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+    return await ctx.runAction(internal.sendEmail.sendEmail, {
+      to,
+      subject: `${otp} — Reactivate Your DKMerch Account`,
       html,
     });
   },
