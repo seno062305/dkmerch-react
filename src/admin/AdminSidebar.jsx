@@ -73,7 +73,7 @@ const LogoutModal = ({
 );
 
 // ── Main Sidebar ──────────────────────────────────────────────────────────────
-const AdminSidebar = ({ onLinkClick, onClose }) => {
+const AdminSidebar = ({ onLinkClick, onClose, onToggleCollapse }) => {
   const { logout, user } = useAuth();
   const navigate   = useNavigate();
   const convex     = useConvex();
@@ -186,11 +186,24 @@ const AdminSidebar = ({ onLinkClick, onClose }) => {
           </div>
           <div className="admin-tagline">Admin Dashboard</div>
         </div>
-        {onClose && (
-          <button className="admin-sidebar-close" onClick={onClose} aria-label="Close menu">
-            <i className="fas fa-times"></i>
-          </button>
-        )}
+        <div className="admin-logo-actions">
+          {onToggleCollapse && (
+            <button
+              type="button"
+              className="admin-sidebar-collapse"
+              onClick={onToggleCollapse}
+              aria-label="Hide sidebar"
+              title="Hide sidebar"
+            >
+              <i className="fas fa-angles-left"></i>
+            </button>
+          )}
+          {onClose && (
+            <button className="admin-sidebar-close" onClick={onClose} aria-label="Close menu">
+              <i className="fas fa-times"></i>
+            </button>
+          )}
+        </div>
       </div>
 
       <nav>

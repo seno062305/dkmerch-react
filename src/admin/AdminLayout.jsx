@@ -4,11 +4,20 @@ import { useAuth } from '../context/AuthContext';
 import AdminSidebar from './AdminSidebar';
 import './AdminLayout.css';
 
+const SIDEBAR_KEY = 'dkmerch_admin_sidebar_collapsed';
+
 const AdminLayout = () => {
   const { user, role, isAuthenticated, isReady } = useAuth();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(SIDEBAR_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
 
   useEffect(() => {
     if (!isReady) return;
@@ -38,6 +47,14 @@ const AdminLayout = () => {
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(SIDEBAR_KEY, sidebarCollapsed ? '1' : '0');
+    } catch { /* ignore */ }
+    document.body.classList.toggle('admin-sidebar-collapsed', sidebarCollapsed);
+    return () => document.body.classList.remove('admin-sidebar-collapsed');
+  }, [sidebarCollapsed]);
+
   if (!isReady) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#f5f5f5' }}>
@@ -51,9 +68,10 @@ const AdminLayout = () => {
 
   const toggleMobileMenu = () => setMobileMenuOpen(!mobileMenuOpen);
   const closeMobileMenu  = () => setMobileMenuOpen(false);
+  const toggleSidebar    = () => setSidebarCollapsed(prev => !prev);
 
   return (
-    <div className="admin-layout">
+    <div className={`admin-layout ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
 
       {!mobileMenuOpen && !mapOpen && (
         <button className="mobile-menu-toggle" onClick={toggleMobileMenu} aria-label="Open menu">
@@ -61,10 +79,26 @@ const AdminLayout = () => {
         </button>
       )}
 
+      {sidebarCollapsed && !mapOpen && (
+        <button
+          type="button"
+          className="sidebar-expand-toggle"
+          onClick={toggleSidebar}
+          aria-label="Show sidebar"
+          title="Show sidebar"
+        >
+          <i className="fas fa-bars"></i>
+        </button>
+      )}
+
       <div className={`mobile-overlay ${mobileMenuOpen ? 'active' : ''}`} onClick={closeMobileMenu}></div>
 
       <div className={`admin-sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
-        <AdminSidebar onLinkClick={closeMobileMenu} onClose={closeMobileMenu} />
+        <AdminSidebar
+          onLinkClick={closeMobileMenu}
+          onClose={closeMobileMenu}
+          onToggleCollapse={toggleSidebar}
+        />
       </div>
 
       <main className="admin-content">

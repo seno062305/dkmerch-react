@@ -410,6 +410,7 @@ const ImportTab = () => {
   const [fileName, setFileName] = useState('');
   const [status,   setStatus]   = useState({});
   const [counts,   setCounts]   = useState({});
+  const [results,  setResults]  = useState({});
   const [confirm,  setConfirm]  = useState(false);
   const [parseErr, setParseErr] = useState('');
 
@@ -422,7 +423,7 @@ const ImportTab = () => {
   const handleFile = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setFileName(file.name); setParsed(null); setParseErr(''); setStatus({}); setCounts({}); setConfirm(false);
+    setFileName(file.name); setParsed(null); setParseErr(''); setStatus({}); setCounts({}); setResults({}); setConfirm(false);
     const reader = new FileReader();
     reader.onload = (ev) => {
       try {
@@ -440,15 +441,27 @@ const ImportTab = () => {
   const handleImportAll = async () => {
     if (!parsed) return;
     setConfirm(false);
+    setResults({});
     for (const [key, records] of Object.entries(parsed)) {
       if (!records.length) continue;
+      if (!mutations[key]) {
+        setStatus(s => ({ ...s, [key]: 'error' }));
+        continue;
+      }
       setStatus(s => ({ ...s, [key]: 'importing' }));
       try {
         const clean = records.map(({ _id, _creationTime, ...rest }) => rest);
         const CHUNK = 50;
-        for (let i = 0; i < clean.length; i += CHUNK)
-          await mutations[key]({ records: clean.slice(i, i + CHUNK) });
-        setStatus(s => ({ ...s, [key]: 'done' }));
+        let inserted = 0;
+        let skipped = 0;
+        for (let i = 0; i < clean.length; i += CHUNK) {
+          const res = await mutations[key]({ records: clean.slice(i, i + CHUNK) });
+          inserted += Number(res?.inserted ?? 0);
+          skipped  += Number(res?.skipped  ?? 0);
+        }
+        const nextStatus = skipped > 0 && inserted === 0 ? 'duplicate' : 'done';
+        setResults(r => ({ ...r, [key]: { inserted, skipped, total: clean.length } }));
+        setStatus(s => ({ ...s, [key]: nextStatus }));
       } catch (err) {
         console.error(`Import failed for ${key}:`, err);
         setStatus(s => ({ ...s, [key]: 'error' }));
@@ -457,9 +470,11 @@ const ImportTab = () => {
   };
 
   const totalRecords = parsed ? Object.values(parsed).reduce((s, v) => s + v.length, 0) : 0;
-  const doneCount    = Object.values(status).filter(s => s === 'done').length;
+  const doneCount    = Object.values(status).filter(s => s === 'done' || s === 'duplicate').length;
   const errorCount   = Object.values(status).filter(s => s === 'error').length;
   const importing    = Object.values(status).some(s => s === 'importing');
+  const totalInserted = Object.values(results).reduce((s, r) => s + (r?.inserted || 0), 0);
+  const totalSkipped  = Object.values(results).reduce((s, r) => s + (r?.skipped  || 0), 0);
 
   return (
     <div className="ab-import-page">
@@ -492,19 +507,25 @@ const ImportTab = () => {
           <div className="ab-import-tables">
             {TABLES.filter(t => parsed[t.key]).map(t => {
               const s = status[t.key] || 'idle';
+              const res = results[t.key];
               return (
                 <div key={t.key} className={`ab-import-row ab-import-row--${s}`}>
                   <div className="ab-import-row-left">
                     <div className="ab-card-icon"><i className={t.icon}></i></div>
                     <div className="ab-card-info">
                       <span className="ab-card-label">{t.label}</span>
-                      <span className="ab-card-count">{counts[t.key]?.toLocaleString()} records to import</span>
+                      <span className="ab-card-count">
+                        {res
+                          ? `${res.inserted.toLocaleString()} new · ${res.skipped.toLocaleString()} duplicate skipped`
+                          : `${counts[t.key]?.toLocaleString()} records to import`}
+                      </span>
                     </div>
                   </div>
                   <div className="ab-import-row-status">
                     {s === 'idle'      && <span className="ab-import-badge ab-import-badge--idle">Ready</span>}
                     {s === 'importing' && <span className="ab-import-badge ab-import-badge--importing"><span className="ab-spinner ab-spinner--sm"></span> Importing…</span>}
                     {s === 'done'      && <span className="ab-import-badge ab-import-badge--done"><i className="fas fa-check"></i> Done</span>}
+                    {s === 'duplicate' && <span className="ab-import-badge ab-import-badge--dup"><i className="fas fa-clone"></i> Duplicate</span>}
                     {s === 'error'     && <span className="ab-import-badge ab-import-badge--error"><i className="fas fa-times"></i> Error</span>}
                   </div>
                 </div>
@@ -512,9 +533,15 @@ const ImportTab = () => {
             })}
           </div>
           {doneCount > 0 && (
-            <div className="ab-import-summary">
-              <i className="fas fa-check-circle"></i>
-              {doneCount} table{doneCount > 1 ? 's' : ''} imported successfully{errorCount > 0 && ` · ${errorCount} failed`}
+            <div className={`ab-import-summary ${totalSkipped > 0 ? 'ab-import-summary--mixed' : ''}`}>
+              <i className={`fas ${totalInserted === 0 && totalSkipped > 0 ? 'fa-clone' : 'fa-check-circle'}`}></i>
+              <div>
+                {totalInserted.toLocaleString()} new record{totalInserted === 1 ? '' : 's'} imported
+                {totalSkipped > 0 && (
+                  <> · <strong>{totalSkipped.toLocaleString()} duplicate{totalSkipped === 1 ? '' : 's'} skipped</strong> (already in the system)</>
+                )}
+                {errorCount > 0 && ` · ${errorCount} table${errorCount > 1 ? 's' : ''} failed`}
+              </div>
             </div>
           )}
           {!importing && doneCount === 0 && (
@@ -522,8 +549,8 @@ const ImportTab = () => {
               <div className="ab-import-warning">
                 <i className="fas fa-exclamation-triangle"></i>
                 <div>
-                  <strong>Warning:</strong> This will insert {totalRecords.toLocaleString()} records into the live database.
-                  Existing records will <em>not</em> be deleted — new records will be added alongside them.
+                  <strong>Note:</strong> Backup does not remove live data. Import only adds records that are not already in the system.
+                  Matching values (same email, order ID, promo code, etc.) are treated as <em>duplicates and will not be imported</em>.
                 </div>
                 <button className="ab-import-confirm-btn" onClick={() => setConfirm(true)}>I understand, proceed</button>
               </div>
@@ -536,7 +563,7 @@ const ImportTab = () => {
           {importing && (
             <div className="ab-import-progress">
               <span className="ab-spinner ab-spinner--purple"></span>
-              Importing data into Convex… please wait
+              Importing data into Convex… duplicates will be skipped
             </div>
           )}
         </>
@@ -1311,31 +1338,37 @@ const AdminBackup = () => {
         </div>
       </div>
 
-      <DatabaseStatusPanel />
-      <AutoBackupPanel />
+      <div className="ab-settings-split">
+        <aside className="ab-settings-left">
+          <DatabaseStatusPanel />
+          <AutoBackupPanel />
+        </aside>
 
-      <div className="ab-tabs">
-        <button className={`ab-tab ${activeTab === 'backup' ? 'ab-tab--active' : ''}`} onClick={() => setActiveTab('backup')}>
-          <i className="fas fa-shield-alt"></i> Backup
-        </button>
-        <button className={`ab-tab ${activeTab === 'import' ? 'ab-tab--active' : ''}`} onClick={() => setActiveTab('import')}>
-          <i className="fas fa-upload"></i> Import
-        </button>
-        <button className={`ab-tab ${activeTab === 'logs' ? 'ab-tab--active' : ''}`} onClick={() => setActiveTab('logs')}>
-          <i className="fas fa-clipboard-list"></i> Logs
-        </button>
+        <section className="ab-settings-right">
+          <div className="ab-tabs">
+            <button className={`ab-tab ${activeTab === 'backup' ? 'ab-tab--active' : ''}`} onClick={() => setActiveTab('backup')}>
+              <i className="fas fa-shield-alt"></i> Backup
+            </button>
+            <button className={`ab-tab ${activeTab === 'import' ? 'ab-tab--active' : ''}`} onClick={() => setActiveTab('import')}>
+              <i className="fas fa-upload"></i> Import
+            </button>
+            <button className={`ab-tab ${activeTab === 'logs' ? 'ab-tab--active' : ''}`} onClick={() => setActiveTab('logs')}>
+              <i className="fas fa-clipboard-list"></i> Logs
+            </button>
+          </div>
+
+          {cooldownLeft > 0 && activeTab === 'backup' && (
+            <p className="ab-cooldown-banner">
+              <i className="fas fa-hourglass-half"></i>
+              Download cooldown: wait {Math.ceil(cooldownLeft / 1000)}s (max every {Math.round(EXPORT_COOLDOWN_MS / 1000)}s)
+            </p>
+          )}
+
+          {activeTab === 'backup' && <BackupTab />}
+          {activeTab === 'import' && <ImportTab />}
+          {activeTab === 'logs' && <LogsTab />}
+        </section>
       </div>
-
-      {cooldownLeft > 0 && activeTab === 'backup' && (
-        <p className="ab-cooldown-banner">
-          <i className="fas fa-hourglass-half"></i>
-          Download cooldown: wait {Math.ceil(cooldownLeft / 1000)}s (max every {Math.round(EXPORT_COOLDOWN_MS / 1000)}s)
-        </p>
-      )}
-
-      {activeTab === 'backup' && <BackupTab />}
-      {activeTab === 'import' && <ImportTab />}
-      {activeTab === 'logs' && <LogsTab />}
     </div>
   );
 };

@@ -46,7 +46,7 @@ export const getAllRiderNotifications = query({
 });
 
 // ── IMPORT MUTATIONS ─────────────────────────────────────────────────────────
-// Each mutation accepts an array of records and inserts them into the DB.
+// Inserts only records that are NOT already in the live DB (duplicate-safe).
 // Fields _id and _creationTime are stripped (Convex auto-generates them).
 
 const strip = (record: Record<string, unknown>) => {
@@ -54,84 +54,136 @@ const strip = (record: Record<string, unknown>) => {
   return rest;
 };
 
+type DupKeyFn = (r: Record<string, any>) => string;
+
+const importWithDedup = async (
+  ctx: any,
+  table: string,
+  records: any[],
+  keyFn: DupKeyFn
+) => {
+  const existing = await ctx.db.query(table).collect();
+  const seen = new Set<string>(existing.map((row: any) => keyFn(row)));
+  let inserted = 0;
+  let skipped = 0;
+
+  for (const raw of records) {
+    const row = strip(raw);
+    const key = keyFn(row);
+    if (!key || seen.has(key)) {
+      skipped += 1;
+      continue;
+    }
+    await ctx.db.insert(table, row);
+    seen.add(key);
+    inserted += 1;
+  }
+
+  return { inserted, skipped, total: records.length };
+};
+
+const userKey: DupKeyFn = (r) =>
+  String(r.email || '').trim().toLowerCase();
+
+const orderKey: DupKeyFn = (r) =>
+  String(r.orderId || '').trim().toLowerCase();
+
+const productKey: DupKeyFn = (r) =>
+  [
+    String(r.name || '').trim().toLowerCase(),
+    String(r.image || '').trim(),
+    String(r.kpopGroup || '').trim().toLowerCase(),
+    String(r.price ?? ''),
+  ].join('|');
+
+const promoKey: DupKeyFn = (r) =>
+  String(r.code || '').trim().toLowerCase();
+
+const preOrderKey: DupKeyFn = (r) =>
+  `${String(r.userId || '').trim()}|${String(r.productId || '').trim()}`;
+
+const pickupKey: DupKeyFn = (r) =>
+  [
+    String(r.orderId || '').trim(),
+    String(r.riderId || '').trim(),
+    String(r.requestedAt || '').trim(),
+  ].join('|');
+
+const riderLocationKey: DupKeyFn = (r) =>
+  String(r.orderId || '').trim();
+
+const reviewKey: DupKeyFn = (r) =>
+  `${String(r.productId || '').trim()}|${String(r.userEmail || '').trim().toLowerCase()}`;
+
+const riderAppKey: DupKeyFn = (r) =>
+  String(r.email || '').trim().toLowerCase();
+
+const riderNotifKey: DupKeyFn = (r) =>
+  [
+    String(r.type || '').trim(),
+    String(r.orderId || '').trim(),
+    String(r.createdAt || '').trim(),
+    String(r.message || '').trim(),
+  ].join('|');
+
 export const importUsers = mutation({
   args: { records: v.array(v.any()) },
-  handler: async (ctx, { records }) => {
-    for (const r of records) await ctx.db.insert('users', strip(r));
-    return records.length;
-  },
+  handler: async (ctx, { records }) =>
+    importWithDedup(ctx, 'users', records, userKey),
 });
 
 export const importOrders = mutation({
   args: { records: v.array(v.any()) },
-  handler: async (ctx, { records }) => {
-    for (const r of records) await ctx.db.insert('orders', strip(r));
-    return records.length;
-  },
+  handler: async (ctx, { records }) =>
+    importWithDedup(ctx, 'orders', records, orderKey),
 });
 
 export const importProducts = mutation({
   args: { records: v.array(v.any()) },
-  handler: async (ctx, { records }) => {
-    for (const r of records) await ctx.db.insert('products', strip(r));
-    return records.length;
-  },
+  handler: async (ctx, { records }) =>
+    importWithDedup(ctx, 'products', records, productKey),
 });
 
 export const importPromos = mutation({
   args: { records: v.array(v.any()) },
-  handler: async (ctx, { records }) => {
-    for (const r of records) await ctx.db.insert('promos', strip(r));
-    return records.length;
-  },
+  handler: async (ctx, { records }) =>
+    importWithDedup(ctx, 'promos', records, promoKey),
 });
 
 export const importPreOrderRequests = mutation({
   args: { records: v.array(v.any()) },
-  handler: async (ctx, { records }) => {
-    for (const r of records) await ctx.db.insert('preOrderRequests', strip(r));
-    return records.length;
-  },
+  handler: async (ctx, { records }) =>
+    importWithDedup(ctx, 'preOrderRequests', records, preOrderKey),
 });
 
 export const importPickupRequests = mutation({
   args: { records: v.array(v.any()) },
-  handler: async (ctx, { records }) => {
-    for (const r of records) await ctx.db.insert('pickupRequests', strip(r));
-    return records.length;
-  },
+  handler: async (ctx, { records }) =>
+    importWithDedup(ctx, 'pickupRequests', records, pickupKey),
 });
 
 export const importRiderLocations = mutation({
   args: { records: v.array(v.any()) },
-  handler: async (ctx, { records }) => {
-    for (const r of records) await ctx.db.insert('riderLocations', strip(r));
-    return records.length;
-  },
+  handler: async (ctx, { records }) =>
+    importWithDedup(ctx, 'riderLocations', records, riderLocationKey),
 });
 
 export const importReviews = mutation({
   args: { records: v.array(v.any()) },
-  handler: async (ctx, { records }) => {
-    for (const r of records) await ctx.db.insert('reviews', strip(r));
-    return records.length;
-  },
+  handler: async (ctx, { records }) =>
+    importWithDedup(ctx, 'reviews', records, reviewKey),
 });
 
 export const importRiderApplications = mutation({
   args: { records: v.array(v.any()) },
-  handler: async (ctx, { records }) => {
-    for (const r of records) await ctx.db.insert('riderApplications', strip(r));
-    return records.length;
-  },
+  handler: async (ctx, { records }) =>
+    importWithDedup(ctx, 'riderApplications', records, riderAppKey),
 });
 
 export const importRiderNotifications = mutation({
   args: { records: v.array(v.any()) },
-  handler: async (ctx, { records }) => {
-    for (const r of records) await ctx.db.insert('riderNotifications', strip(r));
-    return records.length;
-  },
+  handler: async (ctx, { records }) =>
+    importWithDedup(ctx, 'riderNotifications', records, riderNotifKey),
 });
 
 // ── STATUS / CLEAR ───────────────────────────────────────────────────────────

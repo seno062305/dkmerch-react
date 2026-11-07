@@ -182,6 +182,70 @@
   background: #f5f5f5;
   position: relative;
   z-index: 1;
+  transition: margin-left 0.3s ease;
+}
+
+/* Desktop collapse */
+.admin-layout.sidebar-collapsed .admin-sidebar {
+  transform: translateX(-100%);
+  pointer-events: none;
+}
+
+.admin-layout.sidebar-collapsed .admin-content {
+  margin-left: 0;
+}
+
+.admin-logo-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.admin-sidebar-collapse {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: #f3f4f6;
+  border: none;
+  cursor: pointer;
+  color: #6b7280;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.admin-sidebar-collapse:hover {
+  background: #fc1268;
+  color: white;
+}
+
+.sidebar-expand-toggle {
+  display: flex;
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 1100;
+  background: linear-gradient(135deg, #fc1268, #9c27b0);
+  color: white;
+  border: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(252, 18, 104, 0.4);
+  transition: all 0.3s ease;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-expand-toggle:hover { transform: scale(1.08); }
+.sidebar-expand-toggle i { font-size: 18px; }
+
+.admin-layout.sidebar-collapsed .admin-content {
+  padding-top: 72px;
 }
 
 /* Mobile Menu Toggle */
@@ -234,6 +298,17 @@
 
 @media (max-width: 768px) {
   .mobile-menu-toggle { display: flex; }
+  .sidebar-expand-toggle { display: none !important; }
+  .admin-sidebar-collapse { display: none; }
+
+  .admin-layout.sidebar-collapsed .admin-sidebar {
+    transform: translateX(-100%);
+  }
+
+  .admin-layout.sidebar-collapsed .admin-sidebar.mobile-open {
+    transform: translateX(0);
+    pointer-events: auto;
+  }
 
   .admin-sidebar {
     transform: translateX(-100%);
@@ -251,6 +326,11 @@
     margin-left: 0;
     padding: 72px 20px 20px 20px;
     z-index: 1;
+  }
+
+  .admin-layout.sidebar-collapsed .admin-content {
+    margin-left: 0;
+    padding-top: 72px;
   }
 
   .admin-content button,

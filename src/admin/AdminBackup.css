@@ -4,7 +4,82 @@
 
 .ab-page {
   padding: 0;
-  max-width: 900px;
+  max-width: 1280px;
+}
+
+.ab-settings-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.ab-settings-left,
+.ab-settings-right {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ab-settings-right {
+  background: #fff;
+  border: 1px solid #f0e6ff;
+  border-radius: 16px;
+  padding: 16px 18px 18px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+}
+
+.ab-settings-left .ab-status-panel,
+.ab-settings-left .ab-auto-panel {
+  margin-bottom: 0;
+}
+
+.ab-settings-right .ab-tabs {
+  margin-bottom: 12px;
+}
+
+.ab-settings-right .ab-controls {
+  margin-top: 0;
+}
+
+@media (max-width: 1100px) {
+  .ab-settings-split {
+    grid-template-columns: 1fr;
+  }
+
+  .ab-settings-left .ab-storage-card {
+    grid-template-columns: minmax(140px, 1fr) 120px minmax(160px, 1.2fr);
+  }
+
+  .ab-settings-left .ab-storage-donut {
+    margin: 0;
+  }
+}
+
+@media (max-width: 768px) {
+  .ab-settings-right {
+    padding: 14px;
+    border-radius: 14px;
+  }
+
+  .ab-settings-left .ab-storage-card {
+    grid-template-columns: 1fr;
+  }
+
+  .ab-settings-left .ab-storage-donut {
+    margin: 4px auto;
+  }
+
+  .ab-auto-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ab-auto-row select,
+  .ab-auto-row button {
+    width: 100%;
+  }
 }
 
 /* ── Header ── */
@@ -738,6 +813,7 @@
 }
 
 .ab-import-row--done      { border-color: #6ee7b7; background: #f0fdf4; }
+.ab-import-row--duplicate { border-color: #fcd34d; background: #fffbeb; }
 .ab-import-row--error     { border-color: #fca5a5; background: #fff1f2; }
 .ab-import-row--importing { border-color: #a78bfa; }
 
@@ -757,6 +833,7 @@
 .ab-import-badge--idle      { background: #f3f4f6; color: #6b7280; }
 .ab-import-badge--importing { background: #ede9fe; color: #6a0dad; }
 .ab-import-badge--done      { background: #d1fae5; color: #065f46; }
+.ab-import-badge--dup       { background: #fef3c7; color: #b45309; }
 .ab-import-badge--error     { background: #fee2e2; color: #dc2626; }
 
 .ab-import-warning {
@@ -832,9 +909,18 @@
   font-weight: 700;
   color: #065f46;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
+  line-height: 1.45;
 }
+
+.ab-import-summary--mixed {
+  background: #fffbeb;
+  border-color: #fcd34d;
+  color: #92400e;
+}
+
+.ab-import-summary i { margin-top: 2px; flex-shrink: 0; }
 
 .ab-spinner--sm { width: 13px; height: 13px; border-width: 2px; }
 .ab-spinner--purple { border-color: #e9d5ff; border-top-color: #6a0dad; }
@@ -1020,7 +1106,7 @@
   background: white;
   border: 1px solid #f0e6ff;
   border-radius: 16px;
-  padding: 20px 22px;
+  padding: 18px 18px 16px;
   margin-bottom: 22px;
   box-shadow: 0 2px 10px rgba(0,0,0,0.04);
 }
@@ -1231,13 +1317,26 @@
 /* Storage health card */
 .ab-storage-card {
   display: grid;
-  grid-template-columns: minmax(160px, 1.1fr) 140px minmax(220px, 1.4fr);
-  gap: 18px;
+  grid-template-columns: minmax(140px, 1fr) 120px minmax(160px, 1.2fr);
+  gap: 14px;
   align-items: start;
   background: linear-gradient(135deg, #faf5ff 0%, #fff 55%);
   border: 1px solid #f0e6ff;
   border-radius: 14px;
-  padding: 16px;
+  padding: 14px;
+}
+
+.ab-settings-left .ab-storage-card {
+  grid-template-columns: 1fr;
+  justify-items: stretch;
+}
+
+.ab-settings-left .ab-storage-donut {
+  margin: 4px auto;
+}
+
+.ab-settings-left .ab-storage-legend {
+  grid-template-columns: 1fr 1fr;
 }
 .ab-storage-label {
   display: block;
@@ -1322,7 +1421,7 @@
   background: #fff;
   border: 1px solid #f0e6ff;
   border-radius: 16px;
-  padding: 18px 20px;
+  padding: 16px 18px;
   margin-bottom: 22px;
   box-shadow: 0 2px 10px rgba(0,0,0,0.04);
 }

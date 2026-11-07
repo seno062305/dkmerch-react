@@ -61,8 +61,39 @@
   font-weight: 400;
 }
 
+.admin-logo-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.admin-sidebar-collapse {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: #f3f4f6;
+  border: none;
+  cursor: pointer;
+  color: #6b7280;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.admin-sidebar-collapse:hover {
+  background: #fc1268;
+  color: white;
+}
+
 .admin-sidebar-close {
   display: none;
+}
+
+@media (max-width: 768px) {
+  .admin-sidebar-collapse { display: none; }
 }
 
 /* Navigation */

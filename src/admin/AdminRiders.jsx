@@ -294,11 +294,21 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
 
   useEffect(() => {
     const measure = () => {
+      if (document.body.classList.contains('admin-sidebar-collapsed')) {
+        setSidebarWidth(0);
+        return;
+      }
       const s = document.querySelector('.admin-sidebar') || document.querySelector('aside');
       if (s) setSidebarWidth(s.getBoundingClientRect().width);
     };
-    measure(); window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
+    measure();
+    window.addEventListener('resize', measure);
+    const observer = new MutationObserver(measure);
+    observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    return () => {
+      window.removeEventListener('resize', measure);
+      observer.disconnect();
+    };
   }, []);
 
   useEffect(() => {
