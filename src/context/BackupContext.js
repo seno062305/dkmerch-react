@@ -65,10 +65,21 @@ export const BackupProvider = ({ children }) => {
     saveMetaToStorage({ lastFetched: val });
   }, []);
 
+  const clearLocalCache = useCallback(() => {
+    setAllData({});
+    setLoadStatus({});
+    setLastFetchedState(null);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(META_KEY);
+      localStorage.removeItem('dkmerch_export_cooldown_until');
+    } catch {}
+  }, []);
+
   return (
     <BackupContext.Provider value={{
       allData, loadStatus, lastFetched,
-      updateTable, setTableStatus, resetAll, setLastFetched,
+      updateTable, setTableStatus, resetAll, setLastFetched, clearLocalCache,
     }}>
       {children}
     </BackupContext.Provider>

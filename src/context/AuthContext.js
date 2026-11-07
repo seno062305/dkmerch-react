@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import { appendActivityLog } from "../admin/lib/localActivityLog";
 
 const AuthContext = createContext(null);
 
@@ -15,6 +16,10 @@ export const AuthProvider = ({ children }) => {
   const seedAdminMutation  = useMutation(api.users.seedAdmin);
   const loginRiderMutation = useMutation(api.riders.loginRider);
   const createUserMutation = useMutation(api.users.createUser);
+
+  const safeLog = (payload) => {
+    try { appendActivityLog(payload); } catch {}
+  };
 
   useEffect(() => {
     seedAdminMutation({}).catch(() => {});
@@ -46,6 +51,12 @@ export const AuthProvider = ({ children }) => {
         }
 
         if (!riderResult.success) {
+          safeLog({
+            action: "login_failed",
+            actorEmail: identifier,
+            actorRole: "rider",
+            details: riderResult.message || "Rider login failed",
+          });
           return { success: false, message: riderResult.message };
         }
 
@@ -62,6 +73,13 @@ export const AuthProvider = ({ children }) => {
         setUser(sessionRider);
         setRole("rider");
         setIsAuthenticated(true);
+        safeLog({
+          action: "login",
+          actorEmail: sessionRider.email,
+          actorName: sessionRider.name,
+          actorRole: "rider",
+          details: "Rider login success",
+        });
         return { success: true, role: "rider" };
       }
 
@@ -86,6 +104,13 @@ export const AuthProvider = ({ children }) => {
           setUser(sessionUser);
           setRole(sessionUser.role);
           setIsAuthenticated(true);
+          safeLog({
+            action: "login",
+            actorEmail: sessionUser.email,
+            actorName: sessionUser.name,
+            actorRole: sessionUser.role,
+            details: "Account login success",
+          });
           return { success: true, role: sessionUser.role };
         }
 
@@ -102,6 +127,12 @@ export const AuthProvider = ({ children }) => {
         }
 
         if (mode === "user") {
+          safeLog({
+            action: "login_failed",
+            actorEmail: identifier,
+            actorRole: "user",
+            details: result.message || "Invalid credentials",
+          });
           return {
             success: false,
             message: result.message || "Invalid email/username or password.",
@@ -125,6 +156,13 @@ export const AuthProvider = ({ children }) => {
             setUser(sessionRider);
             setRole("rider");
             setIsAuthenticated(true);
+            safeLog({
+              action: "login",
+              actorEmail: sessionRider.email,
+              actorName: sessionRider.name,
+              actorRole: "rider",
+              details: "Rider login success (fallback)",
+            });
             return { success: true, role: "rider" };
           }
           return { success: false, message: riderResult.message };
@@ -147,6 +185,15 @@ export const AuthProvider = ({ children }) => {
   const register = async ({ name, username, email, password }) => {
     try {
       const result = await createUserMutation({ name, username, email, password, role: "user" });
+      if (result?.success) {
+        safeLog({
+          action: "register",
+          actorEmail: email,
+          actorName: name,
+          actorRole: "user",
+          details: `Account created (@${username})`,
+        });
+      }
       return result;
     } catch (err) {
       console.error("Register error:", err);
@@ -164,6 +211,15 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
+    if (user) {
+      safeLog({
+        action: "logout",
+        actorEmail: user.email,
+        actorName: user.name,
+        actorRole: user.role || role || undefined,
+        details: "User logged out",
+      });
+    }
     localStorage.removeItem("authUser");
     setUser(null);
     setRole(null);

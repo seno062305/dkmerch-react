@@ -245,6 +245,7 @@ function AppContent() {
               <Route path="users"         element={<AdminUsers />} />
               <Route path="riders"        element={<AdminRiders />} />
               <Route path="rewards"       element={<AdminRewards />} />
+              <Route path="settings"      element={<AdminBackup />} />
               <Route path="backup"        element={<AdminBackup />} />
             </Route>
           </Routes>

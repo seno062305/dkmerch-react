@@ -283,7 +283,30 @@ export default defineSchema({
     storeAddress: v.optional(v.string()),
     storeLat:     v.optional(v.number()),
     storeLng:     v.optional(v.number()),
+    autoBackupSchedule: v.optional(v.string()), // "daily" | "weekly" | "off"
+    lastAutoBackupAt:   v.optional(v.number()),
+    lastRestoreAt:      v.optional(v.number()),
   }),
+
+  activityLogs: defineTable({
+    action: v.string(),
+    actorEmail: v.optional(v.string()),
+    actorName: v.optional(v.string()),
+    actorRole: v.optional(v.string()),
+    details: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_createdAt", ["createdAt"]),
+
+  systemBackups: defineTable({
+    name: v.string(),
+    schedule: v.optional(v.string()),
+    createdAt: v.number(),
+    recordCount: v.number(),
+    sizeBytes: v.number(),
+    tables: v.array(v.string()),
+    storageId: v.optional(v.id("_storage")),
+    createdBy: v.optional(v.string()),
+  }).index("by_createdAt", ["createdAt"]),
 
   // ── Rewards System ────────────────────────────────────────────────────────
   userPoints: defineTable({

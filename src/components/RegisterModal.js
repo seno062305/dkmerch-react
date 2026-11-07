@@ -4,6 +4,7 @@ import "./RegisterModal.css";
 import { useAuth } from "../context/AuthContext";
 import { useMutation, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import { appendActivityLog } from "../admin/lib/localActivityLog";
 
 const RegisterModal = ({ onClose }) => {
   const { register } = useAuth();
@@ -140,11 +141,12 @@ const RegisterModal = ({ onClose }) => {
   const newPasswordsMatch = confirmNewPassword && newPassword === confirmNewPassword;
 
   const getFingerprint = () => {
+    const { colorDepth, width, height } = window["screen"];
     return btoa([
       navigator.userAgent,
       navigator.language,
-      screen.colorDepth,
-      screen.width + "x" + screen.height,
+      colorDepth,
+      `${width}x${height}`,
       new Date().getTimezoneOffset(),
     ].join("|")).slice(0, 32);
   };
@@ -250,6 +252,15 @@ const RegisterModal = ({ onClose }) => {
     try {
       const result = await verifyOtpAndCreateUser({ email: pendingEmail, otp });
       if (result.success) {
+        try {
+          appendActivityLog({
+            action: "register",
+            actorEmail: pendingEmail,
+            actorName: pendingName,
+            actorRole: "user",
+            details: "Account created after OTP verification",
+          });
+        } catch {}
         setOtpSuccess("✅ Email verified! Your account is ready.");
         setTimeout(() => onClose(), 1500);
       } else {
@@ -349,6 +360,16 @@ const RegisterModal = ({ onClose }) => {
         setErrors({ submit: result.message });
         return;
       }
+
+      try {
+        appendActivityLog({
+          action: "register_started",
+          actorEmail: formData.email,
+          actorName: formData.name,
+          actorRole: "user",
+          details: `Registration OTP sent (@${formData.username})`,
+        });
+      } catch {}
 
       await sendRegistrationOTP({ to: formData.email, name: formData.name, otp: result.otp });
       setPendingEmail(formData.email);

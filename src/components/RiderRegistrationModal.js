@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './RiderRegistrationModal.css';
 import { useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
+import { appendActivityLog } from '../admin/lib/localActivityLog';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
@@ -437,6 +438,15 @@ const RiderRegistrationModal = ({ onClose }) => {
         validId2:      photos.validId2   ?? undefined,
       });
       if (!result.success) { setErrors({ email: result.message }); return; }
+      try {
+        appendActivityLog({
+          action: 'register',
+          actorEmail: form.email,
+          actorName: form.fullName,
+          actorRole: 'rider',
+          details: 'Rider application submitted',
+        });
+      } catch {}
       setSubmitted(true);
     } catch {
       setErrors({ submit: 'Submission failed. Please try again.' });
