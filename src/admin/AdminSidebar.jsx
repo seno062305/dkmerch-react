@@ -241,7 +241,7 @@ const AdminSidebar = ({ onLinkClick, onClose, onToggleCollapse }) => {
           {pendingRedemptions > 0 && <span className="order-badge">{pendingRedemptions}</span>}
         </NavLink>
         <NavLink to="/admin/settings" className="admin-nav-link" onClick={handleNavClick}>
-          <i className="fas fa-cog"></i><span>Settings</span>
+          <i className="fas fa-tools"></i><span>System Maintenance</span>
         </NavLink>
       </nav>
 

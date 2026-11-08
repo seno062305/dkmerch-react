@@ -164,6 +164,18 @@ export const loginUser = mutation({
 
 const PIN_RE = /^\d{4,6}$/;
 
+async function hashPin(pin: string): Promise<string> {
+  const data = new TextEncoder().encode(pin);
+  const buf = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function isPlainPin(value: unknown): value is string {
+  return typeof value === "string" && PIN_RE.test(value);
+}
+
 const toSafeUser = (user: any) => ({
   _id: user._id,
   name: user.name,
@@ -188,8 +200,9 @@ export const setUserPin = mutation({
     if (user.role === "admin") {
       return { success: false, message: "Admin accounts do not use a login PIN." };
     }
+    const pinHash = await hashPin(pin);
     await db.patch(userId, {
-      pin,
+      pin: pinHash,
       loginOtp: undefined,
       loginOtpExpiresAt: undefined,
     } as any);
@@ -212,8 +225,19 @@ export const verifyLoginPin = mutation({
     if (!user.pin) {
       return { success: false, message: "No PIN set. Please verify with OTP first.", needsPinSetup: true };
     }
-    if (user.pin !== pin) {
+    if (!PIN_RE.test(pin)) {
       return { success: false, message: "Incorrect PIN." };
+    }
+    const pinHash = await hashPin(pin);
+    const match =
+      user.pin === pinHash ||
+      // migrate legacy plaintext PINs on first successful login
+      (isPlainPin(user.pin) && user.pin === pin);
+    if (!match) {
+      return { success: false, message: "Incorrect PIN." };
+    }
+    if (isPlainPin(user.pin)) {
+      await db.patch(userId, { pin: pinHash } as any);
     }
     return { success: true, user: toSafeUser(user) };
   },
@@ -736,12 +760,83 @@ export const softDeleteUser = mutation({
   },
 });
 
-// ── Hard delete — used by admin only (removes record entirely) ─────────────
+const clearUserCartWishlist = async (db: any, id: string, email: string) => {
+  const userKeys = [String(id), email].filter(Boolean);
+  for (const userId of userKeys) {
+    const cartItems = await db
+      .query("cart")
+      .withIndex("by_user", (q: any) => q.eq("userId", userId))
+      .collect();
+    for (const row of cartItems) await db.delete(row._id);
+
+    const wishItems = await db
+      .query("wishlist")
+      .withIndex("by_user", (q: any) => q.eq("userId", userId))
+      .collect();
+    for (const row of wishItems) await db.delete(row._id);
+  }
+};
+
+/**
+ * Admin delete = archive + unregister.
+ * Snapshot goes to userArchives; live users row is removed so email/username can register again.
+ */
 export const deleteUser = mutation({
-  args: { id: v.id("users") },
-  handler: async ({ db }, { id }) => {
+  args: {
+    id: v.id("users"),
+    archivedBy: v.optional(v.string()),
+    reason: v.optional(v.string()),
+  },
+  handler: async ({ db }, { id, archivedBy, reason }) => {
+    const user = await db.get(id) as any;
+    if (!user) return { success: false, message: "User not found." };
+    if (user.role === "admin" || user.email === "admin") {
+      return { success: false, message: "Admin accounts cannot be deleted." };
+    }
+
+    const { _id, _creationTime, password, pin, loginOtp, loginOtpExpiresAt, reactivationOtp, reactivationOtpExpiresAt, ...rest } = user;
+
+    await db.insert("userArchives", {
+      originalUserId: String(_id),
+      name: user.name,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      status: user.status,
+      phone: user.phone,
+      registeredAt: user.registeredAt,
+      snapshot: { ...rest, hadPassword: !!password, hadPin: !!pin },
+      archivedAt: Date.now(),
+      archivedBy: archivedBy || "admin",
+      reason: reason || "admin_delete",
+    } as any);
+
+    await clearUserCartWishlist(db, String(id), user.email);
     await db.delete(id);
-    return { success: true };
+
+    return {
+      success: true,
+      archived: true,
+      message: "Account archived & unregistered. Email/username are free to register again.",
+    };
+  },
+});
+
+export const listUserArchives = query({
+  args: {},
+  handler: async ({ db }) => {
+    return await db.query("userArchives").withIndex("by_archivedAt").order("desc").take(200);
+  },
+});
+
+/** Wipe an archived account permanently (no restore). */
+export const permanentDeleteUserArchive = mutation({
+  args: { archiveId: v.id("userArchives") },
+  handler: async ({ db }, { archiveId }) => {
+    const row = await db.get(archiveId);
+    if (!row) return { success: false, message: "Archive not found." };
+    await db.delete(archiveId);
+    return { success: true, message: "Archive permanently deleted." };
   },
 });
 

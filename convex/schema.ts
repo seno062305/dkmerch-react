@@ -326,6 +326,24 @@ export default defineSchema({
     storageId: v.optional(v.id("_storage")),
   }).index("by_createdAt", ["createdAt"]),
 
+  /** Customer accounts removed from live users (unregister) — kept for audit until permanent wipe. */
+  userArchives: defineTable({
+    originalUserId: v.optional(v.string()),
+    name: v.string(),
+    username: v.string(),
+    email: v.string(),
+    role: v.string(),
+    status: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    registeredAt: v.optional(v.string()),
+    snapshot: v.any(),
+    archivedAt: v.number(),
+    archivedBy: v.optional(v.string()),
+    reason: v.optional(v.string()),
+  })
+    .index("by_archivedAt", ["archivedAt"])
+    .index("by_email", ["email"]),
+
   // ── Rewards System ────────────────────────────────────────────────────────
   userPoints: defineTable({
     email: v.string(),

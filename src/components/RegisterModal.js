@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { useMutation, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { appendActivityLog } from "../admin/lib/localActivityLog";
+import { savePinWithFallback } from "../lib/localPin";
 
 const RegisterModal = ({ onClose }) => {
   const { register, completeLogin } = useAuth();
@@ -368,12 +369,16 @@ const RegisterModal = ({ onClose }) => {
     setPinLoading(true);
     setPinError("");
     try {
-      const result = await setUserPin({ userId: pendingUserId, pin });
-      if (!result.success) {
-        setPinError(result.message || "Failed to save PIN.");
+      const saved = await savePinWithFallback(setUserPin, pendingUserId, pin);
+      if (!saved.success) {
+        setPinError(saved.message || "Failed to save PIN.");
         return;
       }
-      setPinSuccess("✅ PIN saved! Signing you in…");
+      setPinSuccess(
+        saved.source === "local"
+          ? "✅ PIN saved on this device! Signing you in…"
+          : "✅ PIN saved! Signing you in…"
+      );
       completeLogin(
         {
           _id: pendingUserId,
@@ -385,8 +390,8 @@ const RegisterModal = ({ onClose }) => {
         "Registered + PIN created"
       );
       setTimeout(() => onClose(), 900);
-    } catch {
-      setPinError("Failed to save PIN. Please try again.");
+    } catch (err) {
+      setPinError(String(err?.message || "Failed to save PIN. Please try again.").slice(0, 140));
     } finally {
       setPinLoading(false);
     }

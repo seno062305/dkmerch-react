@@ -1,9 +1,41 @@
 // src/admin/AdminUsers.jsx
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import './AdminUsers.css';
-import { useQuery, useMutation, useAction } from 'convex/react';
+import { useQuery, useMutation, useAction, useConvex } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useConfirm } from '../context/ConfirmContext';
+
+/** Safe archives fetch — avoids hard crash if Convex hasn't deployed listUserArchives yet. */
+function useUserArchivesSafe(enabled) {
+  const convex = useConvex();
+  const [rows, setRows] = useState([]);
+  const [deployNeeded, setDeployNeeded] = useState(false);
+
+  const refresh = useCallback(async () => {
+    try {
+      const data = await convex.query(api.users.listUserArchives, {});
+      setRows(Array.isArray(data) ? data : []);
+      setDeployNeeded(false);
+    } catch (err) {
+      const msg = String(err?.message || err || '');
+      if (msg.includes('listUserArchives') || msg.includes('Could not find public function')) {
+        setDeployNeeded(true);
+        setRows([]);
+        return;
+      }
+      setRows([]);
+    }
+  }, [convex]);
+
+  useEffect(() => {
+    if (!enabled) return undefined;
+    refresh();
+    const t = setInterval(refresh, 8000);
+    return () => clearInterval(t);
+  }, [enabled, refresh]);
+
+  return { userArchives: rows, archivesDeployNeeded: deployNeeded, refreshArchives: refresh };
+}
 
 const RiderViewModal = ({ rider, onClose }) => {
   const cardRef = useRef();
@@ -134,10 +166,14 @@ const AdminUsers = () => {
 
   const users  = useQuery(api.users.getAllUsers)   ?? [];
   const riders = useQuery(api.riders.getAllRiders) ?? [];
+  const { userArchives, archivesDeployNeeded, refreshArchives } = useUserArchivesSafe(
+    activeTab === 'archives' || activeTab === 'users' || activeTab === 'pending'
+  );
 
   const suspendUserMutation   = useMutation(api.users.suspendUser);
   const unsuspendUserMutation = useMutation(api.users.unsuspendUser);
   const deleteUserMutation    = useMutation(api.users.deleteUser);
+  const permanentDeleteArchiveMutation = useMutation(api.users.permanentDeleteUserArchive);
   const activateUserMutation  = useMutation(api.users.activateUser);
   const deleteRiderMutation   = useMutation(api.riders.deleteRider);
   const adminCreateRider      = useMutation(api.riders.adminCreateRider);
@@ -150,6 +186,13 @@ const AdminUsers = () => {
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [userToDelete, setUserToDelete]           = useState(null);
+  const [deleteConfirmTyped, setDeleteConfirmTyped] = useState('');
+  const [deleteBusy, setDeleteBusy]               = useState(false);
+  const [archiveToWipe, setArchiveToWipe]         = useState(null);
+  const [wipeConfirmTyped, setWipeConfirmTyped]   = useState('');
+  const [wipeBusy, setWipeBusy]                   = useState(false);
+  const [hiddenUserIds, setHiddenUserIds]         = useState(() => new Set());
+  const DELETE_CONFIRM_WORD = 'DELETE';
 
   const [showSuspendModal, setShowSuspendModal] = useState(false);
   const [suspendStep, setSuspendStep]           = useState(STEP_CONFIGURE);
@@ -188,9 +231,13 @@ const AdminUsers = () => {
     setTimeout(() => setNotification({ show: false, message: '', type: '' }), 6000);
   };
 
-  const pendingUsers = users.filter(u => u.status === 'pending_activation');
+  const pendingUsers = users.filter(
+    (u) => u.status === 'pending_activation' && !hiddenUserIds.has(u._id)
+  );
   // regularUsers includes self_deactivated — they're real accounts, not pending
-  const regularUsers = users.filter(u => u.status !== 'pending_activation');
+  const regularUsers = users.filter(
+    (u) => u.status !== 'pending_activation' && !hiddenUserIds.has(u._id)
+  );
 
   const byNewest = (a, b) =>
     (b._creationTime || new Date(b.appliedAt || b.registeredAt || 0).getTime() || 0) -
@@ -422,16 +469,73 @@ const AdminUsers = () => {
     setUserToUnsuspend(null);
   };
 
-  const confirmDeleteUser = async () => {
-    if (!userToDelete) return;
-    try {
-      await deleteUserMutation({ id: userToDelete._id });
-      showNotification('User deleted successfully.', 'success');
-    } catch {
-      showNotification('Failed to delete user.', 'error');
-    }
+  const openDeleteConfirm = (user) => {
+    setUserToDelete(user);
+    setDeleteConfirmTyped('');
+    setShowDeleteConfirm(true);
+  };
+
+  const closeDeleteConfirm = (force = false) => {
+    if (deleteBusy && !force) return;
     setShowDeleteConfirm(false);
     setUserToDelete(null);
+    setDeleteConfirmTyped('');
+    setDeleteBusy(false);
+  };
+
+  const confirmDeleteUser = async () => {
+    if (!userToDelete || deleteConfirmTyped.trim() !== DELETE_CONFIRM_WORD) return;
+    const targetId = userToDelete._id;
+    const targetName = userToDelete.name;
+    setDeleteBusy(true);
+    try {
+      // Only `id` — matches current cloud deleteUser AND newer archive-capable deploy.
+      const result = await deleteUserMutation({ id: targetId });
+      if (result?.success === false) {
+        showNotification(result.message || 'Failed to remove user.', 'error');
+        return;
+      }
+      // Instantly hide from list (query refresh follows)
+      setHiddenUserIds((prev) => new Set(prev).add(targetId));
+      showNotification(
+        result?.message ||
+          `${targetName} removed from live users (unregistered).`,
+        'success'
+      );
+      closeDeleteConfirm(true);
+      refreshArchives();
+    } catch (err) {
+      const msg = String(err?.message || err || '');
+      if (msg.includes('userArchives') || msg.includes('Could not find') || msg.includes('ArgumentValidation')) {
+        showNotification(
+          'Delete failed on Convex. Run npx convex dev in your project folder, then try again.',
+          'error'
+        );
+      } else {
+        showNotification(msg.slice(0, 160) || 'Failed to remove user.', 'error');
+      }
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
+  const confirmWipeArchive = async () => {
+    if (!archiveToWipe || wipeConfirmTyped.trim() !== DELETE_CONFIRM_WORD) return;
+    setWipeBusy(true);
+    try {
+      const result = await permanentDeleteArchiveMutation({ archiveId: archiveToWipe._id });
+      if (result?.success === false) {
+        showNotification(result.message || 'Failed to wipe archive.', 'error');
+      } else {
+        showNotification('Archive permanently deleted.', 'success');
+        setArchiveToWipe(null);
+        setWipeConfirmTyped('');
+      }
+    } catch {
+      showNotification('Failed to wipe archive.', 'error');
+    } finally {
+      setWipeBusy(false);
+    }
   };
 
   const confirmActivate = async () => {
@@ -635,6 +739,10 @@ const AdminUsers = () => {
           <i className="fas fa-user-clock"></i> Pending Activation
           <span className="au-tab-badge">{pendingUsers.length}</span>
         </button>
+        <button className={`tab-btn ${activeTab === 'archives' ? 'active' : ''}`} onClick={() => setActiveTab('archives')}>
+          <i className="fas fa-archive"></i> Archives
+          <span className="au-tab-badge">{userArchives.length}</span>
+        </button>
         <button className={`tab-btn ${activeTab === 'riders' ? 'active' : ''}`} onClick={() => setActiveTab('riders')}>
           <i className="fas fa-motorcycle"></i> Riders
           <span className="au-tab-badge">{totalRiders}</span>
@@ -721,7 +829,7 @@ const AdminUsers = () => {
                             {/* Deleted info chip */}
                             {isDeleted && (
                               <span className="deleted-chip">
-                                <i className="fas fa-trash-alt"></i>Self-deleted · Admin can permanently remove
+                                <i className="fas fa-trash-alt"></i>Self-deleted · Use trash to unregister permanently
                               </span>
                             )}
                           </div>
@@ -745,21 +853,21 @@ const AdminUsers = () => {
                                 </button>
                               )}
 
-                              {/* Deactivated — no admin action, customer reactivates via login OTP */}
+                              {/* Deactivated — customer can still reactivate; admin may delete */}
                               {isDeactivated && (
-                                <span className="au-no-action-tip">
-                                  <i className="fas fa-info-circle"></i> Reactivated by customer
+                                <span className="au-no-action-tip" title="Customer can reactivate via login OTP">
+                                  <i className="fas fa-info-circle"></i>
                                 </span>
                               )}
 
-                              {/* Deleted — remove record permanently */}
-                              {isDeleted && (
-                                <button className="btn-remove"
-                                  onClick={() => { setUserToDelete(user); setShowDeleteConfirm(true); }}
-                                  title="Permanently remove record">
-                                  <i className="fas fa-trash-alt"></i> Remove
-                                </button>
-                              )}
+                              {/* Delete / unregister — frees email & username for new signup */}
+                              <button
+                                className="btn-delete"
+                                onClick={() => openDeleteConfirm(user)}
+                                title="Archive & unregister account"
+                              >
+                                <i className="fas fa-trash"></i>
+                              </button>
                             </>
                           )}
                         </td>
@@ -815,9 +923,71 @@ const AdminUsers = () => {
                           onClick={() => { setUserToActivate(user); setShowActivateConfirm(true); }}>
                           <i className="fas fa-check-circle"></i>
                         </button>
-                        <button className="btn-delete" title="Delete"
-                          onClick={() => { setUserToDelete(user); setShowDeleteConfirm(true); }}>
+                        <button className="btn-delete" title="Archive & unregister"
+                          onClick={() => openDeleteConfirm(user)}>
                           <i className="fas fa-trash"></i>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* ══ USER ARCHIVES TAB ═════════════════════════════════════════════════ */}
+      {activeTab === 'archives' && (
+        <>
+          <div className="users-controls">
+            <div style={{ color: '#64748b', fontSize: 13, lineHeight: 1.45 }}>
+              <i className="fas fa-archive" style={{ marginRight: 6, color: '#fc1268' }}></i>
+              Deleted accounts are archived here (audit). Live email/username are free to register again. Permanent wipe removes the archive only.
+            </div>
+          </div>
+          {archivesDeployNeeded && (
+            <div className="au-deploy-banner">
+              <i className="fas fa-cloud-upload-alt"></i>
+              <div>
+                <strong>Convex deploy needed.</strong> New archive APIs are in the code but not on your cloud yet.
+                In a terminal run: <code>npx convex dev</code> (or <code>npx convex deploy</code>), then refresh.
+              </div>
+            </div>
+          )}
+          <div className="users-table-container">
+            {userArchives.length === 0 ? (
+              <div className="no-users">
+                <i className="fas fa-archive" style={{ color: '#94a3b8' }}></i>
+                <p>{archivesDeployNeeded ? 'Archives unavailable until Convex is deployed.' : 'No archived accounts yet.'}</p>
+              </div>
+            ) : (
+              <table className="users-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Username</th>
+                    <th>Email</th>
+                    <th>Archived</th>
+                    <th>By</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {userArchives.map((row) => (
+                    <tr key={row._id}>
+                      <td className="user-name"><i className="fas fa-archive"></i>{row.name}</td>
+                      <td>@{row.username}</td>
+                      <td>{row.email}</td>
+                      <td className="date-cell">{formatDate(row.archivedAt)}</td>
+                      <td>{row.archivedBy || 'admin'}</td>
+                      <td className="actions-cell">
+                        <button
+                          className="btn-delete"
+                          title="Permanently wipe archive"
+                          onClick={() => { setArchiveToWipe(row); setWipeConfirmTyped(''); }}
+                        >
+                          <i className="fas fa-skull-crossbones"></i>
                         </button>
                       </td>
                     </tr>
@@ -1191,22 +1361,89 @@ const AdminUsers = () => {
         </div>
       )}
 
-      {/* ══ DELETE USER CONFIRM ════════════════════════════════════════════════ */}
-      {showDeleteConfirm && (
-        <div className="modal-overlay" onClick={() => setShowDeleteConfirm(false)}>
-          <div className="modal-content confirm-modal" onClick={e => e.stopPropagation()}>
-            <div className="confirm-icon suspend"><i className="fas fa-trash"></i></div>
-            <h2>{userToDelete?.status === 'deleted' ? 'Permanently Remove Record?' : 'Delete User?'}</h2>
+      {/* ══ DELETE / ARCHIVE USER — type-to-confirm ═══════════════════════════ */}
+      {showDeleteConfirm && userToDelete && (
+        <div className="modal-overlay" onClick={closeDeleteConfirm}>
+          <div className="modal-content confirm-modal au-type-confirm" onClick={e => e.stopPropagation()}>
+            <div className="confirm-icon suspend"><i className="fas fa-archive"></i></div>
+            <h2>Archive &amp; Unregister?</h2>
             <p>
-              {userToDelete?.status === 'deleted'
-                ? <>Permanently remove <strong>{userToDelete?.name}</strong>'s record from the database?</>
-                : <>Permanently delete <strong>{userToDelete?.name}</strong>?</>
-              }
+              Move <strong>{userToDelete.name}</strong>
+              {userToDelete.email ? <> (<strong>{userToDelete.email}</strong>)</> : null} out of live users into <strong>Archives</strong>.
             </p>
-            <p className="warning-text">This action cannot be undone.</p>
+            <p className="warning-text">
+              Email/username become free to register again. Cart/wishlist cleared. Snapshot stays in Archives until you permanently wipe it.
+            </p>
+            <div className="au-type-banner">
+              Type <strong>{DELETE_CONFIRM_WORD}</strong> exactly below to continue.
+            </div>
+            <label className="au-type-label" htmlFor="au-delete-confirm">Confirmation phrase</label>
+            <input
+              id="au-delete-confirm"
+              className={`au-type-input ${deleteConfirmTyped.trim() === DELETE_CONFIRM_WORD ? 'au-type-input--ok' : ''}`}
+              type="text"
+              autoFocus
+              autoComplete="off"
+              spellCheck={false}
+              disabled={deleteBusy}
+              value={deleteConfirmTyped}
+              placeholder={`Type ${DELETE_CONFIRM_WORD}`}
+              onChange={(e) => setDeleteConfirmTyped(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && deleteConfirmTyped.trim() === DELETE_CONFIRM_WORD && !deleteBusy) {
+                  e.preventDefault();
+                  confirmDeleteUser();
+                }
+              }}
+            />
             <div className="modal-actions">
-              <button className="btn-cancel" onClick={() => setShowDeleteConfirm(false)}>Cancel</button>
-              <button className="btn-suspend-confirm" onClick={confirmDeleteUser}><i className="fas fa-trash"></i> {userToDelete?.status === 'deleted' ? 'Remove Permanently' : 'Delete'}</button>
+              <button className="btn-cancel" onClick={closeDeleteConfirm} disabled={deleteBusy}>Cancel</button>
+              <button
+                className="btn-suspend-confirm"
+                onClick={confirmDeleteUser}
+                disabled={deleteBusy || deleteConfirmTyped.trim() !== DELETE_CONFIRM_WORD}
+              >
+                <i className="fas fa-archive"></i> {deleteBusy ? 'Archiving…' : 'Archive Account'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ WIPE USER ARCHIVE — type-to-confirm ════════════════════════════════ */}
+      {archiveToWipe && (
+        <div className="modal-overlay" onClick={() => !wipeBusy && setArchiveToWipe(null)}>
+          <div className="modal-content confirm-modal au-type-confirm" onClick={e => e.stopPropagation()}>
+            <div className="confirm-icon suspend"><i className="fas fa-skull-crossbones"></i></div>
+            <h2>Permanently Wipe Archive?</h2>
+            <p>
+              Delete archived snapshot of <strong>{archiveToWipe.name}</strong> ({archiveToWipe.email}). No restore after this.
+            </p>
+            <div className="au-type-banner">
+              Type <strong>{DELETE_CONFIRM_WORD}</strong> exactly below to continue.
+            </div>
+            <label className="au-type-label" htmlFor="au-wipe-confirm">Confirmation phrase</label>
+            <input
+              id="au-wipe-confirm"
+              className={`au-type-input ${wipeConfirmTyped.trim() === DELETE_CONFIRM_WORD ? 'au-type-input--ok' : ''}`}
+              type="text"
+              autoFocus
+              autoComplete="off"
+              spellCheck={false}
+              disabled={wipeBusy}
+              value={wipeConfirmTyped}
+              placeholder={`Type ${DELETE_CONFIRM_WORD}`}
+              onChange={(e) => setWipeConfirmTyped(e.target.value)}
+            />
+            <div className="modal-actions">
+              <button className="btn-cancel" onClick={() => { setArchiveToWipe(null); setWipeConfirmTyped(''); }} disabled={wipeBusy}>Cancel</button>
+              <button
+                className="btn-suspend-confirm"
+                onClick={confirmWipeArchive}
+                disabled={wipeBusy || wipeConfirmTyped.trim() !== DELETE_CONFIRM_WORD}
+              >
+                <i className="fas fa-trash"></i> {wipeBusy ? 'Wiping…' : 'Wipe Forever'}
+              </button>
             </div>
           </div>
         </div>

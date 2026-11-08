@@ -101,14 +101,16 @@ export const AuthProvider = ({ children }) => {
             role:     result.user.role,
           };
 
-          // Customer accounts: second factor (PIN) or first-time PIN setup via OTP
-          if (!result.skipSecondFactor && (result.needsPin || result.needsPinSetup)) {
+          // Customers NEVER fully sign in on password alone —
+          // always hand off to LoginModal for PIN (or first-time PIN setup).
+          if (sessionUser.role === "user" && !result.skipSecondFactor) {
+            const needsPin = !!result.needsPin;
             return {
               success: true,
-              needsPin: !!result.needsPin,
-              needsPinSetup: !!result.needsPinSetup,
+              needsPin,
+              needsPinSetup: !needsPin,
               pendingUser: sessionUser,
-              role: sessionUser.role,
+              role: "user",
             };
           }
 

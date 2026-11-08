@@ -1388,7 +1388,7 @@ const AdminBackup = () => {
 
       <div className="ab-super-top">
         <div>
-          <h1>Settings</h1>
+          <h1>System Maintenance</h1>
         </div>
         <button type="button" className="ab-super-refresh" disabled={!!busy || isLoading} onClick={refreshOverview}>
           <i className={`fas fa-sync-alt ${isLoading ? 'fa-spin' : ''}`}></i>
