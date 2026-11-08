@@ -5,7 +5,6 @@ import { api } from '../../convex/_generated/api';
 import { QRCodeSVG } from 'qrcode.react';
 import { useConfirm } from '../context/ConfirmContext';
 import './AdminOrders.css';
-// useRef still used by other AdminOrders components below
 
 const SITE_URL = 'https://dkmerchwebsite.vercel.app';
 
@@ -89,18 +88,28 @@ const WaybillModal = ({ order, onClose }) => {
     return dataUrl;
   };
 
-  /** Original-style colored HTML waybill + embedded QR image → direct Print dialog. */
+  /** Original colored HTML waybill + embedded PNG QR → Print dialog (matches on-screen layout). */
   const handlePrint = async () => {
     if (printing) return;
     setPrinting(true);
+    let printWindow = null;
     try {
-      const printWindow = window.open('', '_blank', 'width=480,height=720');
+      // Open on click so popup blockers stay happy, then fill in the label + QR.
+      printWindow = window.open('', '_blank', 'width=480,height=720');
       if (!printWindow) {
         alert('Pop-up blocked! Please allow pop-ups for this site.');
         return;
       }
+      printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Preparing…</title>
+<style>body{font-family:Arial,sans-serif;padding:24px;color:#334155;background:#f1f5f9}</style>
+</head><body><p><strong>Preparing waybill…</strong></p></body></html>`);
+      printWindow.document.close();
 
-      const qrPng = await makePrintQrDataUrl(trackOrderLink, 200);
+      const qrPng = await makePrintQrDataUrl(trackOrderLink, 240);
+      if (!qrPng?.startsWith('data:image/png')) {
+        throw new Error('QR PNG missing');
+      }
+
       const itemsHtml = (order.items || []).map((item, idx) => `
         <tr>
           <td style="color:#9ca3af">${idx + 1}</td>
@@ -124,6 +133,7 @@ const WaybillModal = ({ order, onClose }) => {
         ? `<div class="wb-totals-row wb-promo-row"><span>Promo (${esc(order.promoCode)})</span><strong>−₱${Number(discount).toLocaleString('en-PH')}</strong></div>`
         : '';
 
+      printWindow.document.open();
       printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <title>Waybill — ${shortId} | DKMerch</title>
 <style>
@@ -139,7 +149,7 @@ const WaybillModal = ({ order, onClose }) => {
   .wb-brand-sub { font-size: 8pt; color: #6b7280; font-weight: 600; margin-top: 1mm; }
   .wb-brand-contact { font-size: 7pt; color: #6b7280; margin-top: 1mm; }
   .wb-qr-block { display: flex; flex-direction: column; align-items: center; gap: 1.5mm; flex-shrink: 0; }
-  .wb-qr-block img { width: 22mm; height: 22mm; display: block; }
+  .wb-qr-block img { width: 24mm; height: 24mm; display: block; image-rendering: pixelated; }
   .wb-qr-label { font-size: 6.5pt; color: #111827; font-weight: 800; text-transform: uppercase; letter-spacing: 0.3px; }
   .wb-cols { display: grid; grid-template-columns: 0.9fr 1.1fr; gap: 2.5mm; }
   .wb-box { border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; }
@@ -174,7 +184,7 @@ const WaybillModal = ({ order, onClose }) => {
       <div class="wb-brand-contact">Manila, Philippines · support@dkmerch.com</div>
     </div>
     <div class="wb-qr-block">
-      <img src="${qrPng}" alt="Waybill QR" width="200" height="200" />
+      <img id="wb-qr" src="${qrPng}" alt="Waybill QR" width="240" height="240" />
       <div class="wb-qr-label">Scan / Track</div>
     </div>
   </div>
@@ -216,14 +226,18 @@ const WaybillModal = ({ order, onClose }) => {
   </div>
 </div>
 <script>
-  window.onload = function () {
-    setTimeout(function () { window.focus(); window.print(); }, 300);
-  };
+  function goPrint() {
+    setTimeout(function () { try { window.focus(); window.print(); } catch (e) {} }, 150);
+  }
+  var img = document.getElementById('wb-qr');
+  if (!img || img.complete) goPrint();
+  else { img.onload = goPrint; img.onerror = goPrint; }
 <\/script>
 </body></html>`);
       printWindow.document.close();
     } catch (err) {
       console.error('Waybill print failed:', err);
+      try { printWindow?.close(); } catch (_) { /* ignore */ }
       alert('Failed to open waybill print. Please try again.');
     } finally {
       setPrinting(false);
