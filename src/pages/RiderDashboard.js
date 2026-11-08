@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../context/ConfirmContext';
-import { useQuery, useMutation } from 'convex/react';
+import { useQuery, useMutation, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import WaybillScannerModal from '../components/WaybillScannerModal';
 import './RiderDashboard.css';
@@ -211,10 +211,9 @@ const buildRiderIconHtml = (heading) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fullscreen map modal
-// Desktop: left offset = sidebar width (260px) so it doesn't cover the sidebar
-// Mobile: true fullscreen covering entire viewport
+// Fullscreen map covers the viewport (bottom nav stays under overlay).
 // ─────────────────────────────────────────────────────────────────────────────
-const SIDEBAR_WIDTH = 260; // must match .rider-sidebar width in CSS
+const SIDEBAR_WIDTH = 0;
 
 const FullscreenMapModal = ({ address, customerName, coords, riderCoords, riderHeading, onClose }) => {
   const mapRef         = useRef(null);
@@ -723,17 +722,15 @@ const RiderDashboard = () => {
   const { user, logout } = useAuth();
   const { confirm } = useConfirm();
   const navigate = useNavigate();
-  const location = useLocation();
 
   const [tab, setTab] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     const urlTab = params.get('tab');
     if (GPS.isActive()) return 'deliver';
-    if (urlTab === 'available' || urlTab === 'my-pickups' || urlTab === 'deliver') return urlTab;
+    if (['available', 'my-pickups', 'deliver', 'profile'].includes(urlTab)) return urlTab;
     return 'available';
   });
 
-  const [sidebarOpen, setSidebarOpen]               = useState(false);
   const [expandedOrders, setExpandedOrders]         = useState({});
   const [expandedPickups, setExpandedPickups]       = useState({});
   const [expandedDeliveries, setExpandedDeliveries] = useState({});
@@ -742,6 +739,18 @@ const RiderDashboard = () => {
   const [otpErrors, setOtpErrors]                   = useState({});
   const [confirmingId, setConfirmingId]             = useState(null);
   const [notifyingId, setNotifyingId]               = useState(null);
+  const [acceptingId, setAcceptingId]               = useState(null);
+  const [pickupDateFrom, setPickupDateFrom]         = useState('');
+  const [pickupDateTo, setPickupDateTo]             = useState('');
+  const [profileView, setProfileView]               = useState('main'); // main | forgot
+  const [forgotEmail, setForgotEmail]               = useState('');
+  const [verificationCode, setVerificationCode]     = useState('');
+  const [sentCode, setSentCode]                     = useState('');
+  const [newPassword, setNewPassword]               = useState('');
+  const [confirmNewPw, setConfirmNewPw]             = useState('');
+  const [forgotMsg, setForgotMsg]                   = useState('');
+  const [forgotLoading, setForgotLoading]           = useState(false);
+  const [sendingCode, setSendingCode]               = useState(false);
   const [lastSeenAvailable, setLastSeenAvailable]   = useState(0);
   const [lastSeenPickups, setLastSeenPickups]       = useState(0);
   const [lastSeenDeliveries, setLastSeenDeliveries] = useState(0);
@@ -788,13 +797,15 @@ const RiderDashboard = () => {
     user?.email && user?.sessionId ? { email: user.email, sessionId: user.sessionId } : 'skip'
   );
 
-  const claimOrderByWaybill = useMutation(api.pickupRequests.claimOrderByWaybill);
+  const acceptOrderMutation = useMutation(api.pickupRequests.acceptOrder);
   const updateOrderFields   = useMutation(api.orders.updateOrderFields);
   const updatePickupStatus  = useMutation(api.pickupRequests.updatePickupStatus);
   const deletePickupRequest = useMutation(api.pickupRequests.deletePickupRequest);
   const updateRiderLocation = useMutation(api.riders.updateRiderLocation);
   const stopRiderTracking   = useMutation(api.riders.stopRiderTracking);
   const setRiderKickedAt    = useMutation(api.riders.setRiderKickedAt);
+  const resetPasswordByEmail  = useMutation(api.riders.resetRiderPasswordByEmail);
+  const sendPasswordResetCode = useAction(api.sendEmail.sendPasswordResetCode);
   const [showWaybillScanner, setShowWaybillScanner] = useState(false);
   const [scanTargetOrderId, setScanTargetOrderId]   = useState(null);
 
@@ -831,9 +842,10 @@ const RiderDashboard = () => {
     }
   }, [riderInfo]);
 
+  // Only admin-confirmed paid orders appear here — never raw customer checkouts.
   const claimedStatuses = ['approved', 'out_for_delivery', 'completed'];
 
-  const confirmedOrders = allOrders
+  const availableOrders = allOrders
     .filter(o =>
       (o.orderStatus === 'confirmed' || o.status === 'Confirmed') &&
       !allPickups.some(p => p.orderId === o.orderId && claimedStatuses.includes(p.status))
@@ -844,28 +856,49 @@ const RiderDashboard = () => {
       return bTime - aTime;
     });
 
-  const myPickups = allPickups
-    .filter(p => p.riderEmail === user?.email && claimedStatuses.includes(p.status))
-    .sort((a, b) => {
-      const t = p => p.approvedAt ? new Date(p.approvedAt).getTime() : p.requestedAt ? new Date(p.requestedAt).getTime() : (p._creationTime || 0);
-      return t(b) - t(a);
-    });
-
-  const myDeliveries = myPickups
-    .filter(p => (p.status === 'approved' || p.status === 'out_for_delivery') && allOrders.some(o => o.orderId === p.orderId))
+  const myDeliveries = allPickups
+    .filter(p =>
+      p.riderEmail === user?.email &&
+      (p.status === 'approved' || p.status === 'out_for_delivery') &&
+      allOrders.some(o => o.orderId === p.orderId)
+    )
     .sort((a, b) => {
       if (a.status === 'out_for_delivery' && b.status !== 'out_for_delivery') return -1;
       if (b.status === 'out_for_delivery' && a.status !== 'out_for_delivery') return  1;
-      return (new Date(b.requestedAt).getTime()) - (new Date(a.requestedAt).getTime());
+      return (new Date(b.approvedAt || b.requestedAt).getTime()) - (new Date(a.approvedAt || a.requestedAt).getTime());
     });
 
-  const activePickupsCount    = myPickups.filter(p => p.status === 'approved' || p.status === 'out_for_delivery').length;
+  const myPickupHistory = allPickups
+    .filter(p =>
+      p.riderEmail === user?.email &&
+      (p.status === 'out_for_delivery' || p.status === 'completed')
+    )
+    .filter(p => {
+      if (!pickupDateFrom && !pickupDateTo) return true;
+      const ts = new Date(p.approvedAt || p.requestedAt || p._creationTime || 0);
+      if (pickupDateFrom) {
+        const s = new Date(pickupDateFrom); s.setHours(0, 0, 0, 0);
+        if (ts < s) return false;
+      }
+      if (pickupDateTo) {
+        const e = new Date(pickupDateTo); e.setHours(23, 59, 59, 999);
+        if (ts > e) return false;
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      const tb = new Date(b.approvedAt || b.requestedAt || 0).getTime();
+      const ta = new Date(a.approvedAt || a.requestedAt || 0).getTime();
+      return tb - ta;
+    });
+
   const activeDeliveriesCount = myDeliveries.length;
+  const historyPickupsCount   = myPickupHistory.length;
 
   useEffect(() => {
     if (!initializedRef.current && (allOrders.length > 0 || allPickups.length > 0)) {
-      setLastSeenAvailable(confirmedOrders.length);
-      setLastSeenPickups(myPickups.length);
+      setLastSeenAvailable(availableOrders.length);
+      setLastSeenPickups(myPickupHistory.length);
       setLastSeenDeliveries(myDeliveries.length);
       initializedRef.current = true;
     }
@@ -873,16 +906,16 @@ const RiderDashboard = () => {
 
   const handleNavClick = useCallback((newTab) => {
     setTab(newTab);
-    if (newTab === 'available')  setLastSeenAvailable(confirmedOrders.length);
-    if (newTab === 'my-pickups') setLastSeenPickups(myPickups.length);
+    if (newTab === 'available')  setLastSeenAvailable(availableOrders.length);
+    if (newTab === 'my-pickups') setLastSeenPickups(myPickupHistory.length);
     if (newTab === 'deliver')    setLastSeenDeliveries(myDeliveries.length);
-    setSidebarOpen(false);
-    setTimeout(() => window.dispatchEvent(new Event('rider-sidebar-closed')), 350);
-  }, [confirmedOrders.length, myPickups.length, myDeliveries.length]);
+    if (newTab === 'profile')    setProfileView('main');
+  }, [availableOrders.length, myPickupHistory.length, myDeliveries.length]);
 
-  const newAvailableCount  = Math.max(0, confirmedOrders.length - lastSeenAvailable);
-  const newPickupsCount    = Math.max(0, myPickups.length - lastSeenPickups);
+  const newAvailableCount  = Math.max(0, availableOrders.length - lastSeenAvailable);
+  const newPickupsCount    = Math.max(0, myPickupHistory.length - lastSeenPickups);
   const newDeliveriesCount = Math.max(0, myDeliveries.length - lastSeenDeliveries);
+  const showAvailableDot   = newAvailableCount > 0 || availableOrders.length > 0;
 
   useEffect(() => {
     if (autoStartAttemptedRef.current) return;
@@ -936,10 +969,9 @@ const RiderDashboard = () => {
   const stopTrackingOnDelivery = useCallback(async () => { await GPS.stopOnDelivery(stopRiderTracking); setTrackingOrderId(null); setCurrentPosition(null); }, [stopRiderTracking]);
 
   const toggleExpanded     = (id, setFn) => setFn(prev => ({ ...prev, [id]: !prev[id] }));
-  const getPickupStatusStyle = (status) => ({ approved: { bg: '#d1fae5', color: '#0f5132' }, out_for_delivery: { bg: '#dbeafe', color: '#1e40af' }, completed: { bg: '#d1fae5', color: '#065f46' } }[status] || { bg: '#e2e8f0', color: '#475569' });
-  const getStatusLabel     = (status) => ({ approved: '✅ Scanned', out_for_delivery: '🚚 Out for Delivery', completed: '🎉 Delivered' }[status] || status);
+  const getPickupStatusStyle = (status) => ({ approved: { bg: '#d1fae5', color: '#0f5132' }, out_for_delivery: { bg: '#dbeafe', color: '#1e40af' }, completed: { bg: '#d1fae5', color: '#065f46' }, scanned: { bg: '#fce7f3', color: '#9d174d' } }[status] || { bg: '#e2e8f0', color: '#475569' });
+  const getStatusLabel     = (status) => ({ approved: '✅ Accepted', out_for_delivery: '🚚 Out for Delivery', completed: '🎉 Delivered', scanned: '📷 From Scan' }[status] || status);
 
-  const closeSidebar  = useCallback(() => { setSidebarOpen(false); setTimeout(() => window.dispatchEvent(new Event('rider-sidebar-closed')), 350); }, []);
   const handleLogout  = async () => {
     const ok = await confirm({
       title: 'Logout?',
@@ -953,27 +985,31 @@ const RiderDashboard = () => {
     navigate('/', { replace: true });
   };
 
-  const openWaybillScanner = (orderId = null) => {
+  const openOrderScanner = (orderId) => {
     setScanTargetOrderId(orderId);
     setShowWaybillScanner(true);
   };
 
+  const orderIdsMatch = (a, b) => {
+    if (!a || !b) return false;
+    const A = String(a).trim();
+    const B = String(b).trim();
+    if (A === B) return true;
+    const shortA = A.slice(-8).toUpperCase();
+    const shortB = B.slice(-8).toUpperCase();
+    return shortA === shortB || A.endsWith(B) || B.endsWith(A) || A.endsWith(shortB) || B.endsWith(shortA);
+  };
+
+  /** Scan waybill for a specific available order → accept → Deliver */
   const handleWaybillScan = async (scannedId) => {
-    if (!riderInfo) return false;
-    if (scanTargetOrderId) {
-      const target = scanTargetOrderId;
-      const shortTarget = target.slice(-8).toUpperCase();
-      const shortScanned = scannedId.slice(-8).toUpperCase();
-      const matches =
-        scannedId === target ||
-        shortScanned === shortTarget ||
-        target.endsWith(scannedId) ||
-        scannedId.endsWith(shortTarget);
-      if (!matches) return false;
+    if (!riderInfo || !scanTargetOrderId) return false;
+    if (!orderIdsMatch(scannedId, scanTargetOrderId)) {
+      return false;
     }
+    setAcceptingId(scanTargetOrderId);
     try {
-      const result = await claimOrderByWaybill({
-        orderId: scanTargetOrderId || scannedId,
+      const result = await acceptOrderMutation({
+        orderId: scanTargetOrderId,
         riderId: riderInfo._id,
         riderName: riderInfo.fullName,
         riderEmail: user.email,
@@ -982,20 +1018,72 @@ const RiderDashboard = () => {
         riderPlate: riderInfo.plateNumber || '',
       });
       if (!result?.success) {
-        alert(result?.message || 'Failed to claim order.');
+        alert(result?.message || 'Failed to accept order.');
         return false;
       }
       setShowWaybillScanner(false);
       setScanTargetOrderId(null);
-      setTab('my-pickups');
+      setTab('deliver');
       alert(result.alreadyClaimed
-        ? '✅ This order is already in My Pickups.'
-        : '✅ Waybill verified! Order moved to My Pickups.');
+        ? '✅ This order is already in Deliver.'
+        : '✅ Waybill matched! Order accepted and moved to Deliver.');
       return true;
     } catch (err) {
       console.error(err);
       alert('Failed to verify waybill. Please try again.');
       return false;
+    } finally {
+      setAcceptingId(null);
+    }
+  };
+
+  const handleSendForgotCode = async () => {
+    const email = (forgotEmail || user?.email || '').trim();
+    if (!email || !/\S+@\S+\.\S+/.test(email)) {
+      setForgotMsg('❌ Enter a valid email.');
+      return;
+    }
+    setSendingCode(true);
+    setForgotMsg('');
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    setSentCode(code);
+    try {
+      const result = await sendPasswordResetCode({ to: email, code });
+      if (result?.success) setForgotMsg(`✅ Code sent to ${email}`);
+      else { setForgotMsg(`❌ ${result?.message || 'Failed to send code.'}`); setSentCode(''); }
+    } catch {
+      setForgotMsg('❌ Failed to send email.');
+      setSentCode('');
+    } finally {
+      setSendingCode(false);
+    }
+  };
+
+  const handleResetRiderPassword = async (e) => {
+    e.preventDefault();
+    const email = (forgotEmail || user?.email || '').trim();
+    if (!sentCode) { setForgotMsg('❌ Request a verification code first.'); return; }
+    if (verificationCode !== sentCode) { setForgotMsg('❌ Invalid verification code.'); return; }
+    if (!newPassword.startsWith('@rider') || newPassword.length < 7 || newPassword.length > 10) {
+      setForgotMsg('❌ Password must start with @rider and be 7–10 characters.');
+      return;
+    }
+    if (newPassword !== confirmNewPw) { setForgotMsg('❌ Passwords do not match.'); return; }
+    setForgotLoading(true);
+    setForgotMsg('');
+    try {
+      const result = await resetPasswordByEmail({ email, newPassword });
+      if (result?.success) {
+        setForgotMsg('✅ Password updated.');
+        setVerificationCode(''); setNewPassword(''); setConfirmNewPw(''); setSentCode('');
+        setTimeout(() => setProfileView('main'), 1200);
+      } else {
+        setForgotMsg(`❌ ${result?.message || 'Reset failed.'}`);
+      }
+    } catch {
+      setForgotMsg('❌ Failed to reset password.');
+    } finally {
+      setForgotLoading(false);
     }
   };
 
@@ -1056,10 +1144,13 @@ const RiderDashboard = () => {
   };
 
   const handleDeletePickup = async (pickupId, status, orderId) => {
-    if (['approved', 'out_for_delivery'].includes(status)) { alert('❌ Cannot delete an active pickup. Complete the delivery first.'); return; }
+    if (status !== 'completed') {
+      alert('❌ You can only remove completed deliveries from My Pickup.');
+      return;
+    }
     const ok = await confirm({
       title: 'Remove pickup?',
-      message: 'Remove this pickup record from your list?',
+      message: 'Remove this completed pickup from your list?',
       confirmLabel: 'Remove',
       variant: 'danger',
     });
@@ -1105,65 +1196,33 @@ const RiderDashboard = () => {
   }
 
   const riderHeading = currentPosition?.heading ?? null;
+  const tabTitle = {
+    available: 'Available Orders',
+    deliver: 'Deliver',
+    'my-pickups': 'My Pickup',
+    profile: 'Profile',
+  }[tab] || 'Rider';
 
   return (
-    <div className={`rider-dashboard${sidebarOpen ? ' sidebar-open' : ''}`}>
-      <header className="rider-mobile-header">
-        <button className="rider-burger-btn" onClick={() => setSidebarOpen(true)} aria-label="Open menu"><i className="fas fa-bars"></i></button>
-        <div className="rider-mobile-logo"><i className="fas fa-motorcycle"></i><span>DKMerch</span></div>
-        <div className="rider-mobile-header-right">
-          {trackingOrderId && <span className="rider-mobile-gps-pill"><span className="rider-gps-dot"></span>GPS</span>}
+    <div className="rider-dashboard rider-dashboard--bottom-nav">
+      <header className="rider-topbar">
+        <div className="rider-topbar-brand">
+          <i className="fas fa-motorcycle"></i>
+          <div>
+            <strong>DKMerch</strong>
+            <span>{tabTitle}</span>
+          </div>
+        </div>
+        <div className="rider-topbar-right">
+          {trackingOrderId && (
+            <span className="rider-mobile-gps-pill">
+              <span className="rider-gps-dot"></span>
+              GPS{currentPosition ? ` ±${Math.round(currentPosition.accuracy || 0)}m` : ''}
+            </span>
+          )}
           <RiderNotifBell onGoToAvailable={() => handleNavClick('available')} />
-          <div className="rider-mobile-avatar"><i className="fas fa-user-circle"></i></div>
         </div>
       </header>
-      <div className={`rider-sidebar-overlay ${sidebarOpen ? 'open' : ''}`} onClick={closeSidebar} />
-      <aside className={`rider-sidebar ${sidebarOpen ? 'open' : ''}`}>
-        <div className="rider-sidebar-header">
-          <div>
-            <div className="rider-logo"><i className="fas fa-motorcycle"></i><span>DKMerch</span></div>
-            <div className="rider-tagline">Rider Dashboard</div>
-          </div>
-          <button className="rider-sidebar-close" onClick={closeSidebar} aria-label="Close menu"><i className="fas fa-times"></i></button>
-        </div>
-        <div className="rider-profile-card">
-          <div className="rider-avatar"><i className="fas fa-user-circle"></i></div>
-          <div className="rider-profile-info">
-            <strong>{riderInfo.fullName}</strong>
-            <span>{riderInfo.vehicleType}</span>
-            <span className="rider-plate">{riderInfo.plateNumber}</span>
-          </div>
-        </div>
-        {trackingOrderId && (
-          <div className="rider-gps-sidebar-status">
-            <span className="rider-gps-dot"></span>
-            <span>GPS Active{currentPosition && <small> · ±{Math.round(currentPosition.accuracy || 0)}m</small>}</span>
-          </div>
-        )}
-        <nav className="rider-nav">
-          <button className={`rider-nav-link ${tab === 'available'  ? 'active' : ''}`} onClick={() => handleNavClick('available')}>
-            <i className="fas fa-box-open"></i><span>Available Orders</span>
-            {confirmedOrders.length > 0 && <span className={`rider-nav-badge ${newAvailableCount > 0 ? 'rider-nav-badge-new' : ''}`}>{confirmedOrders.length}</span>}
-          </button>
-          <button className={`rider-nav-link ${tab === 'my-pickups' ? 'active' : ''}`} onClick={() => handleNavClick('my-pickups')}>
-            <i className="fas fa-truck-pickup"></i><span>My Pickups</span>
-            {activePickupsCount > 0 && <span className={`rider-nav-badge ${newPickupsCount > 0 ? 'rider-nav-badge-new' : ''}`}>{activePickupsCount}</span>}
-          </button>
-          <button className={`rider-nav-link ${tab === 'deliver'    ? 'active' : ''}`} onClick={() => handleNavClick('deliver')}>
-            <i className="fas fa-shipping-fast"></i><span>Deliver</span>
-            {activeDeliveriesCount > 0 && <span className={`rider-nav-badge rider-nav-badge-green ${newDeliveriesCount > 0 ? 'rider-nav-badge-new' : ''}`}>{activeDeliveriesCount}</span>}
-          </button>
-        </nav>
-        <div className="rider-sync-indicator"><span className="sync-dot"></span><span className="sync-text">Live • Real-time</span></div>
-
-        {!isInstalled && (isIos || installPrompt) && (
-          <button className="rider-install-btn" onClick={handleInstallClick}>
-            <i className="fas fa-download"></i><span>Install App</span>
-          </button>
-        )}
-
-        <button className="rider-logout-btn" onClick={handleLogout}><i className="fas fa-sign-out-alt"></i><span>Logout</span></button>
-      </aside>
 
       {showIosInstall && (
         <div className="rider-ios-install-overlay" onClick={() => setShowIosInstall(false)}>
@@ -1172,35 +1231,33 @@ const RiderDashboard = () => {
             <div className="rider-ios-install-icon"><img src="/images/dklogo2-removebg-preview.png" alt="DKMerch" /></div>
             <h3>Install DKMerch</h3>
             <p>Install this app on your iPhone for faster access to your deliveries.</p>
-            <div className="rider-ios-steps">
-              <div className="rider-ios-step"><span className="rider-ios-step-num">1</span><span>Tap the <strong>Share</strong> button <i className="fas fa-share-square" style={{color:'#007AFF'}}></i> at the bottom of Safari</span></div>
-              <div className="rider-ios-step"><span className="rider-ios-step-num">2</span><span>Scroll down and tap <strong>"Add to Home Screen"</strong> <i className="fas fa-plus-square" style={{color:'#007AFF'}}></i></span></div>
-              <div className="rider-ios-step"><span className="rider-ios-step-num">3</span><span>Tap <strong>"Add"</strong> in the top right corner</span></div>
-            </div>
-            <button className="rider-ios-install-done" onClick={() => setShowIosInstall(false)}>Got it! 👍</button>
+            <button className="rider-ios-install-done" onClick={() => setShowIosInstall(false)}>Got it!</button>
           </div>
         </div>
       )}
 
       <main className="rider-main">
-        {/* ── AVAILABLE ORDERS — no subtitle ── */}
         {tab === 'available' && (
           <div className="rider-content">
             <div className="rider-live-pill-row">
               <div className="rider-live-badge"><span className="sync-dot"></span>Live Updates</div>
-              <button type="button" className="rider-scan-waybill-btn" onClick={() => openWaybillScanner(null)}>
-                <i className="fas fa-camera"></i> Scan Waybill
-              </button>
+              {newAvailableCount > 0 && (
+                <span className="rider-new-orders-chip"><i className="fas fa-bell"></i> {newAvailableCount} new</span>
+              )}
             </div>
-            {confirmedOrders.length === 0 ? (
-              <div className="rider-empty"><i className="fas fa-box-open"></i><p>No confirmed orders available right now.</p><span>Scan a waybill anytime to claim a paid order.</span></div>
+            {availableOrders.length === 0 ? (
+              <div className="rider-empty">
+                <i className="fas fa-box-open"></i>
+                <p>No confirmed orders available right now.</p>
+                <span>Orders appear here only after admin confirms payment.</span>
+              </div>
             ) : (
               <div className="rider-compact-list">
-                {confirmedOrders.map((order, idx) => {
-                  const isExpanded = expandedOrders[order.orderId];
-                  const isNewest   = idx === 0;
+                {availableOrders.map((order, idx) => {
+                  const isNewest = idx === 0;
+                  const isExpanded = !!expandedOrders[order.orderId];
                   return (
-                    <div key={order.orderId} className={`rider-compact-card ${isNewest ? 'rider-card-newest' : ''}`}>
+                    <div key={order.orderId} className={`rider-compact-card rider-available-card ${isNewest ? 'rider-card-newest' : ''}`}>
                       {isNewest && <div className="rider-newest-tag"><i className="fas fa-bolt"></i> Just Confirmed</div>}
                       <div className="rider-compact-row">
                         <div className="rider-compact-left">
@@ -1209,14 +1266,24 @@ const RiderDashboard = () => {
                           <span className="rider-compact-total">₱{(order.finalTotal ?? order.total ?? 0).toLocaleString()}</span>
                         </div>
                         <div className="rider-compact-right">
-                          <button className="rider-pickup-btn-sm" onClick={() => openWaybillScanner(order.orderId)}>
-                            <i className="fas fa-qrcode"></i> Scan
+                          <button
+                            className="rider-pickup-btn-sm"
+                            disabled={acceptingId === order.orderId}
+                            onClick={() => openOrderScanner(order.orderId)}
+                          >
+                            {acceptingId === order.orderId
+                              ? <><i className="fas fa-spinner fa-spin"></i></>
+                              : <><i className="fas fa-qrcode"></i> Scan</>}
                           </button>
-                          <button className="rider-view-btn" onClick={() => toggleExpanded(order.orderId, setExpandedOrders)}>
+                          <button
+                            className="rider-view-btn"
+                            onClick={() => toggleExpanded(order.orderId, setExpandedOrders)}
+                          >
                             <i className={`fas fa-chevron-${isExpanded ? 'up' : 'down'}`}></i> {isExpanded ? 'Hide' : 'View'}
                           </button>
                         </div>
                       </div>
+
                       {isExpanded && (
                         <div className="rider-expanded-body">
                           <div className="rider-info-row"><i className="fas fa-map-marker-alt"></i><span><strong>Address:</strong> {order.shippingAddress || order.address || 'N/A'}</span></div>
@@ -1225,8 +1292,13 @@ const RiderDashboard = () => {
                             <span><strong>Phone:</strong> {order.phone || 'N/A'}</span>
                             {order.phone && <a href={`tel:${order.phone}`} className="rider-call-btn"><i className="fas fa-phone-alt"></i> Call</a>}
                           </div>
-                          <div className="rider-info-row"><i className="fas fa-box"></i><span><strong>Items:</strong> {order.items?.length || 0} item(s)</span></div>
-                          {order.items?.length > 0 && (
+                          <div className="rider-info-row"><i className="fas fa-calendar"></i><span><strong>Ordered:</strong> {new Date(order._creationTime).toLocaleString('en-PH')}</span></div>
+                          {order.confirmedAt && (
+                            <div className="rider-info-row"><i className="fas fa-check-circle"></i><span><strong>Confirmed:</strong> {new Date(order.confirmedAt).toLocaleString('en-PH')}</span></div>
+                          )}
+
+                          <div className="rider-expanded-section-title" style={{ marginTop: 10 }}><i className="fas fa-box"></i> Items</div>
+                          {order.items?.length > 0 ? (
                             <div className="rider-items-verify">
                               {order.items.map((item, i) => (
                                 <div key={`${item.id || item.name}-${i}`} className="rider-item-row">
@@ -1238,9 +1310,19 @@ const RiderDashboard = () => {
                                 </div>
                               ))}
                             </div>
+                          ) : (
+                            <div className="rider-info-row"><span>No item details.</span></div>
                           )}
-                          <div className="rider-info-row"><i className="fas fa-calendar"></i><span><strong>Date:</strong> {new Date(order._creationTime).toLocaleDateString('en-PH')}</span></div>
-                          {order.confirmedAt && <div className="rider-info-row"><i className="fas fa-check-circle"></i><span><strong>Confirmed:</strong> {new Date(order.confirmedAt).toLocaleString('en-PH')}</span></div>}
+
+                          <button
+                            className="rider-scan-accept-btn"
+                            disabled={acceptingId === order.orderId}
+                            onClick={() => openOrderScanner(order.orderId)}
+                          >
+                            {acceptingId === order.orderId
+                              ? <><i className="fas fa-spinner fa-spin"></i> Accepting...</>
+                              : <><i className="fas fa-qrcode"></i> Scan Waybill to Accept</>}
+                          </button>
                         </div>
                       )}
                     </div>
@@ -1251,22 +1333,31 @@ const RiderDashboard = () => {
           </div>
         )}
 
-        {/* ── MY PICKUPS — no subtitle ── */}
         {tab === 'my-pickups' && (
           <div className="rider-content">
-            <div className="rider-live-pill-row">
-              <button type="button" className="rider-scan-waybill-btn" onClick={() => openWaybillScanner(null)}>
-                <i className="fas fa-camera"></i> Scan Waybill
-              </button>
+            <div className="rider-date-filter">
+              <div className="rider-date-filter-item">
+                <label>From</label>
+                <input type="date" value={pickupDateFrom} max={pickupDateTo || undefined} onChange={e => setPickupDateFrom(e.target.value)} />
+              </div>
+              <div className="rider-date-filter-item">
+                <label>To</label>
+                <input type="date" value={pickupDateTo} min={pickupDateFrom || undefined} onChange={e => setPickupDateTo(e.target.value)} />
+              </div>
+              {(pickupDateFrom || pickupDateTo) && (
+                <button type="button" className="rider-date-filter-clear" onClick={() => { setPickupDateFrom(''); setPickupDateTo(''); }}>
+                  Clear
+                </button>
+              )}
             </div>
-            {myPickups.length === 0 ? (
-              <div className="rider-empty"><i className="fas fa-truck-pickup"></i><p>No pickups yet.</p><span>Scan a waybill from Available Orders to claim a package.</span></div>
+            {myPickupHistory.length === 0 ? (
+              <div className="rider-empty"><i className="fas fa-truck-pickup"></i><p>No out-for-delivery or completed pickups yet.</p><span>Accepted orders show here after you start or finish delivery.</span></div>
             ) : (
               <div className="rider-compact-list">
-                {myPickups.map(req => {
-                  const style      = getPickupStatusStyle(req.status);
+                {myPickupHistory.map(req => {
+                  const style = getPickupStatusStyle(req.status);
                   const isExpanded = expandedPickups[req._id];
-                  const order      = allOrders.find(o => o.orderId === req.orderId);
+                  const order = allOrders.find(o => o.orderId === req.orderId);
                   return (
                     <div key={req._id} className="rider-compact-card">
                       <div className="rider-compact-row">
@@ -1285,14 +1376,9 @@ const RiderDashboard = () => {
                       {isExpanded && (
                         <div className="rider-expanded-body">
                           <div className="rider-info-row"><i className="fas fa-map-marker-alt"></i><span><strong>Address:</strong> {order?.shippingAddress || order?.address || 'N/A'}</span></div>
-                          <div className="rider-info-row">
-                            <i className="fas fa-phone"></i>
-                            <span><strong>Phone:</strong> {order?.phone || 'N/A'}</span>
-                            {order?.phone && <a href={`tel:${order.phone}`} className="rider-call-btn"><i className="fas fa-phone-alt"></i> Call</a>}
-                          </div>
-                          <div className="rider-info-row"><i className="fas fa-calendar"></i><span><strong>Scanned:</strong> {new Date(req.approvedAt || req.requestedAt).toLocaleString('en-PH')}</span></div>
-                          <div className="rider-expanded-section-title" style={{ marginTop: 10 }}><i className="fas fa-box"></i> Verify Items</div>
-                          {order?.items?.length ? (
+                          <div className="rider-info-row"><i className="fas fa-phone"></i><span><strong>Phone:</strong> {order?.phone || 'N/A'}</span></div>
+                          <div className="rider-info-row"><i className="fas fa-calendar"></i><span><strong>Updated:</strong> {new Date(req.approvedAt || req.requestedAt).toLocaleString('en-PH')}</span></div>
+                          {order?.items?.length > 0 && (
                             <div className="rider-items-verify">
                               {order.items.map((item, i) => (
                                 <div key={`${item.id || item.name}-${i}`} className="rider-item-row">
@@ -1304,12 +1390,9 @@ const RiderDashboard = () => {
                                 </div>
                               ))}
                             </div>
-                          ) : (
-                            <div className="rider-info-row"><span>Item details unavailable.</span></div>
                           )}
-                          {req.status === 'approved'         && <div className="rider-approved-notice">✅ Waybill verified. Check items above, then go to <strong>Deliver</strong> to notify the customer.</div>}
-                          {req.status === 'out_for_delivery' && <div className="rider-ofd-notice">🚚 Customer notified. Continue in the <strong>Deliver</strong> tab (map + OTP).</div>}
-                          {req.status === 'completed'        && <div className="rider-completed-notice">🎉 Delivery confirmed and completed!</div>}
+                          {req.status === 'out_for_delivery' && <div className="rider-ofd-notice">🚚 Still out for delivery — open <strong>Deliver</strong> for map + OTP.</div>}
+                          {req.status === 'completed' && <div className="rider-completed-notice">🎉 Delivery completed.</div>}
                           {req.status === 'completed' && (
                             <button className="rider-delete-btn" onClick={() => handleDeletePickup(req._id, req.status, req.orderId)}>
                               <i className="fas fa-trash-alt"></i> Remove from List
@@ -1325,17 +1408,15 @@ const RiderDashboard = () => {
           </div>
         )}
 
-        {/* ── DELIVER — no subtitle ── */}
         {tab === 'deliver' && (
           <div className="rider-content">
-
             {gpsError && (
               <div className="rider-gps-error-banner">
                 <i className="fas fa-exclamation-triangle"></i><span>{gpsError}</span><button onClick={() => setGpsError(null)}>✕</button>
               </div>
             )}
             {myDeliveries.length === 0 ? (
-              <div className="rider-empty"><i className="fas fa-shipping-fast"></i><p>No deliveries ready yet.</p><span>Scan a waybill first — verified pickups appear here with the map.</span></div>
+              <div className="rider-empty"><i className="fas fa-shipping-fast"></i><p>No deliveries yet.</p><span>Accept an order from Available Orders to see it here with the map.</span></div>
             ) : (
               <div className="rider-compact-list">
                 {myDeliveries.map(delivery => {
@@ -1373,12 +1454,14 @@ const RiderDashboard = () => {
                             <div className="rider-expanded-section-title"><i className="fas fa-user"></i> Customer Info</div>
                             <div className="rider-info-row"><i className="fas fa-user-circle"></i><span><strong>Name:</strong> {customerName}</span></div>
                             <div className="rider-info-row"><i className="fas fa-map-marker-alt"></i><span><strong>Address:</strong> {addr || 'N/A'}</span></div>
+                            <div className="rider-info-row">
+                              <i className="fas fa-phone"></i>
+                              <span><strong>Phone:</strong> {phone || 'N/A'}</span>
+                            </div>
                             {phone && (
-                              <div className="rider-info-row">
-                                <i className="fas fa-phone"></i>
-                                <span><strong>Phone:</strong> {phone}</span>
-                                <a href={`tel:${phone}`} className="rider-call-btn"><i className="fas fa-phone-alt"></i> Call</a>
-                              </div>
+                              <a href={`tel:${phone}`} className="rider-scan-accept-btn" style={{ marginTop: 8, background: 'linear-gradient(135deg,#16a34a,#15803d)' }}>
+                                <i className="fas fa-phone-alt"></i> Call Customer
+                              </a>
                             )}
                             <div className="customer-map-section-title"><i className="fas fa-map-marked-alt"></i> Customer Location</div>
                             <CustomerMap orderId={delivery.orderId} allOrders={allOrders} riderCoords={currentPosition ? { lat: currentPosition.lat, lng: currentPosition.lng } : null} riderHeading={riderHeading} />
@@ -1403,18 +1486,9 @@ const RiderDashboard = () => {
                                     <span>Sending location every 5 seconds{currentPosition && <> · <strong>±{Math.round(currentPosition.accuracy || 0)}m</strong></>}</span>
                                   </div>
                                   {currentPosition && <div className="rider-gps-coords"><i className="fas fa-crosshairs"></i>{currentPosition.lat.toFixed(6)}, {currentPosition.lng.toFixed(6)}</div>}
-                                  {/* Stop sharing disabled — auto-stops on delivery confirm */}
-                                  <button
-                                    className="rider-gps-stop-btn"
-                                    disabled={true}
-                                    style={{ opacity: 0.4, cursor: 'not-allowed' }}
-                                    title="GPS tracking cannot be stopped during active delivery"
-                                  >
+                                  <button className="rider-gps-stop-btn" disabled style={{ opacity: 0.4, cursor: 'not-allowed' }}>
                                     <i className="fas fa-stop-circle"></i> Stop Sharing Location
                                   </button>
-                                  <p style={{ fontSize: 11, color: '#6b7280', margin: '6px 0 0', textAlign: 'center' }}>
-                                    📍 GPS auto-stops when delivery is confirmed
-                                  </p>
                                 </>
                               ) : (
                                 <>
@@ -1433,10 +1507,6 @@ const RiderDashboard = () => {
                             <div className="rider-confirm-delivery-section">
                               <div className="rider-confirm-title"><i className="fas fa-shield-alt"></i> Confirm Delivery</div>
                               <p className="rider-confirm-desc">Enter the <strong>OTP code</strong> from the customer's tracking page.</p>
-                              <div className="rider-otp-hint">
-                                <i className="fas fa-info-circle"></i>
-                                <span>Ask the customer to open their <strong>Track Order</strong> page and tap <strong>"Generate My OTP"</strong>.</span>
-                              </div>
                               <div className="rider-otp-group">
                                 <label className="rider-otp-label"><i className="fas fa-key"></i> Customer OTP Code<span className="otp-required-tag">*Required</span></label>
                                 <input type="text" className="rider-otp-input" placeholder="Enter 4-digit OTP" maxLength={4}
@@ -1460,7 +1530,6 @@ const RiderDashboard = () => {
                                     <div className="rider-photo-placeholder">
                                       <i className="fas fa-cloud-upload-alt"></i>
                                       <span>Click to upload photo (optional)</span>
-                                      <small>JPG, PNG — max 5MB</small>
                                     </div>
                                   )}
                                 </div>
@@ -1471,7 +1540,7 @@ const RiderDashboard = () => {
                               </div>
                               {errMsg && <div className="rider-confirm-error"><i className="fas fa-exclamation-circle"></i> {errMsg}</div>}
                               <button className={`rider-confirm-btn ${confirmingId === delivery._id ? 'confirming' : ''}`} onClick={() => confirmDelivery(delivery)} disabled={confirmingId === delivery._id}>
-                                {confirmingId === delivery._id ? <><i className="fas fa-spinner fa-spin"></i> Confirming Delivery...</> : <><i className="fas fa-check-circle"></i> Confirm Delivery</>}
+                                {confirmingId === delivery._id ? <><i className="fas fa-spinner fa-spin"></i> Confirming...</> : <><i className="fas fa-check-circle"></i> Confirm Delivery</>}
                               </button>
                             </div>
                           )}
@@ -1484,15 +1553,115 @@ const RiderDashboard = () => {
             )}
           </div>
         )}
+
+        {tab === 'profile' && (
+          <div className="rider-content">
+            {profileView === 'main' ? (
+              <div className="rider-profile-panel">
+                <div className="rider-profile-hero">
+                  <div className="rider-avatar large"><i className="fas fa-user-circle"></i></div>
+                  <h2>{riderInfo.fullName}</h2>
+                  <span className="rider-plate">{riderInfo.plateNumber || 'No plate'}</span>
+                </div>
+                <div className="rider-profile-card-info">
+                  <h3><i className="fas fa-id-card"></i> Rider Information</h3>
+                  <div className="rider-info-row"><i className="fas fa-envelope"></i><span><strong>Email:</strong> {riderInfo.email || user?.email}</span></div>
+                  <div className="rider-info-row"><i className="fas fa-phone"></i><span><strong>Phone:</strong> {riderInfo.phone || '—'}</span></div>
+                  <div className="rider-info-row"><i className="fas fa-motorcycle"></i><span><strong>Vehicle:</strong> Motorcycle</span></div>
+                  <div className="rider-info-row"><i className="fas fa-id-badge"></i><span><strong>Rider ID:</strong> {riderInfo.dkRiderId || '—'}</span></div>
+                  <div className="rider-info-row"><i className="fas fa-map-marker-alt"></i><span><strong>Address:</strong> {riderInfo.address || '—'}</span></div>
+                </div>
+                <div className="rider-profile-settings">
+                  <h3><i className="fas fa-cog"></i> Settings</h3>
+                  {!isInstalled && (isIos || installPrompt) && (
+                    <button type="button" className="rider-profile-action" onClick={handleInstallClick}>
+                      <i className="fas fa-download"></i> Install App
+                    </button>
+                  )}
+                  <button type="button" className="rider-profile-action" onClick={() => {
+                    setForgotEmail(user?.email || riderInfo.email || '');
+                    setForgotMsg('');
+                    setProfileView('forgot');
+                  }}>
+                    <i className="fas fa-key"></i> Forgot Password
+                  </button>
+                  <button type="button" className="rider-profile-action danger" onClick={handleLogout}>
+                    <i className="fas fa-sign-out-alt"></i> Logout
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="rider-profile-panel">
+                <button type="button" className="rider-profile-back" onClick={() => setProfileView('main')}>
+                  <i className="fas fa-arrow-left"></i> Back
+                </button>
+                <h3>Reset Password</h3>
+                <p className="rider-profile-hint">Only you can reset your rider password here.</p>
+                <form className="rider-forgot-form" onSubmit={handleResetRiderPassword}>
+                  <label>Email</label>
+                  <input type="email" value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} required />
+                  <button type="button" className="rider-profile-action" onClick={handleSendForgotCode} disabled={sendingCode}>
+                    {sendingCode ? 'Sending…' : 'Send Code'}
+                  </button>
+                  <label>Verification Code</label>
+                  <input value={verificationCode} onChange={e => setVerificationCode(e.target.value)} placeholder="6-digit code" />
+                  <label>New Password</label>
+                  <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="@rider + up to 4 chars" maxLength={10} />
+                  <label>Confirm Password</label>
+                  <input type="password" value={confirmNewPw} onChange={e => setConfirmNewPw(e.target.value)} maxLength={10} />
+                  {forgotMsg && <div className="rider-forgot-msg">{forgotMsg}</div>}
+                  <button type="submit" className="rider-pickup-btn-sm" style={{ width: '100%', justifyContent: 'center' }} disabled={forgotLoading}>
+                    {forgotLoading ? 'Saving…' : 'Update Password'}
+                  </button>
+                </form>
+              </div>
+            )}
+          </div>
+        )}
       </main>
+
+      <nav className="rider-bottom-nav rider-bottom-nav--4" aria-label="Rider navigation">
+        <button type="button" className={`rider-bnav-item ${tab === 'available' ? 'active' : ''}`} onClick={() => handleNavClick('available')}>
+          <span className="rider-bnav-icon-wrap">
+            <i className="fas fa-home"></i>
+            {showAvailableDot && tab !== 'available' && (
+              newAvailableCount > 0
+                ? <em className="rider-bnav-badge new">{newAvailableCount}</em>
+                : <em className="rider-bnav-dot" />
+            )}
+            {tab === 'available' && availableOrders.length > 0 && (
+              <em className="rider-bnav-badge">{availableOrders.length}</em>
+            )}
+          </span>
+          <span>Available</span>
+        </button>
+        <button type="button" className={`rider-bnav-item ${tab === 'deliver' ? 'active' : ''}`} onClick={() => handleNavClick('deliver')}>
+          <span className="rider-bnav-icon-wrap">
+            <i className="fas fa-shipping-fast"></i>
+            {activeDeliveriesCount > 0 && <em className={`rider-bnav-badge green ${newDeliveriesCount > 0 ? 'new' : ''}`}>{activeDeliveriesCount}</em>}
+          </span>
+          <span>Deliver</span>
+        </button>
+        <button type="button" className={`rider-bnav-item ${tab === 'my-pickups' ? 'active' : ''}`} onClick={() => handleNavClick('my-pickups')}>
+          <span className="rider-bnav-icon-wrap">
+            <i className="fas fa-box"></i>
+            {historyPickupsCount > 0 && <em className={`rider-bnav-badge ${newPickupsCount > 0 ? 'new' : ''}`}>{historyPickupsCount}</em>}
+          </span>
+          <span>My Pickup</span>
+        </button>
+        <button type="button" className={`rider-bnav-item ${tab === 'profile' ? 'active' : ''}`} onClick={() => handleNavClick('profile')}>
+          <i className="fas fa-user-circle"></i>
+          <span>Profile</span>
+        </button>
+      </nav>
 
       {showWaybillScanner && (
         <WaybillScannerModal
           onClose={() => { setShowWaybillScanner(false); setScanTargetOrderId(null); }}
           onScan={handleWaybillScan}
           hint={scanTargetOrderId
-            ? `Scan the waybill for order #${scanTargetOrderId.slice(-8).toUpperCase()} to claim it.`
-            : 'Point your camera at the waybill QR. Verified orders go to My Pickups.'}
+            ? `Scan the waybill for #${scanTargetOrderId.slice(-8).toUpperCase()}. Matching QR accepts the order into Deliver.`
+            : 'Scan the order waybill QR to accept.'}
         />
       )}
     </div>

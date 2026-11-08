@@ -230,6 +230,8 @@ export default defineSchema({
     status: v.string(),
     approvedAt: v.optional(v.string()),
     rejectedAt: v.optional(v.string()),
+    fromScan: v.optional(v.boolean()),
+    scannedAt: v.optional(v.string()),
   }).index("by_rider", ["riderId"]),
 
   preOrderRequests: defineTable({

@@ -1,8 +1,8 @@
 {
   "name": "DKMerch",
   "short_name": "DKMerch",
-  "description": "DKMerch Rider Dashboard — deliver orders on the go",
-  "start_url": "/rider",
+  "description": "DKMerch — K-Pop merchandise store, orders, tracking, and rider delivery",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
@@ -22,20 +22,27 @@
       "purpose": "any maskable"
     }
   ],
-  "categories": ["logistics", "productivity"],
+  "categories": ["shopping", "lifestyle"],
   "shortcuts": [
     {
-      "name": "Available Orders",
-      "short_name": "Orders",
-      "description": "View available orders",
-      "url": "/rider?tab=available",
+      "name": "Shop",
+      "short_name": "Shop",
+      "description": "Browse collections",
+      "url": "/collections",
       "icons": [{ "src": "/images/dklogo2-removebg-preview.png", "sizes": "96x96" }]
     },
     {
-      "name": "Deliver",
-      "short_name": "Deliver",
-      "description": "View active deliveries",
-      "url": "/rider?tab=deliver",
+      "name": "Track Order",
+      "short_name": "Track",
+      "description": "Track your delivery",
+      "url": "/my-orders",
+      "icons": [{ "src": "/images/dklogo2-removebg-preview.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Rider Dashboard",
+      "short_name": "Rider",
+      "description": "Open rider tools",
+      "url": "/rider",
       "icons": [{ "src": "/images/dklogo2-removebg-preview.png", "sizes": "96x96" }]
     }
   ]

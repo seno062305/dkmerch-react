@@ -42,8 +42,19 @@ export const createPickupRequest = mutation({
   },
 });
 
-/** Rider claims a paid/confirmed order by scanning the waybill — no admin approval. */
-export const claimOrderByWaybill = mutation({
+async function findOrderByIdOrShort(db: any, orderIdRaw: string) {
+  const orderId = orderIdRaw.trim();
+  const exact = await db.query("orders").withIndex("by_orderId", (q: any) => q.eq("orderId", orderId)).first();
+  if (exact) return exact;
+  const short = orderId.slice(-8).toUpperCase();
+  const all = await db.query("orders").collect();
+  return all.find(
+    (o: any) => o.orderId === orderId || o.orderId?.slice(-8).toUpperCase() === short
+  ) || null;
+}
+
+/** Scan waybill → mark order for Available Orders (does not accept yet). */
+export const markOrderFromScan = mutation({
   args: {
     orderId: v.string(),
     riderId: v.string(),
@@ -54,13 +65,7 @@ export const claimOrderByWaybill = mutation({
     riderPlate: v.optional(v.string()),
   },
   handler: async ({ db }, args) => {
-    const orderId = args.orderId.trim();
-    const order =
-      (await db.query("orders").withIndex("by_orderId", q => q.eq("orderId", orderId)).first()) ||
-      (await db.query("orders").collect()).find(
-        o => o.orderId === orderId || o.orderId?.slice(-8).toUpperCase() === orderId.slice(-8).toUpperCase()
-      );
-
+    const order = await findOrderByIdOrShort(db, args.orderId);
     if (!order) {
       return { success: false, message: "Order not found. Check the waybill and try again." };
     }
@@ -70,12 +75,12 @@ export const claimOrderByWaybill = mutation({
       return { success: false, message: `Order is already ${status.replace(/_/g, " ")}.` };
     }
     if (status !== "confirmed" && status !== "shipped") {
-      return { success: false, message: "Only confirmed (paid) orders can be claimed." };
+      return { success: false, message: "Only confirmed (paid) orders can be scanned." };
     }
 
     const existing = await db.query("pickupRequests").collect();
-    const forOrder = existing.filter(p => p.orderId === order.orderId);
-    const claimed = forOrder.find(p =>
+    const forOrder = existing.filter((p: any) => p.orderId === order.orderId);
+    const claimed = forOrder.find((p: any) =>
       ["approved", "out_for_delivery", "completed"].includes(p.status)
     );
     if (claimed) {
@@ -83,44 +88,119 @@ export const claimOrderByWaybill = mutation({
         return {
           success: true,
           alreadyClaimed: true,
-          id: claimed._id,
           orderId: order.orderId,
-          message: "This order is already in your pickups.",
+          message: "You already accepted this order — check Deliver.",
         };
       }
-      return { success: false, message: "Another rider already claimed this order." };
+      return { success: false, message: "Another rider already accepted this order." };
     }
 
-    // Upgrade this rider's pending request if any; drop other riders' pending rows
-    const minePending = forOrder.find(
-      p => p.riderEmail === args.riderEmail && p.status === "pending"
-    );
     const now = new Date().toISOString();
+    const mine = forOrder.find(
+      (p: any) => p.riderEmail === args.riderEmail && (p.status === "scanned" || p.status === "pending")
+    );
+
+    if (mine) {
+      await db.patch(mine._id, {
+        status: "scanned",
+        fromScan: true,
+        scannedAt: now,
+        customerName: order.customerName || mine.customerName,
+        total: order.finalTotal ?? order.total ?? mine.total,
+      });
+      return { success: true, id: mine._id, orderId: order.orderId, fromScan: true };
+    }
+
+    const id = await db.insert("pickupRequests", {
+      orderId: order.orderId,
+      riderId: args.riderId,
+      riderName: args.riderName,
+      riderEmail: args.riderEmail,
+      riderPhone: args.riderPhone || "",
+      riderVehicle: args.riderVehicle || "motorcycle",
+      riderPlate: args.riderPlate || "",
+      customerName: order.customerName || "",
+      total: order.finalTotal ?? order.total ?? 0,
+      requestedAt: now,
+      status: "scanned",
+      fromScan: true,
+      scannedAt: now,
+    });
+
+    return { success: true, id, orderId: order.orderId, fromScan: true };
+  },
+});
+
+/** Accept an available/scanned order → Deliver tab (no admin approval). */
+export const acceptOrder = mutation({
+  args: {
+    orderId: v.string(),
+    riderId: v.string(),
+    riderName: v.string(),
+    riderEmail: v.string(),
+    riderPhone: v.optional(v.string()),
+    riderVehicle: v.optional(v.string()),
+    riderPlate: v.optional(v.string()),
+  },
+  handler: async ({ db }, args) => {
+    const order = await findOrderByIdOrShort(db, args.orderId);
+    if (!order) {
+      return { success: false, message: "Order not found." };
+    }
+
+    const status = (order.orderStatus || order.status || "").toLowerCase();
+    if (["completed", "delivered", "cancelled", "out_for_delivery"].includes(status)) {
+      return { success: false, message: `Order is already ${status.replace(/_/g, " ")}.` };
+    }
+    if (status !== "confirmed" && status !== "shipped") {
+      return { success: false, message: "Only confirmed orders can be accepted." };
+    }
+
+    const existing = await db.query("pickupRequests").collect();
+    const forOrder = existing.filter((p: any) => p.orderId === order.orderId);
+    const claimed = forOrder.find((p: any) =>
+      ["approved", "out_for_delivery", "completed"].includes(p.status)
+    );
+    if (claimed) {
+      if (claimed.riderEmail === args.riderEmail) {
+        return { success: true, alreadyClaimed: true, id: claimed._id, orderId: order.orderId };
+      }
+      return { success: false, message: "Another rider already accepted this order." };
+    }
+
+    const now = new Date().toISOString();
+    const mine = forOrder.find(
+      (p: any) =>
+        p.riderEmail === args.riderEmail &&
+        (p.status === "scanned" || p.status === "pending")
+    );
 
     for (const p of forOrder) {
-      if (p.status === "pending" && p.riderEmail !== args.riderEmail) {
+      if (
+        p.riderEmail !== args.riderEmail &&
+        (p.status === "scanned" || p.status === "pending")
+      ) {
         await db.patch(p._id, { status: "rejected", rejectedAt: now });
       }
     }
 
-    if (minePending) {
-      await db.patch(minePending._id, {
+    const riderInfo = {
+      name: args.riderName,
+      phone: args.riderPhone || "",
+      vehicle: args.riderVehicle || "motorcycle",
+      plate: args.riderPlate || "",
+      email: args.riderEmail,
+    };
+
+    if (mine) {
+      await db.patch(mine._id, {
         status: "approved",
         approvedAt: now,
-        customerName: order.customerName || minePending.customerName,
-        total: order.finalTotal ?? order.total ?? minePending.total,
+        customerName: order.customerName || mine.customerName,
+        total: order.finalTotal ?? order.total ?? mine.total,
       });
-      await db.patch(order._id, {
-        riderId: args.riderId,
-        riderInfo: {
-          name: args.riderName,
-          phone: args.riderPhone || "",
-          vehicle: args.riderVehicle || "motorcycle",
-          plate: args.riderPlate || "",
-          email: args.riderEmail,
-        },
-      });
-      return { success: true, id: minePending._id, orderId: order.orderId };
+      await db.patch(order._id, { riderId: args.riderId, riderInfo });
+      return { success: true, id: mine._id, orderId: order.orderId, fromScan: !!mine.fromScan };
     }
 
     const id = await db.insert("pickupRequests", {
@@ -136,20 +216,11 @@ export const claimOrderByWaybill = mutation({
       requestedAt: now,
       status: "approved",
       approvedAt: now,
+      fromScan: false,
     });
 
-    await db.patch(order._id, {
-      riderId: args.riderId,
-      riderInfo: {
-        name: args.riderName,
-        phone: args.riderPhone || "",
-        vehicle: args.riderVehicle || "motorcycle",
-        plate: args.riderPlate || "",
-        email: args.riderEmail,
-      },
-    });
-
-    return { success: true, id, orderId: order.orderId };
+    await db.patch(order._id, { riderId: args.riderId, riderInfo });
+    return { success: true, id, orderId: order.orderId, fromScan: false };
   },
 });
 

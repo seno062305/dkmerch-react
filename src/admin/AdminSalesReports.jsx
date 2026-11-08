@@ -116,8 +116,8 @@ const SummaryModal = ({ data, onClose }) => {
 // ══════════════════════════════════════════════════════════════════════════
 const AdminSalesReports = () => {
   const serverTime = useQuery(api.orders.getServerTime);
-  const allOrders  = useQuery(api.orders.getAllOrders) || [];
-  const allUsers   = useQuery(api.users.getAllUsers)   || [];
+  const allOrders   = useQuery(api.orders.getAllOrders) || [];
+  const allProducts = useQuery(api.products.getAllProductsAdmin) || [];
 
   const serverOffsetRef = useRef(0);
   const [liveNowMs, setLiveNowMs] = useState(Date.now());
@@ -187,13 +187,34 @@ const AdminSalesReports = () => {
     const avgOrderValue = completedOrders.length
       ? completedOrders.reduce((s, o) => s + (o.finalTotal ?? o.total ?? 0), 0) / completedOrders.length
       : 0;
-    const registeredUsers = allUsers.filter(u => u.role !== 'admin').length;
     return {
       totalSales, grossSales, totalOrders: filtered.length,
       completedOrders: completedOrders.length, refundCount, totalRefundValue,
-      avgOrderValue, registeredUsers,
+      avgOrderValue,
     };
-  }, [filtered, allUsers]);
+  }, [filtered]);
+
+  const topProducts = useMemo(() => {
+    const paid = filtered.filter(isPaid);
+    const map = {};
+    paid.forEach(order => {
+      (order.items || []).forEach(item => {
+        const pid = item.id || item.name;
+        if (!map[pid]) {
+          const full = allProducts.find(p => p._id === pid || p.id === pid);
+          map[pid] = {
+            name: item.name || full?.name || 'Unknown',
+            image: item.image || full?.image || '',
+            quantity: 0,
+            revenue: 0,
+          };
+        }
+        map[pid].quantity += item.quantity || 1;
+        map[pid].revenue += (item.price || 0) * (item.quantity || 1);
+      });
+    });
+    return Object.values(map).sort((a, b) => b.revenue - a.revenue).slice(0, 8);
+  }, [filtered, allProducts]);
 
   const buildChartData = useCallback((mode, type) => {
     if (mode === 'today' || mode === 'last_week' || mode === 'last_month') {
@@ -269,14 +290,15 @@ const AdminSalesReports = () => {
           { label: 'Deducted from Net Sales',  value: `− ${fmt(summary.totalRefundValue)}`, color: '#dc2626' },
         ],
       });
-    } else if (type === 'registeredUsers') {
+    } else if (type === 'avgOrderValue') {
       setSummaryModal({
-        title: 'Registered Users', value: fmtNum(summary.registeredUsers),
-        icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>,
-        explanation: 'Total number of registered non-admin users in the system.',
+        title: 'Average Order Value', value: fmt(summary.avgOrderValue),
+        icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>,
+        explanation: 'Average revenue per completed/delivered order in the selected date range.',
         breakdown: [
-          { label: 'Total Registered Users', value: fmtNum(summary.registeredUsers), color: '#7c3aed' },
-          { label: 'Completed Orders',        value: fmtNum(summary.completedOrders) },
+          { label: 'Completed Orders', value: fmtNum(summary.completedOrders) },
+          { label: 'Average Order Value', value: fmt(summary.avgOrderValue), color: '#7c3aed' },
+          { label: 'Net Total Sales', value: fmt(summary.totalSales), color: '#16a34a' },
         ],
       });
     }
@@ -402,13 +424,13 @@ const AdminSalesReports = () => {
           <div className="summary-card-hint"><i className="fas fa-info-circle"></i></div>
         </div>
 
-        <div className="summary-card clickable-summary" onClick={() => openSummaryModal('registeredUsers')}>
+        <div className="summary-card clickable-summary" onClick={() => openSummaryModal('avgOrderValue')}>
           <div className="card-icon average-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
           </div>
           <div className="card-content">
-            <div className="card-value">{fmtNum(summary.registeredUsers)}</div>
-            <div className="card-label">Registered Users</div>
+            <div className="card-value">{fmt(summary.avgOrderValue)}</div>
+            <div className="card-label">Avg Order Value</div>
           </div>
           <div className="summary-card-hint"><i className="fas fa-info-circle"></i></div>
         </div>
@@ -490,13 +512,38 @@ const AdminSalesReports = () => {
         </div>
       </div>
 
+      <div className="sales-top-products">
+        <div className="sales-top-header">
+          <h3><i className="fas fa-trophy"></i> Top Selling Products</h3>
+          <span>Based on paid orders in the selected date range</span>
+        </div>
+        {topProducts.length === 0 ? (
+          <div className="sales-top-empty">No paid product sales in this range.</div>
+        ) : (
+          <div className="sales-top-list">
+            {topProducts.map((p, i) => (
+              <div key={`${p.name}-${i}`} className="sales-top-item">
+                <div className="sales-top-rank">#{i + 1}</div>
+                {p.image
+                  ? <img src={p.image} alt="" className="sales-top-thumb" />
+                  : <div className="sales-top-thumb placeholder">📦</div>}
+                <div className="sales-top-meta">
+                  <strong>{p.name}</strong>
+                  <span>{p.quantity} sold</span>
+                </div>
+                <div className="sales-top-rev">{fmt(p.revenue)}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* ── Info Note ── */}
       <div className="sales-info-note">
         <i className="fas fa-info-circle"></i>
         <span>
-          <strong>Total Sales</strong> is net of approved refunds (Gross Sales − Refund Value).{' '}
-          <strong>Sales Trend</strong> chart also reflects refund deductions.{' '}
-          Click any summary card for a full breakdown.
+          <strong>Sales Reports</strong> focuses on revenue only: net sales, refunds, trends, order volume, and top products.{' '}
+          Store ops (inventory, users, pickup location) are on the <strong>Dashboard</strong>.
         </span>
       </div>
 

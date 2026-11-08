@@ -53,11 +53,11 @@ const QA = {
       },
       {
         label: "What are the order statuses?",
-        answer: `Here are the order statuses in DKMerch:\n\n• **Pending** – Order placed, waiting for admin confirmation\n• **Confirmed** – Admin approved your order, rider will be assigned\n• **Shipped** – Rider picked up your order from the store\n• **Out for Delivery** – Rider is on the way to you\n• **Completed** – Order delivered successfully\n• **Cancelled** – Order was cancelled`
+        answer: `Here are the order statuses in DKMerch:\n\n• **Pending** – Paid / placed, waiting for admin confirmation\n• **Confirmed** – Admin confirmed; order is visible to riders\n• **Out for Delivery** – Rider notified you and is on the way (live GPS)\n• **Completed / Delivered** – Confirmed with your delivery OTP\n• **Cancelled** – Order was cancelled by admin`
       },
       {
         label: "How do I cancel my order?",
-        answer: `Order cancellation is handled by our admin team. If you need to cancel:\n\n1. Go to **My Orders** page\n2. Find your order\n3. Contact support at **support@dkmerch.com** with your Order ID\n\nNote: Orders that are already **Out for Delivery** cannot be cancelled.`
+        answer: `Order cancellation is handled by our admin team. If you need to cancel:\n\n1. Go to **My Orders** page\n2. Find your order\n3. Contact support at **dkmerchtest@gmail.com** with your Order ID\n\nNote: Orders that are already **Out for Delivery** cannot be cancelled.`
       },
       {
         label: "I didn't receive an email confirmation.",
@@ -91,7 +91,7 @@ const QA = {
     options: [
       {
         label: "What payment methods are accepted?",
-        answer: `DKMerch accepts the following payment methods:\n\n• **GCash** – via PayMongo secure checkout\n• **Maya (PayMaya)** – via PayMongo secure checkout\n• **Cash on Delivery (COD)** – pay when your order arrives\n\nOnline payments (GCash/Maya) are processed securely through **PayMongo**.`
+        answer: `DKMerch accepts online payments through **PayMongo**:\n\n• **GCash**\n• **Maya**\n\nAt checkout you are redirected to PayMongo’s secure page to choose GCash or Maya. We do **not** store your e-wallet credentials on our servers.`
       },
       {
         label: "Is online payment safe?",
@@ -103,7 +103,7 @@ const QA = {
       },
       {
         label: "My payment was deducted but order didn't go through.",
-        answer: `Don't worry! Here's what to do:\n\n1. Check your **My Orders** page first — the order may have been created\n2. Check your email for any order confirmation\n3. If the payment was deducted but no order exists, contact us at **support@dkmerch.com** with:\n   - Your email address\n   - Transaction reference number\n   - Screenshot of the payment\n\nWe'll resolve it as soon as possible!`
+        answer: `Don't worry! Here's what to do:\n\n1. Check your **My Orders** page first — the order may have been created\n2. Check your email for any order confirmation\n3. If the payment was deducted but no order exists, contact us at **dkmerchtest@gmail.com** with:\n   - Your email address\n   - Transaction reference number\n   - Screenshot of the payment\n\nWe'll resolve it as soon as possible!`
       },
     ]
   },
@@ -137,7 +137,7 @@ const QA = {
       },
       {
         label: "How does delivery work?",
-        answer: `DKMerch uses our own network of **DK Riders** for delivery! 🛵\n\nHere's the delivery flow:\n1. Admin confirms your order\n2. A rider requests to pick up your order\n3. Admin approves the rider's pickup\n4. Rider picks up your items\n5. Rider heads to your address\n6. You receive an **OTP code** via email when rider is on the way\n7. Give the OTP to the rider to confirm delivery ✅\n\nEstimated time: **2–4 business days** from order confirmation.`
+        answer: `DKMerch uses our own network of **DK Riders** for delivery! 🛵\n\nHere's the delivery flow:\n1. You pay via **PayMongo (GCash / Maya)**\n2. Admin confirms your order\n3. A rider accepts your parcel by scanning the **waybill / QR code**\n4. Rider marks out for delivery — you can track live **GPS**\n5. Open your tracking page and show your **4-digit delivery OTP**\n6. Rider enters the OTP to complete delivery ✅\n\nEstimated time: **2–4 business days** from order confirmation.`
       },
       {
         label: "How do I track my rider's location?",
@@ -145,11 +145,11 @@ const QA = {
       },
       {
         label: "What is the delivery OTP?",
-        answer: `The delivery OTP (One-Time Password) is a **4-digit code** sent to your email when your rider is on the way.\n\nWhen the rider arrives at your address, they'll ask for this code to **confirm delivery**. This protects you — only you can confirm receipt of your order.\n\nCheck your email inbox (including spam folder) for the OTP!`
+        answer: `The delivery OTP is a **4-digit code** on your **order tracking page**.\n\nGenerate / view it there when your rider is on the way. The rider must enter that same code to mark the order as delivered. This protects you — only someone with your tracking OTP can confirm receipt.`
       },
       {
         label: "What are the delivery areas?",
-        answer: `DKMerch currently delivers within areas served by our DK Riders network.\n\nDelivery fees are calculated based on the **distance** from our store to your address.\n\nFor specific delivery coverage questions, contact us at **support@dkmerch.com**.`
+        answer: `DKMerch currently delivers within areas served by our DK Riders network.\n\nDelivery fees are calculated based on the **distance** from our store to your address.\n\nFor specific delivery coverage questions, contact us at **dkmerchtest@gmail.com**.`
       },
     ]
   },
@@ -170,7 +170,7 @@ const QA = {
       },
       {
         label: "My refund request was rejected. What can I do?",
-        answer: `If your refund was rejected:\n\n1. Check the **reason** provided in the rejection email from admin\n2. You can **resubmit** a new refund request with:\n   - A clearer, more detailed photo of the damaged item\n   - Additional context if needed\n3. If you believe it was wrongly rejected, contact us at **support@dkmerch.com**`
+        answer: `If your refund was rejected:\n\n1. Check the **reason** provided in the rejection email from admin\n2. You can **resubmit** a new refund request with:\n   - A clearer, more detailed photo of the damaged item\n   - Additional context if needed\n3. If you believe it was wrongly rejected, contact us at **dkmerchtest@gmail.com**`
       },
     ]
   },
@@ -203,6 +203,47 @@ export default function DKMerchChatBot() {
   const [hasGreeted, setHasGreeted] = useState(false);
   const [showPulse, setShowPulse] = useState(true);
   const bottomRef = useRef(null);
+
+  const [installPrompt, setInstallPrompt] = useState(null);
+  const [isInstalled, setIsInstalled] = useState(false);
+  const [showIosInstall, setShowIosInstall] = useState(false);
+  const isIos = /iphone|ipad|ipod/i.test(typeof navigator !== "undefined" ? navigator.userAgent : "");
+  const isStandalone =
+    typeof window !== "undefined" &&
+    (window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone);
+
+  useEffect(() => {
+    if (isStandalone) {
+      setIsInstalled(true);
+      return;
+    }
+    const onPrompt = (e) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+    const onInstalled = () => setIsInstalled(true);
+    window.addEventListener("beforeinstallprompt", onPrompt);
+    window.addEventListener("appinstalled", onInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onPrompt);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
+  }, [isStandalone]);
+
+  const handleInstallClick = async () => {
+    if (isIos) {
+      setShowIosInstall(true);
+      return;
+    }
+    if (!installPrompt) {
+      alert("Install is available in supported mobile browsers (Chrome/Edge). Open this site on your phone, then tap Download App.");
+      return;
+    }
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === "accepted") setIsInstalled(true);
+    setInstallPrompt(null);
+  };
 
   useEffect(() => {
     if (open && !hasGreeted) {
@@ -279,52 +320,115 @@ export default function DKMerchChatBot() {
 
   return (
     <>
-      {/* ── Floating Button — always on top of everything ── */}
-      <div style={{ position: "fixed", bottom: 24, right: 24, zIndex: 10050 }}>
-        {!open && showPulse && (
-          <div style={{
-            position: "absolute", inset: -6,
-            borderRadius: "50%",
-            background: `rgba(252,18,104,0.25)`,
-            animation: "dkPulse 1.8s ease-out infinite",
-          }} />
+      {/* ── Floating stack: Download App (above) + Chat ── */}
+      <div style={{
+        position: "fixed", bottom: 24, right: 24, zIndex: 10050,
+        display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
+      }}>
+        {!isInstalled && (
+          <button
+            type="button"
+            onClick={handleInstallClick}
+            title="Download DKMerch app for phone"
+            aria-label="Download app"
+            style={{
+              width: 52, height: 52, borderRadius: "50%",
+              background: "#111827",
+              border: "2px solid #fff",
+              cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: "#fff", fontSize: 18,
+              boxShadow: "0 4px 16px rgba(15,23,42,0.35)",
+            }}
+          >
+            <i className="fas fa-download" aria-hidden="true" />
+          </button>
         )}
-        <button
-          onClick={() => {
-            const willOpen = !open;
-            setOpen(willOpen);
-            if (!willOpen) {
-              setMessages([]);
-              setHasGreeted(false);
-            }
-          }}
-          style={{
-            width: 56, height: 56, borderRadius: "50%",
-            background: `linear-gradient(135deg, ${PINK}, ${PURPLE})`,
-            border: "none", cursor: "pointer",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 24, boxShadow: "0 4px 20px rgba(252,18,104,0.45)",
-            transition: "transform 0.2s, box-shadow 0.2s",
-            position: "relative",
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.transform = "scale(1.1)";
-            e.currentTarget.style.boxShadow = "0 6px 28px rgba(252,18,104,0.6)";
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.transform = "scale(1)";
-            e.currentTarget.style.boxShadow = "0 4px 20px rgba(252,18,104,0.45)";
-          }}
-          title="DKMerch Support"
-        >
-          {open ? "✕" : "💬"}
-        </button>
+
+        <div style={{ position: "relative" }}>
+          {!open && showPulse && (
+            <div style={{
+              position: "absolute", inset: -6,
+              borderRadius: "50%",
+              background: `rgba(252,18,104,0.25)`,
+              animation: "dkPulse 1.8s ease-out infinite",
+            }} />
+          )}
+          <button
+            onClick={() => {
+              const willOpen = !open;
+              setOpen(willOpen);
+              if (!willOpen) {
+                setMessages([]);
+                setHasGreeted(false);
+              }
+            }}
+            style={{
+              width: 56, height: 56, borderRadius: "50%",
+              background: `linear-gradient(135deg, ${PINK}, ${PURPLE})`,
+              border: "none", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 24, boxShadow: "0 4px 20px rgba(252,18,104,0.45)",
+              transition: "transform 0.2s, box-shadow 0.2s",
+              position: "relative",
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.transform = "scale(1.1)";
+              e.currentTarget.style.boxShadow = "0 6px 28px rgba(252,18,104,0.6)";
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.transform = "scale(1)";
+              e.currentTarget.style.boxShadow = "0 4px 20px rgba(252,18,104,0.45)";
+            }}
+            title="DKMerch Support"
+          >
+            {open ? "✕" : "💬"}
+          </button>
+        </div>
       </div>
+
+      {showIosInstall && (
+        <div
+          onClick={() => setShowIosInstall(false)}
+          style={{
+            position: "fixed", inset: 0, zIndex: 10060,
+            background: "rgba(15,23,42,0.55)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: 16,
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: "min(360px, 100%)", background: "#fff", borderRadius: 16,
+              padding: "22px 20px 18px", boxShadow: "0 20px 50px rgba(0,0,0,0.25)",
+            }}
+          >
+            <h3 style={{ margin: "0 0 8px", fontSize: 18 }}>Install DKMerch on iPhone</h3>
+            <ol style={{ margin: "0 0 14px", paddingLeft: 18, fontSize: 13, color: "#475569", lineHeight: 1.55 }}>
+              <li>Tap the <strong>Share</strong> button in Safari.</li>
+              <li>Choose <strong>Add to Home Screen</strong>.</li>
+              <li>Tap <strong>Add</strong>.</li>
+            </ol>
+            <button
+              type="button"
+              onClick={() => setShowIosInstall(false)}
+              style={{
+                width: "100%", border: "none", borderRadius: 10, padding: "11px 14px",
+                background: `linear-gradient(135deg, ${PINK}, ${PURPLE})`,
+                color: "#fff", fontWeight: 700, cursor: "pointer",
+              }}
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Chat Window — above CartModal (z-index: 9999) and its content (10000) ── */}
       {open && (
         <div style={{
-          position: "fixed", bottom: 92, right: 24, zIndex: 10049,
+          position: "fixed", bottom: 130, right: 24, zIndex: 10049,
           width: 360, maxWidth: "calc(100vw - 48px)",
           background: "#fff",
           borderRadius: 20,

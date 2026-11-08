@@ -8,6 +8,46 @@
   box-sizing: border-box;
 }
 
+.dash-page-intro {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.dash-page-intro h2 {
+  margin: 0 0 4px;
+  font-size: 22px;
+  color: #1a1f36;
+}
+.dash-page-intro p {
+  margin: 0;
+  font-size: 13px;
+  color: #64748b;
+  max-width: 560px;
+}
+.dash-sales-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #fc1268, #9c27b0);
+  color: #fff !important;
+  font-weight: 700;
+  font-size: 13px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.dash-inline-link {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fc1268;
+  text-decoration: none;
+}
+
 /* Stats Grid */
 .stats-grid {
   display: grid;
