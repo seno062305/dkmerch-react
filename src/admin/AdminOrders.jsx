@@ -90,8 +90,9 @@ const WaybillModal = ({ order, onClose }) => {
     const node = printRef.current;
     if (!node) throw new Error('Waybill preview not ready');
 
-    const PX_W = 812;
-    const PX_H = 1218;
+    // ~180 DPI keeps spool small; Y41BT often fails on huge multi‑MB EMF jobs
+    const PX_W = 720;
+    const PX_H = 1080;
     const host = document.createElement('div');
     host.style.cssText = `position:fixed;left:-10000px;top:0;width:${PX_W}px;height:${PX_H}px;background:#fff;overflow:hidden;z-index:-1;`;
     const clone = node.cloneNode(true);
@@ -110,7 +111,7 @@ const WaybillModal = ({ order, onClose }) => {
       borderRadius: '0',
       boxShadow: 'none',
       border: 'none',
-      padding: '18px 20px',
+      padding: '16px 18px',
       boxSizing: 'border-box',
       background: '#ffffff',
       color: '#111111',
@@ -129,7 +130,18 @@ const WaybillModal = ({ order, onClose }) => {
         logging: false,
         imageTimeout: 8000,
       });
-      return canvas.toDataURL('image/jpeg', 0.92);
+      // Force high-contrast B&W (thermal printers handle this better than color JPEG)
+      const ctx = canvas.getContext('2d');
+      const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const d = img.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+        const v = g < 160 ? 0 : 255;
+        d[i] = d[i + 1] = d[i + 2] = v;
+        d[i + 3] = 255;
+      }
+      ctx.putImageData(img, 0, 0);
+      return canvas.toDataURL('image/jpeg', 0.82);
     } finally {
       if (host.parentNode) host.parentNode.removeChild(host);
     }
@@ -165,7 +177,7 @@ const WaybillModal = ({ order, onClose }) => {
   html, body { width: 100mm; height: 150mm; margin: 0; padding: 0; background: #fff; }
   img { width: 100mm; height: 150mm; display: block; }
 </style></head><body>
-<img id="wb" src="${imgData}" alt="Waybill ${shortId}" width="812" height="1218" />
+<img id="wb" src="${imgData}" alt="Waybill ${shortId}" width="720" height="1080" />
 </body></html>`);
       doc.close();
 
