@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
+import { createRoot } from 'react-dom/client';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { QRCodeSVG } from 'qrcode.react';
@@ -44,68 +45,93 @@ const WaybillModal = ({ order, onClose }) => {
   const screenPreviewLink = `${trackOrderLink}&src=screen`;
   const shortId        = order.orderId?.slice(-8).toUpperCase();
 
-  /** Convert SVG nodes to PNG <img> so thermal drivers / html2canvas never see SVG. */
-  const replaceSvgsWithPng = async (root) => {
-    const svgs = Array.from(root.querySelectorAll('svg'));
-    await Promise.all(svgs.map(async (svg) => {
-      if (!svg.getAttribute('xmlns')) svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-      svg.querySelectorAll('[fill]').forEach((el) => {
-        const fill = (el.getAttribute('fill') || '').toLowerCase();
-        if (fill && fill !== 'none' && fill !== '#fff' && fill !== '#ffffff' && fill !== 'white') {
-          el.setAttribute('fill', '#000000');
-        }
-      });
-      const rect = svg.getBoundingClientRect();
-      const w = Math.max(160, Math.round((rect.width || 88) * 3));
-      const h = Math.max(160, Math.round((rect.height || 88) * 3));
-      const xml = new XMLSerializer().serializeToString(svg);
-      const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
-      const img = await new Promise((resolve, reject) => {
-        const el = new Image();
-        el.onload = () => resolve(el);
-        el.onerror = reject;
-        el.src = url;
-      });
-      const c = document.createElement('canvas');
-      c.width = w;
-      c.height = h;
-      const ctx = c.getContext('2d');
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, w, h);
-      ctx.drawImage(img, 0, 0, w, h);
-      const out = document.createElement('img');
-      out.src = c.toDataURL('image/png');
-      out.alt = 'QR';
-      out.width = Math.round(rect.width || 88);
-      out.height = Math.round(rect.height || 88);
-      out.style.width = `${rect.width || 88}px`;
-      out.style.height = `${rect.height || 88}px`;
-      out.style.display = 'block';
-      svg.replaceWith(out);
-    }));
+  /** Render a scannable QR PNG for the real track link (always visible in print capture). */
+  const makePrintQrDataUrl = async (value, size = 220) => {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = `position:fixed;left:0;top:0;width:${size}px;height:${size}px;opacity:0;pointer-events:none;z-index:-1;background:#fff;`;
+    document.body.appendChild(wrap);
+    const root = createRoot(wrap);
+    await new Promise((resolve) => {
+      root.render(
+        <QRCodeSVG
+          value={value}
+          size={size}
+          level="M"
+          includeMargin={false}
+          fgColor="#111827"
+          bgColor="#ffffff"
+        />
+      );
+      requestAnimationFrame(() => requestAnimationFrame(resolve));
+    });
+    const svg = wrap.querySelector('svg');
+    if (!svg) {
+      root.unmount();
+      wrap.remove();
+      throw new Error('QR render failed');
+    }
+    if (!svg.getAttribute('xmlns')) svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    const xml = new XMLSerializer().serializeToString(svg);
+    const svgUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
+    const img = await new Promise((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = reject;
+      el.src = svgUrl;
+    });
+    const c = document.createElement('canvas');
+    c.width = size;
+    c.height = size;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, size, size);
+    ctx.drawImage(img, 0, 0, size, size);
+    const dataUrl = c.toDataURL('image/png');
+    root.unmount();
+    wrap.remove();
+    return dataUrl;
   };
 
-  /** Build a printable 100×150mm image matching the colored on-screen preview. */
+  /** Build a printable 100×150mm image matching the colored preview — including rider QR. */
   const buildWaybillImage = async () => {
     const node = printRef.current;
     if (!node) throw new Error('Waybill preview not ready');
 
-    // Match preview aspect (100×150) at good print clarity; keep colors
     const PX_W = 800;
     const PX_H = 1200;
+    const qrPng = await makePrintQrDataUrl(trackOrderLink, 240);
+
     const host = document.createElement('div');
-    host.style.cssText = `position:fixed;left:-10000px;top:0;width:${PX_W}px;height:${PX_H}px;background:#fff;overflow:hidden;z-index:-1;`;
+    // Keep in-viewport (opacity 0) so layout/CSS compute correctly for html2canvas
+    host.style.cssText = `position:fixed;left:0;top:0;width:${PX_W}px;height:${PX_H}px;background:#fff;overflow:hidden;opacity:0;pointer-events:none;z-index:-1;`;
     const clone = node.cloneNode(true);
-    // Use the real print QR (same look as preview, valid payload)
+
+    // Remove screen-only preview QR; inject real printable QR image
     clone.querySelectorAll('.wb-qr-preview').forEach((el) => el.remove());
     clone.querySelectorAll('.wb-qr-print').forEach((el) => {
-      el.style.display = 'flex';
+      el.classList.remove('wb-qr-print'); // CSS has display:none !important on this class
       el.removeAttribute('aria-hidden');
-      const label = el.querySelector('.wb-qr-label');
-      if (label) label.textContent = 'Scan / Track';
+      el.style.setProperty('display', 'flex', 'important');
+      el.style.setProperty('flex-direction', 'column', 'important');
+      el.style.setProperty('align-items', 'center', 'important');
+      el.style.setProperty('gap', '4px', 'important');
+      el.querySelectorAll('svg, img').forEach((n) => n.remove());
+      const img = document.createElement('img');
+      img.src = qrPng;
+      img.alt = 'Waybill QR';
+      img.width = 96;
+      img.height = 96;
+      img.style.width = '96px';
+      img.style.height = '96px';
+      img.style.display = 'block';
+      const label = el.querySelector('.wb-qr-label') || document.createElement('div');
+      label.className = 'wb-qr-label';
+      label.textContent = 'Scan / Track';
+      el.insertBefore(img, label);
+      if (!label.parentNode) el.appendChild(label);
     });
     clone.querySelectorAll('.wb-track-url').forEach((el) => { el.style.display = 'none'; });
-    // Keep the same visual system as the colored preview card
+
     Object.assign(clone.style, {
       width: `${PX_W}px`,
       height: `${PX_H}px`,
@@ -122,8 +148,21 @@ const WaybillModal = ({ order, onClose }) => {
     });
     host.appendChild(clone);
     document.body.appendChild(host);
+
     try {
-      await replaceSvgsWithPng(clone);
+      // Wait for QR <img> to decode before snapshot
+      await Promise.all(
+        Array.from(clone.querySelectorAll('img')).map(
+          (img) =>
+            img.complete
+              ? Promise.resolve()
+              : new Promise((res, rej) => {
+                  img.onload = () => res();
+                  img.onerror = () => rej(new Error('QR image failed'));
+                })
+        )
+      );
+
       const canvas = await html2canvas(clone, {
         scale: 1,
         width: PX_W,
@@ -134,7 +173,6 @@ const WaybillModal = ({ order, onClose }) => {
         logging: false,
         imageTimeout: 8000,
       });
-      // Keep full color — user picks Color vs Black & white in the Print dialog
       return canvas.toDataURL('image/png');
     } finally {
       if (host.parentNode) host.parentNode.removeChild(host);
@@ -142,65 +180,56 @@ const WaybillModal = ({ order, onClose }) => {
   };
 
   /**
-   * Direct system Print dialog only — never downloads a PDF.
-   * Desktop: pick Y41BT / SENDO printer.
-   * Phone: pick Bluetooth printer or FlashLabel print service after pairing in FlashLabel.
+   * Print the same colored label preview (with QR) via the system Print dialog.
    */
   const handlePrint = async () => {
     if (printing) return;
     setPrinting(true);
-    let iframe = null;
+    let printWindow = null;
     try {
+      // Open on user gesture so popup blockers don't kill print
+      printWindow = window.open('', '_blank', 'width=440,height=680');
+      if (!printWindow) {
+        alert('Pop-up blocked! Allow pop-ups, then click Print again.');
+        return;
+      }
+      printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Waybill — ${shortId}</title></head>
+<body style="font-family:Arial;padding:16px;color:#334155">Preparing colored waybill with QR…</body></html>`);
+      printWindow.document.close();
+
       const imgData = await buildWaybillImage();
 
-      // Hidden iframe print — opens the native Print dialog (2nd image), no Save-as-PDF file
-      iframe = document.createElement('iframe');
-      iframe.setAttribute('title', `Waybill ${shortId}`);
-      iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;pointer-events:none;';
-      document.body.appendChild(iframe);
-
-      const doc = iframe.contentDocument || iframe.contentWindow?.document;
-      if (!doc) throw new Error('Could not create print frame');
-
-      doc.open();
-      doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
+      printWindow.document.open();
+      printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <title>Waybill — ${shortId} | DKMerch</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
   @page { size: 100mm 150mm; margin: 0; }
   html, body { width: 100mm; height: 150mm; margin: 0; padding: 0; background: #fff; }
-  img { width: 100mm; height: 150mm; display: block; image-rendering: auto; }
+  @media screen {
+    html, body { width: 100%; height: 100%; background: #e2e8f0; display: flex; justify-content: center; padding: 12px; }
+    img { width: min(380px, 100%); height: auto; aspect-ratio: 100 / 150; box-shadow: 0 8px 28px rgba(0,0,0,.18); background: #fff; }
+  }
+  @media print {
+    html, body { width: 100mm; height: 150mm; }
+    img { width: 100mm; height: 150mm; display: block; }
+  }
 </style></head><body>
 <img id="wb" src="${imgData}" alt="Waybill ${shortId}" width="800" height="1200" />
+<script>
+  function goPrint() {
+    setTimeout(function () { try { window.focus(); window.print(); } catch (e) {} }, 250);
+  }
+  var img = document.getElementById('wb');
+  if (img.complete) goPrint(); else img.onload = goPrint;
+<\/script>
 </body></html>`);
-      doc.close();
-
-      await new Promise((resolve, reject) => {
-        const img = doc.getElementById('wb');
-        if (!img) {
-          reject(new Error('Print image missing'));
-          return;
-        }
-        const done = () => resolve();
-        if (img.complete) done();
-        else {
-          img.onload = done;
-          img.onerror = () => reject(new Error('Print image failed to load'));
-        }
-      });
-
-      // Small delay so the browser lays out the 100×150mm page before print UI
-      await new Promise((r) => setTimeout(r, 180));
-      iframe.contentWindow.focus();
-      iframe.contentWindow.print();
+      printWindow.document.close();
     } catch (err) {
       console.error('Waybill print failed:', err);
-      alert('Failed to open the print dialog. Please allow printing for this site and try again.');
+      alert('Failed to prepare waybill with QR. Please try Print again.');
+      try { printWindow?.close(); } catch { /* ignore */ }
     } finally {
-      // Keep iframe briefly so the print spooler can read it, then remove
-      setTimeout(() => {
-        if (iframe?.parentNode) iframe.parentNode.removeChild(iframe);
-      }, 60_000);
       setPrinting(false);
     }
   };
@@ -213,7 +242,7 @@ const WaybillModal = ({ order, onClose }) => {
       const imgData = await buildWaybillImage();
       const res = await fetch(imgData);
       const blob = await res.blob();
-      const file = new File([blob], `DKMerch-Waybill-${shortId}.jpg`, { type: 'image/jpeg' });
+      const file = new File([blob], `DKMerch-Waybill-${shortId}.png`, { type: blob.type || 'image/png' });
 
       if (navigator.share && navigator.canShare?.({ files: [file] })) {
         await navigator.share({
