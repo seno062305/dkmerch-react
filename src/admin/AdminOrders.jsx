@@ -139,43 +139,79 @@ const WaybillModal = ({ order, onClose }) => {
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   @page { size: 100mm 150mm; margin: 0; }
-  body { font-family: Arial, 'Segoe UI', sans-serif; background: #e2e8f0; padding: 12px; }
-  .waybill-print-root {
-    width: 100mm; min-height: 150mm; margin: 0 auto; background: #fff;
-    padding: 4mm; display: flex; flex-direction: column; gap: 3mm;
+  html, body {
+    width: 100mm; height: 150mm; margin: 0; padding: 0;
+    font-family: Arial, 'Segoe UI', sans-serif; background: #fff; overflow: hidden;
   }
-  .wb-header { display: flex; justify-content: space-between; align-items: center; gap: 3mm; padding-bottom: 2.5mm; border-bottom: 2.5px solid #111827; }
-  .wb-brand-name { font-size: 18pt; font-weight: 900; color: #fc1268; line-height: 1; }
-  .wb-brand-sub { font-size: 8pt; color: #6b7280; font-weight: 600; margin-top: 1mm; }
-  .wb-brand-contact { font-size: 7pt; color: #6b7280; margin-top: 1mm; }
-  .wb-qr-block { display: flex; flex-direction: column; align-items: center; gap: 1.5mm; flex-shrink: 0; }
-  .wb-qr-block img { width: 24mm; height: 24mm; display: block; image-rendering: pixelated; }
-  .wb-qr-label { font-size: 6.5pt; color: #111827; font-weight: 800; text-transform: uppercase; letter-spacing: 0.3px; }
-  .wb-cols { display: grid; grid-template-columns: 0.9fr 1.1fr; gap: 2.5mm; }
-  .wb-box { border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; }
-  .wb-box-hd { background: #f3f4f6; padding: 1.5mm 2mm; font-size: 7pt; font-weight: 800; color: #374151; text-transform: uppercase; border-bottom: 1px solid #e5e7eb; }
-  .wb-box-body { padding: 2mm; display: flex; flex-direction: column; gap: 1.5mm; }
-  .wb-rider-row { flex-direction: row !important; gap: 3mm !important; flex-wrap: wrap; }
-  .wb-field-lbl { font-size: 6pt; color: #9ca3af; font-weight: 700; text-transform: uppercase; }
-  .wb-field-val { font-size: 8pt; color: #1f2937; font-weight: 600; line-height: 1.3; word-break: break-word; }
-  .wb-items-box { border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; }
-  .wb-items-hd { background: #f3f4f6; padding: 1.5mm 2mm; font-size: 7pt; font-weight: 800; color: #374151; text-transform: uppercase; border-bottom: 1px solid #e5e7eb; }
+  .wb-screen-bar {
+    display: none; position: sticky; top: 0; z-index: 10;
+    align-items: center; justify-content: space-between; gap: 12px;
+    padding: 10px 14px; background: #fff; border-bottom: 1px solid #e2e8f0;
+    font-family: Arial, sans-serif;
+  }
+  .wb-screen-bar p { margin: 0; font-size: 12px; color: #64748b; line-height: 1.35; }
+  .wb-screen-bar strong { color: #0f172a; }
+  .wb-print-again {
+    flex-shrink: 0; border: none; border-radius: 8px; cursor: pointer;
+    background: #fc1268; color: #fff; font-weight: 700; font-size: 13px;
+    padding: 10px 16px;
+  }
+  .wb-print-again:hover { background: #e0105c; }
+  .waybill-print-root {
+    width: 100mm; height: 150mm; max-height: 150mm; margin: 0; background: #fff;
+    padding: 3mm; display: flex; flex-direction: column; gap: 2mm;
+    overflow: hidden;
+  }
+  .wb-header { display: flex; justify-content: space-between; align-items: center; gap: 2mm; padding-bottom: 1.5mm; border-bottom: 2px solid #111827; flex-shrink: 0; }
+  .wb-brand-name { font-size: 15pt; font-weight: 900; color: #fc1268; line-height: 1; }
+  .wb-brand-sub { font-size: 7pt; color: #6b7280; font-weight: 600; margin-top: 0.6mm; }
+  .wb-brand-contact { font-size: 6pt; color: #6b7280; margin-top: 0.5mm; }
+  .wb-qr-block { display: flex; flex-direction: column; align-items: center; gap: 1mm; flex-shrink: 0; }
+  .wb-qr-block img { width: 20mm; height: 20mm; display: block; image-rendering: pixelated; }
+  .wb-qr-label { font-size: 5.5pt; color: #111827; font-weight: 800; text-transform: uppercase; letter-spacing: 0.3px; }
+  .wb-cols { display: grid; grid-template-columns: 0.9fr 1.1fr; gap: 2mm; flex-shrink: 0; }
+  .wb-box { border: 1px solid #e5e7eb; border-radius: 3px; overflow: hidden; }
+  .wb-box-hd { background: #f3f4f6; padding: 1mm 1.5mm; font-size: 6pt; font-weight: 800; color: #374151; text-transform: uppercase; border-bottom: 1px solid #e5e7eb; }
+  .wb-box-body { padding: 1.5mm; display: flex; flex-direction: column; gap: 1mm; }
+  .wb-rider-row { flex-direction: row !important; gap: 2.5mm !important; flex-wrap: wrap; }
+  .wb-field-lbl { font-size: 5.5pt; color: #9ca3af; font-weight: 700; text-transform: uppercase; }
+  .wb-field-val { font-size: 7pt; color: #1f2937; font-weight: 600; line-height: 1.25; word-break: break-word; }
+  .wb-items-box { border: 1px solid #e5e7eb; border-radius: 3px; overflow: hidden; flex: 1 1 auto; min-height: 0; }
+  .wb-items-hd { background: #f3f4f6; padding: 1mm 1.5mm; font-size: 6pt; font-weight: 800; color: #374151; text-transform: uppercase; border-bottom: 1px solid #e5e7eb; }
   .wb-items-table { width: 100%; border-collapse: collapse; }
-  .wb-items-table th { padding: 1.2mm 1.5mm; text-align: left; font-size: 6.5pt; font-weight: 700; color: #6b7280; border-bottom: 1px solid #f0f0f0; }
-  .wb-items-table td { padding: 1.2mm 1.5mm; font-size: 7.5pt; color: #1f2937; border-bottom: 1px solid #f8f8f8; }
+  .wb-items-table th { padding: 1mm 1.2mm; text-align: left; font-size: 5.5pt; font-weight: 700; color: #6b7280; border-bottom: 1px solid #f0f0f0; }
+  .wb-items-table td { padding: 1mm 1.2mm; font-size: 6.5pt; color: #1f2937; border-bottom: 1px solid #f8f8f8; }
   .td-right { text-align: right; font-weight: 700; }
   .td-center { text-align: center; }
-  .wb-totals { border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; }
-  .wb-totals-row { display: flex; justify-content: space-between; padding: 1.5mm 2.5mm; font-size: 8pt; border-bottom: 1px solid #f0f0f0; }
+  .wb-totals { border: 1px solid #e5e7eb; border-radius: 3px; overflow: hidden; flex-shrink: 0; }
+  .wb-totals-row { display: flex; justify-content: space-between; padding: 1mm 2mm; font-size: 7pt; border-bottom: 1px solid #f0f0f0; }
   .wb-totals-row:last-child { border-bottom: none; }
-  .wb-grand { background: #fff1f5 !important; font-size: 10pt; font-weight: 800; color: #fc1268 !important; }
+  .wb-grand { background: #fff1f5 !important; font-size: 8.5pt; font-weight: 800; color: #fc1268 !important; }
   .wb-promo-row { color: #16a34a; font-weight: 600; }
-  .wb-footer { text-align: center; font-size: 6.5pt; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 2mm; line-height: 1.4; }
+  .wb-footer { text-align: center; font-size: 5.5pt; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 1.2mm; line-height: 1.3; flex-shrink: 0; }
+  @media screen {
+    html, body { width: auto; height: auto; min-height: 100%; overflow: auto; background: #e2e8f0; }
+    .wb-screen-bar { display: flex; }
+    .wb-screen-wrap { padding: 14px; display: flex; justify-content: center; }
+    .waybill-print-root { box-shadow: 0 8px 28px rgba(15,23,42,0.14); border: 1px solid #cbd5e1; }
+  }
   @media print {
-    body { background: #fff; padding: 0; }
-    .waybill-print-root { width: 100mm; min-height: 150mm; box-shadow: none; }
+    .wb-screen-bar { display: none !important; }
+    .wb-screen-wrap { display: block !important; padding: 0 !important; margin: 0 !important; }
+    html, body { width: 100mm !important; height: 150mm !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; background: #fff !important; }
+    .waybill-print-root {
+      display: flex !important;
+      width: 100mm !important; height: 150mm !important; max-height: 150mm !important;
+      margin: 0 !important; box-shadow: none !important; border: none !important;
+      page-break-after: avoid; page-break-inside: avoid; break-inside: avoid;
+    }
   }
 </style></head><body>
+<div class="wb-screen-bar">
+  <p><strong>Label preview</strong> · 100 × 150 mm<br/>Cancel print to review, then press Print again for settings.</p>
+  <button type="button" class="wb-print-again" onclick="goPrint()">🖨 Print</button>
+</div>
+<div class="wb-screen-wrap">
 <div class="waybill-print-root">
   <div class="wb-header">
     <div>
@@ -225,13 +261,18 @@ const WaybillModal = ({ order, onClose }) => {
     <strong style="color:#fc1268">DKMerch</strong> · Order #${esc(shortId)} · ${esc(new Date().toLocaleDateString('en-PH'))}
   </div>
 </div>
+</div>
 <script>
   function goPrint() {
-    setTimeout(function () { try { window.focus(); window.print(); } catch (e) {} }, 150);
+    try { window.focus(); window.print(); } catch (e) {}
+  }
+  function readyPrint() {
+    // First open: wait for QR, then show print settings. After Cancel, use the Print button.
+    setTimeout(goPrint, 200);
   }
   var img = document.getElementById('wb-qr');
-  if (!img || img.complete) goPrint();
-  else { img.onload = goPrint; img.onerror = goPrint; }
+  if (!img || img.complete) readyPrint();
+  else { img.onload = readyPrint; img.onerror = readyPrint; }
 <\/script>
 </body></html>`);
       printWindow.document.close();
