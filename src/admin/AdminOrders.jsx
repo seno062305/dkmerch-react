@@ -85,23 +85,27 @@ const WaybillModal = ({ order, onClose }) => {
     }));
   };
 
-  /** Build a printable 100×150mm JPEG of the waybill (valid print QR, no preview QR). */
+  /** Build a printable 100×150mm image matching the colored on-screen preview. */
   const buildWaybillImage = async () => {
     const node = printRef.current;
     if (!node) throw new Error('Waybill preview not ready');
 
-    // ~180 DPI keeps spool small; Y41BT often fails on huge multi‑MB EMF jobs
-    const PX_W = 720;
-    const PX_H = 1080;
+    // Match preview aspect (100×150) at good print clarity; keep colors
+    const PX_W = 800;
+    const PX_H = 1200;
     const host = document.createElement('div');
     host.style.cssText = `position:fixed;left:-10000px;top:0;width:${PX_W}px;height:${PX_H}px;background:#fff;overflow:hidden;z-index:-1;`;
     const clone = node.cloneNode(true);
+    // Use the real print QR (same look as preview, valid payload)
     clone.querySelectorAll('.wb-qr-preview').forEach((el) => el.remove());
     clone.querySelectorAll('.wb-qr-print').forEach((el) => {
       el.style.display = 'flex';
       el.removeAttribute('aria-hidden');
+      const label = el.querySelector('.wb-qr-label');
+      if (label) label.textContent = 'Scan / Track';
     });
     clone.querySelectorAll('.wb-track-url').forEach((el) => { el.style.display = 'none'; });
+    // Keep the same visual system as the colored preview card
     Object.assign(clone.style, {
       width: `${PX_W}px`,
       height: `${PX_H}px`,
@@ -111,10 +115,10 @@ const WaybillModal = ({ order, onClose }) => {
       borderRadius: '0',
       boxShadow: 'none',
       border: 'none',
-      padding: '16px 18px',
+      padding: '20px 22px',
       boxSizing: 'border-box',
       background: '#ffffff',
-      color: '#111111',
+      fontFamily: "Arial, 'Segoe UI', sans-serif",
     });
     host.appendChild(clone);
     document.body.appendChild(host);
@@ -130,18 +134,8 @@ const WaybillModal = ({ order, onClose }) => {
         logging: false,
         imageTimeout: 8000,
       });
-      // Force high-contrast B&W (thermal printers handle this better than color JPEG)
-      const ctx = canvas.getContext('2d');
-      const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const d = img.data;
-      for (let i = 0; i < d.length; i += 4) {
-        const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-        const v = g < 160 ? 0 : 255;
-        d[i] = d[i + 1] = d[i + 2] = v;
-        d[i + 3] = 255;
-      }
-      ctx.putImageData(img, 0, 0);
-      return canvas.toDataURL('image/jpeg', 0.82);
+      // Keep full color — user picks Color vs Black & white in the Print dialog
+      return canvas.toDataURL('image/png');
     } finally {
       if (host.parentNode) host.parentNode.removeChild(host);
     }
@@ -172,12 +166,12 @@ const WaybillModal = ({ order, onClose }) => {
       doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <title>Waybill — ${shortId} | DKMerch</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
   @page { size: 100mm 150mm; margin: 0; }
   html, body { width: 100mm; height: 150mm; margin: 0; padding: 0; background: #fff; }
-  img { width: 100mm; height: 150mm; display: block; }
+  img { width: 100mm; height: 150mm; display: block; image-rendering: auto; }
 </style></head><body>
-<img id="wb" src="${imgData}" alt="Waybill ${shortId}" width="720" height="1080" />
+<img id="wb" src="${imgData}" alt="Waybill ${shortId}" width="800" height="1200" />
 </body></html>`);
       doc.close();
 
@@ -254,7 +248,7 @@ const WaybillModal = ({ order, onClose }) => {
           <div>
             <div className="waybill-toolbar-title"><i className="fas fa-print"></i> Print Waybill — #{shortId}</div>
             <div className="waybill-size-hint">
-              Size: <strong>100 × 150 mm</strong> · PC: Print → Y41BT/SENDO · Phone: pair printer in <strong>FlashLabel</strong>, then Print or Share
+              Size: <strong>100 × 150 mm</strong> · Print matches this colored layout · choose <strong>Color</strong> or <strong>Black and white</strong> in the Print dialog
             </div>
           </div>
           <div className="waybill-toolbar-actions">
