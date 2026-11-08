@@ -42,9 +42,12 @@ const MyOrders = () => {
     return labels[s] || s;
   };
 
+  const sortedOrders = [...(orders || [])].sort(
+    (a, b) => (b._creationTime || 0) - (a._creationTime || 0)
+  );
   const filteredOrders = filter === 'all'
-    ? orders
-    : orders.filter(o => getDisplayStatus(o).toLowerCase() === filter.toLowerCase());
+    ? sortedOrders
+    : sortedOrders.filter(o => getDisplayStatus(o).toLowerCase() === filter.toLowerCase());
 
   return (
     <main className="orders-page-main">

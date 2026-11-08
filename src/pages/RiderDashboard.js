@@ -845,14 +845,21 @@ const RiderDashboard = () => {
   // Only admin-confirmed paid orders appear here — never raw customer checkouts.
   const claimedStatuses = ['approved', 'out_for_delivery', 'completed'];
 
+  // Newest confirmed orders first so riders see new Available jobs at the top
   const availableOrders = allOrders
     .filter(o =>
       (o.orderStatus === 'confirmed' || o.status === 'Confirmed') &&
       !allPickups.some(p => p.orderId === o.orderId && claimedStatuses.includes(p.status))
     )
     .sort((a, b) => {
-      const aTime = a.confirmedAt ? new Date(a.confirmedAt).getTime() : (a._creationTime || 0);
-      const bTime = b.confirmedAt ? new Date(b.confirmedAt).getTime() : (b._creationTime || 0);
+      const aTime = Math.max(
+        a._creationTime || 0,
+        a.confirmedAt ? new Date(a.confirmedAt).getTime() : 0
+      );
+      const bTime = Math.max(
+        b._creationTime || 0,
+        b.confirmedAt ? new Date(b.confirmedAt).getTime() : 0
+      );
       return bTime - aTime;
     });
 

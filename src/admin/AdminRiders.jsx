@@ -800,7 +800,11 @@ const AdminRiders = () => {
     .filter(o => completedStatuses.includes((o.orderStatus || o.status || '').toLowerCase()))
     .filter(o => !hiddenCompleted.includes(o._id))
     .filter(o => matchesDateFilter(o))
-    .sort((a, b) => (b.deliveryConfirmedAt || b._creationTime || 0) - (a.deliveryConfirmedAt || a._creationTime || 0));
+    .sort((a, b) => {
+      const tb = new Date(b.deliveryConfirmedAt || b._creationTime || 0).getTime();
+      const ta = new Date(a.deliveryConfirmedAt || a._creationTime || 0).getTime();
+      return tb - ta;
+    });
 
   const handleToggleCollapse = (orderId) => setCollapsed(p => ({ ...p, [orderId]: !p[orderId] }));
   const confirmRemove        = ()         => { if (!removeTarget) return; setHiddenCompleted(p => [...p, removeTarget._id]); setRemoveTarget(null); };

@@ -14,7 +14,7 @@ const generateDkRiderId = (sequence: number): string => {
 };
 
 export const getAllRiders = query(async ({ db }) => {
-  return await db.query("riderApplications").collect();
+  return await db.query("riderApplications").order("desc").collect();
 });
 
 export const getRiderByEmail = query({
@@ -33,6 +33,7 @@ export const getRidersByStatus = query({
     return await db
       .query("riderApplications")
       .withIndex("by_status", q => q.eq("status", status))
+      .order("desc")
       .collect();
   },
 });

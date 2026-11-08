@@ -4,11 +4,12 @@ import { internal } from "./_generated/api";
 import { v } from "convex/values";
 
 export const getAllPickupRequests = query(async ({ db }) => {
-  return await db.query("pickupRequests").collect();
+  return await db.query("pickupRequests").order("desc").collect();
 });
 
 export const getPendingPickupRequests = query(async ({ db }) => {
   return await db.query("pickupRequests")
+    .order("desc")
     .filter(q => q.eq(q.field("status"), "pending"))
     .collect();
 });
@@ -18,6 +19,7 @@ export const getPickupsByRider = query({
   handler: async ({ db }, { riderId }) => {
     return await db.query("pickupRequests")
       .withIndex("by_rider", q => q.eq("riderId", riderId))
+      .order("desc")
       .collect();
   },
 });

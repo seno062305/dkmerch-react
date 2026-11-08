@@ -192,6 +192,10 @@ const AdminUsers = () => {
   // regularUsers includes self_deactivated — they're real accounts, not pending
   const regularUsers = users.filter(u => u.status !== 'pending_activation');
 
+  const byNewest = (a, b) =>
+    (b._creationTime || new Date(b.appliedAt || b.registeredAt || 0).getTime() || 0) -
+    (a._creationTime || new Date(a.appliedAt || a.registeredAt || 0).getTime() || 0);
+
   const filteredUsers = regularUsers.filter(u => {
     if (filterStatus !== 'all' && (u.status || 'active') !== filterStatus) return false;
     if (!searchTerm.trim()) return true;
@@ -202,7 +206,7 @@ const AdminUsers = () => {
       u.email?.toLowerCase().includes(q) ||
       u.role?.toLowerCase().includes(q)
     );
-  });
+  }).sort(byNewest);
 
   const filteredPending = pendingUsers.filter(u => {
     if (!searchTerm.trim()) return true;
@@ -212,7 +216,7 @@ const AdminUsers = () => {
       u.username?.toLowerCase().includes(q) ||
       u.email?.toLowerCase().includes(q)
     );
-  });
+  }).sort(byNewest);
 
   const filteredRiders = riders.filter(r => {
     if (riderFilterStatus !== 'all' && r.status !== riderFilterStatus) return false;
@@ -224,9 +228,9 @@ const AdminUsers = () => {
       r.phone?.includes(riderSearch) ||
       r.vehicleType?.toLowerCase().includes(q)
     );
-  });
+  }).sort(byNewest);
 
-  const pendingApplications = riders.filter(r => r.status === 'pending');
+  const pendingApplications = riders.filter(r => r.status === 'pending').sort(byNewest);
 
   const handleRiderFormChange = (e) => {
     const { name, value } = e.target;

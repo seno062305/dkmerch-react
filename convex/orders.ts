@@ -4,7 +4,8 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 
 export const getAllOrders = query(async ({ db }) => {
-  return await db.query("orders").collect();
+  // Newest orders first system-wide
+  return await db.query("orders").order("desc").collect();
 });
 
 export const getOrdersByUser = query({
@@ -12,6 +13,7 @@ export const getOrdersByUser = query({
   handler: async ({ db }, { userEmail }) => {
     return await db.query("orders")
       .withIndex("by_email", q => q.eq("email", userEmail))
+      .order("desc")
       .collect();
   },
 });
@@ -21,6 +23,7 @@ export const getOrdersByEmail = query({
   handler: async ({ db }, { email }) => {
     return await db.query("orders")
       .withIndex("by_email", q => q.eq("email", email))
+      .order("desc")
       .collect();
   },
 });

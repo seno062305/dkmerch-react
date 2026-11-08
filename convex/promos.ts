@@ -51,13 +51,13 @@ function isPromoValid(promo: any, nowMs: number): { valid: boolean; message?: st
 
 // ── Get all promos (admin) ──
 export const getAllPromos = query(async ({ db }) => {
-  return await db.query("promos").collect();
+  return await db.query("promos").order("desc").collect();
 });
 
 // ── Get active promos (homepage) — server time ──
 export const getActivePromos = query(async ({ db }) => {
   const nowMs = Date.now();
-  const promos = await db.query("promos").collect();
+  const promos = await db.query("promos").order("desc").collect();
   return promos.filter((p) => isPromoValid(p, nowMs).valid);
 });
 

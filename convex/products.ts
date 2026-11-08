@@ -10,7 +10,7 @@ const phtToMs = (date: string, time: string): number => {
 export const getAllProducts = query({
   args: {},
   handler: async ({ db }) => {
-    const products = await db.query("products").collect();
+    const products = await db.query("products").order("desc").collect();
     return products.filter((p: any) => !p.isPreOrder && p.status !== "preorder");
   },
 });
@@ -19,7 +19,7 @@ export const getAllProducts = query({
 export const getAllProductsAdmin = query({
   args: {},
   handler: async ({ db }) => {
-    return await db.query("products").collect();
+    return await db.query("products").order("desc").collect();
   },
 });
 
@@ -34,7 +34,7 @@ export const getProductById = query({
 export const getPreOrderProducts = query({
   args: {},
   handler: async ({ db }) => {
-    const products = await db.query("products").collect();
+    const products = await db.query("products").order("desc").collect();
     const nowMs = Date.now();
 
     return products.filter((p: any) => {
@@ -56,7 +56,7 @@ export const getPreOrderProducts = query({
 export const getCollectionProducts = query({
   args: {},
   handler: async ({ db }) => {
-    const products = await db.query("products").collect();
+    const products = await db.query("products").order("desc").collect();
     const nowMs = Date.now();
 
     return products.filter((p: any) => {

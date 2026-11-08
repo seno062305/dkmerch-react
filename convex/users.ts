@@ -10,7 +10,7 @@ const RATE_LIMIT_MAX        = 5;             // max 5 attempts per fingerprint p
 // ── QUERIES ──────────────────────────────────────
 
 export const getAllUsers = query(async ({ db }) => {
-  return await db.query("users").collect();
+  return await db.query("users").order("desc").collect();
 });
 
 export const getUserByEmail = query({
@@ -35,7 +35,7 @@ export const getUserById = query({
 });
 
 export const getPendingUsers = query(async ({ db }) => {
-  const users = await db.query("users").collect();
+  const users = await db.query("users").order("desc").collect();
   return users.filter(u => u.status === "pending_activation");
 });
 
