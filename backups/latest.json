@@ -1,14 +1,14 @@
 {
-  "latestBackup": "2026-11-07",
-  "date": "2026-11-07",
-  "timestamp": "2026-11-07T03:29:57.068Z",
+  "latestBackup": "2026-11-08",
+  "date": "2026-11-08",
+  "timestamp": "2026-11-08T02:58:50.325Z",
   "tables": {
     "users": {
-      "count": 10,
+      "count": 12,
       "status": "ok"
     },
     "orders": {
-      "count": 4,
+      "count": 8,
       "status": "ok"
     },
     "products": {
@@ -16,7 +16,7 @@
       "status": "ok"
     },
     "promos": {
-      "count": 7,
+      "count": 9,
       "status": "ok"
     },
     "preOrderRequests": {
@@ -24,15 +24,15 @@
       "status": "ok"
     },
     "pickupRequests": {
-      "count": 3,
+      "count": 4,
       "status": "ok"
     },
     "riderLocations": {
-      "count": 6,
+      "count": 7,
       "status": "ok"
     },
     "reviews": {
-      "count": 2,
+      "count": 5,
       "status": "ok"
     },
     "riderApplications": {
@@ -40,10 +40,10 @@
       "status": "ok"
     },
     "riderNotifications": {
-      "count": 3,
+      "count": 4,
       "status": "ok"
     }
   },
-  "totalRecords": 74,
+  "totalRecords": 88,
   "status": "success"
 }
