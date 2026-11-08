@@ -17,11 +17,12 @@ const LogoutModal = ({
   <div className="lo-modal-overlay">
     <div className="lo-modal">
       <div className="lo-modal-icon"><i className="fas fa-database"></i></div>
-      <h2 className="lo-modal-title">Before you logout…</h2>
+      <h2 className="lo-modal-title">Confirm logout</h2>
       {step === 'choose' ? (
         <>
           <p className="lo-modal-desc">
-            Download a password-locked Excel backup of all Convex tables before logging out?
+            Are you sure you want to logout of the admin panel?
+            You can download a password-locked Excel backup of all Convex tables first.
           </p>
           <div className="lo-modal-actions">
             <button className="lo-btn lo-btn--backup" onClick={onLogoutWithBackup} disabled={isBackingUp}>

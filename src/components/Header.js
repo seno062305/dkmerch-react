@@ -99,8 +99,9 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
   const handleLogout = async () => {
     const ok = await confirm({
       title: 'Logout?',
-      message: 'Are you sure you want to logout?',
+      message: 'Are you sure you want to logout of your DKMerch account?',
       confirmLabel: 'Logout',
+      cancelLabel: 'Stay signed in',
       variant: 'warning',
       icon: 'fa-sign-out-alt',
     });

@@ -21,12 +21,33 @@ function extractOrderId(raw) {
  * Built-in waybill scanner for riders.
  * Uses device camera + BarcodeDetector when available; always allows manual order ID entry.
  */
+const normalizeScanResult = (result) => {
+  if (result === true) return { ok: true };
+  if (result === false) {
+    return {
+      ok: false,
+      reason: 'mismatch',
+      message: 'QR mismatch — this waybill does not match the selected order. Order was not accepted.',
+    };
+  }
+  if (result && typeof result === 'object') {
+    return {
+      ok: !!result.ok,
+      reason: result.reason || (result.ok ? 'ok' : 'error'),
+      message: result.message || '',
+    };
+  }
+  return { ok: false, reason: 'error', message: 'Could not verify this waybill.' };
+};
+
 const WaybillScannerModal = ({ onClose, onScan, hint }) => {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const rafRef = useRef(null);
   const busyRef = useRef(false);
+  const cooldownRef = useRef(0);
   const [error, setError] = useState('');
+  const [errorKind, setErrorKind] = useState(''); // 'mismatch' | 'error' | ''
   const [manualId, setManualId] = useState('');
   const [scanning, setScanning] = useState(true);
   const [cameraReady, setCameraReady] = useState(false);
@@ -47,23 +68,37 @@ const WaybillScannerModal = ({ onClose, onScan, hint }) => {
 
   const handleDetected = useCallback(async (raw) => {
     if (busyRef.current) return;
+    if (Date.now() < cooldownRef.current) return;
     const orderId = extractOrderId(raw);
     if (!orderId) {
+      setErrorKind('error');
       setError('Could not read an order ID from that code. Try again or enter it manually.');
       return;
     }
     busyRef.current = true;
     setSubmitting(true);
     setError('');
+    setErrorKind('');
     try {
-      const ok = await onScan(orderId);
-      if (ok === false) {
-        setError('Waybill did not match / claim failed. Try again or enter the Order ID.');
+      const result = normalizeScanResult(await onScan(orderId));
+      if (!result.ok) {
+        const kind = result.reason === 'mismatch' ? 'mismatch' : result.reason === 'cancelled' ? 'cancelled' : 'error';
+        setErrorKind(kind);
+        setError(
+          result.message ||
+          (kind === 'mismatch'
+            ? 'QR mismatch — this waybill does not match the selected order. Order was not accepted.'
+            : 'Order was not accepted.')
+        );
+        // Prevent the same wrong QR from spamming the banner
+        cooldownRef.current = Date.now() + (kind === 'mismatch' ? 2500 : 1200);
         return;
       }
       stopCamera();
     } catch (err) {
+      setErrorKind('error');
       setError(err?.message || 'Scan failed. Try again.');
+      cooldownRef.current = Date.now() + 1500;
     } finally {
       busyRef.current = false;
       setSubmitting(false);
@@ -149,19 +184,29 @@ const WaybillScannerModal = ({ onClose, onScan, hint }) => {
     e.preventDefault();
     const orderId = extractOrderId(manualId) || manualId.trim();
     if (!orderId) {
+      setErrorKind('error');
       setError('Enter a valid order ID from the waybill.');
       return;
     }
     setSubmitting(true);
     setError('');
+    setErrorKind('');
     try {
-      const ok = await onScan(orderId);
-      if (ok === false) {
-        setError('Order ID did not match / claim failed. Double-check the waybill.');
+      const result = normalizeScanResult(await onScan(orderId));
+      if (!result.ok) {
+        const kind = result.reason === 'mismatch' ? 'mismatch' : result.reason === 'cancelled' ? 'cancelled' : 'error';
+        setErrorKind(kind);
+        setError(
+          result.message ||
+          (kind === 'mismatch'
+            ? 'QR mismatch — this waybill does not match the selected order. Order was not accepted.'
+            : 'Order was not accepted.')
+        );
         return;
       }
       stopCamera();
     } catch (err) {
+      setErrorKind('error');
       setError(err?.message || 'Verify failed. Try again.');
     } finally {
       setSubmitting(false);
@@ -193,7 +238,29 @@ const WaybillScannerModal = ({ onClose, onScan, hint }) => {
         </div>
 
         {error && (
-          <div className="wb-scan-error"><i className="fas fa-exclamation-circle"></i> {error}</div>
+          <div
+            className={`wb-scan-error ${
+              errorKind === 'mismatch' ? 'wb-scan-error--mismatch'
+                : errorKind === 'cancelled' ? 'wb-scan-error--cancelled'
+                : ''
+            }`}
+            role="alert"
+          >
+            <i className={`fas ${
+              errorKind === 'mismatch' ? 'fa-times-circle'
+                : errorKind === 'cancelled' ? 'fa-hand-paper'
+                : 'fa-exclamation-circle'
+            }`}></i>
+            <div>
+              {errorKind === 'mismatch' && (
+                <strong className="wb-scan-error-title">Mismatch — wrong QR / item</strong>
+              )}
+              {errorKind === 'cancelled' && (
+                <strong className="wb-scan-error-title">Accept cancelled</strong>
+              )}
+              <span>{error}</span>
+            </div>
+          </div>
         )}
 
         <form className="wb-scan-manual" onSubmit={submitManual}>

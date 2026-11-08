@@ -44,78 +44,121 @@ const WaybillModal = ({ order, onClose }) => {
     const node = printRef.current;
     if (!node) return;
     const svgs = node.querySelectorAll('svg');
-    svgs.forEach(svg => { if (!svg.getAttribute('xmlns')) svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg'); });
+    svgs.forEach(svg => {
+      if (!svg.getAttribute('xmlns')) svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      // Force black QR for thermal / B&W printers
+      svg.querySelectorAll('path, rect').forEach((el) => {
+        if (el.getAttribute('fill') && el.getAttribute('fill') !== 'none' && el.getAttribute('fill') !== '#ffffff' && el.getAttribute('fill') !== 'white') {
+          el.setAttribute('fill', '#000000');
+        }
+      });
+    });
     const printContents = node.innerHTML;
-    const printWindow = window.open('', '_blank', 'width=900,height=700');
+    // ~4x6″ window so on-screen print popup matches label proportions
+    const printWindow = window.open('', '_blank', 'width=420,height=640');
     if (!printWindow) { alert('Pop-up blocked! Please allow pop-ups for this site.'); return; }
     printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <title>Waybill — ${shortId} | DKMerch</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-  @page { size: A5 portrait; margin: 7mm; }
-  html, body { width: 100%; }
-  body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; background: white; }
-
-  .waybill-print-root {
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
+  /* Standard shipping label: 100mm × 150mm (4″ × 6″) — matches SENDO / Y418T thermal size */
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
+  @page { size: 100mm 150mm; margin: 0; }
+  html, body {
+    width: 100mm;
+    height: 150mm;
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    overflow: hidden;
+  }
+  body {
+    font-family: Arial, 'Segoe UI', sans-serif;
+    font-size: 8pt;
+    color: #111;
   }
 
-  /* ── HEADER ── */
+  .waybill-print-root {
+    width: 100mm;
+    height: 150mm;
+    padding: 3.5mm;
+    display: flex;
+    flex-direction: column;
+    gap: 2.2mm;
+    overflow: hidden;
+  }
+  .wb-size-hint { display: none !important; }
+
   .wb-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding-bottom: 6px;
-    border-bottom: 2.5px solid #7c3aed;
-    margin-bottom: 2px;
+    gap: 3mm;
+    padding-bottom: 2mm;
+    border-bottom: 0.6mm solid #111;
+    flex-shrink: 0;
   }
-  .wb-brand-name    { font-size: 20pt; font-weight: 900; color: #fc1268; line-height: 1; }
-  .wb-brand-sub     { font-size: 8pt; color: #6b7280; font-weight: 600; margin-top: 2px; }
-  .wb-brand-contact { font-size: 7.5pt; color: #6b7280; margin-top: 2px; }
-  .wb-qr-block      { display: flex; flex-direction: column; align-items: center; gap: 3px; }
-  .wb-qr-block svg  { width: 68px !important; height: 68px !important; shape-rendering: crispEdges; }
-  .wb-qr-label      { font-size: 7pt; color: #7c3aed; font-weight: 800; text-transform: uppercase; letter-spacing: 0.4px; }
+  .wb-brand-name    { font-size: 16pt; font-weight: 900; color: #111 !important; line-height: 1; letter-spacing: -0.3px; }
+  .wb-brand-sub     { font-size: 7pt; color: #333 !important; font-weight: 700; margin-top: 1mm; }
+  .wb-brand-contact { font-size: 6.5pt; color: #444 !important; margin-top: 0.8mm; }
+  .wb-qr-block      { display: flex; flex-direction: column; align-items: center; gap: 1mm; flex-shrink: 0; }
+  .wb-qr-block svg  { width: 22mm !important; height: 22mm !important; shape-rendering: crispEdges; }
+  .wb-qr-label      { font-size: 6pt; color: #111 !important; font-weight: 800; text-transform: uppercase; letter-spacing: 0.3px; }
 
-  /* ── 2-COL SENDER / RECIPIENT ── */
-  .wb-cols     { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-  .wb-box      { border: 1px solid #e5e7eb; border-radius: 5px; overflow: hidden; }
-  .wb-box-hd   { background: #f3f4f6 !important; padding: 4px 8px; font-size: 8pt; font-weight: 800; color: #374151; text-transform: uppercase; border-bottom: 1px solid #e5e7eb; }
-  .wb-box-body { padding: 5px 8px; display: flex; flex-direction: column; gap: 4px; }
-  .wb-field-lbl { font-size: 7pt; color: #9ca3af; font-weight: 700; text-transform: uppercase; }
-  .wb-field-val { font-size: 9pt; color: #1f2937; font-weight: 600; line-height: 1.3; }
+  .wb-cols {
+    display: grid;
+    grid-template-columns: 0.9fr 1.1fr;
+    gap: 2mm;
+    flex-shrink: 0;
+  }
+  .wb-box      { border: 0.35mm solid #222; border-radius: 1.2mm; overflow: hidden; }
+  .wb-box-hd   { background: #eee !important; padding: 1.2mm 2mm; font-size: 6.5pt; font-weight: 800; color: #111 !important; text-transform: uppercase; border-bottom: 0.25mm solid #ccc; }
+  .wb-box-body { padding: 1.5mm 2mm; display: flex; flex-direction: column; gap: 1.2mm; }
+  .wb-field-lbl { font-size: 5.5pt; color: #555 !important; font-weight: 700; text-transform: uppercase; }
+  .wb-field-val { font-size: 8pt; color: #111 !important; font-weight: 700; line-height: 1.25; word-break: break-word; }
+  .wb-to .wb-field-val { font-size: 8.5pt; }
+  .wb-rider-row { flex-direction: row !important; gap: 3mm !important; flex-wrap: wrap; }
 
-  /* ── RIDER BOX ── */
-  .wb-rider-row { flex-direction: row !important; gap: 16px !important; flex-wrap: wrap; }
-
-  /* ── ITEMS TABLE ── */
-  .wb-items-box { border: 1px solid #e5e7eb; border-radius: 5px; overflow: hidden; }
-  .wb-items-hd  { background: #f3f4f6 !important; padding: 4px 8px; font-size: 8pt; font-weight: 800; color: #374151; text-transform: uppercase; border-bottom: 1px solid #e5e7eb; }
+  .wb-items-box { border: 0.35mm solid #222; border-radius: 1.2mm; overflow: hidden; flex: 1 1 auto; min-height: 0; }
+  .wb-items-hd  { background: #eee !important; padding: 1.2mm 2mm; font-size: 6.5pt; font-weight: 800; color: #111 !important; text-transform: uppercase; border-bottom: 0.25mm solid #ccc; }
   .wb-items-table { width: 100%; border-collapse: collapse; }
-  .wb-items-table th { padding: 4px 6px; text-align: left; font-size: 7.5pt; font-weight: 700; color: #6b7280; border-bottom: 1px solid #f0f0f0; }
-  .wb-items-table td { padding: 4px 6px; font-size: 8.5pt; color: #1f2937; border-bottom: 1px solid #f8f8f8; }
+  .wb-items-table th { padding: 1mm 1.5mm; text-align: left; font-size: 6pt; font-weight: 700; color: #333 !important; border-bottom: 0.2mm solid #ddd; }
+  .wb-items-table td { padding: 1mm 1.5mm; font-size: 7.5pt; color: #111 !important; border-bottom: 0.15mm solid #eee; }
   .wb-items-table tr:last-child td { border-bottom: none; }
   .td-right  { text-align: right; font-weight: 700; }
   .td-center { text-align: center; }
 
-  /* ── TOTALS ── */
-  .wb-totals     { border: 1px solid #e5e7eb; border-radius: 5px; overflow: hidden; }
-  .wb-totals-row { display: flex; justify-content: space-between; padding: 4px 10px; font-size: 9pt; border-bottom: 1px solid #f0f0f0; }
+  .wb-totals     { border: 0.35mm solid #222; border-radius: 1.2mm; overflow: hidden; flex-shrink: 0; }
+  .wb-totals-row { display: flex; justify-content: space-between; padding: 1.2mm 2.5mm; font-size: 8pt; border-bottom: 0.2mm solid #eee; color: #111 !important; }
   .wb-totals-row:last-child { border-bottom: none; }
-  .wb-grand      { background: #fff1f5 !important; font-size: 11pt; font-weight: 800; color: #fc1268 !important; padding: 5px 10px !important; }
-  .wb-promo-row  { color: #16a34a; font-weight: 600; }
+  .wb-grand      { background: #f3f3f3 !important; font-size: 10pt; font-weight: 900; color: #111 !important; padding: 1.6mm 2.5mm !important; }
+  .wb-promo-row  { color: #111 !important; font-weight: 700; }
 
-  /* ── FOOTER ── */
-  .wb-footer { text-align: center; font-size: 7pt; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 4px; margin-top: 2px; line-height: 1.5; }
+  .wb-footer {
+    text-align: center;
+    font-size: 6pt;
+    color: #333 !important;
+    border-top: 0.35mm solid #111;
+    padding-top: 1.5mm;
+    line-height: 1.35;
+    flex-shrink: 0;
+  }
+  .wb-footer .wb-track-url { display: none; }
 
   svg { display: block; }
+
+  @media screen {
+    html, body { width: 100%; height: 100%; background: #e5e7eb; }
+    body { display: flex; align-items: flex-start; justify-content: center; padding: 12px; overflow: auto; }
+    .waybill-print-root {
+      background: #fff;
+      box-shadow: 0 8px 28px rgba(0,0,0,0.18);
+    }
+  }
 </style>
 </head><body>
 <div class="waybill-print-root">${printContents}</div>
 <script>
-  window.onload = function() { setTimeout(function() { window.print(); }, 400); };
+  window.onload = function() { setTimeout(function() { window.print(); }, 350); };
 <\/script>
 </body></html>`);
     printWindow.document.close();
@@ -125,37 +168,40 @@ const WaybillModal = ({ order, onClose }) => {
     <div className="waybill-overlay" onClick={onClose}>
       <div className="waybill-modal" onClick={e => e.stopPropagation()}>
         <div className="waybill-toolbar">
-          <div className="waybill-toolbar-title"><i className="fas fa-print"></i> Print Waybill — #{shortId}</div>
+          <div>
+            <div className="waybill-toolbar-title"><i className="fas fa-print"></i> Print Waybill — #{shortId}</div>
+            <div className="waybill-size-hint">Print size: <strong>100 × 150 mm (4 × 6″)</strong> shipping label · choose SENDO / Y418T paper</div>
+          </div>
           <div className="waybill-toolbar-actions">
             <button className="waybill-print-btn" onClick={handlePrint}><i className="fas fa-print"></i> Print</button>
             <button className="close-btn" onClick={onClose}><i className="fas fa-times"></i></button>
           </div>
         </div>
         <div className="waybill-preview-wrap">
+          <div className="wb-size-hint">Label preview · 100mm × 150mm</div>
           <div ref={printRef} className="waybill-print-root">
             <div className="wb-header">
               <div>
                 <div className="wb-brand-name">DKMerch</div>
                 <div className="wb-brand-sub">K-Pop Paradise</div>
-                <div className="wb-brand-contact">📍 Manila, Philippines &nbsp;|&nbsp; support@dkmerch.com</div>
+                <div className="wb-brand-contact">Manila, Philippines · support@dkmerch.com</div>
               </div>
-              {/* ✅ CHANGED: QR now points to public track order page */}
               <div className="wb-qr-block">
-                <QRCodeSVG value={trackOrderLink} size={60} level="H" includeMargin={false} fgColor="#7c3aed" />
-                <div className="wb-qr-label">📦 Track Order</div>
+                <QRCodeSVG value={trackOrderLink} size={88} level="M" includeMargin={false} fgColor="#111827" bgColor="#ffffff" />
+                <div className="wb-qr-label">Scan / Track</div>
               </div>
             </div>
             <div className="wb-cols">
               <div className="wb-box">
-                <div className="wb-box-hd">📦 From (Sender)</div>
+                <div className="wb-box-hd">From (Sender)</div>
                 <div className="wb-box-body">
                   <div><div className="wb-field-lbl">Store</div><div className="wb-field-val" style={{ fontWeight: 800, color: '#fc1268' }}>DKMerch</div></div>
                   <div><div className="wb-field-lbl">Address</div><div className="wb-field-val">Manila, Philippines</div></div>
                   <div><div className="wb-field-lbl">Contact</div><div className="wb-field-val">support@dkmerch.com</div></div>
                 </div>
               </div>
-              <div className="wb-box">
-                <div className="wb-box-hd">📍 To (Recipient)</div>
+              <div className="wb-box wb-to">
+                <div className="wb-box-hd">To (Recipient)</div>
                 <div className="wb-box-body">
                   <div><div className="wb-field-lbl">Order ID</div><div className="wb-field-val" style={{ fontFamily: 'Courier New, monospace', fontWeight: 800, color: '#fc1268' }}>#{shortId}</div></div>
                   <div><div className="wb-field-lbl">Name</div><div className="wb-field-val" style={{ fontWeight: 800 }}>{order.customerName || 'N/A'}</div></div>
@@ -166,7 +212,7 @@ const WaybillModal = ({ order, onClose }) => {
             </div>
             {order.riderInfo?.name && (
               <div className="wb-box">
-                <div className="wb-box-hd">🛵 Assigned Rider</div>
+                <div className="wb-box-hd">Assigned Rider</div>
                 <div className="wb-box-body wb-rider-row">
                   <div><div className="wb-field-lbl">Name</div><div className="wb-field-val">{order.riderInfo.name}</div></div>
                   <div><div className="wb-field-lbl">Phone</div><div className="wb-field-val">{order.riderInfo.phone || 'N/A'}</div></div>
@@ -175,9 +221,9 @@ const WaybillModal = ({ order, onClose }) => {
               </div>
             )}
             <div className="wb-items-box">
-              <div className="wb-items-hd">🛍 Order Items ({order.items?.length || 0})</div>
+              <div className="wb-items-hd">Order Items ({order.items?.length || 0})</div>
               <table className="wb-items-table">
-                <thead><tr><th>#</th><th>Item</th><th className="td-center">Qty</th><th className="td-right">Unit Price</th><th className="td-right">Subtotal</th></tr></thead>
+                <thead><tr><th>#</th><th>Item</th><th className="td-center">Qty</th><th className="td-right">Unit</th><th className="td-right">Subtotal</th></tr></thead>
                 <tbody>
                   {order.items?.map((item, idx) => (
                     <tr key={idx}>
@@ -197,12 +243,9 @@ const WaybillModal = ({ order, onClose }) => {
               {hasPromo && <div className="wb-totals-row wb-promo-row"><span>Promo ({order.promoCode})</span><strong>−₱{discount.toLocaleString('en-PH')}</strong></div>}
               <div className="wb-totals-row wb-grand"><span>{hasPromo ? 'Total Charged' : 'Total'}</span><strong>₱{finalTotal.toLocaleString('en-PH')}</strong></div>
             </div>
-            {/* ✅ REMOVED: wb-sig-strip (Rider Signature + Customer/Received by) */}
             <div className="wb-footer">
-              <strong style={{ color: '#fc1268' }}>DKMerch</strong> · K-Pop Paradise · Manila, Philippines
-              &nbsp;|&nbsp; Order #{shortId} &nbsp;|&nbsp; Printed {new Date().toLocaleDateString('en-PH')}
-              {/* ✅ CHANGED: footer URL now shows track order link */}
-              <br /><span style={{ fontSize: '9px', marginTop: '2px', display: 'block' }}>Track: {trackOrderLink}</span>
+              <strong style={{ color: '#fc1268' }}>DKMerch</strong> · Order #{shortId} · {new Date().toLocaleDateString('en-PH')}
+              <span className="wb-track-url">Track: {trackOrderLink}</span>
             </div>
           </div>
         </div>
@@ -284,6 +327,32 @@ const AdminOrders = () => {
   };
 
   const handleUpdateStatus = async (orderId, newOrderStatus) => {
+    const order = orders.find(o => o.orderId === orderId) || selectedOrder;
+    const shortId = String(orderId || '').slice(-8).toUpperCase();
+    const customer = order?.customerName || 'the customer';
+
+    if (newOrderStatus === 'confirmed') {
+      const ok = await confirm({
+        title: 'Confirm this order?',
+        message: `Confirm order #${shortId} for ${customer}?\n\nThis marks the order as confirmed and makes it available for riders to scan and accept.`,
+        confirmLabel: 'Confirm Order',
+        cancelLabel: 'Cancel',
+        variant: 'primary',
+        icon: 'fa-check-circle',
+      });
+      if (!ok) return;
+    } else {
+      const ok = await confirm({
+        title: 'Update order status?',
+        message: `Change order #${shortId} to “${getStatusLabel(newOrderStatus)}”?`,
+        confirmLabel: 'Update',
+        cancelLabel: 'Cancel',
+        variant: 'warning',
+        icon: 'fa-tasks',
+      });
+      if (!ok) return;
+    }
+
     try {
       await updateOrderStatusMutation({ orderId, status: mapStatusToTrackingStatus(newOrderStatus), orderStatus: newOrderStatus });
       if (selectedOrder?.orderId === orderId) {
@@ -320,6 +389,18 @@ const AdminOrders = () => {
   };
 
   const handleResolveRefund = async (orderId, refundStatus, adminNote) => {
+    const shortId = String(orderId || '').slice(-8).toUpperCase();
+    if (refundStatus === 'approved') {
+      const ok = await confirm({
+        title: 'Approve this refund?',
+        message: `Approve the refund for order #${shortId}?\n\nThis marks the refund as approved/paid for the customer.`,
+        confirmLabel: 'Approve Refund',
+        cancelLabel: 'Cancel',
+        variant: 'primary',
+        icon: 'fa-hand-holding-usd',
+      });
+      if (!ok) return;
+    }
     try {
       await resolveRefundMutation({ orderId, refundStatus, refundAdminNote: adminNote });
       if (selectedOrder?.orderId === orderId) {

@@ -1002,10 +1002,43 @@ const RiderDashboard = () => {
 
   /** Scan waybill for a specific available order → accept → Deliver */
   const handleWaybillScan = async (scannedId) => {
-    if (!riderInfo || !scanTargetOrderId) return false;
-    if (!orderIdsMatch(scannedId, scanTargetOrderId)) {
-      return false;
+    if (!riderInfo || !scanTargetOrderId) {
+      return {
+        ok: false,
+        reason: 'error',
+        message: 'No target order selected. Close the scanner and tap Scan on the correct Available order.',
+      };
     }
+    if (!orderIdsMatch(scannedId, scanTargetOrderId)) {
+      const expected = scanTargetOrderId.slice(-8).toUpperCase();
+      const got = String(scannedId).slice(-8).toUpperCase();
+      // Do not accept — wrong parcel / QR for this Available card
+      return {
+        ok: false,
+        reason: 'mismatch',
+        message: `QR mismatch — this waybill is for a different order (#${got}). Scan the QR for #${expected} only. Order was not accepted.`,
+      };
+    }
+
+    const shortId = scanTargetOrderId.slice(-8).toUpperCase();
+    const targetOrder = allOrders.find(o => orderIdsMatch(o.orderId, scanTargetOrderId));
+    const itemCount = targetOrder?.items?.length || 0;
+    const acceptOk = await confirm({
+      title: 'Accept this order?',
+      message: `Waybill matched order #${shortId}${itemCount ? ` (${itemCount} item${itemCount === 1 ? '' : 's'})` : ''}.\n\nAccept this order into Deliver? You will be responsible for this delivery.`,
+      confirmLabel: 'Accept Order',
+      cancelLabel: 'Not yet',
+      variant: 'primary',
+      icon: 'fa-motorcycle',
+    });
+    if (!acceptOk) {
+      return {
+        ok: false,
+        reason: 'cancelled',
+        message: 'Accept cancelled. Order was not claimed — scan again when ready.',
+      };
+    }
+
     setAcceptingId(scanTargetOrderId);
     try {
       const result = await acceptOrderMutation({
@@ -1018,8 +1051,11 @@ const RiderDashboard = () => {
         riderPlate: riderInfo.plateNumber || '',
       });
       if (!result?.success) {
-        alert(result?.message || 'Failed to accept order.');
-        return false;
+        return {
+          ok: false,
+          reason: 'error',
+          message: result?.message || 'Failed to accept order. Try again.',
+        };
       }
       setShowWaybillScanner(false);
       setScanTargetOrderId(null);
@@ -1027,11 +1063,14 @@ const RiderDashboard = () => {
       alert(result.alreadyClaimed
         ? '✅ This order is already in Deliver.'
         : '✅ Waybill matched! Order accepted and moved to Deliver.');
-      return true;
+      return { ok: true };
     } catch (err) {
       console.error(err);
-      alert('Failed to verify waybill. Please try again.');
-      return false;
+      return {
+        ok: false,
+        reason: 'error',
+        message: 'Failed to verify waybill. Please try again.',
+      };
     } finally {
       setAcceptingId(null);
     }
@@ -1088,10 +1127,12 @@ const RiderDashboard = () => {
   };
 
   const notifyCustomer = async (delivery) => {
+    const shortId = String(delivery.orderId || '').slice(-8).toUpperCase();
     const ok = await confirm({
-      title: 'Notify customer?',
-      message: 'Notify the customer that their order is on the way?',
-      confirmLabel: 'Notify',
+      title: 'Start delivery?',
+      message: `Mark order #${shortId} as Out for Delivery and notify the customer?\n\nLive GPS tracking will start for this order.`,
+      confirmLabel: 'Start Delivery',
+      cancelLabel: 'Cancel',
       variant: 'primary',
       icon: 'fa-bell',
     });
@@ -1122,10 +1163,12 @@ const RiderDashboard = () => {
     if (!inputOtp)                      { setOtpErrors(p => ({ ...p, [delivery._id]: 'Please enter the OTP from the customer.' })); return; }
     if (!order.deliveryOtp)             { setOtpErrors(p => ({ ...p, [delivery._id]: '⏳ The customer has not generated their OTP yet. Ask them to open their tracking page.' })); return; }
     if (inputOtp !== order.deliveryOtp) { setOtpErrors(p => ({ ...p, [delivery._id]: '❌ Incorrect OTP. Please ask the customer for the correct code.' })); return; }
+    const shortId = String(delivery.orderId || '').slice(-8).toUpperCase();
     const ok = await confirm({
       title: 'Confirm delivery?',
-      message: 'Confirm delivery? This will mark the order as Completed.',
-      confirmLabel: 'Confirm',
+      message: `Confirm delivery for order #${shortId} with OTP ${inputOtp}?\n\nThis will mark the order as Completed and cannot be undone from the rider app.`,
+      confirmLabel: 'Confirm Delivery',
+      cancelLabel: 'Cancel',
       variant: 'primary',
       icon: 'fa-check-circle',
     });
@@ -1660,7 +1703,7 @@ const RiderDashboard = () => {
           onClose={() => { setShowWaybillScanner(false); setScanTargetOrderId(null); }}
           onScan={handleWaybillScan}
           hint={scanTargetOrderId
-            ? `Scan the waybill for #${scanTargetOrderId.slice(-8).toUpperCase()}. Matching QR accepts the order into Deliver.`
+            ? `Scan the waybill QR for #${scanTargetOrderId.slice(-8).toUpperCase()} only. A different QR shows a mismatch and will not accept this order.`
             : 'Scan the order waybill QR to accept.'}
         />
       )}

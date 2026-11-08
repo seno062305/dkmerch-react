@@ -98,6 +98,38 @@
   display: flex;
   gap: 8px;
   align-items: flex-start;
+  line-height: 1.4;
+  border: 1px solid #fecaca;
+}
+.wb-scan-error i {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+.wb-scan-error--mismatch {
+  background: #fff1f2;
+  color: #9f1239;
+  border-color: #fb7185;
+  box-shadow: 0 0 0 3px rgba(252, 18, 104, 0.12);
+  animation: wbScanMismatchPulse 0.45s ease;
+}
+.wb-scan-error--cancelled {
+  background: #fffbeb;
+  color: #92400e;
+  border-color: #fcd34d;
+}
+.wb-scan-error--cancelled .wb-scan-error-title {
+  color: #b45309;
+}
+.wb-scan-error-title {
+  display: block;
+  font-size: 13px;
+  font-weight: 800;
+  margin-bottom: 2px;
+  color: #be123c;
+}
+@keyframes wbScanMismatchPulse {
+  0% { transform: scale(0.98); opacity: 0.7; }
+  100% { transform: scale(1); opacity: 1; }
 }
 
 .wb-scan-manual {

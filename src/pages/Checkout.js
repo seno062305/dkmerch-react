@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useConfirm } from '../context/ConfirmContext';
 import { useNotification } from '../context/NotificationContext';
 import { useProducts, usePreOrderProducts, useUpdateProduct, useCollectionProducts } from '../utils/productStorage';
 import { useCreateOrder } from '../utils/orderStorage';
@@ -541,6 +542,7 @@ const Checkout = () => {
   const navigate  = useNavigate();
   const location  = useLocation();
   const { user, isAuthenticated } = useAuth();
+  const { confirm }               = useConfirm();
   const { showNotification }      = useNotification();
 
   const collectionProducts = useCollectionProducts() || [];
@@ -784,6 +786,16 @@ const Checkout = () => {
         }
       }
     }
+
+    const payOk = await confirm({
+      title: 'Proceed to payment?',
+      message: `Place this order and continue to PayMongo (GCash / Maya)?\n\nTotal: ₱${Number(finalTotal || 0).toLocaleString('en-PH')}`,
+      confirmLabel: 'Pay Now',
+      cancelLabel: 'Cancel',
+      variant: 'primary',
+      icon: 'fa-credit-card',
+    });
+    if (!payOk) return;
 
     setLoading(true);
 

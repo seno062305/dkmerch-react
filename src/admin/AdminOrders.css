@@ -733,10 +733,12 @@
 .waybill-toolbar {
   display: flex; align-items: center; justify-content: space-between;
   padding: 14px 20px; background: #ffffff; border-bottom: 1px solid #e2e8f0;
-  flex-shrink: 0;
+  flex-shrink: 0; gap: 12px;
 }
 .waybill-toolbar-title { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 10px; color: #1a1f36; }
-.waybill-toolbar-actions { display: flex; align-items: center; gap: 10px; }
+.waybill-size-hint { margin-top: 4px; font-size: 12px; color: #64748b; }
+.waybill-size-hint strong { color: #0f172a; }
+.waybill-toolbar-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 .waybill-print-btn {
   display: flex; align-items: center; gap: 8px; padding: 9px 20px;
   background: rgb(107,104,107); color: #000000; border: none; border-radius: 8px;
@@ -745,47 +747,56 @@
 .waybill-print-btn:hover { background: #575455; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
 .waybill-preview-wrap {
   flex: 1; overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none;
-  background: #f1f5f9; padding: 20px;
+  background: #e2e8f0; padding: 20px;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
 }
 .waybill-preview-wrap::-webkit-scrollbar { display: none; }
+.wb-size-hint {
+  font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.4px;
+}
 
-/* ── Preview root (on-screen) ── */
+/* ── Preview root = 100×150mm (4×6″) label proportions ── */
 .waybill-print-root {
   background: white;
-  border-radius: 10px;
-  padding: 20px 22px;
-  box-shadow: 0 2px 16px rgba(0,0,0,0.08);
-  max-width: 660px;
+  border-radius: 4px;
+  padding: 14px 15px;
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.14);
+  width: min(380px, 100%);
+  aspect-ratio: 100 / 150;
+  max-height: min(570px, calc(100vh - 180px));
   margin: 0 auto;
-  font-family: 'Segoe UI', Arial, sans-serif;
+  font-family: Arial, 'Segoe UI', sans-serif;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  overflow: hidden;
+  border: 1px solid #cbd5e1;
 }
 
 /* Header */
 .wb-header {
-  display: flex; justify-content: space-between; align-items: center;
-  padding-bottom: 10px; border-bottom: 3px solid #7c3aed;
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  padding-bottom: 8px; border-bottom: 2.5px solid #111827; flex-shrink: 0;
 }
-.wb-brand-name    { font-size: 22px; font-weight: 900; color: #fc1268; }
+.wb-brand-name    { font-size: 22px; font-weight: 900; color: #fc1268; line-height: 1; }
 .wb-brand-sub     { font-size: 11px; color: #6b7280; font-weight: 600; margin-top: 2px; }
 .wb-brand-contact { margin-top: 3px; font-size: 10px; color: #6b7280; }
-.wb-qr-block      { display: flex; flex-direction: column; align-items: center; gap: 5px; }
-.wb-qr-block svg  { width: 76px !important; height: 76px !important; }
-.wb-qr-label      { font-size: 10px; color: #7c3aed; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
+.wb-qr-block      { display: flex; flex-direction: column; align-items: center; gap: 4px; flex-shrink: 0; }
+.wb-qr-block svg  { width: 84px !important; height: 84px !important; }
+.wb-qr-label      { font-size: 10px; color: #111827; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
 
 /* 2-col grid */
-.wb-cols    { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.wb-cols    { display: grid; grid-template-columns: 0.9fr 1.1fr; gap: 8px; flex-shrink: 0; }
 .wb-box     { border: 1.5px solid #e5e7eb; border-radius: 7px; overflow: hidden; }
 .wb-box-hd  { background: #f3f4f6; padding: 5px 10px; font-size: 10px; font-weight: 800; color: #374151; text-transform: uppercase; letter-spacing: 0.4px; border-bottom: 1px solid #e5e7eb; }
 .wb-box-body { padding: 7px 10px; display: flex; flex-direction: column; gap: 5px; }
 .wb-rider-row { flex-direction: row !important; gap: 14px !important; flex-wrap: wrap; }
 .wb-field-lbl { font-size: 9px; color: #9ca3af; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 1px; }
-.wb-field-val { font-size: 12px; color: #1f2937; font-weight: 600; line-height: 1.3; }
+.wb-field-val { font-size: 12px; color: #1f2937; font-weight: 600; line-height: 1.3; word-break: break-word; }
+.wb-to .wb-field-val { font-size: 12.5px; }
 
 /* Items table */
-.wb-items-box  { border: 1.5px solid #e5e7eb; border-radius: 7px; overflow: hidden; }
+.wb-items-box  { border: 1.5px solid #e5e7eb; border-radius: 7px; overflow: hidden; flex: 1 1 auto; min-height: 0; }
 .wb-items-hd   { background: #f3f4f6; padding: 5px 10px; font-size: 10px; font-weight: 800; color: #374151; text-transform: uppercase; border-bottom: 1px solid #e5e7eb; }
 .wb-items-table { width: 100%; border-collapse: collapse; }
 .wb-items-table th { padding: 5px 8px; text-align: left; font-size: 10px; font-weight: 700; color: #6b7280; border-bottom: 1px solid #f0f0f0; }
@@ -795,7 +806,7 @@
 .td-center { text-align: center; }
 
 /* Totals */
-.wb-totals     { border: 1.5px solid #e5e7eb; border-radius: 7px; overflow: hidden; }
+.wb-totals     { border: 1.5px solid #e5e7eb; border-radius: 7px; overflow: hidden; flex-shrink: 0; }
 .wb-totals-row { display: flex; justify-content: space-between; padding: 5px 12px; font-size: 12px; border-bottom: 1px solid #f0f0f0; }
 .wb-totals-row:last-child { border-bottom: none; }
 .wb-grand      { background: #fff1f5; font-size: 14px; font-weight: 800; color: #fc1268; }
@@ -804,10 +815,9 @@
 /* Footer */
 .wb-footer {
   text-align: center; font-size: 10px; color: #9ca3af;
-  border-top: 1px solid #e5e7eb; padding-top: 6px; line-height: 1.5;
+  border-top: 1px solid #e5e7eb; padding-top: 6px; line-height: 1.5; flex-shrink: 0;
 }
-
-/* NOTE: .wb-sig-strip and .wb-sig-box removed — signature section deleted */
+.wb-footer .wb-track-url { display: block; margin-top: 2px; font-size: 9px; word-break: break-all; }
 
 /* ══════════════════════════
    REFUND STYLES
@@ -923,8 +933,9 @@
   .waybill-overlay { padding: 0; align-items: flex-end; }
   .waybill-modal { border-radius: 20px 20px 0 0; max-height: 94vh; }
   .waybill-preview-wrap { padding: 12px; }
-  .waybill-print-root { padding: 14px; }
-  .wb-cols { grid-template-columns: 1fr; }
+  .waybill-print-root { padding: 12px; width: min(320px, 100%); }
+  .wb-cols { grid-template-columns: 0.9fr 1.1fr; }
+  .wb-qr-block svg { width: 72px !important; height: 72px !important; }
 }
 
 @media (max-width: 900px) {
