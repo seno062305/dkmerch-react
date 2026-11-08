@@ -7,9 +7,9 @@ import { api } from "../../convex/_generated/api";
 import { appendActivityLog } from "../admin/lib/localActivityLog";
 
 const RegisterModal = ({ onClose }) => {
-  const { register } = useAuth();
+  const { register, completeLogin } = useAuth();
 
-  const [view, setView] = useState("register"); // "register" | "otp" | "forgot"
+  const [view, setView] = useState("register"); // "register" | "otp" | "createPin" | "forgot"
 
   const [formData, setFormData] = useState({
     name: "", username: "", email: "", password: "", confirmPassword: ""
@@ -34,7 +34,15 @@ const RegisterModal = ({ onClose }) => {
   const [resendLoading, setResendLoading] = useState(false);
   const [pendingEmail, setPendingEmail] = useState("");
   const [pendingName, setPendingName] = useState("");
+  const [pendingUserId, setPendingUserId] = useState(null);
+  const [pinDigits, setPinDigits] = useState(["", "", "", "", "", ""]);
+  const [pinConfirmDigits, setPinConfirmDigits] = useState(["", "", "", "", "", ""]);
+  const [pinStep, setPinStep] = useState(0); // 0 = enter, 1 = confirm
+  const [pinLoading, setPinLoading] = useState(false);
+  const [pinError, setPinError] = useState("");
+  const [pinSuccess, setPinSuccess] = useState("");
   const otpRefs = useRef([]);
+  const pinRefs = useRef([]);
 
   // ── Forgot password state ─────────────────────────
   const [forgotEmail, setForgotEmail] = useState("");
@@ -60,6 +68,7 @@ const RegisterModal = ({ onClose }) => {
   const registerPendingUser = useMutation(api.users.registerPendingUser);
   const verifyOtpAndCreateUser = useMutation(api.users.verifyOtpAndCreateUser);
   const resendOtpMutation = useMutation(api.users.resendOtp);
+  const setUserPin = useMutation(api.users.setUserPin);
   const resetPasswordByEmail = useMutation(api.users.resetPasswordByEmail);
   const sendPasswordResetCode = useAction(api.sendEmail.sendPasswordResetCode);
   const sendRegistrationOTP = useAction(api.sendEmail.sendRegistrationOTP);
@@ -117,6 +126,9 @@ const RegisterModal = ({ onClose }) => {
   useEffect(() => {
     if (view === "otp") {
       setTimeout(() => otpRefs.current[0]?.focus(), 100);
+    }
+    if (view === "createPin") {
+      setTimeout(() => pinRefs.current[0]?.focus(), 100);
     }
   }, [view]);
 
@@ -261,8 +273,14 @@ const RegisterModal = ({ onClose }) => {
             details: "Account created after OTP verification",
           });
         } catch {}
-        setOtpSuccess("✅ Email verified! Your account is ready.");
-        setTimeout(() => onClose(), 1500);
+        setPendingUserId(result.userId);
+        setOtpSuccess("✅ Email verified! Create your login PIN next.");
+        setPinDigits(["", "", "", "", "", ""]);
+        setPinConfirmDigits(["", "", "", "", "", ""]);
+        setPinStep(0);
+        setPinError("");
+        setPinSuccess("");
+        setTimeout(() => setView("createPin"), 600);
       } else {
         setOtpError(result.message || "Incorrect code. Please try again.");
         if (result.expired) {
@@ -296,6 +314,81 @@ const RegisterModal = ({ onClose }) => {
       setOtpError("Failed to resend OTP. Please try again.");
     } finally {
       setResendLoading(false);
+    }
+  };
+
+  // ── PIN CREATE (after OTP) ───────────────────────
+  const handlePinChange = (index, value, isConfirm) => {
+    if (value && !/^\d$/.test(value)) return;
+    const digits = isConfirm ? [...pinConfirmDigits] : [...pinDigits];
+    digits[index] = value;
+    if (isConfirm) setPinConfirmDigits(digits);
+    else setPinDigits(digits);
+    setPinError("");
+    if (value && index < 5) pinRefs.current[index + 1]?.focus();
+    if (!isConfirm && value && index === 5 && digits.every(d => d)) {
+      setTimeout(() => {
+        setPinStep(1);
+        setPinConfirmDigits(["", "", "", "", "", ""]);
+        setTimeout(() => pinRefs.current[0]?.focus(), 80);
+      }, 150);
+    }
+  };
+
+  const handlePinKeyDown = (index, e, isConfirm) => {
+    const digits = isConfirm ? pinConfirmDigits : pinDigits;
+    if (e.key === "Backspace" && !digits[index] && index > 0) {
+      pinRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handleSavePin = async () => {
+    const pin = pinDigits.join("");
+    const confirm = pinConfirmDigits.join("");
+    if (pin.length < 4) {
+      setPinError("PIN must be 4–6 digits.");
+      return;
+    }
+    if (pinStep === 0) {
+      setPinStep(1);
+      setPinConfirmDigits(["", "", "", "", "", ""]);
+      setTimeout(() => pinRefs.current[0]?.focus(), 80);
+      return;
+    }
+    if (pin !== confirm) {
+      setPinError("PINs do not match. Try again.");
+      setPinConfirmDigits(["", "", "", "", "", ""]);
+      setTimeout(() => pinRefs.current[0]?.focus(), 80);
+      return;
+    }
+    if (!pendingUserId) {
+      setPinError("Account session lost. Please register again.");
+      return;
+    }
+    setPinLoading(true);
+    setPinError("");
+    try {
+      const result = await setUserPin({ userId: pendingUserId, pin });
+      if (!result.success) {
+        setPinError(result.message || "Failed to save PIN.");
+        return;
+      }
+      setPinSuccess("✅ PIN saved! Signing you in…");
+      completeLogin(
+        {
+          _id: pendingUserId,
+          name: pendingName,
+          username: formData.username,
+          email: pendingEmail,
+          role: "user",
+        },
+        "Registered + PIN created"
+      );
+      setTimeout(() => onClose(), 900);
+    } catch {
+      setPinError("Failed to save PIN. Please try again.");
+    } finally {
+      setPinLoading(false);
     }
   };
 
@@ -458,8 +551,99 @@ const RegisterModal = ({ onClose }) => {
           </svg>
         </button>
 
-        {/* ══ OTP VERIFICATION VIEW ══ */}
-        {view === "otp" ? (
+        {/* ══ CREATE PIN (after OTP) ══ */}
+        {view === "createPin" ? (
+          <>
+            <div className="register-modal-header">
+              <div className="register-icon" style={{ background: "linear-gradient(135deg, #fc1268, #9c27b0)" }}>
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 17a2 2 0 100-4 2 2 0 000 4zm6-7h-1V7a5 5 0 00-10 0v3H6a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2v-8a2 2 0 00-2-2zM9 7a3 3 0 016 0v3H9V7z"/>
+                </svg>
+              </div>
+              <h2>{pinStep === 0 ? "Create Your PIN" : "Confirm Your PIN"}</h2>
+              <p className="register-subtitle">
+                {pinStep === 0
+                  ? "One-time setup — use this PIN instead of email OTP on your next logins"
+                  : "Re-enter the same 4–6 digit PIN to confirm"}
+              </p>
+            </div>
+
+            <div style={{ padding: "0 32px 36px" }}>
+              <div style={{ display: "flex", gap: "10px", justifyContent: "center", marginBottom: "20px" }}>
+                {(pinStep === 0 ? pinDigits : pinConfirmDigits).map((digit, index) => (
+                  <input
+                    key={`${pinStep}-${index}`}
+                    ref={el => pinRefs.current[index] = el}
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={digit}
+                    onChange={e => handlePinChange(index, e.target.value, pinStep === 1)}
+                    onKeyDown={e => handlePinKeyDown(index, e, pinStep === 1)}
+                    style={{
+                      width: "48px", height: "56px", textAlign: "center",
+                      fontSize: "22px", fontWeight: "700",
+                      border: `2px solid ${pinError ? "#dc2626" : digit ? "#fc1268" : "#e5e7eb"}`,
+                      borderRadius: "12px", outline: "none",
+                      background: digit ? "linear-gradient(135deg, #fff0f6, #f5f3ff)" : "white",
+                      color: "#1f2937",
+                    }}
+                    disabled={pinLoading}
+                  />
+                ))}
+              </div>
+
+              {pinError && (
+                <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "10px", padding: "12px 16px", marginBottom: "16px", color: "#dc2626", fontSize: "13px", fontWeight: "600", textAlign: "center" }}>
+                  ❌ {pinError}
+                </div>
+              )}
+              {pinSuccess && (
+                <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "10px", padding: "12px 16px", marginBottom: "16px", color: "#15803d", fontSize: "13px", fontWeight: "600", textAlign: "center" }}>
+                  {pinSuccess}
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={handleSavePin}
+                disabled={pinLoading || (pinStep === 0 ? pinDigits.join("").length < 4 : pinConfirmDigits.join("").length < 4)}
+                style={{
+                  width: "100%", padding: "14px",
+                  background: (pinStep === 0 ? pinDigits.join("").length >= 4 : pinConfirmDigits.join("").length >= 4)
+                    ? "linear-gradient(135deg, #fc1268, #9c27b0)"
+                    : "linear-gradient(135deg, #d1d5db, #9ca3af)",
+                  color: "white", border: "none", borderRadius: "12px", fontSize: "15px", fontWeight: "700",
+                  cursor: "pointer", marginBottom: "12px",
+                }}
+              >
+                {pinLoading ? "Saving…" : pinStep === 0 ? "Continue" : "Save PIN & Continue"}
+              </button>
+
+              {pinStep === 1 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPinStep(0);
+                    setPinConfirmDigits(["", "", "", "", "", ""]);
+                    setPinError("");
+                    setTimeout(() => pinRefs.current[0]?.focus(), 80);
+                  }}
+                  style={{ width: "100%", background: "none", border: "none", color: "#9ca3af", fontSize: "13px", cursor: "pointer" }}
+                >
+                  ← Edit PIN
+                </button>
+              )}
+
+              <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "10px", padding: "12px 16px", marginTop: "16px" }}>
+                <p style={{ color: "#1e40af", fontSize: "12px", margin: 0 }}>
+                  Next logins: email/username + password + <strong>PIN</strong> — no email OTP needed.
+                </p>
+              </div>
+            </div>
+          </>
+
+        ) : view === "otp" ? (
           <>
             <div className="register-modal-header">
               <div className="register-icon" style={{ background: "linear-gradient(135deg, #fc1268, #9c27b0)" }}>

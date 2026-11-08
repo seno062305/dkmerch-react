@@ -190,7 +190,9 @@ async function encryptXlsxBytes(plainBytes, password) {
   return bytes;
 }
 
-/** Build password-protected .xlsx (Excel prompts for password on open). */
+/** Build password-protected .xlsx (Excel prompts for password on open).
+ *  Returns { byteLength, bytes, filename } so callers can also upload to Convex.
+ */
 export async function downloadEncryptedBackupExcel(allData, password, filename) {
   const pass = String(password || '').trim();
   if (!pass) throw new Error('Admin password is required to lock the Excel backup.');
@@ -203,9 +205,46 @@ export async function downloadEncryptedBackupExcel(allData, password, filename) 
       throw new Error('Encrypted Excel was invalid/empty. Try again.');
     }
     const day = new Date().toISOString().slice(0, 10);
-    triggerDownload(encrypted, filename || `dkmerch-backup-${day}.xlsx`);
-    return encrypted.byteLength;
+    const safeName = ensureXlsxFilename(filename || `dkmerch-backup-${day}.xlsx`);
+    triggerDownload(encrypted, safeName);
+    return { byteLength: encrypted.byteLength, bytes: encrypted, filename: safeName };
   });
+}
+
+/** Read tables from a password-locked DKMerch Excel backup (_DK_PAYLOAD). */
+export async function readEncryptedBackupExcel(file, password) {
+  const pass = String(password || '').trim();
+  if (!pass) throw new Error('Admin password is required to open this Excel backup.');
+  const XlsxPopulate = (await import('xlsx-populate')).default;
+  const ab = await file.arrayBuffer();
+  let workbook;
+  try {
+    workbook = await XlsxPopulate.fromDataAsync(ab, { password: pass });
+  } catch {
+    throw new Error('Could not open Excel — wrong password or not a DKMerch backup.');
+  }
+  const plain = toUint8Array(await workbook.outputAsync());
+  const wb = XLSX.read(plain, { type: 'array' });
+  const sheet = wb.Sheets['_DK_PAYLOAD'];
+  if (!sheet) {
+    throw new Error('Missing _DK_PAYLOAD sheet. Use a file from Create backup.');
+  }
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false });
+  const json = rows
+    .slice(1)
+    .map((r) => (Array.isArray(r) ? r[0] : ''))
+    .filter(Boolean)
+    .join('');
+  let payload;
+  try {
+    payload = JSON.parse(json);
+  } catch {
+    throw new Error('Backup payload is corrupted.');
+  }
+  if (!payload?.tables || typeof payload.tables !== 'object') {
+    throw new Error('Invalid DKMerch backup payload.');
+  }
+  return payload.tables;
 }
 
 export async function downloadEncryptedTableExcel(tableKey, rows, password, filename) {

@@ -220,6 +220,25 @@ export const getDatabaseStatus = query({
     slices.sort((a, b) => b.bytes - a.bytes);
     const settings = await ctx.db.query('settings').first();
     const backups = await ctx.db.query('systemBackups').order('desc').take(30);
+    let archiveCount = 0;
+    try {
+      archiveCount = (await ctx.db.query('systemArchives').collect()).length;
+    } catch {
+      archiveCount = 0;
+    }
+
+    // OTP / temp auth docs (DKMerch equivalent of SDO "OTP sessions")
+    let otpSessions = 0;
+    try {
+      const pending = await ctx.db.query('pendingUsers').collect();
+      const users = await ctx.db.query('users').collect();
+      otpSessions =
+        pending.filter((p: any) => p.otp || p.token).length +
+        users.filter((u: any) => u.reactivationOtp).length;
+    } catch {
+      otpSessions = 0;
+    }
+
     return {
       ok: true,
       provider: 'convex',
@@ -233,6 +252,8 @@ export const getDatabaseStatus = query({
       lastAutoBackupAt: settings?.lastAutoBackupAt ?? null,
       lastRestoreAt: settings?.lastRestoreAt ?? null,
       backupCount: backups.length,
+      archiveCount,
+      otpSessions,
     };
   },
 });
@@ -243,6 +264,176 @@ export const listSystemBackups = query({
   },
 });
 
+export const listSystemArchives = query({
+  handler: async (ctx) => {
+    return await ctx.db.query('systemArchives').order('desc').take(30);
+  },
+});
+
+export const getBackupFileUrl = query({
+  args: { storageId: v.id('_storage') },
+  handler: async (ctx, { storageId }) => {
+    return await ctx.storage.getUrl(storageId);
+  },
+});
+
+const assertAdminPassword = async (ctx: any, adminId: any, password: string) => {
+  const admin = await ctx.db.get(adminId);
+  if (!admin || admin.role !== 'admin') {
+    return { ok: false as const, message: 'Admin account required.' };
+  }
+  if (admin.password !== password) {
+    return { ok: false as const, message: 'Incorrect password.' };
+  }
+  return { ok: true as const, admin };
+};
+
+export const generateBackupUploadUrl = mutation({
+  args: {
+    adminId: v.id('users'),
+    password: v.string(),
+  },
+  handler: async (ctx, { adminId, password }) => {
+    const auth = await assertAdminPassword(ctx, adminId, password);
+    if (!auth.ok) return { success: false, message: auth.message };
+    const uploadUrl = await ctx.storage.generateUploadUrl();
+    return { success: true, uploadUrl };
+  },
+});
+
+/** Record a manual Create backup (Excel saved to Convex file storage + history). */
+export const recordManualBackup = mutation({
+  args: {
+    adminId: v.id('users'),
+    password: v.string(),
+    storageId: v.id('_storage'),
+    name: v.string(),
+    recordCount: v.number(),
+    sizeBytes: v.number(),
+    tables: v.array(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const auth = await assertAdminPassword(ctx, args.adminId, args.password);
+    if (!auth.ok) return { success: false, message: auth.message };
+    const now = Date.now();
+    await ctx.db.insert('systemBackups', {
+      name: args.name,
+      createdAt: now,
+      recordCount: args.recordCount,
+      sizeBytes: args.sizeBytes,
+      tables: args.tables,
+      storageId: args.storageId,
+      createdBy: auth.admin.email,
+      kind: 'backup',
+    });
+    const settings = await ctx.db.query('settings').first();
+    if (settings) {
+      await ctx.db.patch(settings._id, { lastAutoBackupAt: now });
+    } else {
+      await ctx.db.insert('settings', {
+        storeName: 'DKMerch Store',
+        lastAutoBackupAt: now,
+      });
+    }
+    const all = await ctx.db.query('systemBackups').order('desc').collect();
+    for (const old of all.slice(30)) {
+      if (old.storageId) await ctx.storage.delete(old.storageId);
+      await ctx.db.delete(old._id);
+    }
+    await ctx.db.insert('activityLogs', {
+      action: 'backup_create',
+      actorEmail: auth.admin.email,
+      actorName: auth.admin.name,
+      actorRole: 'admin',
+      details: `${args.name} · ${args.recordCount} records · ${args.sizeBytes} bytes`,
+      createdAt: now,
+    });
+    return { success: true, createdAt: now };
+  },
+});
+
+export const markRestoreCompleted = mutation({
+  args: {
+    adminId: v.id('users'),
+    password: v.string(),
+    details: v.optional(v.string()),
+  },
+  handler: async (ctx, { adminId, password, details }) => {
+    const auth = await assertAdminPassword(ctx, adminId, password);
+    if (!auth.ok) return { success: false, message: auth.message };
+    const now = Date.now();
+    const settings = await ctx.db.query('settings').first();
+    if (settings) {
+      await ctx.db.patch(settings._id, { lastRestoreAt: now });
+    } else {
+      await ctx.db.insert('settings', {
+        storeName: 'DKMerch Store',
+        lastRestoreAt: now,
+      });
+    }
+    await ctx.db.insert('activityLogs', {
+      action: 'backup_restore',
+      actorEmail: auth.admin.email,
+      actorName: auth.admin.name,
+      actorRole: 'admin',
+      details: details || 'Import/restore completed (duplicates skipped)',
+      createdAt: now,
+    });
+    return { success: true };
+  },
+});
+
+/** Move live table rows into an archive package, then remove them from live DB. */
+export const archiveTable = mutation({
+  args: {
+    table: v.string(),
+    adminId: v.id('users'),
+    password: v.string(),
+  },
+  handler: async (ctx, { table, adminId, password }) => {
+    if (!(TABLE_NAMES as readonly string[]).includes(table)) {
+      return { success: false, message: 'Unknown table.' };
+    }
+    const auth = await assertAdminPassword(ctx, adminId, password);
+    if (!auth.ok) return { success: false, message: auth.message };
+
+    const rows = await ctx.db.query(table as any).collect();
+    const payload = JSON.stringify({
+      version: 1,
+      kind: 'dkmerch-table-archive',
+      table,
+      createdAt: new Date().toISOString(),
+      records: rows,
+    });
+    const sizeBytes = new TextEncoder().encode(payload).length;
+    const storageId = await ctx.storage.store(
+      new Blob([payload], { type: 'application/json' })
+    );
+    const now = Date.now();
+    const name = `archive-${table}-${new Date(now).toISOString().slice(0, 10)}`;
+    await ctx.db.insert('systemArchives', {
+      name,
+      tableName: table,
+      createdAt: now,
+      createdBy: auth.admin.email,
+      recordCount: rows.length,
+      sizeBytes,
+      storageId,
+    });
+    for (const row of rows) await ctx.db.delete(row._id);
+    await ctx.db.insert('activityLogs', {
+      action: 'table_archive',
+      actorEmail: auth.admin.email,
+      actorName: auth.admin.name,
+      actorRole: 'admin',
+      details: `Archived ${rows.length} from ${table}`,
+      createdAt: now,
+    });
+    return { success: true, archived: rows.length, name };
+  },
+});
+
+/** Permanently wipe a live table (no archive). */
 export const clearTable = mutation({
   args: {
     table: v.string(),
@@ -253,16 +444,45 @@ export const clearTable = mutation({
     if (!(TABLE_NAMES as readonly string[]).includes(table)) {
       return { success: false, message: 'Unknown table.' };
     }
-    const admin = await ctx.db.get(adminId);
-    if (!admin || admin.role !== 'admin') {
-      return { success: false, message: 'Admin account required.' };
-    }
-    if (admin.password !== password) {
-      return { success: false, message: 'Incorrect password.' };
-    }
+    const auth = await assertAdminPassword(ctx, adminId, password);
+    if (!auth.ok) return { success: false, message: auth.message };
     const rows = await ctx.db.query(table as any).collect();
     for (const row of rows) await ctx.db.delete(row._id);
+    await ctx.db.insert('activityLogs', {
+      action: 'table_wipe',
+      actorEmail: auth.admin.email,
+      actorName: auth.admin.name,
+      actorRole: 'admin',
+      details: `Permanently deleted ${rows.length} from ${table}`,
+      createdAt: Date.now(),
+    });
     return { success: true, deleted: rows.length };
+  },
+});
+
+/** Permanently delete an archive package (+ file). */
+export const permanentDeleteArchive = mutation({
+  args: {
+    archiveId: v.id('systemArchives'),
+    adminId: v.id('users'),
+    password: v.string(),
+  },
+  handler: async (ctx, { archiveId, adminId, password }) => {
+    const auth = await assertAdminPassword(ctx, adminId, password);
+    if (!auth.ok) return { success: false, message: auth.message };
+    const row = await ctx.db.get(archiveId);
+    if (!row) return { success: false, message: 'Archive not found.' };
+    if (row.storageId) await ctx.storage.delete(row.storageId);
+    await ctx.db.delete(archiveId);
+    await ctx.db.insert('activityLogs', {
+      action: 'archive_permanent_delete',
+      actorEmail: auth.admin.email,
+      actorName: auth.admin.name,
+      actorRole: 'admin',
+      details: `Permanently deleted archive ${row.name}`,
+      createdAt: Date.now(),
+    });
+    return { success: true };
   },
 });
 

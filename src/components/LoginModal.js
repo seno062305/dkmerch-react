@@ -1,5 +1,5 @@
 // src/components/LoginModal.js
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import "./LoginModal.css";
 import { useAuth } from "../context/AuthContext";
 import RegisterModal from "./RegisterModal";
@@ -50,11 +50,25 @@ function getRemainingLockout() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const LoginModal = ({ onClose, onLoginSuccess }) => {
-  const { login } = useAuth();
+  const { login, completeLogin } = useAuth();
   const navigate = useNavigate();
 
-  // view: "login" | "forgot" | "reactivate"
+  // view: "login" | "pin" | "loginOtp" | "createPin" | "forgot" | "reactivate"
   const [view, setView] = useState("login");
+  const [pendingUser, setPendingUser] = useState(null);
+  const [pinDigits, setPinDigits] = useState(["", "", "", "", "", ""]);
+  const [pinConfirmDigits, setPinConfirmDigits] = useState(["", "", "", "", "", ""]);
+  const [pinStep, setPinStep] = useState(0);
+  const [pinLoading, setPinLoading] = useState(false);
+  const [pinError, setPinError] = useState("");
+  const [loginOtpDigits, setLoginOtpDigits] = useState(["", "", "", "", "", ""]);
+  const [loginOtpLoading, setLoginOtpLoading] = useState(false);
+  const [loginOtpError, setLoginOtpError] = useState("");
+  const [loginOtpMsg, setLoginOtpMsg] = useState("");
+  const [loginOtpCooldown, setLoginOtpCooldown] = useState(0);
+  const [isPinReset, setIsPinReset] = useState(false);
+  const pinRefs = useRef([]);
+  const loginOtpRefs = useRef([]);
 
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [showRegister, setShowRegister] = useState(false);
@@ -102,6 +116,12 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
   const generateReactivationOtp = useMutation(api.users.generateReactivationOtp);
   const reactivateAccount     = useMutation(api.users.reactivateAccount);
   const sendReactivationOTP   = useAction(api.sendEmail.sendReactivationOTP);
+  const verifyLoginPin        = useMutation(api.users.verifyLoginPin);
+  const setUserPin            = useMutation(api.users.setUserPin);
+  const generateLoginOtp      = useMutation(api.users.generateLoginOtp);
+  const verifyLoginOtp        = useMutation(api.users.verifyLoginOtp);
+  const clearUserPinAfterOtp  = useMutation(api.users.clearUserPinAfterOtp);
+  const sendLoginOTP          = useAction(api.sendEmail.sendLoginOTP);
 
   // ── On mount: restore any existing lockout from sessionStorage ──
   useEffect(() => {
@@ -126,6 +146,21 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
     const t = setTimeout(() => setReactivateCooldown(c => c - 1), 1000);
     return () => clearTimeout(t);
   }, [reactivateCooldown]);
+
+  useEffect(() => {
+    if (loginOtpCooldown <= 0) return;
+    const t = setTimeout(() => setLoginOtpCooldown(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [loginOtpCooldown]);
+
+  useEffect(() => {
+    if (view === "pin" || view === "createPin") {
+      setTimeout(() => pinRefs.current[0]?.focus(), 80);
+    }
+    if (view === "loginOtp") {
+      setTimeout(() => loginOtpRefs.current[0]?.focus(), 80);
+    }
+  }, [view, pinStep]);
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -283,6 +318,36 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
       setLoginAttempts(0);
       setLoginCooldown(0);
 
+      // Customer: password OK → PIN or first-time OTP + create PIN
+      if (result.needsPin && result.pendingUser) {
+        setPendingUser(result.pendingUser);
+        setPinDigits(["", "", "", "", "", ""]);
+        setPinError("");
+        setView("pin");
+        return;
+      }
+      if (result.needsPinSetup && result.pendingUser) {
+        setPendingUser(result.pendingUser);
+        setIsPinReset(false);
+        setLoginOtpDigits(["", "", "", "", "", ""]);
+        setLoginOtpError("");
+        setLoginOtpMsg("");
+        setView("loginOtp");
+        try {
+          const otpRes = await generateLoginOtp({ userId: result.pendingUser._id });
+          if (otpRes.success) {
+            await sendLoginOTP({ to: otpRes.email, name: otpRes.name, otp: otpRes.otp });
+            setLoginOtpMsg(`✅ Code sent to ${otpRes.email}`);
+            setLoginOtpCooldown(60);
+          } else {
+            setLoginOtpError(otpRes.message || "Failed to send OTP.");
+          }
+        } catch {
+          setLoginOtpError("Failed to send OTP. Please try again.");
+        }
+        return;
+      }
+
       if (onLoginSuccess) {
         onLoginSuccess(result.role);
       } else {
@@ -292,6 +357,150 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
       setError("Login failed. Please try again.");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const finishLogin = (role) => {
+    if (onLoginSuccess) onLoginSuccess(role);
+    else onClose();
+  };
+
+  const handlePinDigit = (index, value, isConfirm = false) => {
+    if (value && !/^\d$/.test(value)) return;
+    const next = isConfirm ? [...pinConfirmDigits] : [...pinDigits];
+    next[index] = value;
+    if (isConfirm) setPinConfirmDigits(next);
+    else setPinDigits(next);
+    setPinError("");
+    if (value && index < 5) pinRefs.current[index + 1]?.focus();
+  };
+
+  const handleVerifyPin = async () => {
+    const pin = pinDigits.join("");
+    if (pin.length < 4 || !pendingUser?._id) {
+      setPinError("Enter your 4–6 digit PIN.");
+      return;
+    }
+    setPinLoading(true);
+    setPinError("");
+    try {
+      const result = await verifyLoginPin({ userId: pendingUser._id, pin });
+      if (!result.success) {
+        setPinError(result.message || "Incorrect PIN.");
+        if (result.needsPinSetup) {
+          setView("loginOtp");
+        }
+        return;
+      }
+      const done = completeLogin(result.user, "Login with PIN");
+      finishLogin(done.role);
+    } catch {
+      setPinError("PIN check failed. Please try again.");
+    } finally {
+      setPinLoading(false);
+    }
+  };
+
+  const handleForgotPin = async () => {
+    if (!pendingUser?._id) return;
+    setIsPinReset(true);
+    setLoginOtpError("");
+    setLoginOtpMsg("");
+    setLoginOtpDigits(["", "", "", "", "", ""]);
+    setView("loginOtp");
+    try {
+      const otpRes = await generateLoginOtp({ userId: pendingUser._id, resetPin: true });
+      if (otpRes.success) {
+        await sendLoginOTP({ to: otpRes.email, name: otpRes.name, otp: otpRes.otp });
+        setLoginOtpMsg(`✅ Reset code sent to ${otpRes.email}`);
+        setLoginOtpCooldown(60);
+      } else {
+        setLoginOtpError(otpRes.message || "Failed to send code.");
+      }
+    } catch {
+      setLoginOtpError("Failed to send code.");
+    }
+  };
+
+  const handleResendLoginOtp = async () => {
+    if (!pendingUser?._id || loginOtpCooldown > 0) return;
+    try {
+      const otpRes = await generateLoginOtp({
+        userId: pendingUser._id,
+        resetPin: isPinReset || undefined,
+      });
+      if (!otpRes.success) {
+        setLoginOtpError(otpRes.message || "Failed to resend.");
+        return;
+      }
+      await sendLoginOTP({ to: otpRes.email, name: otpRes.name, otp: otpRes.otp });
+      setLoginOtpDigits(["", "", "", "", "", ""]);
+      setLoginOtpMsg("✅ New code sent!");
+      setLoginOtpCooldown(60);
+    } catch {
+      setLoginOtpError("Failed to resend OTP.");
+    }
+  };
+  const handleVerifyLoginOtp = async () => {
+    const otp = loginOtpDigits.join("");
+    if (otp.length !== 6 || !pendingUser?._id) {
+      setLoginOtpError("Enter the 6-digit code.");
+      return;
+    }
+    setLoginOtpLoading(true);
+    setLoginOtpError("");
+    try {
+      const result = await verifyLoginOtp({ userId: pendingUser._id, otp });
+      if (!result.success) {
+        setLoginOtpError(result.message || "Incorrect code.");
+        return;
+      }
+      // If forgot-PIN path, clear old PIN then create new
+      await clearUserPinAfterOtp({ userId: pendingUser._id });
+      setPinDigits(["", "", "", "", "", ""]);
+      setPinConfirmDigits(["", "", "", "", "", ""]);
+      setPinStep(0);
+      setPinError("");
+      setView("createPin");
+    } catch {
+      setLoginOtpError("Verification failed.");
+    } finally {
+      setLoginOtpLoading(false);
+    }
+  };
+
+  const handleSaveLoginPin = async () => {
+    const pin = pinDigits.join("");
+    const confirm = pinConfirmDigits.join("");
+    if (pin.length < 4) {
+      setPinError("PIN must be 4–6 digits.");
+      return;
+    }
+    if (pinStep === 0) {
+      setPinStep(1);
+      setPinConfirmDigits(["", "", "", "", "", ""]);
+      setTimeout(() => pinRefs.current[0]?.focus(), 80);
+      return;
+    }
+    if (pin !== confirm) {
+      setPinError("PINs do not match.");
+      setPinConfirmDigits(["", "", "", "", "", ""]);
+      return;
+    }
+    setPinLoading(true);
+    setPinError("");
+    try {
+      const result = await setUserPin({ userId: pendingUser._id, pin });
+      if (!result.success) {
+        setPinError(result.message || "Failed to save PIN.");
+        return;
+      }
+      const done = completeLogin(pendingUser, "Login + PIN created");
+      finishLogin(done.role);
+    } catch {
+      setPinError("Failed to save PIN.");
+    } finally {
+      setPinLoading(false);
     }
   };
 
@@ -782,6 +991,186 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
                 </p>
               </div>
             </form>
+          </>
+        )}
+
+        {/* ── PIN LOGIN ────────────────────────────────────────────── */}
+        {view === "pin" && (
+          <>
+            <div className="login-modal-header">
+              <div className="login-icon" style={{ background: accentGradient, boxShadow: `0 10px 25px ${accentShadow}` }}>
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 17a2 2 0 100-4 2 2 0 000 4zm6-7h-1V7a5 5 0 00-10 0v3H6a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2v-8a2 2 0 00-2-2zM9 7a3 3 0 016 0v3H9V7z"/>
+                </svg>
+              </div>
+              <h2 style={{ background: accentGradient, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
+                Enter Your PIN
+              </h2>
+              <p className="login-subtitle">Hi {pendingUser?.name || "there"} — password verified. Enter your login PIN.</p>
+            </div>
+            <div className="login-form">
+              <div style={{ display: "flex", gap: 10, justifyContent: "center", marginBottom: 18 }}>
+                {pinDigits.map((digit, index) => (
+                  <input
+                    key={index}
+                    ref={el => pinRefs.current[index] = el}
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={digit}
+                    onChange={e => handlePinDigit(index, e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === "Backspace" && !pinDigits[index] && index > 0) pinRefs.current[index - 1]?.focus();
+                      if (e.key === "Enter") handleVerifyPin();
+                    }}
+                    style={{
+                      width: 48, height: 56, textAlign: "center", fontSize: 22, fontWeight: 700,
+                      border: `2px solid ${pinError ? "#dc2626" : digit ? "#fc1268" : "#e5e7eb"}`,
+                      borderRadius: 12, outline: "none",
+                    }}
+                    disabled={pinLoading}
+                  />
+                ))}
+              </div>
+              {pinError && <div className="error-banner">{pinError}</div>}
+              <button type="button" className="login-btn" onClick={handleVerifyPin} disabled={pinLoading || pinDigits.join("").length < 4}
+                style={{ background: accentGradient }}>
+                {pinLoading ? "Checking…" : "Unlock with PIN"}
+              </button>
+              <div className="signup-section" style={{ marginTop: 14 }}>
+                <button type="button" className="signup-link" style={{ color: accentColor }} onClick={handleForgotPin}>
+                  Forgot PIN? Use email OTP
+                </button>
+                <br />
+                <button type="button" className="signup-link" style={{ color: "#9ca3af", marginTop: 8 }} onClick={() => { setView("login"); setPendingUser(null); }}>
+                  ← Back
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ── LOGIN OTP (PIN setup / forgot PIN) ───────────────────── */}
+        {view === "loginOtp" && (
+          <>
+            <div className="login-modal-header">
+              <div className="login-icon" style={{ background: accentGradient, boxShadow: `0 10px 25px ${accentShadow}` }}>
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
+                </svg>
+              </div>
+              <h2 style={{ background: accentGradient, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
+                {isPinReset ? "Reset Your PIN" : "Verify to Create PIN"}
+              </h2>
+              <p className="login-subtitle">
+                {isPinReset
+                  ? "Enter the email code to reset your PIN"
+                  : "One-time email OTP — then create a PIN for faster next logins"}
+              </p>
+            </div>
+            <div className="login-form">
+              {loginOtpMsg && <div className="error-banner success-banner">{loginOtpMsg}</div>}
+              <div style={{ display: "flex", gap: 10, justifyContent: "center", marginBottom: 18 }}>
+                {loginOtpDigits.map((digit, index) => (
+                  <input
+                    key={index}
+                    ref={el => loginOtpRefs.current[index] = el}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={digit}
+                    onChange={e => {
+                      const v = e.target.value.replace(/\D/g, "").slice(-1);
+                      const next = [...loginOtpDigits];
+                      next[index] = v;
+                      setLoginOtpDigits(next);
+                      setLoginOtpError("");
+                      if (v && index < 5) loginOtpRefs.current[index + 1]?.focus();
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === "Backspace" && !loginOtpDigits[index] && index > 0) loginOtpRefs.current[index - 1]?.focus();
+                    }}
+                    style={{
+                      width: 48, height: 56, textAlign: "center", fontSize: 22, fontWeight: 700,
+                      border: `2px solid ${loginOtpError ? "#dc2626" : digit ? "#fc1268" : "#e5e7eb"}`,
+                      borderRadius: 12, outline: "none",
+                    }}
+                    disabled={loginOtpLoading}
+                  />
+                ))}
+              </div>
+              {loginOtpError && <div className="error-banner">{loginOtpError}</div>}
+              <button type="button" className="login-btn" onClick={handleVerifyLoginOtp}
+                disabled={loginOtpLoading || loginOtpDigits.join("").length !== 6}
+                style={{ background: accentGradient }}>
+                {loginOtpLoading ? "Verifying…" : "Verify Code"}
+              </button>
+              <div className="signup-section" style={{ marginTop: 14 }}>
+                <button type="button" className="signup-link" style={{ color: loginOtpCooldown > 0 ? "#9ca3af" : accentColor }}
+                  disabled={loginOtpCooldown > 0} onClick={handleResendLoginOtp}>
+                  {loginOtpCooldown > 0 ? `Resend in ${loginOtpCooldown}s` : "Resend code"}
+                </button>
+                <br />
+                <button type="button" className="signup-link" style={{ color: "#9ca3af", marginTop: 8 }}
+                  onClick={() => { setView(isPinReset ? "pin" : "login"); }}>
+                  ← Back
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ── CREATE PIN (after login OTP) ─────────────────────────── */}
+        {view === "createPin" && (
+          <>
+            <div className="login-modal-header">
+              <div className="login-icon" style={{ background: accentGradient, boxShadow: `0 10px 25px ${accentShadow}` }}>
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 17a2 2 0 100-4 2 2 0 000 4zm6-7h-1V7a5 5 0 00-10 0v3H6a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2v-8a2 2 0 00-2-2zM9 7a3 3 0 016 0v3H9V7z"/>
+                </svg>
+              </div>
+              <h2 style={{ background: accentGradient, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
+                {pinStep === 0 ? "Create Your PIN" : "Confirm Your PIN"}
+              </h2>
+              <p className="login-subtitle">
+                {pinStep === 0
+                  ? "4–6 digits — you’ll use this instead of email OTP next time"
+                  : "Re-enter the same PIN to confirm"}
+              </p>
+            </div>
+            <div className="login-form">
+              <div style={{ display: "flex", gap: 10, justifyContent: "center", marginBottom: 18 }}>
+                {(pinStep === 0 ? pinDigits : pinConfirmDigits).map((digit, index) => (
+                  <input
+                    key={`${pinStep}-${index}`}
+                    ref={el => pinRefs.current[index] = el}
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={digit}
+                    onChange={e => handlePinDigit(index, e.target.value, pinStep === 1)}
+                    style={{
+                      width: 48, height: 56, textAlign: "center", fontSize: 22, fontWeight: 700,
+                      border: `2px solid ${pinError ? "#dc2626" : digit ? "#fc1268" : "#e5e7eb"}`,
+                      borderRadius: 12, outline: "none",
+                    }}
+                    disabled={pinLoading}
+                  />
+                ))}
+              </div>
+              {pinError && <div className="error-banner">{pinError}</div>}
+              <button type="button" className="login-btn" onClick={handleSaveLoginPin}
+                disabled={pinLoading || (pinStep === 0 ? pinDigits.join("").length < 4 : pinConfirmDigits.join("").length < 4)}
+                style={{ background: accentGradient }}>
+                {pinLoading ? "Saving…" : pinStep === 0 ? "Continue" : "Save PIN & Sign In"}
+              </button>
+              {pinStep === 1 && (
+                <button type="button" className="signup-link" style={{ color: "#9ca3af", marginTop: 12 }}
+                  onClick={() => { setPinStep(0); setPinConfirmDigits(["", "", "", "", "", ""]); }}>
+                  ← Edit PIN
+                </button>
+              )}
+            </div>
           </>
         )}
 

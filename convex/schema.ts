@@ -22,6 +22,10 @@ export default defineSchema({
     zipCode: v.optional(v.string()),
     addressLat: v.optional(v.number()),
     addressLng: v.optional(v.number()),
+    // ── Login PIN (set after OTP; used instead of OTP on later logins) ──
+    pin:                      v.optional(v.string()),
+    loginOtp:                 v.optional(v.string()),
+    loginOtpExpiresAt:        v.optional(v.number()),
     // ── Self-reactivation OTP ─────────────────
     reactivationOtp:          v.optional(v.string()),
     reactivationOtpExpiresAt: v.optional(v.number()),
@@ -306,6 +310,18 @@ export default defineSchema({
     tables: v.array(v.string()),
     storageId: v.optional(v.id("_storage")),
     createdBy: v.optional(v.string()),
+    kind: v.optional(v.string()), // backup | restore | archive
+  }).index("by_createdAt", ["createdAt"]),
+
+  /** Soft-deleted live table snapshots (archive packages). Permanent delete removes these. */
+  systemArchives: defineTable({
+    name: v.string(),
+    tableName: v.string(),
+    createdAt: v.number(),
+    createdBy: v.optional(v.string()),
+    recordCount: v.number(),
+    sizeBytes: v.number(),
+    storageId: v.optional(v.id("_storage")),
   }).index("by_createdAt", ["createdAt"]),
 
   // ── Rewards System ────────────────────────────────────────────────────────

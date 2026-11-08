@@ -84,7 +84,7 @@ export const loginUser = mutation({
       .withIndex("by_username", q => q.eq("username", identifier))
       .first();
 
-    const user = byEmail || byUsername;
+    let user = byEmail || byUsername;
 
     if (user && user.password === password) {
       // ── Auto-unsuspend if suspension has expired ──
@@ -97,7 +97,7 @@ export const loginUser = mutation({
             suspendReason: undefined,
             suspendNote: undefined,
           });
-          return { success: true, user: { ...user, status: "active" } };
+          user = { ...user, status: "active" };
         }
       }
 
@@ -136,9 +136,150 @@ export const loginUser = mutation({
       if (user.status === "pending_activation") {
         return { success: false, user: null, message: "Your account is pending activation by an administrator." };
       }
-      return { success: true, user };
+
+      const safeUser = {
+        _id: user._id,
+        name: user.name,
+        username: user.username,
+        email: user.email,
+        phone: user.phone || "",
+        role: user.role,
+      };
+
+      // Admins skip PIN / second factor
+      if (user.role === "admin") {
+        return { success: true, user: safeUser, skipSecondFactor: true };
+      }
+
+      const hasPin = !!(user as any).pin && String((user as any).pin).length >= 4;
+      if (hasPin) {
+        return { success: true, user: safeUser, needsPin: true };
+      }
+      // First login / legacy accounts without PIN → OTP then create PIN
+      return { success: true, user: safeUser, needsPinSetup: true };
     }
     return { success: false, user: null, message: "Invalid username/email or password" };
+  },
+});
+
+const PIN_RE = /^\d{4,6}$/;
+
+const toSafeUser = (user: any) => ({
+  _id: user._id,
+  name: user.name,
+  username: user.username,
+  email: user.email,
+  phone: user.phone || "",
+  role: user.role,
+});
+
+/** Set / update login PIN after OTP verification (register or first login). */
+export const setUserPin = mutation({
+  args: {
+    userId: v.id("users"),
+    pin: v.string(),
+  },
+  handler: async ({ db }, { userId, pin }) => {
+    if (!PIN_RE.test(pin)) {
+      return { success: false, message: "PIN must be 4–6 digits." };
+    }
+    const user = await db.get(userId);
+    if (!user) return { success: false, message: "Account not found." };
+    if (user.role === "admin") {
+      return { success: false, message: "Admin accounts do not use a login PIN." };
+    }
+    await db.patch(userId, {
+      pin,
+      loginOtp: undefined,
+      loginOtpExpiresAt: undefined,
+    } as any);
+    return { success: true, user: toSafeUser(user) };
+  },
+});
+
+/** Second step when account already has a PIN. */
+export const verifyLoginPin = mutation({
+  args: {
+    userId: v.id("users"),
+    pin: v.string(),
+  },
+  handler: async ({ db }, { userId, pin }) => {
+    const user = await db.get(userId) as any;
+    if (!user) return { success: false, message: "Account not found." };
+    if (user.status === "suspended" || user.status === "deleted" || user.status === "self_deactivated") {
+      return { success: false, message: "This account cannot sign in right now." };
+    }
+    if (!user.pin) {
+      return { success: false, message: "No PIN set. Please verify with OTP first.", needsPinSetup: true };
+    }
+    if (user.pin !== pin) {
+      return { success: false, message: "Incorrect PIN." };
+    }
+    return { success: true, user: toSafeUser(user) };
+  },
+});
+
+/** OTP for accounts that still need to create a PIN (or forgot PIN). */
+export const generateLoginOtp = mutation({
+  args: {
+    userId: v.id("users"),
+    resetPin: v.optional(v.boolean()),
+  },
+  handler: async ({ db }, { userId, resetPin }) => {
+    const user = await db.get(userId) as any;
+    if (!user) return { success: false, message: "Account not found." };
+    if (user.role === "admin") {
+      return { success: false, message: "Admin accounts do not use login OTP." };
+    }
+    if (user.pin && !resetPin) {
+      return { success: false, message: "PIN already set. Use your PIN to sign in." };
+    }
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const loginOtpExpiresAt = Date.now() + 1000 * 60 * 3;
+    await db.patch(userId, { loginOtp: otp, loginOtpExpiresAt } as any);
+    return {
+      success: true,
+      otp,
+      email: user.email,
+      name: user.name,
+    };
+  },
+});
+
+export const verifyLoginOtp = mutation({
+  args: {
+    userId: v.id("users"),
+    otp: v.string(),
+  },
+  handler: async ({ db }, { userId, otp }) => {
+    const user = await db.get(userId) as any;
+    if (!user) return { success: false, message: "Account not found." };
+    if (!user.loginOtp || !user.loginOtpExpiresAt) {
+      return { success: false, message: "No OTP found. Please request a new code." };
+    }
+    if (Date.now() > user.loginOtpExpiresAt) {
+      return { success: false, message: "OTP has expired. Please request a new code.", expired: true };
+    }
+    if (user.loginOtp !== otp) {
+      return { success: false, message: "Incorrect OTP. Please try again." };
+    }
+    await db.patch(userId, {
+      loginOtp: undefined,
+      loginOtpExpiresAt: undefined,
+    } as any);
+    // Cleared PIN if this was a forgot-PIN reset path — client will set a new one
+    return { success: true, user: toSafeUser(user), canSetPin: true };
+  },
+});
+
+/** Clear PIN after OTP (forgot PIN), then client calls setUserPin. */
+export const clearUserPinAfterOtp = mutation({
+  args: { userId: v.id("users") },
+  handler: async ({ db }, { userId }) => {
+    const user = await db.get(userId) as any;
+    if (!user) return { success: false, message: "Account not found." };
+    await db.patch(userId, { pin: undefined } as any);
+    return { success: true };
   },
 });
 

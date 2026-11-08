@@ -89,7 +89,7 @@ export const AuthProvider = ({ children }) => {
       if (mode === "user" || !mode) {
         const result = await loginUserMutation({ identifier, password });
 
-        // ── Successful login ──
+        // ── Password OK — may still need PIN / PIN setup ──
         if (result.success && result.user) {
           const sessionUser = {
             _id:      result.user._id,
@@ -100,6 +100,18 @@ export const AuthProvider = ({ children }) => {
             phone:    result.user.phone || '',
             role:     result.user.role,
           };
+
+          // Customer accounts: second factor (PIN) or first-time PIN setup via OTP
+          if (!result.skipSecondFactor && (result.needsPin || result.needsPinSetup)) {
+            return {
+              success: true,
+              needsPin: !!result.needsPin,
+              needsPinSetup: !!result.needsPinSetup,
+              pendingUser: sessionUser,
+              role: sessionUser.role,
+            };
+          }
+
           localStorage.setItem("authUser", JSON.stringify(sessionUser));
           setUser(sessionUser);
           setRole(sessionUser.role);
@@ -201,6 +213,32 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  /** Finish login after PIN verify / PIN create (customer accounts). */
+  const completeLogin = (pendingUser, details = "Account login success") => {
+    if (!pendingUser?._id) return { success: false };
+    const sessionUser = {
+      _id:      pendingUser._id,
+      id:       pendingUser._id,
+      name:     pendingUser.name,
+      username: pendingUser.username,
+      email:    pendingUser.email,
+      phone:    pendingUser.phone || "",
+      role:     pendingUser.role || "user",
+    };
+    localStorage.setItem("authUser", JSON.stringify(sessionUser));
+    setUser(sessionUser);
+    setRole(sessionUser.role);
+    setIsAuthenticated(true);
+    safeLog({
+      action: "login",
+      actorEmail: sessionUser.email,
+      actorName: sessionUser.name,
+      actorRole: sessionUser.role,
+      details,
+    });
+    return { success: true, role: sessionUser.role };
+  };
+
   const updateUser = (updatedFields) => {
     setUser(prev => {
       const updated = { ...prev, ...updatedFields };
@@ -227,7 +265,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, role, isAuthenticated, isReady, login, register, logout, updateUser }}>
+    <AuthContext.Provider value={{ user, role, isAuthenticated, isReady, login, completeLogin, register, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

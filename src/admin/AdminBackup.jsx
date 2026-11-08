@@ -1,5 +1,5 @@
-// src/admin/AdminBackup.jsx  (Admin Settings — backup / Convex status)
-import React, { useState, useRef, useEffect } from 'react';
+﻿// src/admin/AdminBackup.jsx  (Admin Settings — backup / Convex status)
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useMutation, useConvex, useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useBackup } from '../context/BackupContext';
@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import {
   downloadEncryptedBackupExcel,
   downloadEncryptedTableExcel,
+  readEncryptedBackupExcel,
   estimateTableBytes,
   formatBytes,
 } from './lib/backupExcel';
@@ -21,7 +22,13 @@ import {
   appendActivityLog,
   clearActivityLogs,
 } from './lib/localActivityLog';
+import {
+  readLocalBackupHistory,
+  pushLocalBackupHistory,
+  removeLocalBackupHistory,
+} from './lib/localBackupHistory';
 import './AdminBackup.css';
+import './AdminSettingsSuper.css';
 
 export const TABLES = [
   { key: 'users',              label: 'Users',               icon: 'fas fa-users',          query: api.backup.getAllUsers,              importMutation: api.backup.importUsers },
@@ -240,7 +247,7 @@ const PasswordModal = ({
           {error && <p className="ab-password-error"><i className="fas fa-exclamation-circle"></i> {error}</p>}
           <div className="ab-confirm-actions">
             <button type="button" className="ab-confirm-cancel" onClick={onClose} disabled={busy}>Cancel</button>
-            <button type="submit" className="ab-confirm-proceed" disabled={busy} style={{ background: 'linear-gradient(135deg, #fc1268, #9b30ff)' }}>
+            <button type="submit" className="ab-confirm-proceed" disabled={busy} style={{ background: 'linear-gradient(135deg, #6a0dad, #9b30ff)' }}>
               {busy ? <><span className="ab-spinner ab-spinner--white"></span> {busyLabel}</> : confirmLabel}
             </button>
           </div>
@@ -405,6 +412,7 @@ const DataModal = ({ table, data, onClose, onRequestDownload }) => {
 
 // ── Import Tab ────────────────────────────────────────────────────────────────
 const ImportTab = () => {
+  const { user } = useAuth();
   const fileInputRef = useRef(null);
   const [parsed,   setParsed]   = useState(null);
   const [fileName, setFileName] = useState('');
@@ -413,6 +421,10 @@ const ImportTab = () => {
   const [results,  setResults]  = useState({});
   const [confirm,  setConfirm]  = useState(false);
   const [parseErr, setParseErr] = useState('');
+  const [pendingFile, setPendingFile] = useState(null);
+  const [needPassword, setNeedPassword] = useState(false);
+  const [importPassword, setImportPassword] = useState('');
+  const [parsing, setParsing] = useState(false);
 
   const mutations = {};
   for (const t of TABLES) {
@@ -420,30 +432,67 @@ const ImportTab = () => {
     mutations[t.key] = useMutation(t.importMutation);
   }
 
+  const applyParsed = (data, name) => {
+    if (!data || Object.keys(data).length === 0) {
+      setParseErr('No recognizable table data found in this backup.');
+      return;
+    }
+    setParsed(data);
+    setFileName(name);
+    const c = {};
+    for (const [k, v] of Object.entries(data)) c[k] = Array.isArray(v) ? v.length : 0;
+    setCounts(c);
+  };
+
   const handleFile = (e) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
-    setFileName(file.name); setParsed(null); setParseErr(''); setStatus({}); setCounts({}); setResults({}); setConfirm(false);
+    setParsed(null); setParseErr(''); setStatus({}); setCounts({}); setResults({}); setConfirm(false); setImportPassword('');
+    const lower = file.name.toLowerCase();
+    if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) {
+      setPendingFile(file);
+      setNeedPassword(true);
+      return;
+    }
     const reader = new FileReader();
     reader.onload = (ev) => {
       try {
         const data = parseBackupTs(ev.target.result);
-        if (Object.keys(data).length === 0) { setParseErr('No recognizable table data found. Make sure it is a DKMerch backup .ts file.'); return; }
-        setParsed(data);
-        const c = {};
-        for (const [k, v] of Object.entries(data)) c[k] = v.length;
-        setCounts(c);
+        applyParsed(data, file.name);
       } catch (err) { setParseErr('Failed to parse file: ' + err.message); }
     };
     reader.readAsText(file);
   };
 
+  const openExcelWithPassword = async (password) => {
+    if (!pendingFile) return;
+    setParsing(true);
+    setParseErr('');
+    try {
+      const tables = await readEncryptedBackupExcel(pendingFile, password);
+      applyParsed(tables, pendingFile.name);
+      setImportPassword(password);
+      setNeedPassword(false);
+      setPendingFile(null);
+    } catch (err) {
+      setParseErr(err.message || 'Failed to open Excel backup.');
+    } finally {
+      setParsing(false);
+    }
+  };
+
   const handleImportAll = async () => {
     if (!parsed) return;
+    if (!importPassword) {
+      setNeedPassword(true);
+      setPendingFile({ __importOnly: true });
+      return;
+    }
     setConfirm(false);
     setResults({});
     for (const [key, records] of Object.entries(parsed)) {
-      if (!records.length) continue;
+      if (!records?.length) continue;
       if (!mutations[key]) {
         setStatus(s => ({ ...s, [key]: 'error' }));
         continue;
@@ -467,9 +516,16 @@ const ImportTab = () => {
         setStatus(s => ({ ...s, [key]: 'error' }));
       }
     }
+    pushLocalBackupHistory({
+      kind: 'restore',
+      name: fileName || 'import',
+      recordCount: Object.values(parsed || {}).reduce((n, r) => n + (Array.isArray(r) ? r.length : 0), 0),
+      sizeBytes: 0,
+      createdBy: user?.email || 'admin',
+    });
   };
 
-  const totalRecords = parsed ? Object.values(parsed).reduce((s, v) => s + v.length, 0) : 0;
+  const totalRecords = parsed ? Object.values(parsed).reduce((s, v) => s + (Array.isArray(v) ? v.length : 0), 0) : 0;
   const doneCount    = Object.values(status).filter(s => s === 'done' || s === 'duplicate').length;
   const errorCount   = Object.values(status).filter(s => s === 'error').length;
   const importing    = Object.values(status).some(s => s === 'importing');
@@ -478,14 +534,38 @@ const ImportTab = () => {
 
   return (
     <div className="ab-import-page">
+      {needPassword && (
+        <PasswordModal
+          title={pendingFile?.__importOnly ? 'Admin password required' : 'Unlock Excel backup'}
+          message={
+            pendingFile?.__importOnly
+              ? 'Enter your current admin password to authorize import. Existing records stay; only missing rows are inserted.'
+              : 'Enter the admin password that locked this Excel backup (same as your account password when it was created).'
+          }
+          confirmLabel={pendingFile?.__importOnly ? 'Verify & import' : 'Unlock file'}
+          busyLabel={parsing ? 'Reading…' : 'Verifying…'}
+          onVerified={async (pw) => {
+            if (pendingFile?.__importOnly) {
+              setImportPassword(pw);
+              setNeedPassword(false);
+              setPendingFile(null);
+              setConfirm(true);
+              return;
+            }
+            await openExcelWithPassword(pw);
+          }}
+          onClose={() => { setNeedPassword(false); setPendingFile(null); }}
+        />
+      )}
+
       <div className={`ab-dropzone ${parsed ? 'ab-dropzone--loaded' : ''}`} onClick={() => fileInputRef.current?.click()}>
-        <input ref={fileInputRef} type="file" accept=".ts" style={{ display: 'none' }} onChange={handleFile} />
+        <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.ts" style={{ display: 'none' }} onChange={handleFile} />
         {!parsed ? (
           <>
             <div className="ab-dropzone-icon"><i className="fas fa-file-upload"></i></div>
             <div className="ab-dropzone-text">
-              <strong>Click to choose a backup .ts file</strong>
-              <span>Exported from DKMerch Database Backup</span>
+              <strong>Upload &amp; restore backup</strong>
+              <span>Password-locked Excel from Create backup (or legacy .ts)</span>
             </div>
           </>
         ) : (
@@ -517,7 +597,7 @@ const ImportTab = () => {
                       <span className="ab-card-count">
                         {res
                           ? `${res.inserted.toLocaleString()} new · ${res.skipped.toLocaleString()} duplicate skipped`
-                          : `${counts[t.key]?.toLocaleString()} records to import`}
+                          : `${counts[t.key]?.toLocaleString()} records in file`}
                       </span>
                     </div>
                   </div>
@@ -549,21 +629,24 @@ const ImportTab = () => {
               <div className="ab-import-warning">
                 <i className="fas fa-exclamation-triangle"></i>
                 <div>
-                  <strong>Note:</strong> Backup does not remove live data. Import only adds records that are not already in the system.
-                  Matching values (same email, order ID, promo code, etc.) are treated as <em>duplicates and will not be imported</em>.
+                  <strong>Duplicate-safe restore:</strong> rows that already exist (same email, order ID, promo code, etc.) are <em>not</em> created again.
+                  Only missing data is inserted. Admin password is required.
                 </div>
-                <button className="ab-import-confirm-btn" onClick={() => setConfirm(true)}>I understand, proceed</button>
+                <button className="ab-import-confirm-btn" onClick={() => {
+                  if (importPassword) setConfirm(true);
+                  else { setPendingFile({ __importOnly: true }); setNeedPassword(true); }
+                }}>I understand, proceed</button>
               </div>
             ) : (
               <button className="ab-import-go-btn" onClick={handleImportAll}>
-                <i className="fas fa-upload"></i> Import All Tables into Database
+                <i className="fas fa-upload"></i> Import missing records only
               </button>
             )
           )}
           {importing && (
             <div className="ab-import-progress">
               <span className="ab-spinner ab-spinner--purple"></span>
-              Importing data into Convex… duplicates will be skipped
+              Importing into Convex… duplicates skipped
             </div>
           )}
         </>
@@ -572,369 +655,8 @@ const ImportTab = () => {
   );
 };
 
-// ── Backup Tab ────────────────────────────────────────────────────────────────
-const BackupTab = () => {
-  const convex = useConvex();
-  const { user } = useAuth();
-  const {
-    allData, loadStatus, lastFetched,
-    updateTable, setTableStatus, resetAll, setLastFetched, clearLocalCache,
-  } = useBackup();
-  const clearTableMutation = useMutation(api.backup.clearTable);
-
-  const [modalTable, setModalTable] = useState(null);
-  const [downloading, setDownloading] = useState(false);
-  const [showRefreshConfirm, setShowRefreshConfirm] = useState(false);
-  const [passwordAction, setPasswordAction] = useState(null); // { type: 'export-all'|'export-table'|'wipe', table?, data? }
-  const [typeAction, setTypeAction] = useState(null); // { type: 'clear-cache'|'wipe', table?, password? }
-  const [wipeBusy, setWipeBusy] = useState(false);
-
-  const loadedKeys   = Object.keys(allData).filter(k => loadStatus[k] === 'done');
-  const allLoaded    = loadedKeys.length === TABLES.length;
-  const isLoading    = Object.values(loadStatus).some(s => s === 'loading');
-  const hasCached    = Object.keys(allData).length > 0;
-  const totalRecords = Object.values(allData).reduce((s, d) => s + (Array.isArray(d) ? d.length : 0), 0);
-
-  const handleFetchAll = async () => {
-    resetAll(TABLES.map(t => t.key));
-    await Promise.all(
-      TABLES.map(async (t) => {
-        try {
-          const data = await convex.query(t.query);
-          updateTable(t.key, data);
-        } catch (err) {
-          console.error(`Failed to fetch ${t.key}:`, err);
-          setTableStatus(t.key, 'error');
-        }
-      })
-    );
-    setLastFetched(new Date().toLocaleString('en-PH', {
-      month: 'short', day: 'numeric', year: 'numeric',
-      hour: '2-digit', minute: '2-digit', second: '2-digit',
-    }));
-  };
-
-  const runPasswordVerified = async (password) => {
-    const action = passwordAction;
-    setPasswordAction(null);
-    if (!action) return;
-
-    if (action.type === 'export-all') {
-      setDownloading(true);
-      try {
-        const dateStr = new Date().toISOString().split('T')[0];
-        await downloadEncryptedBackupExcel(allData, password, `dkmerch-backup-${dateStr}.xlsx`);
-        writeAutoBackupPrefs({ lastAutoBackupAt: Date.now() });
-        appendActivityLog({
-          action: 'backup_download',
-          actorEmail: user?.email,
-          actorName: user?.name,
-          actorRole: user?.role || 'admin',
-          details: `Full Excel backup (${Object.keys(allData).length} tables)`,
-        });
-      } catch (err) {
-        alert(formatExportCooldownMessage(err) || 'Failed to create Excel backup.');
-      } finally {
-        setDownloading(false);
-      }
-      return;
-    }
-
-    if (action.type === 'export-table') {
-      setDownloading(true);
-      try {
-        const day = new Date().toISOString().slice(0, 10);
-        await downloadEncryptedTableExcel(
-          action.table.key,
-          action.data,
-          password,
-          `${action.table.key}-${day}.xlsx`
-        );
-        writeAutoBackupPrefs({ lastAutoBackupAt: Date.now() });
-        appendActivityLog({
-          action: 'backup_download',
-          actorEmail: user?.email,
-          actorName: user?.name,
-          actorRole: user?.role || 'admin',
-          details: `Excel backup: ${action.table.label}`,
-        });
-      } catch (err) {
-        alert(formatExportCooldownMessage(err) || 'Failed to create Excel backup.');
-      } finally {
-        setDownloading(false);
-      }
-      return;
-    }
-
-    if (action.type === 'wipe') {
-      setTypeAction({ type: 'wipe', table: action.table, password });
-    }
-  };
-
-  const runTypeConfirmed = async () => {
-    const action = typeAction;
-    if (!action) return;
-
-    if (action.type === 'clear-cache') {
-      clearLocalCache();
-      setTypeAction(null);
-      return;
-    }
-
-    if (action.type === 'wipe') {
-      setWipeBusy(true);
-      try {
-        const result = await clearTableMutation({
-          table: action.table.key,
-          adminId: user._id || user.id,
-          password: action.password,
-        });
-        if (!result?.success) {
-          alert(result?.message || 'Failed to delete table data. Deploy latest Convex functions if this feature is missing on cloud.');
-          return;
-        }
-        updateTable(action.table.key, []);
-        setTypeAction(null);
-        setModalTable(null);
-        appendActivityLog({
-          action: 'table_wipe',
-          actorEmail: user?.email,
-          actorName: user?.name,
-          actorRole: 'admin',
-          details: `Deleted ${result.deleted} from ${action.table.label}`,
-        });
-        alert(`Permanently deleted ${result.deleted} record(s) from ${action.table.label}.`);
-      } catch (err) {
-        const msg = String(err?.message || err || '');
-        if (msg.includes('Could not find') || msg.includes('clearTable')) {
-          alert('Permanent delete is not deployed on this Convex project yet. Run `npx convex deploy` while logged in as the project owner.');
-        } else {
-          alert(err?.message || 'Delete failed.');
-        }
-      } finally {
-        setWipeBusy(false);
-      }
-    }
-  };
-
-  return (
-    <>
-      {showRefreshConfirm && (
-        <ConfirmModal
-          title={hasCached ? 'Refresh All Tables?' : 'Load All Tables?'}
-          message={
-            hasCached
-              ? `This will re-fetch all ${TABLES.length} tables from the live Convex database and replace the current cached data. Continue?`
-              : `This will fetch a snapshot of all ${TABLES.length} tables from the live Convex database. Continue?`
-          }
-          confirmLabel={hasCached ? 'Yes, Refresh' : 'Yes, Load'}
-          confirmColor="linear-gradient(135deg, #6a0dad, #9b30ff)"
-          onConfirm={handleFetchAll}
-          onClose={() => setShowRefreshConfirm(false)}
-        />
-      )}
-
-      {passwordAction && (
-        <PasswordModal
-          title={passwordAction.type === 'wipe' ? 'Admin password required' : 'Lock Excel backup'}
-          message={
-            passwordAction.type === 'wipe'
-              ? `Enter your current admin password to authorize permanent delete of “${passwordAction.table.label}”.`
-              : 'Enter your current admin password. The downloaded Excel file will require this same password to open — even on another device.'
-          }
-          confirmLabel={passwordAction.type === 'wipe' ? 'Verify & continue' : 'Verify & download'}
-          busyLabel={passwordAction.type === 'wipe' ? 'Verifying…' : 'Encrypting…'}
-          onVerified={runPasswordVerified}
-          onClose={() => setPasswordAction(null)}
-        />
-      )}
-
-      {typeAction?.type === 'clear-cache' && (
-        <TypeConfirmModal
-          title="Clear local cache?"
-          message="Aapektuhan lang: local browser snapshot (Load All Tables cache), last-fetched timestamp, at export cooldown state sa device na ito. HINDI mabubura ang live Convex products/orders/users. Inventory sa site mananatili."
-          confirmWord="CLEAR CACHE"
-          confirmLabel="Clear local cache"
-          danger={false}
-          onConfirm={runTypeConfirmed}
-          onClose={() => setTypeAction(null)}
-        />
-      )}
-
-      {typeAction?.type === 'wipe' && (
-        <TypeConfirmModal
-          title={`Permanently delete ${typeAction.table.label}?`}
-          message={`This will permanently delete all live Convex records in “${typeAction.table.label}”. This cannot be undone.`}
-          confirmWord="DELETE"
-          confirmLabel="Delete permanently"
-          danger
-          busy={wipeBusy}
-          onConfirm={runTypeConfirmed}
-          onClose={() => setTypeAction(null)}
-        />
-      )}
-
-      <div className="ab-controls">
-        <button
-          className={`ab-fetch-btn ${isLoading ? 'loading' : ''}`}
-          onClick={() => setShowRefreshConfirm(true)}
-          disabled={isLoading}
-        >
-          {isLoading
-            ? <><span className="ab-spinner ab-spinner--white"></span> Fetching…</>
-            : <><i className="fas fa-sync-alt"></i> {!hasCached ? 'Load All Tables' : 'Refresh All Tables'}</>
-          }
-        </button>
-
-        {hasCached && (
-          <button
-            className={`ab-download-all-btn ${downloading ? 'loading' : ''}`}
-            onClick={() => setPasswordAction({ type: 'export-all' })}
-            disabled={downloading || isLoading}
-          >
-            {downloading
-              ? <><span className="ab-spinner ab-spinner--white"></span> Preparing…</>
-              : <><i className="fas fa-file-excel"></i> Export Excel Backup</>
-            }
-          </button>
-        )}
-
-        {hasCached && (
-          <button
-            className="ab-clear-cache-btn"
-            onClick={() => setTypeAction({ type: 'clear-cache' })}
-            disabled={isLoading || downloading}
-          >
-            <i className="fas fa-broom"></i> Clear Cache
-          </button>
-        )}
-      </div>
-
-      {lastFetched && (
-        <p className="ab-last-fetched">
-          <i className="fas fa-clock"></i> Last fetched: {lastFetched}
-          <span className="ab-cached-badge"><i className="fas fa-hdd"></i> Cached</span>
-        </p>
-      )}
-
-      {!hasCached && !isLoading && (
-        <div className="ab-empty-state">
-          <div className="ab-empty-icon"><i className="fas fa-database"></i></div>
-          <p>Click <strong>Load All Tables</strong> to fetch a snapshot of the Convex database.</p>
-          <p className="ab-empty-sub">Exports are password-locked Excel files using your current admin password.</p>
-        </div>
-      )}
-
-      {hasCached && (
-        <div className="ab-summary">
-          <div className="ab-stat">
-            <span className="ab-stat-val">{totalRecords.toLocaleString()}</span>
-            <span className="ab-stat-label">Total Records</span>
-          </div>
-          <div className="ab-stat">
-            <span className="ab-stat-val">{loadedKeys.length}/{TABLES.length}</span>
-            <span className="ab-stat-label">Tables Loaded</span>
-          </div>
-          <div className="ab-stat">
-            <span className={`ab-stat-badge ${allLoaded && !isLoading ? 'ab-stat-badge--ok' : 'ab-stat-badge--loading'}`}>
-              {isLoading ? 'Refreshing…' : allLoaded ? 'Ready' : 'Partial'}
-            </span>
-            <span className="ab-stat-label">Status</span>
-          </div>
-          {isLoading && (
-            <div className="ab-progress-bar">
-              <div
-                className="ab-progress-fill"
-                style={{ width: `${(loadedKeys.length / TABLES.length) * 100}%` }}
-              />
-            </div>
-          )}
-        </div>
-      )}
-
-      {hasCached && (
-        <div className="ab-cards">
-          {TABLES.map(t => {
-            const s     = loadStatus[t.key] || 'done';
-            const data  = allData[t.key];
-            const count = Array.isArray(data) ? data.length : null;
-            const isRefreshing = s === 'loading';
-            return (
-              <div
-                key={t.key}
-                className={`ab-card ${(!data || !data.length) && s !== 'loading' ? 'ab-card--disabled' : ''}`}
-              >
-                <div className="ab-card-header">
-                  <div className="ab-card-left">
-                    <div className="ab-card-icon"><i className={t.icon}></i></div>
-                    <div className="ab-card-info">
-                      <span className="ab-card-label">{t.label}</span>
-                      {isRefreshing && count !== null
-                        ? <span className="ab-card-count ab-loading">{count?.toLocaleString()} records · refreshing…</span>
-                        : isRefreshing
-                        ? <span className="ab-card-count ab-loading">Fetching…</span>
-                        : s === 'error'
-                        ? <span className="ab-card-count" style={{ color: '#dc2626' }}>Failed to load</span>
-                        : <span className="ab-card-count">{count?.toLocaleString() ?? 0} records</span>
-                      }
-                    </div>
-                  </div>
-                  <div className="ab-card-right">
-                    {isRefreshing && <span className="ab-spinner"></span>}
-                    {!isRefreshing && (
-                      <>
-                        {data?.length > 0 && (
-                          <>
-                            <button
-                              className="ab-dl-btn"
-                              title="Download password-locked Excel"
-                              onClick={() => setPasswordAction({ type: 'export-table', table: t, data })}
-                            >
-                              <i className="fas fa-download"></i>
-                            </button>
-                            <button
-                              type="button"
-                              className="ab-view-btn"
-                              title="View records"
-                              onClick={() => setModalTable({ table: t, data })}
-                            >
-                              <i className="fas fa-eye"></i>
-                            </button>
-                          </>
-                        )}
-                        <button
-                          className="ab-wipe-btn"
-                          title="Permanently delete live table data"
-                          onClick={() => setPasswordAction({ type: 'wipe', table: t })}
-                        >
-                          <i className="fas fa-trash-alt"></i>
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      <p className="ab-footer-note">
-        <i className="fas fa-lock"></i> Excel backups require your current admin password to open.
-        Clear Cache only removes local browser cache. Permanent delete requires typing <strong>DELETE</strong>.
-      </p>
-
-      {modalTable && (
-        <DataModal
-          table={modalTable.table}
-          data={modalTable.data}
-          onClose={() => setModalTable(null)}
-          onRequestDownload={(table, data) => setPasswordAction({ type: 'export-table', table, data })}
-        />
-      )}
-    </>
-  );
-};
+// Legacy per-table BackupTab removed — Settings uses SDO-style AdminBackup below.
+const BackupTab = () => null;
 
 // ── Convex status + storage health ────────────────────────────────────────────
 const SLICE_COLORS = ['#6a0dad', '#fc1268', '#9b30ff', '#c084fc', '#db2777', '#7c3aed', '#a855f7', '#f472b6', '#8b5cf6', '#e879f9'];
@@ -1310,65 +1032,662 @@ const LogsTab = () => {
   );
 };
 
-// ── Main ──────────────────────────────────────────────────────────────────────
-const AdminBackup = () => {
-  const [activeTab, setActiveTab] = useState('backup');
-  const [cooldownLeft, setCooldownLeft] = useState(0);
-  const now = new Date().toLocaleString('en-PH', {
-    month: 'long', day: 'numeric', year: 'numeric',
+const HISTORY_PAGE_SIZE = 5;
+
+const formatWhenShort = (ts) => {
+  if (!ts) return 'Never';
+  return new Date(ts).toLocaleString('en-PH', {
+    month: 'short', day: 'numeric', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
   });
+};
 
-  useEffect(() => {
-    const tick = () => setCooldownLeft(getExportCooldownRemainingMs());
-    tick();
-    const id = setInterval(tick, 500);
-    return () => clearInterval(id);
-  }, [activeTab]);
+const buildPager = (page, totalPages) => {
+  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
+  const pages = new Set([1, totalPages, page, page - 1, page + 1, 2, totalPages - 1]);
+  const sorted = [...pages].filter((p) => p >= 1 && p <= totalPages).sort((a, b) => a - b);
+  const out = [];
+  let prev = 0;
+  for (const p of sorted) {
+    if (prev && p - prev > 1) out.push('…');
+    out.push(p);
+    prev = p;
+  }
+  return out;
+};
+
+// ── Main (SDO /admin/super approach) ──────────────────────────────────────────
+const AdminBackup = () => {
+  const convex = useConvex();
+  const { user } = useAuth();
+  const {
+    allData, loadStatus,
+    updateTable, setTableStatus, resetAll, setLastFetched, clearLocalCache,
+  } = useBackup();
+
+  // NOTE: cloud Convex may not have newer backup:* functions yet (deploy blocked).
+  // Build overview from existing getAll* queries + local history so Settings never hard-crashes.
+  const clearTableMutation = useMutation(api.backup.clearTable);
+
+  const importMutations = {};
+  for (const t of TABLES) {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    importMutations[t.key] = useMutation(t.importMutation);
+  }
+
+  const fileRef = useRef(null);
+  const [busy, setBusy] = useState('');
+  const [passwordAction, setPasswordAction] = useState(null);
+  const [typeAction, setTypeAction] = useState(null);
+  const [prefs, setPrefs] = useState(() => readAutoBackupPrefs());
+  const [scheduleDraft, setScheduleDraft] = useState(prefs.schedule || 'off');
+  const [historyFilter, setHistoryFilter] = useState('all');
+  const [historyPage, setHistoryPage] = useState(1);
+  const [showLogs, setShowLogs] = useState(false);
+  const [dangerTableKey, setDangerTableKey] = useState(TABLES[0]?.key || 'products');
+  const [localHistory, setLocalHistory] = useState(() => readLocalBackupHistory());
+
+  const refreshOverview = async () => {
+    setBusy('refresh');
+    try {
+      resetAll(TABLES.map((t) => t.key));
+      await Promise.all(
+        TABLES.map(async (t) => {
+          try {
+            const data = await convex.query(t.query);
+            updateTable(t.key, data);
+          } catch {
+            setTableStatus(t.key, 'error');
+          }
+        })
+      );
+      setLastFetched(new Date().toLocaleString('en-PH'));
+      setPrefs(readAutoBackupPrefs());
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const createBackup = async (password) => {
+    setBusy('backup');
+    try {
+      const fresh = {};
+      await Promise.all(
+        TABLES.map(async (t) => {
+          try {
+            fresh[t.key] = await convex.query(t.query);
+            updateTable(t.key, fresh[t.key]);
+          } catch {
+            fresh[t.key] = allData[t.key] || [];
+          }
+        })
+      );
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const fileName = `dkmerch-backup-${dateStr}.xlsx`;
+      const result = await downloadEncryptedBackupExcel(fresh, password, fileName);
+      const recordCount = Object.values(fresh).reduce((n, rows) => n + (Array.isArray(rows) ? rows.length : 0), 0);
+      const sizeBytes = result?.byteLength || 0;
+
+      setLocalHistory(pushLocalBackupHistory({
+        kind: 'backup',
+        name: result?.filename || fileName,
+        recordCount,
+        sizeBytes,
+        tables: Object.keys(fresh),
+        createdBy: user?.email || 'admin',
+      }));
+
+      const next = writeAutoBackupPrefs({ lastAutoBackupAt: Date.now() });
+      setPrefs(next);
+      appendActivityLog({
+        action: 'backup_create',
+        actorEmail: user?.email,
+        actorRole: 'admin',
+        details: `Create backup · ${recordCount} records`,
+      });
+    } catch (err) {
+      alert(formatExportCooldownMessage(err) || err.message || 'Backup failed.');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const restoreBackup = async (file, password) => {
+    setBusy('restore');
+    try {
+      let tables = null;
+      const lower = file.name.toLowerCase();
+      if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) {
+        tables = await readEncryptedBackupExcel(file, password);
+      } else {
+        const text = await file.text();
+        tables = parseBackupTs(text);
+      }
+      if (!tables || !Object.keys(tables).length) throw new Error('No table data found in backup.');
+
+      let inserted = 0;
+      let skipped = 0;
+      for (const [key, records] of Object.entries(tables)) {
+        if (!importMutations[key] || !Array.isArray(records) || !records.length) continue;
+        const clean = records.map(({ _id, _creationTime, ...rest }) => rest);
+        for (let i = 0; i < clean.length; i += 50) {
+          const res = await importMutations[key]({ records: clean.slice(i, i + 50) });
+          if (typeof res === 'number') inserted += res;
+          else {
+            inserted += Number(res?.inserted || 0);
+            skipped += Number(res?.skipped || 0);
+          }
+        }
+      }
+      setLocalHistory(pushLocalBackupHistory({
+        kind: 'restore',
+        name: file.name,
+        recordCount: inserted + skipped,
+        sizeBytes: file.size || 0,
+        createdBy: user?.email || 'admin',
+        details: `${inserted} new · ${skipped} duplicates skipped`,
+      }));
+      writeAutoBackupPrefs({ lastRestoreAt: Date.now() });
+      setPrefs(readAutoBackupPrefs());
+      await refreshOverview();
+    } catch (err) {
+      alert(err.message || 'Restore failed.');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const runPasswordVerified = async (password) => {
+    const action = passwordAction;
+    setPasswordAction(null);
+    if (!action) return;
+    if (action.type === 'backup') return createBackup(password);
+    if (action.type === 'restore') return restoreBackup(action.file, password);
+    if (action.type === 'schedule') {
+      const next = writeAutoBackupPrefs({ schedule: scheduleDraft });
+      setPrefs(next);
+      appendActivityLog({
+        action: 'auto_backup_schedule',
+        actorRole: 'admin',
+        details: `Schedule set to ${scheduleDraft}`,
+      });
+      return;
+    }
+    if (action.type === 'archive' || action.type === 'wipe' || action.type === 'purge-archive') {
+      setTypeAction({ ...action, password });
+    }
+  };
+
+  const runTypeConfirmed = async () => {
+    const action = typeAction;
+    if (!action) return;
+    if (action.type === 'clear-cache') {
+      clearLocalCache();
+      setTypeAction(null);
+      return;
+    }
+    setBusy('maintain');
+    try {
+      if (action.type === 'archive') {
+        // Soft archive: snapshot to download history, then remove live rows (password already verified).
+        let rows = allData[action.table.key];
+        if (!Array.isArray(rows)) {
+          try { rows = await convex.query(action.table.query); } catch { rows = []; }
+        }
+        const payload = JSON.stringify(rows || []);
+        setLocalHistory(pushLocalBackupHistory({
+          kind: 'archive',
+          name: `archive-${action.table.key}-${new Date().toISOString().slice(0, 10)}`,
+          tableName: action.table.key,
+          recordCount: Array.isArray(rows) ? rows.length : 0,
+          sizeBytes: new Blob([payload]).size,
+          createdBy: user?.email || 'admin',
+        }));
+        try {
+          const result = await clearTableMutation({
+            table: action.table.key,
+            adminId: user._id || user.id,
+            password: action.password,
+          });
+          if (!result?.success) throw new Error(result?.message || 'Archive clear failed');
+          updateTable(action.table.key, []);
+        } catch (err) {
+          alert(`Archive package saved in history. Live clear needs Convex deploy: ${err.message || err}`);
+        }
+      } else if (action.type === 'wipe') {
+        const result = await clearTableMutation({
+          table: action.table.key,
+          adminId: user._id || user.id,
+          password: action.password,
+        });
+        if (!result?.success) throw new Error(result?.message || 'Delete failed');
+        updateTable(action.table.key, []);
+      } else if (action.type === 'purge-archive') {
+        const id = action.archive?.id || action.archive?._id;
+        setLocalHistory(removeLocalBackupHistory(id));
+      }
+      setTypeAction(null);
+    } catch (err) {
+      alert(err.message || 'Action failed. If clearTable is missing on Convex, deploy backup functions.');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const historyRows = useMemo(() => {
+    let rows = (localHistory || []).map((row) => ({
+      id: row.id,
+      kind: row.kind || 'backup',
+      name: row.name,
+      createdAt: row.createdAt,
+      sizeBytes: row.sizeBytes || 0,
+      recordCount: row.recordCount || 0,
+      storageId: null,
+      tableName: row.tableName,
+      raw: row,
+    }));
+    if (historyFilter === 'backups') rows = rows.filter((r) => r.kind === 'backup');
+    if (historyFilter === 'archives') rows = rows.filter((r) => r.kind === 'archive');
+    if (historyFilter === 'restores') rows = rows.filter((r) => r.kind === 'restore');
+    return rows;
+  }, [localHistory, historyFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(historyRows.length / HISTORY_PAGE_SIZE));
+  const page = Math.min(historyPage, totalPages);
+  const pageRows = historyRows.slice((page - 1) * HISTORY_PAGE_SIZE, page * HISTORY_PAGE_SIZE);
+  const pager = buildPager(page, totalPages);
+
+  useEffect(() => { setHistoryPage(1); }, [historyFilter]);
+
+  const clientTotal = Object.values(allData).reduce((n, r) => n + (Array.isArray(r) ? r.length : 0), 0);
+  const clientBytes = Object.values(allData).reduce((n, r) => n + estimateTableBytes(r), 0);
+  const lastBackupAt = prefs.lastAutoBackupAt || null;
+  const lastRestoreAt = prefs.lastRestoreAt || null;
+  const dbSize = clientBytes > 0 ? formatBytes(clientBytes) : '—';
+  const recordTotal = clientTotal;
+  const backupCount = localHistory.filter((r) => r.kind === 'backup').length;
+  const archiveCount = localHistory.filter((r) => r.kind === 'archive').length;
+  const isLoading = Object.values(loadStatus).some((s) => s === 'loading') || busy === 'refresh';
 
   return (
-    <div className="ab-page">
-      <div className="ab-header">
-        <div className="ab-header-left">
-          <div className="ab-header-icon"><i className="fas fa-cog"></i></div>
-          <div>
-            <h1 className="ab-title">Settings</h1>
-            <p className="ab-subtitle">Convex health, secure Excel backups, auto backup &amp; activity logs · {now}</p>
-          </div>
+    <div className="ab-page ab-super">
+      {passwordAction && (
+        <PasswordModal
+          title={
+            passwordAction.type === 'backup' ? 'Create backup'
+              : passwordAction.type === 'restore' ? 'Upload & restore'
+              : 'Admin password required'
+          }
+          message={
+            passwordAction.type === 'backup'
+              ? 'Enter your admin password. One compressed Excel downloads and is also saved to Convex history.'
+              : passwordAction.type === 'restore'
+              ? 'Enter the password that locked this backup. Existing rows stay; only missing data is imported.'
+              : passwordAction.type === 'archive'
+              ? `Archive “${passwordAction.table.label}” (soft delete into Convex package).`
+              : passwordAction.type === 'wipe'
+              ? `Permanently delete live “${passwordAction.table.label}” (no archive).`
+              : passwordAction.type === 'purge-archive'
+              ? `Permanently delete archive “${passwordAction.archive?.name}”.`
+              : 'Enter admin password to continue.'
+          }
+          confirmLabel="Verify & continue"
+          busyLabel="Working…"
+          onVerified={runPasswordVerified}
+          onClose={() => setPasswordAction(null)}
+        />
+      )}
+
+      {typeAction?.type === 'clear-cache' && (
+        <TypeConfirmModal
+          title="Clear local cache?"
+          message="Clears browser snapshot/cache only. Live Convex data is not deleted."
+          confirmWord="CLEAR CACHE"
+          confirmLabel="Clear local cache"
+          danger={false}
+          onConfirm={runTypeConfirmed}
+          onClose={() => setTypeAction(null)}
+        />
+      )}
+      {typeAction?.type === 'archive' && (
+        <TypeConfirmModal
+          title={`Archive ${typeAction.table.label}?`}
+          message="Live rows move into a Convex archive package, then leave the live table."
+          confirmWord="ARCHIVE"
+          confirmLabel="Move to archive"
+          danger={false}
+          busy={busy === 'maintain'}
+          onConfirm={runTypeConfirmed}
+          onClose={() => setTypeAction(null)}
+        />
+      )}
+      {typeAction?.type === 'wipe' && (
+        <TypeConfirmModal
+          title={`Permanently delete ${typeAction.table.label}?`}
+          message="This permanently deletes live rows with no archive. Prefer Archive if you may need the data."
+          confirmWord="DELETE"
+          confirmLabel="Delete permanently"
+          danger
+          busy={busy === 'maintain'}
+          onConfirm={runTypeConfirmed}
+          onClose={() => setTypeAction(null)}
+        />
+      )}
+      {typeAction?.type === 'purge-archive' && (
+        <TypeConfirmModal
+          title="Permanently delete archive?"
+          message={`Deletes archive “${typeAction.archive?.name}” and its stored file forever.`}
+          confirmWord="DELETE"
+          confirmLabel="Delete permanently"
+          danger
+          busy={busy === 'maintain'}
+          onConfirm={runTypeConfirmed}
+          onClose={() => setTypeAction(null)}
+        />
+      )}
+
+      <div className="ab-super-top">
+        <div>
+          <h1>Settings</h1>
+        </div>
+        <button type="button" className="ab-super-refresh" disabled={!!busy || isLoading} onClick={refreshOverview}>
+          <i className={`fas fa-sync-alt ${isLoading ? 'fa-spin' : ''}`}></i>
+          Refresh overview
+        </button>
+      </div>
+
+      <div className="ab-stat-grid">
+        <div className="ab-stat-card ab-stat-card--ok">
+          <div className="ab-stat-card-label">System health <i className="fas fa-wifi"></i></div>
+          <strong>Healthy</strong>
+          <span>API + Convex</span>
+        </div>
+        <div className="ab-stat-card ab-stat-card--brand">
+          <div className="ab-stat-card-label">Database size <i className="fas fa-hdd"></i></div>
+          <strong>{dbSize}</strong>
+          <span>{Number(recordTotal || 0).toLocaleString()} active records</span>
+        </div>
+        <div className="ab-stat-card">
+          <div className="ab-stat-card-label">Last backup <i className="fas fa-shield-alt"></i></div>
+          <strong style={{ fontSize: 16 }}>{formatWhenShort(lastBackupAt)}</strong>
+          <span>Schedule: {prefs.schedule || 'off'}</span>
+        </div>
+        <div className="ab-stat-card">
+          <div className="ab-stat-card-label">Saved backups <i className="fas fa-download"></i></div>
+          <strong>{backupCount}</strong>
+          <span>Logged in Download history</span>
+        </div>
+        <div className="ab-stat-card">
+          <div className="ab-stat-card-label">Archives <i className="fas fa-archive"></i></div>
+          <strong>{archiveCount}</strong>
+          <span>Soft-deleted table packages</span>
+        </div>
+        <div className="ab-stat-card">
+          <div className="ab-stat-card-label">OTP sessions <i className="fas fa-key"></i></div>
+          <strong>—</strong>
+          <span>Refresh overview to load live counts</span>
         </div>
       </div>
 
-      <div className="ab-settings-split">
-        <aside className="ab-settings-left">
-          <DatabaseStatusPanel />
-          <AutoBackupPanel />
-        </aside>
-
-        <section className="ab-settings-right">
-          <div className="ab-tabs">
-            <button className={`ab-tab ${activeTab === 'backup' ? 'ab-tab--active' : ''}`} onClick={() => setActiveTab('backup')}>
-              <i className="fas fa-shield-alt"></i> Backup
-            </button>
-            <button className={`ab-tab ${activeTab === 'import' ? 'ab-tab--active' : ''}`} onClick={() => setActiveTab('import')}>
-              <i className="fas fa-upload"></i> Import
-            </button>
-            <button className={`ab-tab ${activeTab === 'logs' ? 'ab-tab--active' : ''}`} onClick={() => setActiveTab('logs')}>
-              <i className="fas fa-clipboard-list"></i> Logs
-            </button>
+      <section className="ab-section">
+        <div className="ab-section-head">
+          <h2>Data protection</h2>
+        </div>
+        <div className="ab-dp-grid">
+          <div className="ab-card ab-card--hl">
+            <div className="ab-card-title">
+              <i className="fas fa-shield-alt"></i>
+              <h3>Backup &amp; restore</h3>
+            </div>
+            <div className="ab-dp-actions">
+              <button
+                type="button"
+                className="ab-btn-primary"
+                disabled={!!busy}
+                onClick={() => setPasswordAction({ type: 'backup' })}
+              >
+                <i className="fas fa-download"></i>
+                {busy === 'backup' ? 'Creating…' : 'Create backup'}
+              </button>
+              <button
+                type="button"
+                className="ab-btn-outline"
+                disabled={!!busy}
+                onClick={() => fileRef.current?.click()}
+              >
+                <i className="fas fa-upload"></i>
+                {busy === 'restore' ? 'Restoring…' : 'Upload & restore'}
+              </button>
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".xlsx,.xls,.ts"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = '';
+                  if (!file) return;
+                  setPasswordAction({ type: 'restore', file });
+                }}
+              />
+            </div>
           </div>
 
-          {cooldownLeft > 0 && activeTab === 'backup' && (
-            <p className="ab-cooldown-banner">
-              <i className="fas fa-hourglass-half"></i>
-              Download cooldown: wait {Math.ceil(cooldownLeft / 1000)}s (max every {Math.round(EXPORT_COOLDOWN_MS / 1000)}s)
-            </p>
-          )}
+          <div className="ab-card">
+            <div className="ab-card-title">
+              <i className="fas fa-history"></i>
+              <h3>Automatic backup</h3>
+              <span className="ab-badge-soft">Keeps last 30</span>
+            </div>
+            <div className="ab-auto-mini">
+              <div>
+                <span>Last backup</span>
+                <strong>{formatWhenShort(lastBackupAt)}</strong>
+              </div>
+              <div>
+                <span>Last restore</span>
+                <strong>{formatWhenShort(lastRestoreAt)}</strong>
+              </div>
+            </div>
+            <label className="ab-password-label" htmlFor="ab-super-schedule">Schedule</label>
+            <div className="ab-auto-row">
+              <select
+                id="ab-super-schedule"
+                value={scheduleDraft}
+                onChange={(e) => setScheduleDraft(e.target.value)}
+                disabled={!!busy}
+              >
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="off">Off</option>
+              </select>
+              <button
+                type="button"
+                className="ab-download-all-btn"
+                disabled={!!busy || scheduleDraft === (prefs.schedule || 'off')}
+                onClick={() => setPasswordAction({ type: 'schedule' })}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
 
-          {activeTab === 'backup' && <BackupTab />}
-          {activeTab === 'import' && <ImportTab />}
-          {activeTab === 'logs' && <LogsTab />}
-        </section>
-      </div>
+      <section className="ab-section">
+        <div className="ab-section-head">
+          <h2>Storage overview</h2>
+        </div>
+        <DatabaseStatusPanel />
+      </section>
+
+      <section className="ab-section">
+        <div className="ab-section-head">
+          <h2>Maintenance</h2>
+        </div>
+        <div className="ab-maint-grid">
+          <div className="ab-card ab-card--danger">
+            <div className="ab-card-title">
+              <i className="fas fa-exclamation-triangle" style={{ background: '#f3e8ff', color: '#e11d48' }}></i>
+              <h3>Danger zone</h3>
+            </div>
+            <div className="ab-danger-tools">
+              <button type="button" className="ab-btn-cache" onClick={() => setTypeAction({ type: 'clear-cache' })}>
+                <i className="fas fa-broom"></i> Clear Cache
+              </button>
+            </div>
+            <label className="ab-password-label" htmlFor="ab-danger-table">Table scope</label>
+            <select
+              id="ab-danger-table"
+              className="ab-oracle-input"
+              style={{ marginBottom: 10 }}
+              value={dangerTableKey}
+              onChange={(e) => setDangerTableKey(e.target.value)}
+            >
+              {TABLES.map((t) => {
+                const count = Array.isArray(allData[t.key]) ? allData[t.key].length : null;
+                return (
+                  <option key={t.key} value={t.key}>
+                    {t.label}{typeof count === 'number' ? ` (${count})` : ''}
+                  </option>
+                );
+              })}
+            </select>
+            <div className="ab-dp-actions">
+              <button
+                type="button"
+                className="ab-btn-outline"
+                disabled={!!busy}
+                onClick={() => {
+                  const table = TABLES.find((t) => t.key === dangerTableKey);
+                  if (table) setPasswordAction({ type: 'archive', table });
+                }}
+              >
+                <i className="fas fa-archive"></i> Archive instead
+              </button>
+              <button
+                type="button"
+                className="ab-btn-primary"
+                style={{ background: 'linear-gradient(135deg,#be123c,#e11d48)' }}
+                disabled={!!busy}
+                onClick={() => {
+                  const table = TABLES.find((t) => t.key === dangerTableKey);
+                  if (table) setPasswordAction({ type: 'wipe', table });
+                }}
+              >
+                <i className="fas fa-trash-alt"></i> Permanent delete
+              </button>
+            </div>
+          </div>
+
+          <div className="ab-card" style={{ display: 'flex', flexDirection: 'column', minHeight: 420 }}>
+            <div className="ab-card-title">
+              <i className="fas fa-history"></i>
+              <h3>Download history</h3>
+            </div>
+            <p className="ab-card-hint">Backups and archive packages saved in Convex.</p>
+            <div className="ab-hist-tabs">
+              {[
+                { id: 'all', label: 'All' },
+                { id: 'backups', label: 'Backups' },
+                { id: 'restores', label: 'Restores' },
+                { id: 'archives', label: 'Archives' },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className={`ab-hist-tab ${historyFilter === tab.id ? 'ab-hist-tab--on' : ''}`}
+                  onClick={() => setHistoryFilter(tab.id)}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {pageRows.length === 0 ? (
+              <div className="ab-hist-empty">
+                No packages yet. Use <strong>Create backup</strong> or Archive in Danger zone.
+              </div>
+            ) : (
+              <ul className="ab-hist-list">
+                {pageRows.map((row) => (
+                  <li key={`${row.kind}-${row.id}`} className="ab-hist-item">
+                    <span className={`ab-hist-ico ab-hist-ico--${row.kind}`}>
+                      <i className={`fas ${row.kind === 'archive' ? 'fa-archive' : 'fa-file-archive'}`}></i>
+                    </span>
+                    <div className="ab-hist-meta">
+                      <strong>
+                        {row.name}
+                        <span className="ab-badge-soft">{row.kind}</span>
+                      </strong>
+                      <span>
+                        {formatWhenShort(row.createdAt)} · {formatBytes(row.sizeBytes)} · {row.recordCount.toLocaleString()} rec
+                        {row.tableName ? ` · ${row.tableName}` : ''}
+                      </span>
+                    </div>
+                    {(row.kind === 'archive' || row.kind === 'backup') ? (
+                      <button
+                        type="button"
+                        className="ab-icon-btn ab-icon-btn--del"
+                        title="Remove from history"
+                        onClick={() => setPasswordAction({ type: 'purge-archive', archive: row.raw })}
+                      >
+                        <i className="fas fa-trash-alt"></i>
+                      </button>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {totalPages > 1 && (
+              <nav className="ab-pager" aria-label="Download history pages">
+                <button
+                  type="button"
+                  className="ab-pager-nav"
+                  disabled={page <= 1}
+                  onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
+                >
+                  Previous
+                </button>
+                {pager.map((item, idx) => (
+                  item === '…' ? (
+                    <span key={`e-${idx}`} className="ab-pager-ellipsis">…</span>
+                  ) : (
+                    <button
+                      key={item}
+                      type="button"
+                      className={`ab-pager-num ${page === item ? 'ab-pager-on' : ''}`}
+                      onClick={() => setHistoryPage(item)}
+                    >
+                      {item}
+                    </button>
+                  )
+                ))}
+                <button
+                  type="button"
+                  className="ab-pager-nav"
+                  disabled={page >= totalPages}
+                  onClick={() => setHistoryPage((p) => Math.min(totalPages, p + 1))}
+                >
+                  Next
+                </button>
+              </nav>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="ab-section">
+        <button type="button" className="ab-super-refresh" onClick={() => setShowLogs((v) => !v)}>
+          <i className="fas fa-clipboard-list"></i> {showLogs ? 'Hide activity logs' : 'Show activity logs'}
+        </button>
+        {showLogs && (
+          <div style={{ marginTop: 12 }}>
+            <LogsTab />
+          </div>
+        )}
+      </section>
     </div>
   );
 };

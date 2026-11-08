@@ -177,6 +177,72 @@ export const sendRegistrationOTP = action({
   },
 });
 
+/** Login / PIN-setup OTP (accounts without PIN, or forgot PIN). */
+export const sendLoginOTP = action({
+  args: {
+    to: v.string(),
+    name: v.string(),
+    otp: v.string(),
+  },
+  handler: async (
+    ctx,
+    { to, name, otp }: { to: string; name: string; otp: string }
+  ): Promise<{ success: boolean; message?: string; id?: string }> => {
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>DKMerch Login Code</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:32px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:white;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+        <tr><td style="background:linear-gradient(135deg,#42011e,#fc1268);padding:36px 32px;text-align:center;">
+          <div style="font-size:32px;font-weight:900;color:white;letter-spacing:1px;">DKMerch</div>
+          <div style="color:#ffd6e7;font-size:13px;margin-top:6px;">Your K-Pop Paradise</div>
+        </td></tr>
+        <tr><td style="background:#fff0f6;padding:28px 32px;text-align:center;border-bottom:1px solid #ffd6e7;">
+          <div style="font-size:52px;margin-bottom:10px;">🔑</div>
+          <div style="font-size:22px;font-weight:800;color:#42011e;">Login Verification Code</div>
+          <div style="font-size:14px;color:#9c27b0;margin-top:6px;">Use this code to set up or reset your login PIN</div>
+        </td></tr>
+        <tr><td style="padding:32px 36px;">
+          <p style="font-size:16px;color:#374151;margin:0 0 16px;">Hi <strong>${name}</strong>! 👋</p>
+          <p style="font-size:14px;color:#6b7280;line-height:1.7;margin:0 0 28px;">
+            Enter this code in the DKMerch login window, then create your PIN so future logins won’t need email OTP.
+          </p>
+          <div style="background:linear-gradient(135deg,#fff0f6,#f5f3ff);border:2px dashed #fc1268;border-radius:16px;padding:28px;text-align:center;margin:0 0 28px;">
+            <p style="font-size:12px;font-weight:700;color:#9c27b0;text-transform:uppercase;letter-spacing:1px;margin:0 0 10px;">Your OTP Code</p>
+            <div style="font-size:48px;font-weight:900;letter-spacing:12px;color:#fc1268;margin:8px 0;">${otp}</div>
+            <p style="font-size:13px;color:#6b7280;margin:10px 0 0;">
+              ⏱ This code expires in <strong style="color:#fc1268;">3 minutes</strong>
+            </p>
+          </div>
+          <div style="background:#fffbeb;border-radius:10px;border:1px solid #fde68a;padding:14px 18px;">
+            <p style="font-size:13px;color:#92400e;margin:0;line-height:1.6;">
+              🔒 Never share this code. DKMerch will never ask for your OTP via chat or call.
+            </p>
+          </div>
+        </td></tr>
+        <tr><td style="background:#fafafa;border-top:1px solid #e5e7eb;padding:20px 36px;text-align:center;">
+          <p style="color:#aaa;font-size:12px;margin:0;">© 2026 DKMerch · K-Pop Paradise · All rights reserved</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+    return await ctx.runAction(internal.sendEmail.sendEmail, {
+      to,
+      subject: `${otp} — Your DKMerch Login Code`,
+      html,
+    });
+  },
+});
+
 // ── EMAIL VERIFICATION (link-based — kept for compatibility) ──────────────────
 
 export const sendVerificationEmail = action({
