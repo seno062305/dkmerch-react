@@ -37,9 +37,8 @@ const WaybillModal = ({ order, onClose }) => {
   const finalTotal  = order.finalTotal  ?? ((order.total || 0) - discount);
   const hasPromo    = !!(order.promoCode && discount > 0);
 
+  // Same scannable link for preview + print (order-accurate; screen scans allowed)
   const trackOrderLink = `${SITE_URL}/track-order?order=${order.orderId}`;
-  // On-screen only — riders must scan the printed QR, not this preview
-  const screenPreviewLink = `${trackOrderLink}&src=screen`;
   const shortId = order.orderId?.slice(-8).toUpperCase();
 
   const esc = (v) => String(v ?? '')
@@ -48,15 +47,15 @@ const WaybillModal = ({ order, onClose }) => {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 
-  /** PNG QR for print HTML (SVG often disappears in print preview / thermal drivers). */
-  const makePrintQrDataUrl = async (value, size = 200) => {
+  /** High-res crisp PNG QR for thermal print (pure black modules). */
+  const makePrintQrDataUrl = async (value, size = 512) => {
     const wrap = document.createElement('div');
     wrap.style.cssText = `position:fixed;left:0;top:0;width:${size}px;height:${size}px;opacity:0;pointer-events:none;z-index:-1;background:#fff;`;
     document.body.appendChild(wrap);
     const root = createRoot(wrap);
     await new Promise((resolve) => {
       root.render(
-        <QRCodeSVG value={value} size={size} level="M" includeMargin={false} fgColor="#111827" bgColor="#ffffff" />
+        <QRCodeSVG value={value} size={size} level="M" includeMargin={true} fgColor="#000000" bgColor="#ffffff" />
       );
       requestAnimationFrame(() => requestAnimationFrame(resolve));
     });
@@ -79,6 +78,7 @@ const WaybillModal = ({ order, onClose }) => {
     c.width = size;
     c.height = size;
     const ctx = c.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, size, size);
     ctx.drawImage(img, 0, 0, size, size);
@@ -105,18 +105,18 @@ const WaybillModal = ({ order, onClose }) => {
 </head><body><p><strong>Preparing waybill…</strong></p></body></html>`);
       printWindow.document.close();
 
-      const qrPng = await makePrintQrDataUrl(trackOrderLink, 240);
+      const qrPng = await makePrintQrDataUrl(trackOrderLink, 512);
       if (!qrPng?.startsWith('data:image/png')) {
         throw new Error('QR PNG missing');
       }
 
       const itemsHtml = (order.items || []).map((item, idx) => `
         <tr>
-          <td style="color:#9ca3af">${idx + 1}</td>
-          <td style="font-weight:600">${esc(item.name || 'N/A')}</td>
+          <td>${idx + 1}</td>
+          <td style="font-weight:700">${esc(item.name || 'N/A')}</td>
           <td class="td-center">${esc(item.quantity)}</td>
           <td class="td-right">₱${Number(item.price || 0).toLocaleString('en-PH')}</td>
-          <td class="td-right" style="color:#fc1268">₱${Number((item.quantity || 0) * (item.price || 0)).toLocaleString('en-PH')}</td>
+          <td class="td-right wb-accent">₱${Number((item.quantity || 0) * (item.price || 0)).toLocaleString('en-PH')}</td>
         </tr>`).join('');
 
       const riderHtml = order.riderInfo?.name ? `
@@ -141,13 +141,14 @@ const WaybillModal = ({ order, onClose }) => {
   @page { size: 100mm 150mm; margin: 0; }
   html, body {
     width: 100mm; height: 150mm; margin: 0; padding: 0;
-    font-family: Arial, 'Segoe UI', sans-serif; background: #fff; overflow: hidden;
+    font-family: Arial, Helvetica, sans-serif; background: #fff; overflow: hidden;
+    color: #000; -webkit-font-smoothing: none; font-smooth: never;
   }
   .wb-screen-bar {
     display: none; position: sticky; top: 0; z-index: 10;
     align-items: center; justify-content: space-between; gap: 12px;
     padding: 10px 14px; background: #fff; border-bottom: 1px solid #e2e8f0;
-    font-family: Arial, sans-serif;
+    font-family: Arial, sans-serif; -webkit-font-smoothing: antialiased;
   }
   .wb-screen-bar p { margin: 0; font-size: 12px; color: #64748b; line-height: 1.35; }
   .wb-screen-bar strong { color: #0f172a; }
@@ -159,38 +160,42 @@ const WaybillModal = ({ order, onClose }) => {
   .wb-print-again:hover { background: #e0105c; }
   .waybill-print-root {
     width: 100mm; height: 150mm; max-height: 150mm; margin: 0; background: #fff;
-    padding: 3mm; display: flex; flex-direction: column; gap: 2mm;
+    padding: 3.5mm; display: flex; flex-direction: column; gap: 2.2mm;
     overflow: hidden;
   }
-  .wb-header { display: flex; justify-content: space-between; align-items: center; gap: 2mm; padding-bottom: 1.5mm; border-bottom: 2px solid #111827; flex-shrink: 0; }
-  .wb-brand-name { font-size: 15pt; font-weight: 900; color: #fc1268; line-height: 1; }
-  .wb-brand-sub { font-size: 7pt; color: #6b7280; font-weight: 600; margin-top: 0.6mm; }
-  .wb-brand-contact { font-size: 6pt; color: #6b7280; margin-top: 0.5mm; }
-  .wb-qr-block { display: flex; flex-direction: column; align-items: center; gap: 1mm; flex-shrink: 0; }
-  .wb-qr-block img { width: 20mm; height: 20mm; display: block; image-rendering: pixelated; }
-  .wb-qr-label { font-size: 5.5pt; color: #111827; font-weight: 800; text-transform: uppercase; letter-spacing: 0.3px; }
-  .wb-cols { display: grid; grid-template-columns: 0.9fr 1.1fr; gap: 2mm; flex-shrink: 0; }
-  .wb-box { border: 1px solid #e5e7eb; border-radius: 3px; overflow: hidden; }
-  .wb-box-hd { background: #f3f4f6; padding: 1mm 1.5mm; font-size: 6pt; font-weight: 800; color: #374151; text-transform: uppercase; border-bottom: 1px solid #e5e7eb; }
-  .wb-box-body { padding: 1.5mm; display: flex; flex-direction: column; gap: 1mm; }
+  .wb-header { display: flex; justify-content: space-between; align-items: center; gap: 2.5mm; padding-bottom: 2mm; border-bottom: 2.5px solid #000; flex-shrink: 0; }
+  .wb-brand-name { font-size: 18pt; font-weight: 900; color: #fc1268; line-height: 1; }
+  .wb-brand-sub { font-size: 8pt; color: #444; font-weight: 700; margin-top: 0.8mm; }
+  .wb-brand-contact { font-size: 7pt; color: #444; margin-top: 0.6mm; font-weight: 600; }
+  .wb-qr-block { display: flex; flex-direction: column; align-items: center; gap: 1.2mm; flex-shrink: 0; }
+  .wb-qr-block img {
+    width: 24mm; height: 24mm; display: block;
+    image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges; image-rendering: pixelated;
+  }
+  .wb-qr-label { font-size: 7pt; color: #000; font-weight: 900; text-transform: uppercase; letter-spacing: 0.4px; }
+  .wb-cols { display: grid; grid-template-columns: 0.9fr 1.1fr; gap: 2.2mm; flex-shrink: 0; }
+  .wb-box { border: 1.5px solid #000; border-radius: 0; overflow: hidden; }
+  .wb-box-hd { background: #eee; padding: 1.4mm 2mm; font-size: 7pt; font-weight: 900; color: #000; text-transform: uppercase; border-bottom: 1px solid #000; }
+  .wb-box-body { padding: 1.8mm 2mm; display: flex; flex-direction: column; gap: 1.2mm; }
   .wb-rider-row { flex-direction: row !important; gap: 2.5mm !important; flex-wrap: wrap; }
-  .wb-field-lbl { font-size: 5.5pt; color: #9ca3af; font-weight: 700; text-transform: uppercase; }
-  .wb-field-val { font-size: 7pt; color: #1f2937; font-weight: 600; line-height: 1.25; word-break: break-word; }
-  .wb-items-box { border: 1px solid #e5e7eb; border-radius: 3px; overflow: hidden; flex: 1 1 auto; min-height: 0; }
-  .wb-items-hd { background: #f3f4f6; padding: 1mm 1.5mm; font-size: 6pt; font-weight: 800; color: #374151; text-transform: uppercase; border-bottom: 1px solid #e5e7eb; }
+  .wb-field-lbl { font-size: 6.5pt; color: #333; font-weight: 800; text-transform: uppercase; }
+  .wb-field-val { font-size: 8.5pt; color: #000; font-weight: 700; line-height: 1.25; word-break: break-word; }
+  .wb-accent { color: #fc1268; font-weight: 900; }
+  .wb-items-box { border: 1.5px solid #000; border-radius: 0; overflow: hidden; flex: 1 1 auto; min-height: 0; }
+  .wb-items-hd { background: #eee; padding: 1.4mm 2mm; font-size: 7pt; font-weight: 900; color: #000; text-transform: uppercase; border-bottom: 1px solid #000; }
   .wb-items-table { width: 100%; border-collapse: collapse; }
-  .wb-items-table th { padding: 1mm 1.2mm; text-align: left; font-size: 5.5pt; font-weight: 700; color: #6b7280; border-bottom: 1px solid #f0f0f0; }
-  .wb-items-table td { padding: 1mm 1.2mm; font-size: 6.5pt; color: #1f2937; border-bottom: 1px solid #f8f8f8; }
-  .td-right { text-align: right; font-weight: 700; }
+  .wb-items-table th { padding: 1.2mm 1.5mm; text-align: left; font-size: 7pt; font-weight: 800; color: #000; border-bottom: 1px solid #ccc; }
+  .wb-items-table td { padding: 1.2mm 1.5mm; font-size: 8pt; color: #000; font-weight: 600; border-bottom: 1px solid #eee; }
+  .td-right { text-align: right; font-weight: 800; }
   .td-center { text-align: center; }
-  .wb-totals { border: 1px solid #e5e7eb; border-radius: 3px; overflow: hidden; flex-shrink: 0; }
-  .wb-totals-row { display: flex; justify-content: space-between; padding: 1mm 2mm; font-size: 7pt; border-bottom: 1px solid #f0f0f0; }
+  .wb-totals { border: 1.5px solid #000; border-radius: 0; overflow: hidden; flex-shrink: 0; }
+  .wb-totals-row { display: flex; justify-content: space-between; padding: 1.4mm 2.2mm; font-size: 8.5pt; font-weight: 700; color: #000; border-bottom: 1px solid #ddd; }
   .wb-totals-row:last-child { border-bottom: none; }
-  .wb-grand { background: #fff1f5 !important; font-size: 8.5pt; font-weight: 800; color: #fc1268 !important; }
-  .wb-promo-row { color: #16a34a; font-weight: 600; }
-  .wb-footer { text-align: center; font-size: 5.5pt; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 1.2mm; line-height: 1.3; flex-shrink: 0; }
+  .wb-grand { background: #fff1f5 !important; font-size: 11pt; font-weight: 900; color: #fc1268 !important; }
+  .wb-promo-row { color: #000; font-weight: 800; }
+  .wb-footer { text-align: center; font-size: 7pt; color: #000; font-weight: 700; border-top: 1px solid #000; padding-top: 1.5mm; line-height: 1.35; flex-shrink: 0; }
   @media screen {
-    html, body { width: auto; height: auto; min-height: 100%; overflow: auto; background: #e2e8f0; }
+    html, body { width: auto; height: auto; min-height: 100%; overflow: auto; background: #e2e8f0; -webkit-font-smoothing: antialiased; }
     .wb-screen-bar { display: flex; }
     .wb-screen-wrap { padding: 14px; display: flex; justify-content: center; }
     .waybill-print-root { box-shadow: 0 8px 28px rgba(15,23,42,0.14); border: 1px solid #cbd5e1; }
@@ -198,13 +203,22 @@ const WaybillModal = ({ order, onClose }) => {
   @media print {
     .wb-screen-bar { display: none !important; }
     .wb-screen-wrap { display: block !important; padding: 0 !important; margin: 0 !important; }
-    html, body { width: 100mm !important; height: 150mm !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; background: #fff !important; }
+    html, body {
+      width: 100mm !important; height: 150mm !important; margin: 0 !important; padding: 0 !important;
+      overflow: hidden !important; background: #fff !important; color: #000 !important;
+      -webkit-font-smoothing: none !important; font-smooth: never !important;
+    }
     .waybill-print-root {
       display: flex !important;
       width: 100mm !important; height: 150mm !important; max-height: 150mm !important;
       margin: 0 !important; box-shadow: none !important; border: none !important;
       page-break-after: avoid; page-break-inside: avoid; break-inside: avoid;
     }
+    /* Thermal B&W: pink becomes muddy — force solid black for sharp text */
+    .wb-brand-name, .wb-accent, .wb-grand, .wb-grand strong, .wb-footer strong { color: #000 !important; }
+    .wb-grand { background: #eee !important; }
+    .wb-box-hd, .wb-items-hd { background: #ddd !important; }
+    .wb-qr-block img { image-rendering: crisp-edges !important; }
   }
 </style></head><body>
 <div class="wb-screen-bar">
@@ -220,7 +234,7 @@ const WaybillModal = ({ order, onClose }) => {
       <div class="wb-brand-contact">Manila, Philippines · support@dkmerch.com</div>
     </div>
     <div class="wb-qr-block">
-      <img id="wb-qr" src="${qrPng}" alt="Waybill QR" width="240" height="240" />
+      <img id="wb-qr" src="${qrPng}" alt="Waybill QR" width="512" height="512" />
       <div class="wb-qr-label">Scan / Track</div>
     </div>
   </div>
@@ -228,7 +242,7 @@ const WaybillModal = ({ order, onClose }) => {
     <div class="wb-box">
       <div class="wb-box-hd">From (Sender)</div>
       <div class="wb-box-body">
-        <div><div class="wb-field-lbl">Store</div><div class="wb-field-val" style="font-weight:800;color:#fc1268">DKMerch</div></div>
+        <div><div class="wb-field-lbl">Store</div><div class="wb-field-val wb-accent">DKMerch</div></div>
         <div><div class="wb-field-lbl">Address</div><div class="wb-field-val">Manila, Philippines</div></div>
         <div><div class="wb-field-lbl">Contact</div><div class="wb-field-val">support@dkmerch.com</div></div>
       </div>
@@ -236,8 +250,8 @@ const WaybillModal = ({ order, onClose }) => {
     <div class="wb-box">
       <div class="wb-box-hd">To (Recipient)</div>
       <div class="wb-box-body">
-        <div><div class="wb-field-lbl">Order ID</div><div class="wb-field-val" style="font-family:Courier New,monospace;font-weight:800;color:#fc1268">#${esc(shortId)}</div></div>
-        <div><div class="wb-field-lbl">Name</div><div class="wb-field-val" style="font-weight:800">${esc(order.customerName || 'N/A')}</div></div>
+        <div><div class="wb-field-lbl">Order ID</div><div class="wb-field-val wb-accent" style="font-family:Courier New,monospace">#${esc(shortId)}</div></div>
+        <div><div class="wb-field-lbl">Name</div><div class="wb-field-val" style="font-weight:900">${esc(order.customerName || 'N/A')}</div></div>
         <div><div class="wb-field-lbl">Phone</div><div class="wb-field-val">${esc(order.phone || 'N/A')}</div></div>
         <div><div class="wb-field-lbl">Address</div><div class="wb-field-val">${esc(order.shippingAddress || 'N/A')}</div></div>
       </div>
@@ -258,7 +272,7 @@ const WaybillModal = ({ order, onClose }) => {
     <div class="wb-totals-row wb-grand"><span>${hasPromo ? 'Total Charged' : 'Total'}</span><strong>₱${Number(finalTotal).toLocaleString('en-PH')}</strong></div>
   </div>
   <div class="wb-footer">
-    <strong style="color:#fc1268">DKMerch</strong> · Order #${esc(shortId)} · ${esc(new Date().toLocaleDateString('en-PH'))}
+    <strong class="wb-accent">DKMerch</strong> · Order #${esc(shortId)} · ${esc(new Date().toLocaleDateString('en-PH'))}
   </div>
 </div>
 </div>
@@ -267,7 +281,6 @@ const WaybillModal = ({ order, onClose }) => {
     try { window.focus(); window.print(); } catch (e) {}
   }
   function readyPrint() {
-    // First open: wait for QR, then show print settings. After Cancel, use the Print button.
     setTimeout(goPrint, 200);
   }
   var img = document.getElementById('wb-qr');
@@ -292,7 +305,7 @@ const WaybillModal = ({ order, onClose }) => {
           <div>
             <div className="waybill-toolbar-title"><i className="fas fa-print"></i> Print Waybill — #{shortId}</div>
             <div className="waybill-size-hint">
-              Size: <strong>100 × 150 mm</strong> · Print includes QR for rider scan · Color / B&amp;W in Print dialog
+              Size: <strong>100 × 150 mm</strong> · Same order QR on screen &amp; print · Color / B&amp;W in Print dialog
             </div>
           </div>
           <div className="waybill-toolbar-actions">
@@ -314,7 +327,7 @@ const WaybillModal = ({ order, onClose }) => {
                 <div className="wb-brand-contact">Manila, Philippines · support@dkmerch.com</div>
               </div>
               <div className="wb-qr-block">
-                <QRCodeSVG value={screenPreviewLink} size={88} level="M" includeMargin={false} fgColor="#111827" bgColor="#ffffff" />
+                <QRCodeSVG value={trackOrderLink} size={88} level="M" includeMargin={true} fgColor="#000000" bgColor="#ffffff" />
                 <div className="wb-qr-label">Scan / Track</div>
               </div>
             </div>

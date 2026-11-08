@@ -1703,8 +1703,8 @@ const RiderDashboard = () => {
           onClose={() => { setShowWaybillScanner(false); setScanTargetOrderId(null); }}
           onScan={handleWaybillScan}
           hint={scanTargetOrderId
-            ? `Scan the printed waybill QR for #${scanTargetOrderId.slice(-8).toUpperCase()} only. Screen QRs (phone/PC) are blocked. Wrong QR = mismatch, not accepted.`
-            : 'Scan the printed waybill QR only — not from a screen.'}
+            ? `Scan the waybill QR for #${scanTargetOrderId.slice(-8).toUpperCase()} (printed or on screen). Wrong QR = mismatch, not accepted.`
+            : 'Scan the waybill QR for this order (printed or on screen).'}
         />
       )}
     </div>
