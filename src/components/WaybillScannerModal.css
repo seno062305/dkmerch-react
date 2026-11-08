@@ -120,6 +120,15 @@
 .wb-scan-error--cancelled .wb-scan-error-title {
   color: #b45309;
 }
+.wb-scan-error--screen {
+  background: #eff6ff;
+  color: #1e3a8a;
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+.wb-scan-error--screen .wb-scan-error-title {
+  color: #1d4ed8;
+}
 .wb-scan-error-title {
   display: block;
   font-size: 13px;

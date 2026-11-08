@@ -2,6 +2,8 @@ import React, { useState, useMemo, useRef } from 'react';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { QRCodeSVG } from 'qrcode.react';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 import { useConfirm } from '../context/ConfirmContext';
 import './AdminOrders.css';
 
@@ -29,6 +31,7 @@ const REFUND_METHOD_LABELS = {
 ══════════════════════════════════════ */
 const WaybillModal = ({ order, onClose }) => {
   const printRef = useRef(null);
+  const [printing, setPrinting] = useState(false);
 
   const subtotal    = order.subtotal    || 0;
   const shippingFee = order.shippingFee || 0;
@@ -36,132 +39,157 @@ const WaybillModal = ({ order, onClose }) => {
   const finalTotal  = order.finalTotal  ?? ((order.total || 0) - discount);
   const hasPromo    = !!(order.promoCode && discount > 0);
 
-  // ✅ CHANGED: QR now points to public track order page (no login needed)
+  // Real track link — encoded only on the printed label QR
   const trackOrderLink = `${SITE_URL}/track-order?order=${order.orderId}`;
+  // On-screen preview QR is intentionally invalid for rider scan (src=screen)
+  const screenPreviewLink = `${trackOrderLink}&src=screen`;
   const shortId        = order.orderId?.slice(-8).toUpperCase();
 
-  const handlePrint = () => {
-    const node = printRef.current;
-    if (!node) return;
-    const svgs = node.querySelectorAll('svg');
-    svgs.forEach(svg => {
+  /** Convert SVG nodes to PNG <img> so thermal drivers / html2canvas never see SVG. */
+  const replaceSvgsWithPng = async (root) => {
+    const svgs = Array.from(root.querySelectorAll('svg'));
+    await Promise.all(svgs.map(async (svg) => {
       if (!svg.getAttribute('xmlns')) svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-      // Force black QR for thermal / B&W printers
-      svg.querySelectorAll('path, rect').forEach((el) => {
-        if (el.getAttribute('fill') && el.getAttribute('fill') !== 'none' && el.getAttribute('fill') !== '#ffffff' && el.getAttribute('fill') !== 'white') {
+      svg.querySelectorAll('[fill]').forEach((el) => {
+        const fill = (el.getAttribute('fill') || '').toLowerCase();
+        if (fill && fill !== 'none' && fill !== '#fff' && fill !== '#ffffff' && fill !== 'white') {
           el.setAttribute('fill', '#000000');
         }
       });
-    });
-    const printContents = node.innerHTML;
-    // ~4x6″ window so on-screen print popup matches label proportions
-    const printWindow = window.open('', '_blank', 'width=420,height=640');
-    if (!printWindow) { alert('Pop-up blocked! Please allow pop-ups for this site.'); return; }
-    printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
+      const rect = svg.getBoundingClientRect();
+      const w = Math.max(160, Math.round((rect.width || 88) * 3));
+      const h = Math.max(160, Math.round((rect.height || 88) * 3));
+      const xml = new XMLSerializer().serializeToString(svg);
+      const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
+      const img = await new Promise((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = reject;
+        el.src = url;
+      });
+      const c = document.createElement('canvas');
+      c.width = w;
+      c.height = h;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+      const out = document.createElement('img');
+      out.src = c.toDataURL('image/png');
+      out.alt = 'QR';
+      out.width = Math.round(rect.width || 88);
+      out.height = Math.round(rect.height || 88);
+      out.style.width = `${rect.width || 88}px`;
+      out.style.height = `${rect.height || 88}px`;
+      out.style.display = 'block';
+      svg.replaceWith(out);
+    }));
+  };
+
+  /**
+   * Thermal printers (Y41BT / Y418T) often error on HTML+SVG print jobs.
+   * Rasterize the label to a 100×150mm PNG/PDF bitmap, then print that.
+   */
+  const handlePrint = async () => {
+    const node = printRef.current;
+    if (!node || printing) return;
+    setPrinting(true);
+    let host = null;
+    try {
+      // Off-screen clone at ~203 DPI for 100×150mm (common thermal label DPI)
+      const PX_W = 812;
+      const PX_H = 1218;
+      host = document.createElement('div');
+      host.setAttribute('data-waybill-capture', '1');
+      host.style.cssText = `position:fixed;left:-10000px;top:0;width:${PX_W}px;height:${PX_H}px;background:#fff;overflow:hidden;z-index:-1;`;
+      const clone = node.cloneNode(true);
+      clone.querySelectorAll('.wb-qr-preview').forEach((el) => el.remove());
+      clone.querySelectorAll('.wb-qr-print').forEach((el) => {
+        el.style.display = 'flex';
+        el.removeAttribute('aria-hidden');
+      });
+      clone.querySelectorAll('.wb-track-url').forEach((el) => { el.style.display = 'none'; });
+      clone.style.width = `${PX_W}px`;
+      clone.style.height = `${PX_H}px`;
+      clone.style.maxHeight = 'none';
+      clone.style.aspectRatio = 'auto';
+      clone.style.margin = '0';
+      clone.style.borderRadius = '0';
+      clone.style.boxShadow = 'none';
+      clone.style.border = 'none';
+      clone.style.padding = '18px 20px';
+      clone.style.boxSizing = 'border-box';
+      clone.style.background = '#ffffff';
+      clone.style.color = '#111111';
+      host.appendChild(clone);
+      document.body.appendChild(host);
+
+      await replaceSvgsWithPng(clone);
+
+      const canvas = await html2canvas(clone, {
+        scale: 1,
+        width: PX_W,
+        height: PX_H,
+        backgroundColor: '#ffffff',
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+        imageTimeout: 8000,
+      });
+
+      // JPEG is smaller and more reliable for many thermal drivers than huge PNGs
+      const imgData = canvas.toDataURL('image/jpeg', 0.92);
+
+      // Exact 100×150mm PDF page — preferred by Y41BT / SENDO paper size
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: [100, 150],
+        compress: true,
+      });
+      pdf.addImage(imgData, 'JPEG', 0, 0, 100, 150, undefined, 'FAST');
+      pdf.setProperties({ title: `Waybill — ${shortId} | DKMerch` });
+
+      // autoPrint injects a print call when the PDF opens
+      pdf.autoPrint();
+      const blob = pdf.output('blob');
+      const blobUrl = URL.createObjectURL(blob);
+      const printWindow = window.open(blobUrl, '_blank', 'noopener,noreferrer,width=420,height=640');
+
+      if (!printWindow) {
+        // Fallback: download PDF + open simple image print sheet
+        pdf.save(`DKMerch-Waybill-${shortId}.pdf`);
+        const imgWin = window.open('', '_blank', 'width=420,height=640');
+        if (imgWin) {
+          imgWin.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <title>Waybill — ${shortId} | DKMerch</title>
 <style>
-  /* Standard shipping label: 100mm × 150mm (4″ × 6″) — matches SENDO / Y418T thermal size */
-  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
   @page { size: 100mm 150mm; margin: 0; }
-  html, body {
-    width: 100mm;
-    height: 150mm;
-    margin: 0;
-    padding: 0;
-    background: #fff;
-    overflow: hidden;
-  }
-  body {
-    font-family: Arial, 'Segoe UI', sans-serif;
-    font-size: 8pt;
-    color: #111;
-  }
-
-  .waybill-print-root {
-    width: 100mm;
-    height: 150mm;
-    padding: 3.5mm;
-    display: flex;
-    flex-direction: column;
-    gap: 2.2mm;
-    overflow: hidden;
-  }
-  .wb-size-hint { display: none !important; }
-
-  .wb-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 3mm;
-    padding-bottom: 2mm;
-    border-bottom: 0.6mm solid #111;
-    flex-shrink: 0;
-  }
-  .wb-brand-name    { font-size: 16pt; font-weight: 900; color: #111 !important; line-height: 1; letter-spacing: -0.3px; }
-  .wb-brand-sub     { font-size: 7pt; color: #333 !important; font-weight: 700; margin-top: 1mm; }
-  .wb-brand-contact { font-size: 6.5pt; color: #444 !important; margin-top: 0.8mm; }
-  .wb-qr-block      { display: flex; flex-direction: column; align-items: center; gap: 1mm; flex-shrink: 0; }
-  .wb-qr-block svg  { width: 22mm !important; height: 22mm !important; shape-rendering: crispEdges; }
-  .wb-qr-label      { font-size: 6pt; color: #111 !important; font-weight: 800; text-transform: uppercase; letter-spacing: 0.3px; }
-
-  .wb-cols {
-    display: grid;
-    grid-template-columns: 0.9fr 1.1fr;
-    gap: 2mm;
-    flex-shrink: 0;
-  }
-  .wb-box      { border: 0.35mm solid #222; border-radius: 1.2mm; overflow: hidden; }
-  .wb-box-hd   { background: #eee !important; padding: 1.2mm 2mm; font-size: 6.5pt; font-weight: 800; color: #111 !important; text-transform: uppercase; border-bottom: 0.25mm solid #ccc; }
-  .wb-box-body { padding: 1.5mm 2mm; display: flex; flex-direction: column; gap: 1.2mm; }
-  .wb-field-lbl { font-size: 5.5pt; color: #555 !important; font-weight: 700; text-transform: uppercase; }
-  .wb-field-val { font-size: 8pt; color: #111 !important; font-weight: 700; line-height: 1.25; word-break: break-word; }
-  .wb-to .wb-field-val { font-size: 8.5pt; }
-  .wb-rider-row { flex-direction: row !important; gap: 3mm !important; flex-wrap: wrap; }
-
-  .wb-items-box { border: 0.35mm solid #222; border-radius: 1.2mm; overflow: hidden; flex: 1 1 auto; min-height: 0; }
-  .wb-items-hd  { background: #eee !important; padding: 1.2mm 2mm; font-size: 6.5pt; font-weight: 800; color: #111 !important; text-transform: uppercase; border-bottom: 0.25mm solid #ccc; }
-  .wb-items-table { width: 100%; border-collapse: collapse; }
-  .wb-items-table th { padding: 1mm 1.5mm; text-align: left; font-size: 6pt; font-weight: 700; color: #333 !important; border-bottom: 0.2mm solid #ddd; }
-  .wb-items-table td { padding: 1mm 1.5mm; font-size: 7.5pt; color: #111 !important; border-bottom: 0.15mm solid #eee; }
-  .wb-items-table tr:last-child td { border-bottom: none; }
-  .td-right  { text-align: right; font-weight: 700; }
-  .td-center { text-align: center; }
-
-  .wb-totals     { border: 0.35mm solid #222; border-radius: 1.2mm; overflow: hidden; flex-shrink: 0; }
-  .wb-totals-row { display: flex; justify-content: space-between; padding: 1.2mm 2.5mm; font-size: 8pt; border-bottom: 0.2mm solid #eee; color: #111 !important; }
-  .wb-totals-row:last-child { border-bottom: none; }
-  .wb-grand      { background: #f3f3f3 !important; font-size: 10pt; font-weight: 900; color: #111 !important; padding: 1.6mm 2.5mm !important; }
-  .wb-promo-row  { color: #111 !important; font-weight: 700; }
-
-  .wb-footer {
-    text-align: center;
-    font-size: 6pt;
-    color: #333 !important;
-    border-top: 0.35mm solid #111;
-    padding-top: 1.5mm;
-    line-height: 1.35;
-    flex-shrink: 0;
-  }
-  .wb-footer .wb-track-url { display: none; }
-
-  svg { display: block; }
-
-  @media screen {
-    html, body { width: 100%; height: 100%; background: #e5e7eb; }
-    body { display: flex; align-items: flex-start; justify-content: center; padding: 12px; overflow: auto; }
-    .waybill-print-root {
-      background: #fff;
-      box-shadow: 0 8px 28px rgba(0,0,0,0.18);
-    }
-  }
-</style>
-</head><body>
-<div class="waybill-print-root">${printContents}</div>
+  html, body { margin: 0; padding: 0; width: 100mm; height: 150mm; background: #fff; }
+  img { width: 100mm; height: 150mm; display: block; }
+</style></head><body>
+<img src="${imgData}" alt="Waybill ${shortId}" />
 <script>
-  window.onload = function() { setTimeout(function() { window.print(); }, 350); };
+  const img = document.querySelector('img');
+  const go = () => setTimeout(function(){ window.focus(); window.print(); }, 250);
+  if (img.complete) go(); else img.onload = go;
 <\/script>
 </body></html>`);
-    printWindow.document.close();
+          imgWin.document.close();
+        } else {
+          alert('Pop-up blocked. A PDF was downloaded — open it and print to Y41BT Label (paper: 100×150 mm, margins: none, scale: 100%).');
+        }
+      } else {
+        // Revoke later; give the PDF viewer time to load
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+      }
+    } catch (err) {
+      console.error('Waybill print failed:', err);
+      alert('Failed to prepare waybill for the label printer. Please try again.');
+    } finally {
+      if (host?.parentNode) host.parentNode.removeChild(host);
+      setPrinting(false);
+    }
   };
 
   return (
@@ -173,7 +201,11 @@ const WaybillModal = ({ order, onClose }) => {
             <div className="waybill-size-hint">Print size: <strong>100 × 150 mm (4 × 6″)</strong> shipping label · choose SENDO / Y418T paper</div>
           </div>
           <div className="waybill-toolbar-actions">
-            <button className="waybill-print-btn" onClick={handlePrint}><i className="fas fa-print"></i> Print</button>
+            <button className="waybill-print-btn" onClick={handlePrint} disabled={printing}>
+              {printing
+                ? <><i className="fas fa-spinner fa-spin"></i> Preparing…</>
+                : <><i className="fas fa-print"></i> Print</>}
+            </button>
             <button className="close-btn" onClick={onClose}><i className="fas fa-times"></i></button>
           </div>
         </div>
@@ -186,7 +218,13 @@ const WaybillModal = ({ order, onClose }) => {
                 <div className="wb-brand-sub">K-Pop Paradise</div>
                 <div className="wb-brand-contact">Manila, Philippines · support@dkmerch.com</div>
               </div>
-              <div className="wb-qr-block">
+              {/* Preview QR (invalid for rider camera) — looks the same but embeds src=screen */}
+              <div className="wb-qr-block wb-qr-preview">
+                <QRCodeSVG value={screenPreviewLink} size={88} level="M" includeMargin={false} fgColor="#111827" bgColor="#ffffff" />
+                <div className="wb-qr-label">Preview only</div>
+              </div>
+              {/* Print QR (valid) — shown only in the print document */}
+              <div className="wb-qr-block wb-qr-print" aria-hidden="true">
                 <QRCodeSVG value={trackOrderLink} size={88} level="M" includeMargin={false} fgColor="#111827" bgColor="#ffffff" />
                 <div className="wb-qr-label">Scan / Track</div>
               </div>
