@@ -1,7 +1,7 @@
 // src/App.js
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { useAuth } from './context/AuthContext';
 import { useCart, useRemoveFromCart, useCartCount } from './context/cartUtils';
 import { useWishlist, useWishlistCount } from './context/wishlistUtils';
 import { BackupProvider } from './context/BackupContext';
@@ -24,7 +24,6 @@ import VerifyEmail from './pages/VerifyEmail';
 import TermsAndConditions from './pages/TermsAndConditions';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 
-import LoginModal from './components/LoginModal';
 import CartModal from './components/CartModal';
 import ProductModal from './components/ProductModal';
 import WishlistPage from './components/WishlistPage';
@@ -45,6 +44,9 @@ import OrderSuccess from './pages/OrderSuccess';
 
 // 🛵 Rider Dashboard
 import RiderDashboard from './pages/RiderDashboard';
+
+// Lazy LoginModal breaks HMR TDZ with RegisterModal / AuthContext
+const LoginModal = React.lazy(() => import('./components/LoginModal'));
 
 import './App.css';
 
@@ -113,15 +115,17 @@ const ProtectedRoute = ({ children }) => {
     return (
       <>
         {showLoginModal && (
-          <LoginModal
-            onClose={() => { setShowLoginModal(false); navigate('/'); }}
-            onLoginSuccess={(loginRole) => {
-              setShowLoginModal(false);
-              const redirect = sessionStorage.getItem('redirectAfterLogin') || '/';
-              sessionStorage.removeItem('redirectAfterLogin');
-              navigate(redirect, { replace: true });
-            }}
-          />
+          <React.Suspense fallback={null}>
+            <LoginModal
+              onClose={() => { setShowLoginModal(false); navigate('/'); }}
+              onLoginSuccess={(loginRole) => {
+                setShowLoginModal(false);
+                const redirect = sessionStorage.getItem('redirectAfterLogin') || '/';
+                sessionStorage.removeItem('redirectAfterLogin');
+                navigate(redirect, { replace: true });
+              }}
+            />
+          </React.Suspense>
         )}
       </>
     );
@@ -254,10 +258,12 @@ function AppContent() {
           {showChatBot && <DKMerchChatBot />}
 
           {showLoginModal && (
-            <LoginModal
-              onClose={() => setShowLoginModal(false)}
-              onLoginSuccess={handleLoginSuccess}
-            />
+            <React.Suspense fallback={null}>
+              <LoginModal
+                onClose={() => setShowLoginModal(false)}
+                onLoginSuccess={handleLoginSuccess}
+              />
+            </React.Suspense>
           )}
 
           {showCartModal && (
@@ -282,11 +288,11 @@ function AppContent() {
 }
 
 function App() {
+  // AuthProvider lives in index.js — nesting it here caused webpack
+  // "__WEBPACK_DEFAULT_EXPORT__ before initialization" under HMR.
   return (
     <Router>
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
+      <AppContent />
     </Router>
   );
 }

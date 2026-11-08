@@ -271,4 +271,18 @@ export const AuthProvider = ({ children }) => {
   );
 };
 
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = () => {
+  const ctx = useContext(AuthContext);
+  // Avoid crash if a consumer mounts outside AuthProvider during HMR
+  return ctx || {
+    user: null,
+    role: null,
+    isAuthenticated: false,
+    isReady: false,
+    login: async () => ({ success: false, message: "Auth not ready." }),
+    completeLogin: () => ({ success: false }),
+    register: async () => ({ success: false, message: "Auth not ready." }),
+    logout: () => {},
+    updateUser: () => {},
+  };
+};

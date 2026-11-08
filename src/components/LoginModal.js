@@ -2,10 +2,11 @@
 import React, { useState, useEffect, useRef } from "react";
 import "./LoginModal.css";
 import { useAuth } from "../context/AuthContext";
-import RegisterModal from "./RegisterModal";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
+
+const RegisterModal = React.lazy(() => import("./RegisterModal"));
 
 // ── Rate limit helpers (per-browser via sessionStorage) ──────────────────────
 const RL_KEY_ATTEMPTS = "dkmerch_login_attempts";
@@ -647,7 +648,13 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
     }
   };
 
-  if (showRegister) return <RegisterModal onClose={handleRegisterSuccess} />;
+  if (showRegister) {
+    return (
+      <React.Suspense fallback={null}>
+        <RegisterModal onClose={handleRegisterSuccess} />
+      </React.Suspense>
+    );
+  }
 
   const isLockedOut = loginCooldown > 0;
 
