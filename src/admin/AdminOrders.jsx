@@ -3,9 +3,9 @@ import { createRoot } from 'react-dom/client';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { QRCodeSVG } from 'qrcode.react';
-import html2canvas from 'html2canvas';
 import { useConfirm } from '../context/ConfirmContext';
 import './AdminOrders.css';
+// useRef still used by other AdminOrders components below
 
 const SITE_URL = 'https://dkmerchwebsite.vercel.app';
 
@@ -30,7 +30,6 @@ const REFUND_METHOD_LABELS = {
    WAYBILL MODAL
 ══════════════════════════════════════ */
 const WaybillModal = ({ order, onClose }) => {
-  const printRef = useRef(null);
   const [printing, setPrinting] = useState(false);
 
   const subtotal    = order.subtotal    || 0;
@@ -39,28 +38,26 @@ const WaybillModal = ({ order, onClose }) => {
   const finalTotal  = order.finalTotal  ?? ((order.total || 0) - discount);
   const hasPromo    = !!(order.promoCode && discount > 0);
 
-  // Real track link — encoded only on the printed label QR
   const trackOrderLink = `${SITE_URL}/track-order?order=${order.orderId}`;
-  // On-screen preview QR is intentionally invalid for rider scan (src=screen)
+  // On-screen only — riders must scan the printed QR, not this preview
   const screenPreviewLink = `${trackOrderLink}&src=screen`;
-  const shortId        = order.orderId?.slice(-8).toUpperCase();
+  const shortId = order.orderId?.slice(-8).toUpperCase();
 
-  /** Render a scannable QR PNG for the real track link (always visible in print capture). */
-  const makePrintQrDataUrl = async (value, size = 220) => {
+  const esc = (v) => String(v ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
+  /** PNG QR for print HTML (SVG often disappears in print preview / thermal drivers). */
+  const makePrintQrDataUrl = async (value, size = 200) => {
     const wrap = document.createElement('div');
     wrap.style.cssText = `position:fixed;left:0;top:0;width:${size}px;height:${size}px;opacity:0;pointer-events:none;z-index:-1;background:#fff;`;
     document.body.appendChild(wrap);
     const root = createRoot(wrap);
     await new Promise((resolve) => {
       root.render(
-        <QRCodeSVG
-          value={value}
-          size={size}
-          level="M"
-          includeMargin={false}
-          fgColor="#111827"
-          bgColor="#ffffff"
-        />
+        <QRCodeSVG value={value} size={size} level="M" includeMargin={false} fgColor="#111827" bgColor="#ffffff" />
       );
       requestAnimationFrame(() => requestAnimationFrame(resolve));
     });
@@ -92,179 +89,142 @@ const WaybillModal = ({ order, onClose }) => {
     return dataUrl;
   };
 
-  /** Build a printable 100×150mm image matching the colored preview — including rider QR. */
-  const buildWaybillImage = async () => {
-    const node = printRef.current;
-    if (!node) throw new Error('Waybill preview not ready');
-
-    const PX_W = 800;
-    const PX_H = 1200;
-    const qrPng = await makePrintQrDataUrl(trackOrderLink, 240);
-
-    const host = document.createElement('div');
-    // Keep in-viewport (opacity 0) so layout/CSS compute correctly for html2canvas
-    host.style.cssText = `position:fixed;left:0;top:0;width:${PX_W}px;height:${PX_H}px;background:#fff;overflow:hidden;opacity:0;pointer-events:none;z-index:-1;`;
-    const clone = node.cloneNode(true);
-
-    // Remove screen-only preview QR; inject real printable QR image
-    clone.querySelectorAll('.wb-qr-preview').forEach((el) => el.remove());
-    clone.querySelectorAll('.wb-qr-print').forEach((el) => {
-      el.classList.remove('wb-qr-print'); // CSS has display:none !important on this class
-      el.removeAttribute('aria-hidden');
-      el.style.setProperty('display', 'flex', 'important');
-      el.style.setProperty('flex-direction', 'column', 'important');
-      el.style.setProperty('align-items', 'center', 'important');
-      el.style.setProperty('gap', '4px', 'important');
-      el.querySelectorAll('svg, img').forEach((n) => n.remove());
-      const img = document.createElement('img');
-      img.src = qrPng;
-      img.alt = 'Waybill QR';
-      img.width = 96;
-      img.height = 96;
-      img.style.width = '96px';
-      img.style.height = '96px';
-      img.style.display = 'block';
-      const label = el.querySelector('.wb-qr-label') || document.createElement('div');
-      label.className = 'wb-qr-label';
-      label.textContent = 'Scan / Track';
-      el.insertBefore(img, label);
-      if (!label.parentNode) el.appendChild(label);
-    });
-    clone.querySelectorAll('.wb-track-url').forEach((el) => { el.style.display = 'none'; });
-
-    Object.assign(clone.style, {
-      width: `${PX_W}px`,
-      height: `${PX_H}px`,
-      maxHeight: 'none',
-      aspectRatio: 'auto',
-      margin: '0',
-      borderRadius: '0',
-      boxShadow: 'none',
-      border: 'none',
-      padding: '20px 22px',
-      boxSizing: 'border-box',
-      background: '#ffffff',
-      fontFamily: "Arial, 'Segoe UI', sans-serif",
-    });
-    host.appendChild(clone);
-    document.body.appendChild(host);
-
-    try {
-      // Wait for QR <img> to decode before snapshot
-      await Promise.all(
-        Array.from(clone.querySelectorAll('img')).map(
-          (img) =>
-            img.complete
-              ? Promise.resolve()
-              : new Promise((res, rej) => {
-                  img.onload = () => res();
-                  img.onerror = () => rej(new Error('QR image failed'));
-                })
-        )
-      );
-
-      const canvas = await html2canvas(clone, {
-        scale: 1,
-        width: PX_W,
-        height: PX_H,
-        backgroundColor: '#ffffff',
-        useCORS: true,
-        allowTaint: true,
-        logging: false,
-        imageTimeout: 8000,
-      });
-      return canvas.toDataURL('image/png');
-    } finally {
-      if (host.parentNode) host.parentNode.removeChild(host);
-    }
-  };
-
-  /**
-   * Print the same colored label preview (with QR) via the system Print dialog.
-   */
+  /** Original-style colored HTML waybill + embedded QR image → direct Print dialog. */
   const handlePrint = async () => {
     if (printing) return;
     setPrinting(true);
-    let printWindow = null;
     try {
-      // Open on user gesture so popup blockers don't kill print
-      printWindow = window.open('', '_blank', 'width=440,height=680');
+      const printWindow = window.open('', '_blank', 'width=480,height=720');
       if (!printWindow) {
-        alert('Pop-up blocked! Allow pop-ups, then click Print again.');
+        alert('Pop-up blocked! Please allow pop-ups for this site.');
         return;
       }
-      printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Waybill — ${shortId}</title></head>
-<body style="font-family:Arial;padding:16px;color:#334155">Preparing colored waybill with QR…</body></html>`);
-      printWindow.document.close();
 
-      const imgData = await buildWaybillImage();
+      const qrPng = await makePrintQrDataUrl(trackOrderLink, 200);
+      const itemsHtml = (order.items || []).map((item, idx) => `
+        <tr>
+          <td style="color:#9ca3af">${idx + 1}</td>
+          <td style="font-weight:600">${esc(item.name || 'N/A')}</td>
+          <td class="td-center">${esc(item.quantity)}</td>
+          <td class="td-right">₱${Number(item.price || 0).toLocaleString('en-PH')}</td>
+          <td class="td-right" style="color:#fc1268">₱${Number((item.quantity || 0) * (item.price || 0)).toLocaleString('en-PH')}</td>
+        </tr>`).join('');
 
-      printWindow.document.open();
+      const riderHtml = order.riderInfo?.name ? `
+        <div class="wb-box">
+          <div class="wb-box-hd">Assigned Rider</div>
+          <div class="wb-box-body wb-rider-row">
+            <div><div class="wb-field-lbl">Name</div><div class="wb-field-val">${esc(order.riderInfo.name)}</div></div>
+            <div><div class="wb-field-lbl">Phone</div><div class="wb-field-val">${esc(order.riderInfo.phone || 'N/A')}</div></div>
+            ${order.riderInfo.plate ? `<div><div class="wb-field-lbl">Plate No.</div><div class="wb-field-val">${esc(order.riderInfo.plate)}</div></div>` : ''}
+          </div>
+        </div>` : '';
+
+      const promoHtml = hasPromo
+        ? `<div class="wb-totals-row wb-promo-row"><span>Promo (${esc(order.promoCode)})</span><strong>−₱${Number(discount).toLocaleString('en-PH')}</strong></div>`
+        : '';
+
       printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <title>Waybill — ${shortId} | DKMerch</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   @page { size: 100mm 150mm; margin: 0; }
-  html, body { width: 100mm; height: 150mm; margin: 0; padding: 0; background: #fff; }
-  @media screen {
-    html, body { width: 100%; height: 100%; background: #e2e8f0; display: flex; justify-content: center; padding: 12px; }
-    img { width: min(380px, 100%); height: auto; aspect-ratio: 100 / 150; box-shadow: 0 8px 28px rgba(0,0,0,.18); background: #fff; }
+  body { font-family: Arial, 'Segoe UI', sans-serif; background: #e2e8f0; padding: 12px; }
+  .waybill-print-root {
+    width: 100mm; min-height: 150mm; margin: 0 auto; background: #fff;
+    padding: 4mm; display: flex; flex-direction: column; gap: 3mm;
   }
+  .wb-header { display: flex; justify-content: space-between; align-items: center; gap: 3mm; padding-bottom: 2.5mm; border-bottom: 2.5px solid #111827; }
+  .wb-brand-name { font-size: 18pt; font-weight: 900; color: #fc1268; line-height: 1; }
+  .wb-brand-sub { font-size: 8pt; color: #6b7280; font-weight: 600; margin-top: 1mm; }
+  .wb-brand-contact { font-size: 7pt; color: #6b7280; margin-top: 1mm; }
+  .wb-qr-block { display: flex; flex-direction: column; align-items: center; gap: 1.5mm; flex-shrink: 0; }
+  .wb-qr-block img { width: 22mm; height: 22mm; display: block; }
+  .wb-qr-label { font-size: 6.5pt; color: #111827; font-weight: 800; text-transform: uppercase; letter-spacing: 0.3px; }
+  .wb-cols { display: grid; grid-template-columns: 0.9fr 1.1fr; gap: 2.5mm; }
+  .wb-box { border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; }
+  .wb-box-hd { background: #f3f4f6; padding: 1.5mm 2mm; font-size: 7pt; font-weight: 800; color: #374151; text-transform: uppercase; border-bottom: 1px solid #e5e7eb; }
+  .wb-box-body { padding: 2mm; display: flex; flex-direction: column; gap: 1.5mm; }
+  .wb-rider-row { flex-direction: row !important; gap: 3mm !important; flex-wrap: wrap; }
+  .wb-field-lbl { font-size: 6pt; color: #9ca3af; font-weight: 700; text-transform: uppercase; }
+  .wb-field-val { font-size: 8pt; color: #1f2937; font-weight: 600; line-height: 1.3; word-break: break-word; }
+  .wb-items-box { border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; }
+  .wb-items-hd { background: #f3f4f6; padding: 1.5mm 2mm; font-size: 7pt; font-weight: 800; color: #374151; text-transform: uppercase; border-bottom: 1px solid #e5e7eb; }
+  .wb-items-table { width: 100%; border-collapse: collapse; }
+  .wb-items-table th { padding: 1.2mm 1.5mm; text-align: left; font-size: 6.5pt; font-weight: 700; color: #6b7280; border-bottom: 1px solid #f0f0f0; }
+  .wb-items-table td { padding: 1.2mm 1.5mm; font-size: 7.5pt; color: #1f2937; border-bottom: 1px solid #f8f8f8; }
+  .td-right { text-align: right; font-weight: 700; }
+  .td-center { text-align: center; }
+  .wb-totals { border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; }
+  .wb-totals-row { display: flex; justify-content: space-between; padding: 1.5mm 2.5mm; font-size: 8pt; border-bottom: 1px solid #f0f0f0; }
+  .wb-totals-row:last-child { border-bottom: none; }
+  .wb-grand { background: #fff1f5 !important; font-size: 10pt; font-weight: 800; color: #fc1268 !important; }
+  .wb-promo-row { color: #16a34a; font-weight: 600; }
+  .wb-footer { text-align: center; font-size: 6.5pt; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 2mm; line-height: 1.4; }
   @media print {
-    html, body { width: 100mm; height: 150mm; }
-    img { width: 100mm; height: 150mm; display: block; }
+    body { background: #fff; padding: 0; }
+    .waybill-print-root { width: 100mm; min-height: 150mm; box-shadow: none; }
   }
 </style></head><body>
-<img id="wb" src="${imgData}" alt="Waybill ${shortId}" width="800" height="1200" />
+<div class="waybill-print-root">
+  <div class="wb-header">
+    <div>
+      <div class="wb-brand-name">DKMerch</div>
+      <div class="wb-brand-sub">K-Pop Paradise</div>
+      <div class="wb-brand-contact">Manila, Philippines · support@dkmerch.com</div>
+    </div>
+    <div class="wb-qr-block">
+      <img src="${qrPng}" alt="Waybill QR" width="200" height="200" />
+      <div class="wb-qr-label">Scan / Track</div>
+    </div>
+  </div>
+  <div class="wb-cols">
+    <div class="wb-box">
+      <div class="wb-box-hd">From (Sender)</div>
+      <div class="wb-box-body">
+        <div><div class="wb-field-lbl">Store</div><div class="wb-field-val" style="font-weight:800;color:#fc1268">DKMerch</div></div>
+        <div><div class="wb-field-lbl">Address</div><div class="wb-field-val">Manila, Philippines</div></div>
+        <div><div class="wb-field-lbl">Contact</div><div class="wb-field-val">support@dkmerch.com</div></div>
+      </div>
+    </div>
+    <div class="wb-box">
+      <div class="wb-box-hd">To (Recipient)</div>
+      <div class="wb-box-body">
+        <div><div class="wb-field-lbl">Order ID</div><div class="wb-field-val" style="font-family:Courier New,monospace;font-weight:800;color:#fc1268">#${esc(shortId)}</div></div>
+        <div><div class="wb-field-lbl">Name</div><div class="wb-field-val" style="font-weight:800">${esc(order.customerName || 'N/A')}</div></div>
+        <div><div class="wb-field-lbl">Phone</div><div class="wb-field-val">${esc(order.phone || 'N/A')}</div></div>
+        <div><div class="wb-field-lbl">Address</div><div class="wb-field-val">${esc(order.shippingAddress || 'N/A')}</div></div>
+      </div>
+    </div>
+  </div>
+  ${riderHtml}
+  <div class="wb-items-box">
+    <div class="wb-items-hd">Order Items (${(order.items || []).length})</div>
+    <table class="wb-items-table">
+      <thead><tr><th>#</th><th>Item</th><th class="td-center">Qty</th><th class="td-right">Unit</th><th class="td-right">Subtotal</th></tr></thead>
+      <tbody>${itemsHtml}</tbody>
+    </table>
+  </div>
+  <div class="wb-totals">
+    <div class="wb-totals-row"><span>Subtotal</span><strong>₱${Number(subtotal).toLocaleString('en-PH')}</strong></div>
+    <div class="wb-totals-row"><span>Shipping</span><strong>${shippingFee === 0 ? 'FREE' : `₱${Number(shippingFee).toLocaleString('en-PH')}`}</strong></div>
+    ${promoHtml}
+    <div class="wb-totals-row wb-grand"><span>${hasPromo ? 'Total Charged' : 'Total'}</span><strong>₱${Number(finalTotal).toLocaleString('en-PH')}</strong></div>
+  </div>
+  <div class="wb-footer">
+    <strong style="color:#fc1268">DKMerch</strong> · Order #${esc(shortId)} · ${esc(new Date().toLocaleDateString('en-PH'))}
+  </div>
+</div>
 <script>
-  function goPrint() {
-    setTimeout(function () { try { window.focus(); window.print(); } catch (e) {} }, 250);
-  }
-  var img = document.getElementById('wb');
-  if (img.complete) goPrint(); else img.onload = goPrint;
+  window.onload = function () {
+    setTimeout(function () { window.focus(); window.print(); }, 300);
+  };
 <\/script>
 </body></html>`);
       printWindow.document.close();
     } catch (err) {
       console.error('Waybill print failed:', err);
-      alert('Failed to prepare waybill with QR. Please try Print again.');
-      try { printWindow?.close(); } catch { /* ignore */ }
-    } finally {
-      setPrinting(false);
-    }
-  };
-
-  /** Phone / FlashLabel: share the waybill image so FlashLabel (Bluetooth) can print it. */
-  const handleShareForFlashLabel = async () => {
-    if (printing) return;
-    setPrinting(true);
-    try {
-      const imgData = await buildWaybillImage();
-      const res = await fetch(imgData);
-      const blob = await res.blob();
-      const file = new File([blob], `DKMerch-Waybill-${shortId}.png`, { type: blob.type || 'image/png' });
-
-      if (navigator.share && navigator.canShare?.({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: `Waybill #${shortId}`,
-          text: 'Open in FlashLabel (or your label app) to print via Bluetooth.',
-        });
-        return;
-      }
-
-      // Fallback: open image in a tab — user can share/print from there (still no PDF)
-      const url = URL.createObjectURL(blob);
-      const w = window.open(url, '_blank');
-      if (!w) {
-        alert('Share is not supported here. Use Print and choose your FlashLabel / Bluetooth printer.');
-      } else {
-        setTimeout(() => URL.revokeObjectURL(url), 60_000);
-      }
-    } catch (err) {
-      if (err?.name === 'AbortError') return;
-      console.error(err);
-      alert('Could not share the waybill image. Use Print and pick FlashLabel / Bluetooth printer.');
+      alert('Failed to open waybill print. Please try again.');
     } finally {
       setPrinting(false);
     }
@@ -277,13 +237,10 @@ const WaybillModal = ({ order, onClose }) => {
           <div>
             <div className="waybill-toolbar-title"><i className="fas fa-print"></i> Print Waybill — #{shortId}</div>
             <div className="waybill-size-hint">
-              Size: <strong>100 × 150 mm</strong> · Print matches this colored layout · choose <strong>Color</strong> or <strong>Black and white</strong> in the Print dialog
+              Size: <strong>100 × 150 mm</strong> · Print includes QR for rider scan · Color / B&amp;W in Print dialog
             </div>
           </div>
           <div className="waybill-toolbar-actions">
-            <button type="button" className="waybill-share-btn" onClick={handleShareForFlashLabel} disabled={printing} title="Share image to FlashLabel / Bluetooth apps">
-              <i className="fas fa-share-alt"></i> Share
-            </button>
             <button className="waybill-print-btn" onClick={handlePrint} disabled={printing}>
               {printing
                 ? <><i className="fas fa-spinner fa-spin"></i> Preparing…</>
@@ -294,21 +251,15 @@ const WaybillModal = ({ order, onClose }) => {
         </div>
         <div className="waybill-preview-wrap">
           <div className="wb-size-hint">Label preview · 100mm × 150mm</div>
-          <div ref={printRef} className="waybill-print-root">
+          <div className="waybill-print-root">
             <div className="wb-header">
               <div>
                 <div className="wb-brand-name">DKMerch</div>
                 <div className="wb-brand-sub">K-Pop Paradise</div>
                 <div className="wb-brand-contact">Manila, Philippines · support@dkmerch.com</div>
               </div>
-              {/* Preview QR (invalid for rider camera) — looks the same but embeds src=screen */}
-              <div className="wb-qr-block wb-qr-preview">
+              <div className="wb-qr-block">
                 <QRCodeSVG value={screenPreviewLink} size={88} level="M" includeMargin={false} fgColor="#111827" bgColor="#ffffff" />
-                <div className="wb-qr-label">Preview only</div>
-              </div>
-              {/* Print QR (valid) — shown only in the print document */}
-              <div className="wb-qr-block wb-qr-print" aria-hidden="true">
-                <QRCodeSVG value={trackOrderLink} size={88} level="M" includeMargin={false} fgColor="#111827" bgColor="#ffffff" />
                 <div className="wb-qr-label">Scan / Track</div>
               </div>
             </div>
@@ -366,7 +317,6 @@ const WaybillModal = ({ order, onClose }) => {
             </div>
             <div className="wb-footer">
               <strong style={{ color: '#fc1268' }}>DKMerch</strong> · Order #{shortId} · {new Date().toLocaleDateString('en-PH')}
-              <span className="wb-track-url">Track: {trackOrderLink}</span>
             </div>
           </div>
         </div>
