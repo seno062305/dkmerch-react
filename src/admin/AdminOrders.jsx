@@ -3,7 +3,6 @@ import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { QRCodeSVG } from 'qrcode.react';
 import html2canvas from 'html2canvas';
-import { jsPDF } from 'jspdf';
 import { useConfirm } from '../context/ConfirmContext';
 import './AdminOrders.css';
 
@@ -87,8 +86,9 @@ const WaybillModal = ({ order, onClose }) => {
   };
 
   /**
-   * Thermal printers (Y41BT / Y418T) often error on HTML+SVG print jobs.
-   * Rasterize the label to a 100×150mm PNG/PDF bitmap, then print that.
+   * Direct browser print (no PDF download).
+   * Rasterize label to one image first so Y41BT/thermal drivers get a simple
+   * bitmap job instead of HTML+SVG (which caused Print Queue errors).
    */
   const handlePrint = async () => {
     const node = printRef.current;
@@ -96,11 +96,24 @@ const WaybillModal = ({ order, onClose }) => {
     setPrinting(true);
     let host = null;
     try {
-      // Off-screen clone at ~203 DPI for 100×150mm (common thermal label DPI)
+      // Open print window early (keeps popup permission tied to the click)
+      const printWindow = window.open('', '_blank', 'width=420,height=640');
+      if (!printWindow) {
+        alert('Pop-up blocked! Please allow pop-ups for this site, then click Print again.');
+        return;
+      }
+      printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
+<title>Waybill — ${shortId} | DKMerch</title>
+<style>
+  html, body { margin: 0; padding: 16px; font-family: Arial, sans-serif; background: #f1f5f9; color: #334155; }
+  .prep { font-size: 14px; font-weight: 600; }
+</style></head><body><p class="prep">Preparing waybill for printer…</p></body></html>`);
+      printWindow.document.close();
+
+      // Off-screen clone at ~203 DPI for 100×150mm
       const PX_W = 812;
       const PX_H = 1218;
       host = document.createElement('div');
-      host.setAttribute('data-waybill-capture', '1');
       host.style.cssText = `position:fixed;left:-10000px;top:0;width:${PX_W}px;height:${PX_H}px;background:#fff;overflow:hidden;z-index:-1;`;
       const clone = node.cloneNode(true);
       clone.querySelectorAll('.wb-qr-preview').forEach((el) => el.remove());
@@ -137,55 +150,34 @@ const WaybillModal = ({ order, onClose }) => {
         imageTimeout: 8000,
       });
 
-      // JPEG is smaller and more reliable for many thermal drivers than huge PNGs
       const imgData = canvas.toDataURL('image/jpeg', 0.92);
 
-      // Exact 100×150mm PDF page — preferred by Y41BT / SENDO paper size
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: [100, 150],
-        compress: true,
-      });
-      pdf.addImage(imgData, 'JPEG', 0, 0, 100, 150, undefined, 'FAST');
-      pdf.setProperties({ title: `Waybill — ${shortId} | DKMerch` });
-
-      // autoPrint injects a print call when the PDF opens
-      pdf.autoPrint();
-      const blob = pdf.output('blob');
-      const blobUrl = URL.createObjectURL(blob);
-      const printWindow = window.open(blobUrl, '_blank', 'noopener,noreferrer,width=420,height=640');
-
-      if (!printWindow) {
-        // Fallback: download PDF + open simple image print sheet
-        pdf.save(`DKMerch-Waybill-${shortId}.pdf`);
-        const imgWin = window.open('', '_blank', 'width=420,height=640');
-        if (imgWin) {
-          imgWin.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
+      // Same flow as before: print dialog → choose waybill printer. No PDF download.
+      printWindow.document.open();
+      printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <title>Waybill — ${shortId} | DKMerch</title>
 <style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   @page { size: 100mm 150mm; margin: 0; }
-  html, body { margin: 0; padding: 0; width: 100mm; height: 150mm; background: #fff; }
+  html, body { width: 100mm; height: 150mm; margin: 0; padding: 0; background: #fff; overflow: hidden; }
   img { width: 100mm; height: 150mm; display: block; }
 </style></head><body>
-<img src="${imgData}" alt="Waybill ${shortId}" />
+<img id="wb" src="${imgData}" alt="Waybill ${shortId}" width="812" height="1218" />
 <script>
-  const img = document.querySelector('img');
-  const go = () => setTimeout(function(){ window.focus(); window.print(); }, 250);
-  if (img.complete) go(); else img.onload = go;
+  function goPrint() {
+    setTimeout(function () {
+      try { window.focus(); window.print(); } catch (e) {}
+    }, 200);
+  }
+  var img = document.getElementById('wb');
+  if (img.complete) goPrint();
+  else img.onload = goPrint;
 <\/script>
 </body></html>`);
-          imgWin.document.close();
-        } else {
-          alert('Pop-up blocked. A PDF was downloaded — open it and print to Y41BT Label (paper: 100×150 mm, margins: none, scale: 100%).');
-        }
-      } else {
-        // Revoke later; give the PDF viewer time to load
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
-      }
+      printWindow.document.close();
     } catch (err) {
       console.error('Waybill print failed:', err);
-      alert('Failed to prepare waybill for the label printer. Please try again.');
+      alert('Failed to prepare waybill for printing. Please try again.');
     } finally {
       if (host?.parentNode) host.parentNode.removeChild(host);
       setPrinting(false);
