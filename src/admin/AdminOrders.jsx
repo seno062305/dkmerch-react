@@ -85,60 +85,40 @@ const WaybillModal = ({ order, onClose }) => {
     }));
   };
 
-  /**
-   * Direct browser print (no PDF download).
-   * Rasterize label to one image first so Y41BT/thermal drivers get a simple
-   * bitmap job instead of HTML+SVG (which caused Print Queue errors).
-   */
-  const handlePrint = async () => {
+  /** Build a printable 100×150mm JPEG of the waybill (valid print QR, no preview QR). */
+  const buildWaybillImage = async () => {
     const node = printRef.current;
-    if (!node || printing) return;
-    setPrinting(true);
-    let host = null;
+    if (!node) throw new Error('Waybill preview not ready');
+
+    const PX_W = 812;
+    const PX_H = 1218;
+    const host = document.createElement('div');
+    host.style.cssText = `position:fixed;left:-10000px;top:0;width:${PX_W}px;height:${PX_H}px;background:#fff;overflow:hidden;z-index:-1;`;
+    const clone = node.cloneNode(true);
+    clone.querySelectorAll('.wb-qr-preview').forEach((el) => el.remove());
+    clone.querySelectorAll('.wb-qr-print').forEach((el) => {
+      el.style.display = 'flex';
+      el.removeAttribute('aria-hidden');
+    });
+    clone.querySelectorAll('.wb-track-url').forEach((el) => { el.style.display = 'none'; });
+    Object.assign(clone.style, {
+      width: `${PX_W}px`,
+      height: `${PX_H}px`,
+      maxHeight: 'none',
+      aspectRatio: 'auto',
+      margin: '0',
+      borderRadius: '0',
+      boxShadow: 'none',
+      border: 'none',
+      padding: '18px 20px',
+      boxSizing: 'border-box',
+      background: '#ffffff',
+      color: '#111111',
+    });
+    host.appendChild(clone);
+    document.body.appendChild(host);
     try {
-      // Open print window early (keeps popup permission tied to the click)
-      const printWindow = window.open('', '_blank', 'width=420,height=640');
-      if (!printWindow) {
-        alert('Pop-up blocked! Please allow pop-ups for this site, then click Print again.');
-        return;
-      }
-      printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
-<title>Waybill — ${shortId} | DKMerch</title>
-<style>
-  html, body { margin: 0; padding: 16px; font-family: Arial, sans-serif; background: #f1f5f9; color: #334155; }
-  .prep { font-size: 14px; font-weight: 600; }
-</style></head><body><p class="prep">Preparing waybill for printer…</p></body></html>`);
-      printWindow.document.close();
-
-      // Off-screen clone at ~203 DPI for 100×150mm
-      const PX_W = 812;
-      const PX_H = 1218;
-      host = document.createElement('div');
-      host.style.cssText = `position:fixed;left:-10000px;top:0;width:${PX_W}px;height:${PX_H}px;background:#fff;overflow:hidden;z-index:-1;`;
-      const clone = node.cloneNode(true);
-      clone.querySelectorAll('.wb-qr-preview').forEach((el) => el.remove());
-      clone.querySelectorAll('.wb-qr-print').forEach((el) => {
-        el.style.display = 'flex';
-        el.removeAttribute('aria-hidden');
-      });
-      clone.querySelectorAll('.wb-track-url').forEach((el) => { el.style.display = 'none'; });
-      clone.style.width = `${PX_W}px`;
-      clone.style.height = `${PX_H}px`;
-      clone.style.maxHeight = 'none';
-      clone.style.aspectRatio = 'auto';
-      clone.style.margin = '0';
-      clone.style.borderRadius = '0';
-      clone.style.boxShadow = 'none';
-      clone.style.border = 'none';
-      clone.style.padding = '18px 20px';
-      clone.style.boxSizing = 'border-box';
-      clone.style.background = '#ffffff';
-      clone.style.color = '#111111';
-      host.appendChild(clone);
-      document.body.appendChild(host);
-
       await replaceSvgsWithPng(clone);
-
       const canvas = await html2canvas(clone, {
         scale: 1,
         width: PX_W,
@@ -149,37 +129,108 @@ const WaybillModal = ({ order, onClose }) => {
         logging: false,
         imageTimeout: 8000,
       });
+      return canvas.toDataURL('image/jpeg', 0.92);
+    } finally {
+      if (host.parentNode) host.parentNode.removeChild(host);
+    }
+  };
 
-      const imgData = canvas.toDataURL('image/jpeg', 0.92);
+  /**
+   * Direct system Print dialog only — never downloads a PDF.
+   * Desktop: pick Y41BT / SENDO printer.
+   * Phone: pick Bluetooth printer or FlashLabel print service after pairing in FlashLabel.
+   */
+  const handlePrint = async () => {
+    if (printing) return;
+    setPrinting(true);
+    let iframe = null;
+    try {
+      const imgData = await buildWaybillImage();
 
-      // Same flow as before: print dialog → choose waybill printer. No PDF download.
-      printWindow.document.open();
-      printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
+      // Hidden iframe print — opens the native Print dialog (2nd image), no Save-as-PDF file
+      iframe = document.createElement('iframe');
+      iframe.setAttribute('title', `Waybill ${shortId}`);
+      iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;pointer-events:none;';
+      document.body.appendChild(iframe);
+
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (!doc) throw new Error('Could not create print frame');
+
+      doc.open();
+      doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <title>Waybill — ${shortId} | DKMerch</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   @page { size: 100mm 150mm; margin: 0; }
-  html, body { width: 100mm; height: 150mm; margin: 0; padding: 0; background: #fff; overflow: hidden; }
+  html, body { width: 100mm; height: 150mm; margin: 0; padding: 0; background: #fff; }
   img { width: 100mm; height: 150mm; display: block; }
 </style></head><body>
 <img id="wb" src="${imgData}" alt="Waybill ${shortId}" width="812" height="1218" />
-<script>
-  function goPrint() {
-    setTimeout(function () {
-      try { window.focus(); window.print(); } catch (e) {}
-    }, 200);
-  }
-  var img = document.getElementById('wb');
-  if (img.complete) goPrint();
-  else img.onload = goPrint;
-<\/script>
 </body></html>`);
-      printWindow.document.close();
+      doc.close();
+
+      await new Promise((resolve, reject) => {
+        const img = doc.getElementById('wb');
+        if (!img) {
+          reject(new Error('Print image missing'));
+          return;
+        }
+        const done = () => resolve();
+        if (img.complete) done();
+        else {
+          img.onload = done;
+          img.onerror = () => reject(new Error('Print image failed to load'));
+        }
+      });
+
+      // Small delay so the browser lays out the 100×150mm page before print UI
+      await new Promise((r) => setTimeout(r, 180));
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
     } catch (err) {
       console.error('Waybill print failed:', err);
-      alert('Failed to prepare waybill for printing. Please try again.');
+      alert('Failed to open the print dialog. Please allow printing for this site and try again.');
     } finally {
-      if (host?.parentNode) host.parentNode.removeChild(host);
+      // Keep iframe briefly so the print spooler can read it, then remove
+      setTimeout(() => {
+        if (iframe?.parentNode) iframe.parentNode.removeChild(iframe);
+      }, 60_000);
+      setPrinting(false);
+    }
+  };
+
+  /** Phone / FlashLabel: share the waybill image so FlashLabel (Bluetooth) can print it. */
+  const handleShareForFlashLabel = async () => {
+    if (printing) return;
+    setPrinting(true);
+    try {
+      const imgData = await buildWaybillImage();
+      const res = await fetch(imgData);
+      const blob = await res.blob();
+      const file = new File([blob], `DKMerch-Waybill-${shortId}.jpg`, { type: 'image/jpeg' });
+
+      if (navigator.share && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: `Waybill #${shortId}`,
+          text: 'Open in FlashLabel (or your label app) to print via Bluetooth.',
+        });
+        return;
+      }
+
+      // Fallback: open image in a tab — user can share/print from there (still no PDF)
+      const url = URL.createObjectURL(blob);
+      const w = window.open(url, '_blank');
+      if (!w) {
+        alert('Share is not supported here. Use Print and choose your FlashLabel / Bluetooth printer.');
+      } else {
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      }
+    } catch (err) {
+      if (err?.name === 'AbortError') return;
+      console.error(err);
+      alert('Could not share the waybill image. Use Print and pick FlashLabel / Bluetooth printer.');
+    } finally {
       setPrinting(false);
     }
   };
@@ -190,9 +241,14 @@ const WaybillModal = ({ order, onClose }) => {
         <div className="waybill-toolbar">
           <div>
             <div className="waybill-toolbar-title"><i className="fas fa-print"></i> Print Waybill — #{shortId}</div>
-            <div className="waybill-size-hint">Print size: <strong>100 × 150 mm (4 × 6″)</strong> shipping label · choose SENDO / Y418T paper</div>
+            <div className="waybill-size-hint">
+              Size: <strong>100 × 150 mm</strong> · PC: Print → Y41BT/SENDO · Phone: pair printer in <strong>FlashLabel</strong>, then Print or Share
+            </div>
           </div>
           <div className="waybill-toolbar-actions">
+            <button type="button" className="waybill-share-btn" onClick={handleShareForFlashLabel} disabled={printing} title="Share image to FlashLabel / Bluetooth apps">
+              <i className="fas fa-share-alt"></i> Share
+            </button>
             <button className="waybill-print-btn" onClick={handlePrint} disabled={printing}>
               {printing
                 ? <><i className="fas fa-spinner fa-spin"></i> Preparing…</>
