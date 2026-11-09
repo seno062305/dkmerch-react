@@ -6,8 +6,8 @@ import { useNavigate } from "react-router-dom";
 import { useMutation, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { hasLocalPin, savePinWithFallback, verifyPinWithFallback, clearLocalPin } from "../lib/localPin";
-
-const RegisterModal = React.lazy(() => import("./RegisterModal"));
+// Static import — lazy chunk breaks Create Account after HMR / stale builds
+import RegisterModal from "./RegisterModal";
 
 // ── Rate limit helpers (per-browser via sessionStorage) ──────────────────────
 const RL_KEY_ATTEMPTS = "dkmerch_login_attempts";
@@ -794,11 +794,7 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
   };
 
   if (showRegister) {
-    return (
-      <React.Suspense fallback={null}>
-        <RegisterModal onClose={handleRegisterSuccess} />
-      </React.Suspense>
-    );
+    return <RegisterModal onClose={handleRegisterSuccess} />;
   }
 
   const isLockedOut = loginCooldown > 0;

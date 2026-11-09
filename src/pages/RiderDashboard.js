@@ -1032,8 +1032,8 @@ const RiderDashboard = () => {
     const itemCount = targetOrder?.items?.length || 0;
     const acceptOk = await confirm({
       title: 'Accept this order?',
-      message: `Waybill matched order #${shortId}${itemCount ? ` (${itemCount} item${itemCount === 1 ? '' : 's'})` : ''}.\n\nAccept this order into Deliver? You will be responsible for this delivery.`,
-      confirmLabel: 'Accept Order',
+      message: `Waybill matched order #${shortId}${itemCount ? ` (${itemCount} item${itemCount === 1 ? '' : 's'})` : ''}.\n\nAccepting moves it to Deliver as Out for Delivery. You will be responsible for this delivery.`,
+      confirmLabel: 'Accept & Deliver',
       cancelLabel: 'Not yet',
       variant: 'primary',
       icon: 'fa-motorcycle',
@@ -1064,12 +1064,14 @@ const RiderDashboard = () => {
           message: result?.message || 'Failed to accept order. Try again.',
         };
       }
+      const deliveredOrderId = result.orderId || scanTargetOrderId;
       setShowWaybillScanner(false);
       setScanTargetOrderId(null);
       setTab('deliver');
+      startTracking(deliveredOrderId);
       alert(result.alreadyClaimed
-        ? '✅ This order is already in Deliver.'
-        : '✅ Waybill matched! Order accepted and moved to Deliver.');
+        ? '✅ This order is already Out for Delivery in Deliver.'
+        : '✅ Waybill matched! Order is Out for Delivery — opened in Deliver.');
       return { ok: true };
     } catch (err) {
       console.error(err);

@@ -133,7 +133,7 @@ export const markOrderFromScan = mutation({
   },
 });
 
-/** Accept an available/scanned order → Deliver tab (no admin approval). */
+/** Accept via waybill scan → Deliver as Out for Delivery (no extra Start Delivery step). */
 export const acceptOrder = mutation({
   args: {
     orderId: v.string(),
@@ -151,10 +151,21 @@ export const acceptOrder = mutation({
     }
 
     const status = (order.orderStatus || order.status || "").toLowerCase();
-    if (["completed", "delivered", "cancelled", "out_for_delivery"].includes(status)) {
+    if (["completed", "delivered", "cancelled"].includes(status)) {
       return { success: false, message: `Order is already ${status.replace(/_/g, " ")}.` };
     }
-    if (status !== "confirmed" && status !== "shipped") {
+    if (status === "out_for_delivery") {
+      const existingOfd = (await db.query("pickupRequests").collect()).find(
+        (p: any) =>
+          p.orderId === order.orderId &&
+          p.riderEmail === args.riderEmail &&
+          p.status === "out_for_delivery"
+      );
+      if (existingOfd) {
+        return { success: true, alreadyClaimed: true, id: existingOfd._id, orderId: order.orderId };
+      }
+    }
+    if (status !== "confirmed" && status !== "shipped" && status !== "out_for_delivery") {
       return { success: false, message: "Only confirmed orders can be accepted." };
     }
 
@@ -163,14 +174,42 @@ export const acceptOrder = mutation({
     const claimed = forOrder.find((p: any) =>
       ["approved", "out_for_delivery", "completed"].includes(p.status)
     );
+
+    const now = new Date().toISOString();
+    const riderInfo = {
+      name: args.riderName,
+      phone: args.riderPhone || "",
+      vehicle: args.riderVehicle || "motorcycle",
+      plate: args.riderPlate || "",
+      email: args.riderEmail,
+    };
+
+    const markOutForDelivery = async (pickupId: any) => {
+      await db.patch(pickupId, {
+        status: "out_for_delivery",
+        approvedAt: now,
+        customerName: order.customerName || "",
+        total: order.finalTotal ?? order.total ?? 0,
+      });
+      await db.patch(order._id, {
+        riderId: args.riderId,
+        riderInfo,
+        orderStatus: "out_for_delivery",
+        status: "Out for Delivery",
+        outForDeliveryAt: now,
+      });
+    };
+
     if (claimed) {
       if (claimed.riderEmail === args.riderEmail) {
+        if (claimed.status !== "out_for_delivery") {
+          await markOutForDelivery(claimed._id);
+        }
         return { success: true, alreadyClaimed: true, id: claimed._id, orderId: order.orderId };
       }
       return { success: false, message: "Another rider already accepted this order." };
     }
 
-    const now = new Date().toISOString();
     const mine = forOrder.find(
       (p: any) =>
         p.riderEmail === args.riderEmail &&
@@ -186,22 +225,8 @@ export const acceptOrder = mutation({
       }
     }
 
-    const riderInfo = {
-      name: args.riderName,
-      phone: args.riderPhone || "",
-      vehicle: args.riderVehicle || "motorcycle",
-      plate: args.riderPlate || "",
-      email: args.riderEmail,
-    };
-
     if (mine) {
-      await db.patch(mine._id, {
-        status: "approved",
-        approvedAt: now,
-        customerName: order.customerName || mine.customerName,
-        total: order.finalTotal ?? order.total ?? mine.total,
-      });
-      await db.patch(order._id, { riderId: args.riderId, riderInfo });
+      await markOutForDelivery(mine._id);
       return { success: true, id: mine._id, orderId: order.orderId, fromScan: !!mine.fromScan };
     }
 
@@ -216,13 +241,20 @@ export const acceptOrder = mutation({
       customerName: order.customerName || "",
       total: order.finalTotal ?? order.total ?? 0,
       requestedAt: now,
-      status: "approved",
+      status: "out_for_delivery",
       approvedAt: now,
-      fromScan: false,
+      fromScan: true,
+      scannedAt: now,
     });
 
-    await db.patch(order._id, { riderId: args.riderId, riderInfo });
-    return { success: true, id, orderId: order.orderId, fromScan: false };
+    await db.patch(order._id, {
+      riderId: args.riderId,
+      riderInfo,
+      orderStatus: "out_for_delivery",
+      status: "Out for Delivery",
+      outForDeliveryAt: now,
+    });
+    return { success: true, id, orderId: order.orderId, fromScan: true };
   },
 });
 
