@@ -529,11 +529,24 @@ body.product-modal-open .dk-chat-fab-stack {
 .stars-input i.active { color: #f5a623; }
 
 .review-input label { display: block; font-size: 13px; font-weight: 600; color: #555; margin-bottom: 6px; }
-.review-input textarea {
-  width: 100%; padding: 10px 12px;
-  border: 1.5px solid #e0e0e0; border-radius: 8px;
-  font-size: 13px; resize: vertical; outline: none;
-  box-sizing: border-box; font-family: inherit; transition: border-color 0.2s;
+.review-input textarea,
+.review-input textarea.review-comment-box {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1.5px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 13px;
+  resize: none !important;
+  outline: none;
+  box-sizing: border-box;
+  font-family: inherit;
+  transition: border-color 0.2s;
+  min-height: 72px;
+  max-height: 180px;
+  height: 72px;
+  overflow-y: auto;
+  line-height: 1.45;
+  field-sizing: fixed;
 }
 .review-input textarea:focus { border-color: var(--primary-color, #fc1268); }
 

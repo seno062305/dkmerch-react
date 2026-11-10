@@ -40,25 +40,19 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
     productId ? { productId: String(productId) } : 'skip'
   );
 
-  const userOrders = useQuery(
-    api.orders.getOrdersByEmail,
-    isAuthenticated && user?.email ? { email: user.email } : 'skip'
+  const reviewGate = useQuery(
+    api.reviews.getReviewEligibility,
+    isAuthenticated && user?.email && productId
+      ? { productId: String(productId), userEmail: user.email }
+      : 'skip'
   );
 
-  const hasPurchased = (() => {
-    if (!isAuthenticated || !user?.email || !productId) return false;
-    if (userOrders === undefined) return undefined;
-    const pid = String(productId);
-    return userOrders.some((order) => {
-      const status = String(order.orderStatus || order.status || '').toLowerCase();
-      if (!status || status.includes('cancel')) return false;
-      if (status !== 'completed' && status !== 'delivered') return false;
-      return (order.items || []).some((item) => {
-        const itemId = String(item.id || item.productId || '');
-        return itemId === pid;
-      });
-    });
-  })();
+  const hasPurchased =
+    reviewGate === undefined
+      ? undefined
+      : !!(reviewGate?.canReview || reviewGate?.hasReviewed);
+
+  const canLeaveReview = reviewGate?.canReview === true;
 
   const submitReviewMutation = useMutation(api.reviews.submitReview);
   const deleteReviewMutation = useMutation(api.reviews.deleteReview);
@@ -140,8 +134,11 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
       setShowLoginModal(true);
       return;
     }
-    if (!hasPurchased) {
-      showNotification('You can only review products you have purchased.', 'error');
+    if (!canLeaveReview) {
+      showNotification(
+        reviewGate?.reason || 'You can only review this item once per order.',
+        'error'
+      );
       return;
     }
     if (rating === 0) { showNotification('Please select a rating', 'error'); return; }
@@ -498,22 +495,27 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
 
               {/* Review Form only — list is on the left */}
               <div className="review-section">
-                <h3><i className="fas fa-star"></i> {hasUserReviewed ? 'Update Review' : 'Rate & Review'}</h3>
+                <h3><i className="fas fa-star"></i> {canLeaveReview && hasUserReviewed ? 'Review again' : 'Rate & Review'}</h3>
 
                 {!isAuthenticated ? (
                   <div className="login-to-review">
                     <i className="fas fa-lock"></i>
                     <p>Please login to leave a review</p>
                   </div>
-                ) : hasPurchased === false ? (
-                  <div className="login-to-review">
-                    <i className="fas fa-shopping-bag"></i>
-                    <p>Only customers who bought this item can leave a review</p>
-                  </div>
-                ) : hasPurchased === undefined ? (
+                ) : reviewGate === undefined ? (
                   <div className="login-to-review">
                     <i className="fas fa-spinner fa-spin"></i>
                     <p>Checking purchase history...</p>
+                  </div>
+                ) : !canLeaveReview ? (
+                  <div className="login-to-review">
+                    <i className="fas fa-info-circle"></i>
+                    <p>
+                      {reviewGate?.reason ||
+                        (hasPurchased
+                          ? 'You already reviewed this item. Order again to leave another review.'
+                          : 'Only customers who received this item can leave a review')}
+                    </p>
                   </div>
                 ) : (
                   <>
@@ -533,11 +535,20 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
                     <div className="review-input">
                       <label>Your Review: ({review.length}/250)</label>
                       <textarea
+                        className="review-comment-box"
                         value={review}
-                        onChange={(e) => { if (e.target.value.length <= 250) setReview(e.target.value); }}
+                        rows={3}
+                        maxLength={250}
                         placeholder="Share your thoughts about this product..."
-                        rows="4"
-                        maxLength="250"
+                        onChange={(e) => {
+                          if (e.target.value.length > 250) return;
+                          setReview(e.target.value);
+                          const el = e.target;
+                          el.style.height = '72px';
+                          if (el.scrollHeight > 72) {
+                            el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
+                          }
+                        }}
                       />
                     </div>
                     <button
@@ -546,7 +557,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
                       disabled={rating === 0 || review.trim() === ''}
                     >
                       <i className="fas fa-paper-plane"></i>{' '}
-                      {hasUserReviewed ? 'Update Review' : 'Submit Review'}
+                      {hasUserReviewed ? 'Submit new review' : 'Submit Review'}
                     </button>
                   </>
                 )}

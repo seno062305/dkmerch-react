@@ -186,6 +186,13 @@ async function onOrderConfirmed(
       itemCount,
       shippingAddress: shippingAddr,
     });
+    // Phone push (installed PWA) — fire on every confirm
+    await scheduler.runAfter(0, internal.webPush.sendToEmail, {
+      email: order.email,
+      title: "Order confirmed ✅",
+      body: `Hi ${customerName}! Your order #${orderId.slice(-8).toUpperCase()} was confirmed.`,
+      url: `/track-order?order=${encodeURIComponent(orderId)}`,
+    });
   }
 
   // Outside NCR → LBC Express only — do not notify motorcycle riders

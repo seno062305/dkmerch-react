@@ -12,6 +12,7 @@ import { api } from '../../convex/_generated/api';
 import { runWithFailover } from '../lib/failoverWrite';
 import { failoverCheckoutAssist, isFailoverPayConfigured } from '../lib/failoverPayEmail';
 import { isWithinNCR, LBC_FLAT_SHIPPING_FEE } from '../utils/deliveryUtils';
+import { isAppOutdated } from '../utils/appUpdate';
 import './Checkout.css';
 
 // ─── LALAMOVE SHIPPING CONFIG ─────────────────────────────────────────────────
@@ -561,6 +562,7 @@ const Checkout = () => {
   const saveProfileMut           = useMutation(api.users.saveProfile);
   const sendPaymentReceivedEmail = useAction(api.sendEmail.sendPaymentReceivedEmail);
   const createPaymentLink        = useAction(api.payments.createPaymentLink);
+  const latestAppUpdate          = useQuery(api.appUpdates.getLatestUpdate);
   const markTicketCheckedOutMut  = useMutation(api.rewards.markTicketCheckedOut);
   const saveProfile = (args) =>
     runWithFailover(saveProfileMut, args, {
@@ -846,6 +848,19 @@ const Checkout = () => {
       showNotification('Please fill in and save all required fields', 'error');
       if (!isContactComplete()) setIsEditingContact(true);
       if (!isAddressComplete()) setIsEditingAddress(true);
+      return;
+    }
+    // Require latest app version before payment
+    if (latestAppUpdate?.isActive && latestAppUpdate.version && isAppOutdated(latestAppUpdate.version)) {
+      showNotification('Please update the app before payment.', 'warning');
+      navigate(
+        {
+          pathname: '/checkout',
+          search: `?appUpdate=${encodeURIComponent(latestAppUpdate.version)}`,
+        },
+        { replace: true }
+      );
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
     if (!rewardOrder && products.length === 0) {

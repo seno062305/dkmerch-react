@@ -192,14 +192,21 @@ function AppContent() {
     return () => window.removeEventListener('openLoginModal', handleOpenLogin);
   }, []);
 
-  // Quietly refresh existing push subscription for logged-in customers (no prompt if already denied)
+  // Keep / request push subscription for logged-in customers (needed for phone order alerts)
   useEffect(() => {
     if (!isAuthenticated || !user?.email || role === 'admin' || role === 'rider') return;
     if (!isPushSupported()) return;
-    if (getNotificationPermission() !== 'granted') return;
+    const permission = getNotificationPermission();
+    if (permission === 'denied') return;
     let cancelled = false;
     (async () => {
       try {
+        // Ask once per browser session if not yet granted
+        if (permission !== 'granted') {
+          const asked = sessionStorage.getItem('dkmerch_push_asked') === '1';
+          if (asked) return;
+          sessionStorage.setItem('dkmerch_push_asked', '1');
+        }
         const sub = await subscribeToPush();
         if (cancelled || !sub?.endpoint || !sub?.keys) return;
         await savePushSub({
@@ -216,6 +223,7 @@ function AppContent() {
 
   const handleLoginSuccess = (loginRole) => {
     setShowLoginModal(false);
+    try { sessionStorage.removeItem('dkmerch_push_asked'); } catch { /* ignore */ }
     try { sessionStorage.removeItem('dk_login_customers_only'); } catch { /* ignore */ }
     const redirect = sessionStorage.getItem('redirectAfterLogin');
     if (redirect) {
