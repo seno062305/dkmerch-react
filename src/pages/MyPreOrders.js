@@ -6,6 +6,7 @@ import { useNotification } from '../context/NotificationContext';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useAddToCart } from '../context/cartUtils';
+import { useConfirm, addToCartConfirmRememberKey } from '../context/ConfirmContext';
 import LoginModal from '../components/LoginModal';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -27,6 +28,7 @@ const fmtDate = (dateStr) => {
 const MyPreOrders = () => {
   const { isAuthenticated, user } = useAuth();
   const { showNotification } = useNotification();
+  const { confirm } = useConfirm();
   const addToCart = useAddToCart();
   const [loadingId, setLoadingId] = useState(null);
   const [removingId, setRemovingId] = useState(null);
@@ -125,6 +127,17 @@ const MyPreOrders = () => {
   const addedCount     = myPreOrders.filter((r) => r.addedToCart).length;
 
   const handleAddToCart = async (req) => {
+    const ok = await confirm({
+      title: 'Add to cart?',
+      message: `Add "${req.productName}" to cart?\n\nPrice: ₱${Number(req.productPrice || 0).toLocaleString('en-PH')}`,
+      confirmLabel: 'Add to Cart',
+      variant: 'primary',
+      icon: 'fa-shopping-cart',
+      rememberKey: addToCartConfirmRememberKey(user?.email),
+      rememberLabel: 'Do not show again for my account',
+    });
+    if (!ok) return;
+
     setLoadingId(req._id);
     try {
       const cartItem = {

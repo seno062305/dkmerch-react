@@ -3,6 +3,13 @@ import ConfirmModal from '../components/ConfirmModal';
 
 const ConfirmContext = createContext(null);
 
+/** Per-account skip key so first-time add-to-cart still confirms until that user opts out. */
+export function addToCartConfirmRememberKey(email) {
+  const normalized = String(email || '').trim().toLowerCase();
+  if (!normalized) return null;
+  return `dk_skip_add_to_cart_confirm:${normalized}`;
+}
+
 export const ConfirmProvider = ({ children }) => {
   const [state, setState] = useState(null);
   const resolverRef = useRef(null);
@@ -29,7 +36,15 @@ export const ConfirmProvider = ({ children }) => {
     const opts = typeof options === 'string' ? { message: options } : options;
     const rememberKey = opts.rememberKey || null;
 
-    if (rememberKey) {
+    // Only skip when this exact account opted out via "Do not show again".
+    // Ignore/clear legacy device-wide key that skipped confirm for every item.
+    try {
+      if (localStorage.getItem('dk_skip_add_to_cart_confirm') === '1') {
+        localStorage.removeItem('dk_skip_add_to_cart_confirm');
+      }
+    } catch { /* ignore */ }
+
+    if (rememberKey && rememberKey.includes(':')) {
       try {
         if (localStorage.getItem(rememberKey) === '1') {
           return Promise.resolve(true);

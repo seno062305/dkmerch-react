@@ -173,6 +173,8 @@ export default defineSchema({
     cancelledAt: v.optional(v.string()),
     /** 'customer' | 'admin' */
     cancelledBy: v.optional(v.string()),
+    /** Admin screenshot proof that refund money was sent (GCash/Maya/PayMongo) */
+    cancelRefundProofId: v.optional(v.string()),
     refundStatus:          v.optional(v.string()),
     refundReason:          v.optional(v.string()),
     refundComment:         v.optional(v.string()),

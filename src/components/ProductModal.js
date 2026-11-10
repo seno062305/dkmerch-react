@@ -3,7 +3,7 @@ import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
-import { useConfirm } from '../context/ConfirmContext';
+import { useConfirm, addToCartConfirmRememberKey } from '../context/ConfirmContext';
 import { useNavigate } from 'react-router-dom';
 import LoginModal from './LoginModal';
 import PromoCodeInput from './PromoCodeInput';
@@ -193,14 +193,15 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
     const priceDisplay = appliedPromo
       ? `₱${discountedPrice.toLocaleString()} (${appliedPromo.discount}% off)`
       : `₱${product.price.toLocaleString()}`;
+    const rememberKey = addToCartConfirmRememberKey(user?.email);
     const ok = await confirm({
       title: 'Add to cart?',
       message: `Add "${product.name}" to cart?\n\nPrice: ${priceDisplay}`,
       confirmLabel: 'Add to Cart',
       variant: 'primary',
       icon: 'fa-shopping-cart',
-      rememberKey: 'dk_skip_add_to_cart_confirm',
-      rememberLabel: 'Do not show again',
+      rememberKey,
+      rememberLabel: 'Do not show again for my account',
     });
     if (!ok) return;
     onAddToCart({ ...product, appliedPromo, finalPrice: discountedPrice });

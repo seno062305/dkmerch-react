@@ -4,11 +4,13 @@ import './WishlistPage.css';
 import { useWishlist, useRemoveFromWishlist } from '../context/wishlistUtils';
 import { useAddToCart } from '../context/cartUtils';
 import { useNotification } from '../context/NotificationContext';
-import { useConfirm } from '../context/ConfirmContext';
+import { useConfirm, addToCartConfirmRememberKey } from '../context/ConfirmContext';
+import { useAuth } from '../context/AuthContext';
 const MAX_WISHLIST = 10;
 
 const WishlistPage = ({ onProductClick }) => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { showNotification } = useNotification();
   const { confirm } = useConfirm();
   const [lightboxImg, setLightboxImg] = useState(null);
@@ -57,8 +59,8 @@ const WishlistPage = ({ onProductClick }) => {
       confirmLabel: 'Add to Cart',
       variant: 'primary',
       icon: 'fa-shopping-cart',
-      rememberKey: 'dk_skip_add_to_cart_confirm',
-      rememberLabel: 'Do not show again',
+      rememberKey: addToCartConfirmRememberKey(user?.email),
+      rememberLabel: 'Do not show again for my account',
     });
     if (!ok) return;
     addToCart({

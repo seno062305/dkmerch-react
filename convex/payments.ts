@@ -242,8 +242,9 @@ export const approveCustomerCancel = action({
   args: {
     orderId: v.string(),
     adminNote: v.optional(v.string()),
+    proofPhotoId: v.optional(v.string()),
   },
-  handler: async (ctx, { orderId, adminNote }) => {
+  handler: async (ctx, { orderId, adminNote, proofPhotoId }) => {
     const order = await ctx.runQuery(api.orders.getOrderById, { orderId });
     if (!order) return { success: false, error: "Order not found." };
 
@@ -260,6 +261,13 @@ export const approveCustomerCancel = action({
     const amount = Number(order.finalTotal ?? order.total ?? 0);
     let refunded = false;
     let refundId = "";
+
+    if (wasPaid && !proofPhotoId) {
+      return {
+        success: false,
+        error: "Upload a screenshot proof that the refund was sent before approving.",
+      };
+    }
 
     if (wasPaid && amount > 0) {
       const secretKey = process.env.PAYMONGO_SECRET_KEY;
@@ -344,6 +352,7 @@ export const approveCustomerCancel = action({
       refundId: refundId || undefined,
       refundAmount: wasPaid ? amount : 0,
       adminNote: adminNote || undefined,
+      proofPhotoId: proofPhotoId || undefined,
     });
 
     if (!result?.success) {

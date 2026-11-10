@@ -62,6 +62,15 @@ const getRefundWindow = (order) => {
   return { canRefund: true, hoursLeft: Math.floor(msLeft / (1000 * 60 * 60)), minsLeft: Math.floor((msLeft % (1000 * 60 * 60)) / (1000 * 60)), expired: false };
 };
 
+const CANCEL_REASON_OPTIONS = [
+  { id: 'mistake', label: 'Ordered by mistake' },
+  { id: 'changed_mind', label: 'Changed my mind' },
+  { id: 'wrong_item', label: 'Wrong item / wrong variant' },
+  { id: 'found_cheaper', label: 'Found a better option elsewhere' },
+  { id: 'payment_issue', label: 'Payment / checkout issue' },
+  { id: 'others', label: 'Others' },
+];
+
 // ─── CANCEL ORDER MODAL (before admin confirms — request for review) ─────────
 const CancelOrderModal = ({ order, userEmail, onClose, onSuccess }) => {
   const requestCustomerCancel = useMutation(api.orders.requestCustomerCancel);
@@ -70,7 +79,8 @@ const CancelOrderModal = ({ order, userEmail, onClose, onSuccess }) => {
   const pmRaw = String(order.paymentMethod || '').toLowerCase();
   const defaultMethod = pmRaw.includes('maya') ? 'maya' : pmRaw.includes('gcash') ? 'gcash' : '';
 
-  const [reason, setReason] = useState('');
+  const [reasonId, setReasonId] = useState('');
+  const [otherNote, setOtherNote] = useState('');
   const [phone, setPhone] = useState(String(order.phone || '').replace(/\D/g, '').slice(0, 11));
   const [refundMethod, setRefundMethod] = useState(defaultMethod);
   const [submitting, setSubmitting] = useState(false);
@@ -82,10 +92,18 @@ const CancelOrderModal = ({ order, userEmail, onClose, onSuccess }) => {
   }, []);
 
   const handleSubmit = async () => {
-    const note = reason.trim();
-    if (note.length < 5) {
-      setError('Please explain why you want to cancel (min 5 characters).');
+    if (!reasonId) {
+      setError('Please select a reason for cancelling.');
       return;
+    }
+    let note = CANCEL_REASON_OPTIONS.find((o) => o.id === reasonId)?.label || '';
+    if (reasonId === 'others') {
+      const custom = otherNote.trim();
+      if (custom.length < 5) {
+        setError('Please type your reason (min 5 characters).');
+        return;
+      }
+      note = custom;
     }
     if (paid) {
       if (!refundMethod) { setError('Please select GCash or Maya (how you paid).'); return; }
@@ -141,16 +159,37 @@ const CancelOrderModal = ({ order, userEmail, onClose, onSuccess }) => {
 
           <div className="refund-field-group">
             <label className="refund-modal-label">
-              <i className="fas fa-comment-alt"></i> Why are you cancelling? <span className="refund-required">*</span>
+              <i className="fas fa-comment-alt"></i> Why do you need to cancel? <span className="refund-required">*</span>
             </label>
-            <textarea
-              className="refund-input"
-              rows={3}
-              placeholder="e.g. Ordered by mistake, changed mind, wrong item…"
-              value={reason}
-              maxLength={400}
-              onChange={(e) => { setReason(e.target.value); setError(''); }}
-            />
+            <div className="cancel-reason-options" role="listbox" aria-label="Cancel reasons">
+              {CANCEL_REASON_OPTIONS.map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  role="option"
+                  aria-selected={reasonId === opt.id}
+                  className={`cancel-reason-option ${reasonId === opt.id ? 'selected' : ''}`}
+                  onClick={() => {
+                    setReasonId(opt.id);
+                    setError('');
+                    if (opt.id !== 'others') setOtherNote('');
+                  }}
+                >
+                  {opt.label}
+                  {reasonId === opt.id && <i className="fas fa-check-circle" aria-hidden="true" />}
+                </button>
+              ))}
+            </div>
+            {reasonId === 'others' && (
+              <textarea
+                className="refund-input cancel-reason-other"
+                rows={3}
+                placeholder="Type your reason here…"
+                value={otherNote}
+                maxLength={400}
+                onChange={(e) => { setOtherNote(e.target.value); setError(''); }}
+              />
+            )}
           </div>
 
           {paid && (

@@ -796,6 +796,7 @@ export const applyCustomerCancel = mutation({
     refundId: v.optional(v.string()),
     refundAmount: v.optional(v.number()),
     adminNote: v.optional(v.string()),
+    proofPhotoId: v.optional(v.string()),
   },
   handler: async ({ db, scheduler }, args) => {
     const order = await db
@@ -812,6 +813,13 @@ export const applyCustomerCancel = mutation({
     const amount = Number(args.refundAmount ?? order.finalTotal ?? order.total ?? 0);
     const reason = order.cancelRequestReason || "Cancelled by customer (admin approved)";
 
+    if (wasPaid && !args.proofPhotoId) {
+      return {
+        success: false,
+        error: "Upload a screenshot proof that the refund was sent before approving.",
+      };
+    }
+
     const existingHistory = (order as any).refundHistory || [];
     const patch: any = {
       status: "Cancelled",
@@ -823,6 +831,7 @@ export const applyCustomerCancel = mutation({
       cancelRequestNote: args.adminNote || "Approved by admin",
       cancelResolvedAt: now,
     };
+    if (args.proofPhotoId) patch.cancelRefundProofId = args.proofPhotoId;
 
     if (wasPaid) {
       patch.refundStatus = "approved";
@@ -850,6 +859,7 @@ export const applyCustomerCancel = mutation({
           phone: order.cancelRequestPhone || "",
           refundMethod: order.cancelRequestMethod || "",
           adminNote: args.adminNote || "",
+          proofPhotoId: args.proofPhotoId || "",
         },
       ];
     }
