@@ -10,6 +10,8 @@ import {
   markExplicitLogout,
   clearExplicitLogoutFlag,
 } from "../lib/deviceUnlock";
+import { collectLoginDeviceInfo } from "../utils/deviceInfo";
+import NewLoginAlertModal from "../components/NewLoginAlertModal";
 
 const AuthContext = createContext(null);
 const AUTH_USER_KEY = "authUser";
@@ -90,13 +92,19 @@ export const AuthProvider = ({ children }) => {
   const [isReady, setIsReady]                 = useState(false);
   // Cold start (app closed then opened): prompt PIN unlock, not full login
   const [needsDeviceUnlock, setNeedsDeviceUnlock] = useState(false);
+  /** FB-style alert when another device signs into this account */
+  const [securityAlert, setSecurityAlert] = useState(null);
 
   const loginUserMutation  = useMutation(api.users.loginUser);
   const seedAdminMutation  = useMutation(api.users.seedAdmin);
   const loginRiderMutation = useMutation(api.riders.loginRider);
   const createUserMutation = useMutation(api.users.createUser);
   const startUserSession   = useMutation(api.users.startUserSession);
+  const confirmLoginAlert  = useMutation(api.users.confirmLoginAlert);
+  const denyLoginAlert     = useMutation(api.users.denyLoginAlert);
   const kickedRef = useRef(false);
+  const userRef = useRef(null);
+  userRef.current = user;
 
   const safeLog = (payload) => {
     try { appendActivityLog(payload); } catch {}
@@ -208,30 +216,98 @@ export const AuthProvider = ({ children }) => {
     setNeedsDeviceUnlock(false);
   };
 
-  // Another device logged into this account → force logout here
+  // Another device logged in → show FB-style Yes / No alert (don't silent-kick)
   useEffect(() => {
     if (!sessionCheck || sessionCheck.valid !== false) return;
     if (sessionCheck.reason !== "new_device_logged_in") return;
     if (kickedRef.current) return;
     kickedRef.current = true;
+
+    const current = userRef.current;
+    const alert = sessionCheck.loginAlert || {
+      sessionId: "unknown",
+      previousSessionId: current?.sessionId,
+      deviceName: sessionCheck.activeDeviceName || "Another device",
+      location: sessionCheck.activeDeviceLocation || "Unknown location",
+      at: sessionCheck.activeDeviceAt || Date.now(),
+    };
+
+    setSecurityAlert({
+      alert,
+      previousUser: current,
+    });
+
+    // Soft-lock browsing until they choose Yes / No
+    clearSessionAlive();
+    setIsAuthenticated(false);
+    setNeedsDeviceUnlock(false);
+    setUser(null);
+    setRole(null);
+  }, [sessionCheck]);
+
+  const finishSecurityLogout = () => {
     clearAuthUser();
     clearSessionAlive();
     try { localStorage.removeItem(LAST_ACTIVE_KEY); } catch { /* ignore */ }
     markExplicitLogout();
+    clearDeviceUnlock();
     try { sessionStorage.removeItem("dkmerch_push_asked"); } catch { /* ignore */ }
     setUser(null);
     setRole(null);
     setIsAuthenticated(false);
     setNeedsDeviceUnlock(false);
+    setSecurityAlert(null);
+    kickedRef.current = false;
     try {
-      window.alert("Signed out — this account was opened on another device.");
-    } catch { /* ignore */ }
-    try {
-      if (window.location.pathname.startsWith("/admin") || window.location.pathname.startsWith("/settings")) {
+      if (
+        window.location.pathname.startsWith("/admin")
+        || window.location.pathname.startsWith("/settings")
+      ) {
         window.location.assign("/");
       }
     } catch { /* ignore */ }
-  }, [sessionCheck]);
+  };
+
+  const handleSecurityYes = async () => {
+    const alert = securityAlert?.alert;
+    const prev = securityAlert?.previousUser;
+    try {
+      if (prev?._id && alert?.sessionId && alert.sessionId !== "unknown") {
+        await confirmLoginAlert({
+          userId: String(prev._id),
+          sessionId: String(alert.sessionId),
+        });
+      }
+    } catch { /* ignore */ }
+    finishSecurityLogout();
+  };
+
+  const handleSecurityNo = async () => {
+    const alert = securityAlert?.alert;
+    const prev = securityAlert?.previousUser;
+    if (!prev?._id || !prev?.sessionId) {
+      throw new Error("Could not restore this device. Please log in again.");
+    }
+    const newSid = alert?.sessionId && alert.sessionId !== "unknown"
+      ? String(alert.sessionId)
+      : "";
+    if (!newSid) {
+      throw new Error("Missing new-device session. Please log in again.");
+    }
+    const result = await denyLoginAlert({
+      userId: String(prev._id),
+      previousSessionId: String(prev.sessionId),
+      newSessionId: newSid,
+    });
+    if (!result?.success) {
+      throw new Error(result?.message || "Could not restore this device.");
+    }
+    // Restore this device's session and keep browsing
+    kickedRef.current = false;
+    setSecurityAlert(null);
+    clearExplicitLogoutFlag();
+    applySession(prev);
+  };
 
   const login = async (identifier, password, mode) => {
     try {
@@ -426,7 +502,13 @@ export const AuthProvider = ({ children }) => {
     if (!pendingUser?._id) return { success: false };
     let sessionId = pendingUser.sessionId;
     try {
-      const started = await startUserSession({ userId: pendingUser._id });
+      const device = await collectLoginDeviceInfo();
+      const started = await startUserSession({
+        userId: pendingUser._id,
+        deviceName: device.deviceName,
+        location: device.location,
+        platform: device.platform,
+      });
       if (started?.sessionId) sessionId = started.sessionId;
     } catch (err) {
       console.warn("startUserSession failed:", err);
@@ -502,6 +584,13 @@ export const AuthProvider = ({ children }) => {
       }}
     >
       {children}
+      {securityAlert && (
+        <NewLoginAlertModal
+          alert={securityAlert.alert}
+          onConfirmYes={handleSecurityYes}
+          onConfirmNo={handleSecurityNo}
+        />
+      )}
     </AuthContext.Provider>
   );
 };

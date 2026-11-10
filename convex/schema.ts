@@ -37,6 +37,19 @@ export default defineSchema({
     // ── Single active session (login on another device kicks the old one) ──
     activeSessionId:          v.optional(v.string()),
     activeDeviceAt:           v.optional(v.number()),
+    activeDeviceName:         v.optional(v.string()),
+    activeDeviceLocation:     v.optional(v.string()),
+    activeDevicePlatform:     v.optional(v.string()),
+    /** Shown on the previous device when a newer login takes over (FB-style). */
+    loginAlert: v.optional(v.object({
+      sessionId: v.string(),
+      previousSessionId: v.optional(v.string()),
+      deviceName: v.string(),
+      location: v.string(),
+      platform: v.optional(v.string()),
+      at: v.number(),
+      resolved: v.optional(v.boolean()),
+    })),
     /** Last time the customer changed username (7-day cooldown). */
     usernameChangedAt:        v.optional(v.number()),
   })

@@ -1,0 +1,144 @@
+.nla-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100080;
+  background: rgba(15, 23, 42, 0.62);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(16px, env(safe-area-inset-top, 0px)) 16px max(16px, env(safe-area-inset-bottom, 0px));
+  box-sizing: border-box;
+}
+
+.nla-modal {
+  width: 100%;
+  max-width: 420px;
+  background: #fff;
+  border-radius: 18px;
+  padding: 24px 22px 18px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
+  text-align: center;
+}
+
+.nla-icon {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 14px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #fc1268, #ff4d94);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  box-shadow: 0 8px 20px rgba(252, 18, 104, 0.28);
+}
+
+.nla-title {
+  margin: 0 0 8px;
+  font-size: 20px;
+  font-weight: 800;
+  color: #111827;
+}
+
+.nla-desc {
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: #4b5563;
+}
+
+.nla-card {
+  text-align: left;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.nla-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.nla-row > i {
+  width: 18px;
+  margin-top: 2px;
+  color: #fc1268;
+  flex-shrink: 0;
+}
+
+.nla-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6b7280;
+}
+
+.nla-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+.nla-error {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #b91c1c;
+  background: #fef2f2;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.nla-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nla-btn {
+  width: 100%;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 0.12s ease, opacity 0.12s ease;
+}
+
+.nla-btn:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+
+.nla-btn:not(:disabled):active {
+  transform: scale(0.98);
+}
+
+.nla-btn-yes {
+  background: linear-gradient(135deg, #fc1268, #e0105a);
+  color: #fff;
+}
+
+.nla-btn-no {
+  background: #111827;
+  color: #fff;
+}
+
+.nla-hint {
+  margin: 12px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #6b7280;
+}

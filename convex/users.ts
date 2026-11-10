@@ -240,16 +240,64 @@ export const hasLoginPin = query({
 
 /** Mint a new active session — logs out any other device for this account. */
 export const startUserSession = mutation({
-  args: { userId: v.id("users") },
-  handler: async ({ db }, { userId }) => {
-    const user = await db.get(userId);
+  args: {
+    userId: v.id("users"),
+    deviceName: v.optional(v.string()),
+    location: v.optional(v.string()),
+    platform: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { db, scheduler } = ctx;
+    const user = await db.get(args.userId) as any;
     if (!user) return { success: false, message: "Account not found." };
+
     const sessionId = genSessionId();
-    await db.patch(userId, {
+    const now = Date.now();
+    const deviceName = String(args.deviceName || "Unknown device").slice(0, 120);
+    const location = String(args.location || "Unknown location").slice(0, 160);
+    const platform = String(args.platform || "").slice(0, 80);
+    const previousSessionId = user.activeSessionId
+      ? String(user.activeSessionId)
+      : undefined;
+
+    const patch: Record<string, unknown> = {
       activeSessionId: sessionId,
-      activeDeviceAt: Date.now(),
-    } as any);
-    return { success: true, sessionId };
+      activeDeviceAt: now,
+      activeDeviceName: deviceName,
+      activeDeviceLocation: location,
+      activeDevicePlatform: platform || undefined,
+    };
+
+    // Only alert the previous device when a real session is being replaced
+    if (previousSessionId && previousSessionId !== sessionId) {
+      patch.loginAlert = {
+        sessionId,
+        previousSessionId,
+        deviceName,
+        location,
+        platform: platform || undefined,
+        at: now,
+        resolved: false,
+      };
+    }
+
+    await db.patch(args.userId, patch as any);
+
+    // Push notify other subscribed devices (best-effort)
+    if (previousSessionId && user.email) {
+      try {
+        await scheduler.runAfter(0, internal.webPush.sendToEmail, {
+          email: String(user.email).toLowerCase(),
+          title: "New login to your DKMerch account",
+          body: `${deviceName} · ${location}. Open the app to confirm if this was you.`,
+          url: "/",
+        });
+      } catch {
+        /* push optional */
+      }
+    }
+
+    return { success: true, sessionId, replacedSession: !!previousSessionId };
   },
 });
 
@@ -269,14 +317,95 @@ export const checkUserSession = query({
       // Legacy sessions (no server token yet) stay valid until next login
       if (!user.activeSessionId) return { valid: true, reason: "legacy" };
       const ok = user.activeSessionId === sid;
+      const alert = user.loginAlert && !user.loginAlert.resolved
+        ? user.loginAlert
+        : null;
       return {
         valid: ok,
         reason: ok ? "ok" : "new_device_logged_in",
         activeDeviceAt: user.activeDeviceAt ?? null,
+        loginAlert: !ok ? alert : null,
+        activeDeviceName: user.activeDeviceName ?? null,
+        activeDeviceLocation: user.activeDeviceLocation ?? null,
       };
     } catch {
       return { valid: false, reason: "error" };
     }
+  },
+});
+
+/** Old device: "Yes, it's me" — accept the newer login and stay signed out here. */
+export const confirmLoginAlert = mutation({
+  args: {
+    userId: v.string(),
+    sessionId: v.string(),
+  },
+  handler: async ({ db }, { userId, sessionId }) => {
+    const user = await db.get(userId as any) as any;
+    if (!user) return { success: false, message: "Account not found." };
+    const alert = user.loginAlert;
+    if (alert && String(alert.sessionId) === String(sessionId)) {
+      await db.patch(user._id, {
+        loginAlert: { ...alert, resolved: true },
+      } as any);
+    }
+    return { success: true };
+  },
+});
+
+/**
+ * Old device: "No, I'm not" — revoke the newer login and restore this device's session.
+ */
+export const denyLoginAlert = mutation({
+  args: {
+    userId: v.string(),
+    previousSessionId: v.string(),
+    newSessionId: v.string(),
+  },
+  handler: async ({ db }, { userId, previousSessionId, newSessionId }) => {
+    const user = await db.get(userId as any) as any;
+    if (!user) return { success: false, message: "Account not found." };
+
+    const alert = user.loginAlert;
+    const prev = String(previousSessionId || "").trim();
+    const neu = String(newSessionId || "").trim();
+    if (!prev || !neu) return { success: false, message: "Invalid session." };
+
+    // Only reclaim if the alert still points at this takeover
+    if (
+      alert
+      && String(alert.sessionId) === neu
+      && String(alert.previousSessionId || "") === prev
+      && !alert.resolved
+    ) {
+      await db.patch(user._id, {
+        activeSessionId: prev,
+        activeDeviceAt: Date.now(),
+        loginAlert: { ...alert, resolved: true },
+      } as any);
+      return { success: true, sessionId: prev, revoked: true };
+    }
+
+    // Alert already resolved / mismatched — if active is still the new one, still reclaim
+    if (String(user.activeSessionId || "") === neu) {
+      const patch: Record<string, unknown> = {
+        activeSessionId: prev,
+        activeDeviceAt: Date.now(),
+      };
+      if (alert) patch.loginAlert = { ...alert, resolved: true };
+      await db.patch(user._id, patch as any);
+      return { success: true, sessionId: prev, revoked: true };
+    }
+
+    // Already restored or superseded
+    if (String(user.activeSessionId || "") === prev) {
+      return { success: true, sessionId: prev, revoked: false };
+    }
+
+    return {
+      success: false,
+      message: "Could not restore this device. Please log in again.",
+    };
   },
 });
 
