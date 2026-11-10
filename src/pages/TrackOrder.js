@@ -716,6 +716,11 @@ const TrackOrder = () => {
             {ordDate && <span className="order-card-date"><i className="fas fa-calendar-alt"></i>{ordDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>}
           </div>
           <div className="order-card-price-row"><span className="order-card-price">₱{order.total?.toLocaleString()}</span></div>
+          {isLbcOrder(order) && (
+            <button type="button" className="btn lbc-track-btn order-card-lbc-btn" onClick={openLbcTracker}>
+              <i className="fas fa-truck"></i> Track on LBC
+            </button>
+          )}
           {!isGuest && needsPayment ? (
             <>
               <button className="btn btn-continue-payment" onClick={handleContinuePayment} disabled={continuingPayment}>{continuingPayment ? <><i className="fas fa-spinner fa-spin"></i> Loading…</> : <><i className="fas fa-credit-card"></i> Continue Payment</>}</button>
@@ -798,6 +803,7 @@ const TrackOrder = () => {
         <div className="container">
           <section className="track-order-page">
             {refundSuccess && <div className="refund-success-toast"><i className="fas fa-check-circle"></i> Refund request submitted! We'll review it within 1-3 business days.</div>}
+            <LbcTrackPanel />
             <div className="orders-tab-bar">
               {FILTERS.map(f => (
                 <button key={f.key} className={`orders-tab-btn ${filter === f.key ? 'active' : ''}`} onClick={() => setFilter(f.key)}>
@@ -843,6 +849,7 @@ const TrackOrder = () => {
       <div className="page-header"><div className="container"><h1 className="page-title">Track Your Order</h1><p className="page-description">Enter your email to view your order status</p></div></div>
       <div className="container">
         <section className="track-order-page">
+          <LbcTrackPanel />
           <div className="tracking-form-section">
             <div className="tracking-form">
               <h2>Find My Orders</h2>
@@ -851,7 +858,7 @@ const TrackOrder = () => {
                 <button type="submit" className="btn btn-primary"><i className="fas fa-search"></i> Find My Orders</button>
               </form>
             </div>
-            <div className="tracking-info"><h3>How to Track</h3><ul><li><i className="fas fa-check"></i> Enter your email address</li><li><i className="fas fa-check"></i> View all your orders</li><li><i className="fas fa-check"></i> See real-time status</li></ul></div>
+            <div className="tracking-info"><h3>How to Track</h3><ul><li><i className="fas fa-check"></i> Enter your email address</li><li><i className="fas fa-check"></i> View all your orders</li><li><i className="fas fa-check"></i> See real-time status</li><li><i className="fas fa-truck"></i> Outside NCR? Use LBC Tracker above</li></ul></div>
           </div>
           {showTrackedOrders && emailOrders.length > 0 && (
             <div className="tracked-orders-section">
