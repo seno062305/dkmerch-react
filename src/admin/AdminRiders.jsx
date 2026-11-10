@@ -878,14 +878,16 @@ const AdminRiders = () => {
 
   return (
     <div className="admin-riders">
-      <div className="riders-tabs">
-        {tabs.map(t => (
-          <button key={t.key} className={`riders-tab-btn ${tab === t.key ? 'active' : ''}`} onClick={() => setTab(t.key)}>
-            <DkIcon name={t.icon} size={15} className="ar-tab-icon" />
-            {t.label}
-            {t.count > 0 && <span className={`riders-tab-count-badge ${t.green ? 'riders-tab-count-badge--green' : ''}`}>{t.count}</span>}
-          </button>
-        ))}
+      <div className="riders-tabs-row">
+        <div className="riders-tabs">
+          {tabs.map(t => (
+            <button key={t.key} className={`riders-tab-btn ${tab === t.key ? 'active' : ''}`} onClick={() => setTab(t.key)}>
+              <DkIcon name={t.icon} size={15} className="ar-tab-icon" />
+              {t.label}
+              {t.count > 0 && <span className={`riders-tab-count-badge ${t.green ? 'riders-tab-count-badge--green' : ''}`}>{t.count}</span>}
+            </button>
+          ))}
+        </div>
         <div className="ar-bell-tab-slot"><NotificationBell /></div>
       </div>
 

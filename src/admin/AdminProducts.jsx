@@ -725,13 +725,104 @@ const CatalogManager = ({
   );
 };
 
+const STOCK_PAGE_SIZES = [5, 10, 15, 20, 25];
+
+const getStockStatus = (stock) => {
+  if (stock === 0)  return { label: 'Out of Stock', cls: 'out-of-stock' };
+  if (stock <= 5)   return { label: 'Critical',     cls: 'critical' };
+  if (stock <= 10)  return { label: 'Low Stock',    cls: 'low-stock' };
+  return { label: 'In Stock', cls: 'in-stock' };
+};
+
+const StockPanelList = ({
+  products,
+  showPrice,
+  rowClass,
+  editingStock,
+  stockValue,
+  stockError,
+  onStartEdit,
+  onCancelEdit,
+  onSaveEdit,
+  onStockValueChange,
+}) => (
+  <div className="stock-list">
+    {products.map((product) => {
+      const status = getStockStatus(product.stock);
+      const isEditing = editingStock === product._id;
+      return (
+        <div key={product._id} className={`stock-list-row${rowClass ? ` ${rowClass}` : ''}${isEditing ? ' is-editing' : ''}`}>
+          <img className="stock-list-thumb" src={product.image} alt="" />
+          <div className="stock-list-main">
+            <strong className="stock-list-name" title={product.name}>{product.name}</strong>
+            <div className="stock-list-meta">
+              <span>{product.category}</span>
+              <span>·</span>
+              <span>{product.kpopGroup}</span>
+              {showPrice && (
+                <>
+                  <span>·</span>
+                  <span className="stock-list-price">₱{Number(product.price || 0).toLocaleString()}</span>
+                </>
+              )}
+            </div>
+          </div>
+          <div className="stock-list-stock">
+            {isEditing ? (
+              <div className="stock-edit-wrap">
+                <div className="stock-edit">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={3}
+                    value={stockValue}
+                    onChange={onStockValueChange}
+                    onKeyPress={(e) => {
+                      if (!/[0-9]/.test(e.key) && e.key !== 'Enter') { e.preventDefault(); return; }
+                      if (e.key === 'Enter') onSaveEdit(product._id);
+                    }}
+                    placeholder="0–999"
+                    autoFocus
+                  />
+                  <button className="save-btn" onClick={() => onSaveEdit(product._id)}><i className="fas fa-check"></i></button>
+                  <button className="cancel-btn" onClick={onCancelEdit}><i className="fas fa-times"></i></button>
+                </div>
+                {stockError && <span className="stock-inline-err">{stockError}</span>}
+              </div>
+            ) : (
+              <strong className={product.stock === 0 ? 'stock-zero' : product.stock <= 10 ? 'stock-low' : ''}>
+                {product.stock}
+              </strong>
+            )}
+          </div>
+          <span className={`status-badge ${status.cls}`}>{status.label}</span>
+          {!isEditing && (
+            <button
+              type="button"
+              className="edit-stock-btn stock-list-edit"
+              onClick={() => onStartEdit(product._id, product.stock)}
+              title="Edit stock"
+            >
+              <i className="fas fa-edit"></i>
+            </button>
+          )}
+        </div>
+      );
+    })}
+  </div>
+);
+
 const StockManagement = ({ products, updateProduct, onAddProduct, categories = FALLBACK_CATEGORIES }) => {
-  const [activeTab, setActiveTab]           = useState('all');
   const [searchTerm, setSearchTerm]         = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [editingStock, setEditingStock]     = useState(null);
   const [stockValue, setStockValue]         = useState('');
   const [stockError, setStockError]         = useState('');
+  const [allPage, setAllPage]               = useState(0);
+  const [allPageSize, setAllPageSize]       = useState(10);
+  const [lowPage, setLowPage]               = useState(0);
+  const [lowPageSize, setLowPageSize]       = useState(10);
 
   const filteredProducts = products.filter(p => {
     const matchSearch =
@@ -747,12 +838,8 @@ const StockManagement = ({ products, updateProduct, onAddProduct, categories = F
   const totalStock       = products.reduce((s, p) => s + (p.stock || 0), 0);
   const outOfStockCount  = products.filter(p => p.stock === 0).length;
 
-  const getStockStatus = (stock) => {
-    if (stock === 0)  return { label: 'Out of Stock', cls: 'out-of-stock' };
-    if (stock <= 5)   return { label: 'Critical',     cls: 'critical' };
-    if (stock <= 10)  return { label: 'Low Stock',    cls: 'low-stock' };
-    return { label: 'In Stock', cls: 'in-stock' };
-  };
+  useEffect(() => { setAllPage(0); }, [searchTerm, filterCategory, allPageSize, products.length]);
+  useEffect(() => { setLowPage(0); }, [searchTerm, filterCategory, lowPageSize, products.length]);
 
   const startEdit  = (productId, currentStock) => { setEditingStock(productId); setStockValue(String(currentStock)); setStockError(''); };
   const cancelEdit = () => { setEditingStock(null); setStockValue(''); setStockError(''); };
@@ -768,37 +855,44 @@ const StockManagement = ({ products, updateProduct, onAddProduct, categories = F
     setEditingStock(null); setStockValue(''); setStockError('');
   };
 
-  const displayList = activeTab === 'low' ? lowStockProducts : sortedFiltered;
+  const onStockValueChange = (e) => {
+    const v = e.target.value.replace(/[^0-9]/g, '').slice(0, 3);
+    setStockValue(v);
+    setStockError('');
+  };
+
+  const tableProps = {
+    editingStock,
+    stockValue,
+    stockError,
+    onStartEdit: startEdit,
+    onCancelEdit: cancelEdit,
+    onSaveEdit: saveEdit,
+    onStockValueChange,
+  };
+
+  const pagedAll = sortedFiltered.slice(allPage * allPageSize, allPage * allPageSize + allPageSize);
+  const pagedLow = lowStockProducts.slice(lowPage * lowPageSize, lowPage * lowPageSize + lowPageSize);
 
   return (
     <div className="stock-section">
       <div className="stock-stats">
-        <div className="stat-card">
-          <div className="stat-icon blue"><DkIcon name={DK_ICONS.totalProducts} size={24} /></div>
-          <div className="stat-info"><h3>{products.length}</h3><p>Total Products</p></div>
+        <div className="stock-stat-card">
+          <div className="stock-stat-icon blue"><DkIcon name={DK_ICONS.totalProducts} size={22} /></div>
+          <div className="stock-stat-info"><h3>{products.length}</h3><p>Total Products</p></div>
         </div>
-        <div className="stat-card">
-          <div className="stat-icon green"><i className="fas fa-warehouse"></i></div>
-          <div className="stat-info"><h3>{totalStock.toLocaleString()}</h3><p>Total Stock Units</p></div>
+        <div className="stock-stat-card">
+          <div className="stock-stat-icon green"><i className="fas fa-warehouse"></i></div>
+          <div className="stock-stat-info"><h3>{totalStock.toLocaleString()}</h3><p>Total Stock Units</p></div>
         </div>
-        <div className="stat-card">
-          <div className="stat-icon orange"><i className="fas fa-exclamation-triangle"></i></div>
-          <div className="stat-info"><h3>{lowStockCount}</h3><p>Low Stock Items</p></div>
+        <div className="stock-stat-card">
+          <div className="stock-stat-icon orange"><i className="fas fa-exclamation-triangle"></i></div>
+          <div className="stock-stat-info"><h3>{lowStockCount}</h3><p>Low Stock Items</p></div>
         </div>
-        <div className="stat-card">
-          <div className="stat-icon red"><i className="fas fa-times-circle"></i></div>
-          <div className="stat-info"><h3>{outOfStockCount}</h3><p>Out of Stock</p></div>
+        <div className="stock-stat-card">
+          <div className="stock-stat-icon red"><i className="fas fa-times-circle"></i></div>
+          <div className="stock-stat-info"><h3>{outOfStockCount}</h3><p>Out of Stock</p></div>
         </div>
-      </div>
-
-      <div className="stock-tabs">
-        <button className={`tab-btn${activeTab === 'all' ? ' active' : ''}`} onClick={() => setActiveTab('all')}>
-          <i className="fas fa-warehouse"></i> All Stock Levels
-        </button>
-        <button className={`tab-btn${activeTab === 'low' ? ' active' : ''}`} onClick={() => setActiveTab('low')}>
-          <i className="fas fa-exclamation-triangle"></i> Low Stock
-          {lowStockCount > 0 && <span className="low-pill">{lowStockCount}</span>}
-        </button>
       </div>
 
       <div className="stock-filters">
@@ -814,84 +908,63 @@ const StockManagement = ({ products, updateProduct, onAddProduct, categories = F
         </select>
       </div>
 
-      <div className="stock-table-card">
-        {activeTab === 'low' && lowStockProducts.length === 0 ? (
-          <div className="empty-state success">
-            <i className="fas fa-check-circle"></i><h3>All Good!</h3>
-            <p>No low stock products at the moment.</p>
-          </div>
-        ) : displayList.length === 0 ? (
-          <div className="empty-state">
-            <i className="fas fa-box-open"></i><h3>No products found</h3>
-            <p>Try adjusting your search or filters.</p>
-          </div>
-        ) : (
-          <>
-            {activeTab === 'low' && (
-              <div className="low-stock-alert">
-                <i className="fas fa-exclamation-triangle"></i>
-                <p><strong>{lowStockProducts.length} product(s)</strong> need restocking</p>
-              </div>
-            )}
-            <div className="inventory-table-wrapper">
-              <table className="inventory-table">
-                <thead>
-                  <tr>
-                    <th>Product</th><th>Category</th><th>Group</th>
-                    {activeTab === 'all' && <th>Price</th>}
-                    <th>Stock ↑</th><th>Status</th><th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {displayList.map(product => {
-                    const status = getStockStatus(product.stock);
-                    return (
-                      <tr key={product._id} className={activeTab === 'low' ? 'low-stock-row' : ''}>
-                        <td data-label="Product">
-                          <div className="product-cell">
-                            <img src={product.image} alt={product.name} />
-                            <div className="product-info"><strong>{product.name}</strong></div>
-                          </div>
-                        </td>
-                        <td data-label="Category"><span className="category-badge">{product.category}</span></td>
-                        <td data-label="Group">{product.kpopGroup}</td>
-                        {activeTab === 'all' && <td className="price-cell" data-label="Price">₱{product.price.toLocaleString()}</td>}
-                        <td data-label="Stock">
-                          {editingStock === product._id ? (
-                            <div className="stock-edit-wrap">
-                              <div className="stock-edit">
-                                <input type="text" inputMode="numeric" pattern="[0-9]*" maxLength={3}
-                                  value={stockValue}
-                                  onChange={e => { const v = e.target.value.replace(/[^0-9]/g, '').slice(0, 3); setStockValue(v); setStockError(''); }}
-                                  onKeyPress={e => { if (!/[0-9]/.test(e.key) && e.key !== 'Enter') { e.preventDefault(); return; } if (e.key === 'Enter') saveEdit(product._id); }}
-                                  placeholder="0–999" autoFocus />
-                                <button className="save-btn" onClick={() => saveEdit(product._id)}><i className="fas fa-check"></i></button>
-                                <button className="cancel-btn" onClick={cancelEdit}><i className="fas fa-times"></i></button>
-                              </div>
-                              {stockError && <span className="stock-inline-err">{stockError}</span>}
-                            </div>
-                          ) : (
-                            <strong className={product.stock === 0 ? 'stock-zero' : product.stock <= 10 ? 'stock-low' : ''}>
-                              {product.stock}
-                            </strong>
-                          )}
-                        </td>
-                        <td data-label="Status"><span className={`status-badge ${status.cls}`}>{status.label}</span></td>
-                        <td data-label="Actions">
-                          <div className="action-buttons">
-                            <button className="edit-stock-btn" onClick={() => startEdit(product._id, product.stock)}>
-                              <i className="fas fa-edit"></i> Edit
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+      <div className="stock-split">
+        <div className="stock-panel">
+          <div className="stock-panel-head">
+            <div>
+              <h3><i className="fas fa-warehouse"></i> All Stock Levels</h3>
+              <p>{sortedFiltered.length} product{sortedFiltered.length !== 1 ? 's' : ''}</p>
             </div>
-          </>
-        )}
+          </div>
+          {sortedFiltered.length === 0 ? (
+            <div className="empty-state stock-panel-empty">
+              <i className="fas fa-box-open"></i>
+              <h3>No products found</h3>
+              <p>Try adjusting your search or filters.</p>
+            </div>
+          ) : (
+            <>
+              <StockPanelList products={pagedAll} showPrice {...tableProps} />
+              <AdminPager
+                total={sortedFiltered.length}
+                page={allPage}
+                pageSize={allPageSize}
+                pageSizeOptions={STOCK_PAGE_SIZES}
+                onPageChange={setAllPage}
+                onPageSizeChange={setAllPageSize}
+              />
+            </>
+          )}
+        </div>
+
+        <div className="stock-panel stock-panel--low">
+          <div className="stock-panel-head">
+            <div>
+              <h3><i className="fas fa-exclamation-triangle"></i> Low Stock</h3>
+              <p>{lowStockProducts.length} need restocking</p>
+            </div>
+            {lowStockProducts.length > 0 && <span className="low-pill">{lowStockProducts.length}</span>}
+          </div>
+          {lowStockProducts.length === 0 ? (
+            <div className="empty-state success stock-panel-empty">
+              <i className="fas fa-check-circle"></i>
+              <h3>All Good!</h3>
+              <p>No low stock products at the moment.</p>
+            </div>
+          ) : (
+            <>
+              <StockPanelList products={pagedLow} rowClass="low-stock-row" {...tableProps} />
+              <AdminPager
+                total={lowStockProducts.length}
+                page={lowPage}
+                pageSize={lowPageSize}
+                pageSizeOptions={STOCK_PAGE_SIZES}
+                onPageChange={setLowPage}
+                onPageSizeChange={setLowPageSize}
+              />
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

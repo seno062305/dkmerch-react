@@ -4,17 +4,28 @@
 .admin-riders { padding: 24px; max-width: 1100px; }
 
 /* ── TABS ── */
+.riders-tabs-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin-bottom: 24px;
+  border-bottom: 2px solid #e2e8f0;
+  position: relative;
+  z-index: 40;
+}
 .riders-tabs {
   display: flex;
   gap: 0;
-  margin-bottom: 24px;
-  border-bottom: 2px solid #e2e8f0;
+  margin-bottom: 0;
+  border-bottom: none;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   -ms-overflow-style: none;
   flex-wrap: nowrap;
   align-items: flex-end;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .riders-tabs::-webkit-scrollbar { display: none; }
 
@@ -68,9 +79,10 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  padding: 0 8px 6px 12px;
+  padding: 0 0 8px 8px;
   flex-shrink: 0;
-  margin-left: auto;
+  position: relative;
+  z-index: 50;
 }
 
 .ar-empty { text-align: center; padding: 60px 20px; color: #888; }
@@ -381,12 +393,12 @@
 @keyframes gpsDotPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(22,163,74,0.5); } 50% { box-shadow: 0 0 0 6px rgba(22,163,74,0); } }
 
 /* Notification Bell */
-.ar-bell-wrap { position: relative; flex-shrink: 0; }
-.ar-bell-btn  { position: relative; background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 10px; width: 38px; height: 38px; font-size: 17px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: all 0.2s; color: #64748b; padding: 0; line-height: 0; }
+.ar-bell-wrap { position: relative; flex-shrink: 0; z-index: 50; }
+.ar-bell-btn  { position: relative; background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 10px; width: 38px; height: 38px; font-size: 17px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: all 0.2s; color: #64748b; padding: 0; line-height: 0; z-index: 1; }
 .ar-bell-btn:hover { background: #f1f5f9; border-color: #cbd5e1; color: #1a1f36; }
 .ar-bell-badge { position: absolute; top: -5px; right: -5px; background: #fc1268; color: white; border-radius: 20px; min-width: 17px; height: 17px; padding: 0 4px; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; border: 2px solid white; animation: bellPop 0.3s ease; }
 @keyframes bellPop { from { transform: scale(0); } to { transform: scale(1); } }
-.ar-bell-dropdown { position: absolute; top: calc(100% + 8px); right: 0; left: auto; width: min(340px, calc(100vw - 28px)); background: white; border-radius: 14px; box-shadow: 0 8px 32px rgba(0,0,0,0.14); border: 1px solid #e2e8f0; z-index: 9999; overflow: hidden; animation: bellDropIn 0.18s ease; box-sizing: border-box; }
+.ar-bell-dropdown { position: absolute; top: calc(100% + 8px); right: 0; left: auto; width: min(340px, calc(100vw - 28px)); background: white; border-radius: 14px; box-shadow: 0 8px 32px rgba(0,0,0,0.14); border: 1px solid #e2e8f0; z-index: 10050; overflow: hidden; animation: bellDropIn 0.18s ease; box-sizing: border-box; }
 @keyframes bellDropIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
 .ar-bell-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px 10px; border-bottom: 1px solid #e2e8f0; background: #f8fafc; gap: 8px; }
 .ar-bell-title { font-size: 14px; font-weight: 700; color: #1a1f36; }
@@ -486,37 +498,49 @@ body.ar-map-open { overflow: hidden !important; position: fixed !important; widt
 @media (max-width: 768px) {
   .admin-riders { padding: 14px; max-width: 100%; overflow-x: visible; box-sizing: border-box; }
 
+  .riders-tabs-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 8px;
+    margin-bottom: 14px;
+    border-bottom: 2px solid #e2e8f0;
+    overflow: visible;
+    z-index: 40;
+  }
   .riders-tabs {
     display: grid !important;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
-    margin-bottom: 14px;
+    margin-bottom: 0;
     border-bottom: none;
     overflow: visible;
     padding: 0 0 4px;
     min-width: 0;
     max-width: 100%;
+    flex: 1 1 100%;
   }
   .ar-bell-tab-slot {
-    grid-column: 1 / -1;
     display: flex;
     width: 100%;
-    justify-content: stretch;
+    justify-content: flex-end;
     margin-left: 0;
-    padding: 0;
+    padding: 0 0 8px;
     position: relative;
-    z-index: 20;
+    z-index: 50;
+    order: -1;
   }
   .ar-bell-wrap {
-    width: 100%;
+    width: auto;
     display: flex;
     justify-content: flex-end;
     position: relative;
+    z-index: 50;
   }
   .ar-bell-dropdown {
-    left: 0;
+    left: auto;
     right: 0;
-    width: auto;
+    width: min(340px, calc(100vw - 28px));
     max-width: none;
   }
   .riders-tab-btn {
