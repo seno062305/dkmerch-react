@@ -308,6 +308,15 @@ const Settings = () => {
   // ── Account details form ──
   const [accountForm, setAccountForm] = useState({ name: '', username: '', email: '', phone: '' });
   const [emailChanged, setEmailChanged] = useState(false);
+  const USERNAME_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+  const usernameChangedAt = Number(user?.usernameChangedAt || 0);
+  const usernameCooldownLeftMs = usernameChangedAt > 0
+    ? Math.max(0, USERNAME_COOLDOWN_MS - (Date.now() - usernameChangedAt))
+    : 0;
+  const usernameLocked = usernameCooldownLeftMs > 0;
+  const usernameCooldownDays = usernameLocked
+    ? Math.max(1, Math.ceil(usernameCooldownLeftMs / (24 * 60 * 60 * 1000)))
+    : 0;
 
   // ── Password form ──
   const [passwordForm, setPasswordForm] = useState({ email: '', verificationCode: '', newPassword: '', confirmPassword: '' });
@@ -394,14 +403,31 @@ const Settings = () => {
     e.preventDefault();
     if (!user?._id && !user?.id) { setSaveMsg('❌ User not found.'); return; }
     if (accountForm.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(accountForm.email)) { setSaveMsg('❌ Please enter a valid email address.'); return; }
+    const nextUsername = (accountForm.username || '').trim();
+    const prevUsername = (user?.username || '').trim();
+    if (nextUsername && nextUsername.toLowerCase() !== prevUsername.toLowerCase() && usernameLocked) {
+      setSaveMsg(`❌ Username can only be changed once every 7 days. Try again in ${usernameCooldownDays} day${usernameCooldownDays === 1 ? '' : 's'}.`);
+      return;
+    }
     setSaving(true); setSaveMsg('');
     try {
       const uid = user._id || user.id;
-      await updateUserProfile({ id: uid, name: accountForm.name, username: accountForm.username, email: accountForm.email, phone: accountForm.phone });
-      if (updateUser) await updateUser({ name: accountForm.name, username: accountForm.username, email: accountForm.email, phone: accountForm.phone });
+      const result = await updateUserProfile({ id: uid, name: accountForm.name, username: accountForm.username, email: accountForm.email, phone: accountForm.phone });
+      if (updateUser) {
+        await updateUser({
+          name: accountForm.name,
+          username: result?.username || accountForm.username,
+          email: accountForm.email,
+          phone: accountForm.phone,
+          ...(result?.usernameChangedAt != null ? { usernameChangedAt: result.usernameChangedAt } : {}),
+        });
+      }
       setEmailChanged(false); setSaveMsg('✅ Account details saved successfully!');
-    } catch { setSaveMsg('❌ Failed to save. Please try again.'); }
-    finally { setSaving(false); setTimeout(() => setSaveMsg(''), 4000); }
+    } catch (err) {
+      const msg = err?.data || err?.message || 'Failed to save. Please try again.';
+      setSaveMsg(`❌ ${String(msg).replace(/^Error:\s*/i, '')}`);
+    }
+    finally { setSaving(false); setTimeout(() => setSaveMsg(''), 5000); }
   };
 
   const handleSendCode = async () => {
@@ -525,7 +551,23 @@ const Settings = () => {
               </div>
               <div className="form-group">
                 <label>Username</label>
-                <input type="text" name="username" className="form-control" value={accountForm.username} onChange={handleAccountChange} required />
+                <input
+                  type="text"
+                  name="username"
+                  className="form-control"
+                  value={accountForm.username}
+                  onChange={handleAccountChange}
+                  required
+                  disabled={usernameLocked}
+                  title={usernameLocked ? `Username locked for ${usernameCooldownDays} more day(s)` : undefined}
+                />
+                {usernameLocked ? (
+                  <small className="email-change-note">
+                    <i className="fas fa-clock"></i> Username can be changed again in {usernameCooldownDays} day{usernameCooldownDays === 1 ? '' : 's'} (7-day cooldown).
+                  </small>
+                ) : (
+                  <small>You can change your username once every 7 days.</small>
+                )}
               </div>
               <div className="form-group">
                 <label>Email Address</label>

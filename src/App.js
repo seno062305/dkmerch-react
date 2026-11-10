@@ -184,6 +184,32 @@ function AppContent() {
   const [showProductModal,  setShowProductModal]  = useState(false);
   const [currentProduct,    setCurrentProduct]    = useState(null);
 
+  // Close product/cart overlays when switching customer tabs/routes
+  useEffect(() => {
+    setShowProductModal(false);
+    setCurrentProduct(null);
+    setShowCartModal(false);
+  }, [location.pathname]);
+
+  // Safety: never leave product/cart lock classes stuck (they disable bottom-nav / scroll)
+  useEffect(() => {
+    if (!showProductModal) document.body.classList.remove('product-modal-open');
+    if (!showCartModal) document.body.classList.remove('cart-modal-open');
+    if (
+      !showProductModal
+      && !showCartModal
+      && !showLoginModal
+      && !document.body.classList.contains('login-modal-open')
+    ) {
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.left = '';
+      document.body.style.right = '';
+      document.body.style.width = '';
+      document.body.style.overflow = '';
+    }
+  }, [showProductModal, showCartModal, showLoginModal]);
+
   useEffect(() => {
     const handleOpenLogin = (e) => {
       const customersOnly = !!e?.detail?.customersOnly;
@@ -244,11 +270,14 @@ function AppContent() {
         navigate(loginRole === 'admin' ? '/admin/chat' : '/rider', { replace: true });
         return;
       }
+      // Stay on current page if redirect matches (PIN unlock / reload) — avoid unnecessary remount
+      if (redirect === location.pathname + location.search) return;
       navigate(redirect, { replace: true });
       return;
     }
+    // Customer PIN unlock / login while already on a page — do not bounce to home
     if (loginRole === 'admin')  navigate('/admin',  { replace: true });
-    if (loginRole === 'rider')  navigate('/rider',  { replace: true });
+    else if (loginRole === 'rider')  navigate('/rider',  { replace: true });
   };
 
   const isAdminRoute      = location.pathname.startsWith('/admin');

@@ -7,7 +7,7 @@ import { useNotification } from '../context/NotificationContext';
 import { useConfirm, addToCartConfirmRememberKey } from '../context/ConfirmContext';
 import { useAuth } from '../context/AuthContext';
 import { useProducts, usePreOrderProducts } from '../utils/productStorage';
-import { shouldShowSaleBadge, shouldShowPreOrderBadge, hasDiscountedPrice } from '../utils/saleUtils';
+import { formatSaleEndLabel, formatSaleEndShort, shouldShowSaleBadge, shouldShowPreOrderBadge, hasDiscountedPrice } from '../utils/saleUtils';
 import { useCloseOnHistoryBack } from '../hooks/useCloseOnHistoryBack';
 
 const MAX_WISHLIST = 10;
@@ -94,7 +94,7 @@ const WishlistPage = ({ onProductClick }) => {
       variant: 'primary',
       icon: 'fa-shopping-cart',
       rememberKey: addToCartConfirmRememberKey(user?.email),
-      rememberLabel: 'Do not show again for my account',
+      rememberLabel: 'Do not show again',
     });
     if (!ok) return;
     addToCart({
@@ -228,7 +228,16 @@ const WishlistPage = ({ onProductClick }) => {
                       }
                       {(showSale || showPreOrder) && (
                         <div className="wishlist-badge-stack">
-                          {showSale && <span className="wishlist-sale-badge">SALE</span>}
+                          {showSale && (
+                            <span className="wishlist-sale-badge">
+                              <span>SALE</span>
+                              {(formatSaleEndShort(item) || formatSaleEndLabel(item)) && (
+                                <span className="wishlist-sale-badge-end">
+                                  {formatSaleEndShort(item) || formatSaleEndLabel(item)}
+                                </span>
+                              )}
+                            </span>
+                          )}
                           {showPreOrder && <span className="wishlist-preorder-badge">PRE-ORDER</span>}
                         </div>
                       )}
@@ -244,7 +253,7 @@ const WishlistPage = ({ onProductClick }) => {
                       </p>
                       <div className="order-card-price-row" style={{ marginBottom: '8px' }}>
                         <span className={`order-card-price${showSale ? ' sale' : ''}`}>₱{item.price?.toLocaleString()}</span>
-                        {hasDiscountedPrice(item) && (
+                        {showSale && hasDiscountedPrice(item) && (
                           <span className="order-card-price-original">₱{Number(item.originalPrice).toLocaleString()}</span>
                         )}
                       </div>

@@ -9,7 +9,8 @@ import { useNotification } from '../context/NotificationContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { PointsBadge } from '../utils/pointsUtils';
 import {
-  formatSaleRange,
+  formatSaleEndLabel,
+  formatSaleEndShort,
   shouldShowSaleBadge,
   shouldShowPreOrderBadge,
   hasDiscountedPrice,
@@ -126,10 +127,14 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
     const pid = product._id || product.id;
     const hasPromo = isPromoProduct(product);
 
+    const stockQty = Number(product.stock ?? 0);
+    const isOutOfStock = stockQty <= 0;
+
     const releaseMs = getReleaseMs(product);
     const diffMs = releaseMs !== null ? Date.now() - releaseMs : -1;
-    const showReleasedBadge = diffMs >= 0 && diffMs < JUST_RELEASED_MS;
-    const showNewBadgeResolved = showNewBadge || isNewArrival(product);
+    // Never show "Just Released" / NEW on out-of-stock items
+    const showReleasedBadge = !isOutOfStock && diffMs >= 0 && diffMs < JUST_RELEASED_MS;
+    const showNewBadgeResolved = !isOutOfStock && (showNewBadge || isNewArrival(product));
 
     const discountPct =
       product.originalPrice && Number(product.originalPrice) > Number(product.price)
@@ -139,9 +144,6 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
               100
           )
         : null;
-
-    const stockQty = Number(product.stock ?? 0);
-    const isOutOfStock = stockQty <= 0;
     const isLowStock = !isOutOfStock && stockQty > 0 && stockQty <= 5;
     const isOnSale = shouldShowSaleBadge(product);
     const showPreOrder =
@@ -164,7 +166,12 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
           <div className="wv-badge-stack">
             {isOnSale && (
               <div className="wv-sale-badge">
-                {discountPct ? `-${discountPct}%` : 'SALE'}
+                <span>{discountPct ? `-${discountPct}%` : 'SALE'}</span>
+                {(formatSaleEndShort(product) || formatSaleEndLabel(product)) && (
+                  <span className="wv-sale-badge-end">
+                    {formatSaleEndShort(product) || formatSaleEndLabel(product)}
+                  </span>
+                )}
               </div>
             )}
             {showPreOrder && <div className="wv-preorder-badge">PRE-ORDER</div>}
@@ -197,17 +204,17 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
             <span className={`wv-card-price-current${isOnSale ? ' sale' : ''}`}>
               ₱{Number(product.price)?.toLocaleString()}
             </span>
-            {hasDiscountedPrice(product) && (
+            {isOnSale && hasDiscountedPrice(product) && (
               <span className="wv-card-price-original">
                 ₱{Number(product.originalPrice)?.toLocaleString()}
               </span>
             )}
             <PointsBadge price={product.price} />
           </div>
-          {isOnSale && formatSaleRange(product) && (
+          {isOnSale && formatSaleEndLabel(product) && (
             <div className="wv-sale-period">
               <i className="fas fa-clock"></i>
-              <span>{formatSaleRange(product)}</span>
+              <span>{formatSaleEndLabel(product)}</span>
             </div>
           )}
           <div

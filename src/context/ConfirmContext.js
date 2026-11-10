@@ -3,11 +3,31 @@ import ConfirmModal from '../components/ConfirmModal';
 
 const ConfirmContext = createContext(null);
 
-/** Per-account skip key so first-time add-to-cart still confirms until that user opts out. */
-export function addToCartConfirmRememberKey(email) {
-  const normalized = String(email || '').trim().toLowerCase();
-  if (!normalized) return null;
-  return `dk_skip_add_to_cart_confirm:${normalized}`;
+/** One skip preference for ALL add-to-cart confirms (every product). */
+export const ADD_TO_CART_CONFIRM_SKIP_KEY = 'dk_skip_add_to_cart_confirm';
+
+/** @deprecated email arg ignored — skip is global for all products */
+export function addToCartConfirmRememberKey(_email) {
+  return ADD_TO_CART_CONFIRM_SKIP_KEY;
+}
+
+function isAddToCartSkipKey(key) {
+  return typeof key === 'string' && key.startsWith('dk_skip_add_to_cart_confirm');
+}
+
+function hasAddToCartSkip() {
+  try {
+    if (localStorage.getItem(ADD_TO_CART_CONFIRM_SKIP_KEY) === '1') return true;
+    // Migrate older per-account keys → treat as global skip
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('dk_skip_add_to_cart_confirm:') && localStorage.getItem(k) === '1') {
+        localStorage.setItem(ADD_TO_CART_CONFIRM_SKIP_KEY, '1');
+        return true;
+      }
+    }
+  } catch { /* ignore */ }
+  return false;
 }
 
 export const ConfirmProvider = ({ children }) => {
@@ -26,7 +46,12 @@ export const ConfirmProvider = ({ children }) => {
     setState(null);
     if (saveDontShow) {
       try {
-        localStorage.setItem(rememberKey, '1');
+        // Always persist the global ATC skip so every product is covered
+        if (isAddToCartSkipKey(rememberKey)) {
+          localStorage.setItem(ADD_TO_CART_CONFIRM_SKIP_KEY, '1');
+        } else {
+          localStorage.setItem(rememberKey, '1');
+        }
       } catch { /* ignore */ }
     }
     if (resolve) resolve(result);
@@ -36,16 +61,11 @@ export const ConfirmProvider = ({ children }) => {
     const opts = typeof options === 'string' ? { message: options } : options;
     const rememberKey = opts.rememberKey || null;
 
-    // Only skip when this exact account opted out via "Do not show again".
-    // Ignore/clear legacy device-wide key that skipped confirm for every item.
-    try {
-      if (localStorage.getItem('dk_skip_add_to_cart_confirm') === '1') {
-        localStorage.removeItem('dk_skip_add_to_cart_confirm');
-      }
-    } catch { /* ignore */ }
-
-    if (rememberKey && rememberKey.includes(':')) {
+    if (rememberKey) {
       try {
+        if (isAddToCartSkipKey(rememberKey) && hasAddToCartSkip()) {
+          return Promise.resolve(true);
+        }
         if (localStorage.getItem(rememberKey) === '1') {
           return Promise.resolve(true);
         }

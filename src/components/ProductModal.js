@@ -7,7 +7,7 @@ import { useNotification } from '../context/NotificationContext';
 import { useConfirm, addToCartConfirmRememberKey } from '../context/ConfirmContext';
 import { useNavigate } from 'react-router-dom';
 import PromoCodeInput from './PromoCodeInput';
-import { formatSaleRange, shouldShowSaleBadge, shouldShowPreOrderBadge, hasDiscountedPrice } from '../utils/saleUtils';
+import { formatSaleEndLabel, formatSaleEndShort, formatSaleRange, shouldShowSaleBadge, shouldShowPreOrderBadge, hasDiscountedPrice } from '../utils/saleUtils';
 import './ProductModal.css';
 
 const REVIEW_CHAR_LIMIT = 120;
@@ -115,32 +115,38 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
     setShowLightbox(false);
     setShowBuyNowQty(false);
 
-    // ✅ FIX: Read scrollY from body.style.top if already fixed,
-    // otherwise read window.scrollY directly.
-    // This prevents jumping to top on close.
     const getScrollY = () => {
       const bodyTop = document.body.style.top;
       if (bodyTop) return Math.abs(parseInt(bodyTop, 10)) || 0;
-      return window.scrollY;
+      return window.scrollY || window.pageYOffset || 0;
     };
 
     const scrollY = getScrollY();
-
+    document.body.classList.add('product-modal-open');
     document.body.style.position = 'fixed';
     document.body.style.top = `-${scrollY}px`;
+    document.body.style.left = '0';
+    document.body.style.right = '0';
     document.body.style.width = '100%';
     document.body.style.overflow = 'hidden';
 
     return () => {
-      document.body.style.position = '';
-      document.body.style.top = '';
-      document.body.style.width = '';
-      document.body.style.overflow = '';
-      // ✅ Restore exact scroll position — no jump
-      try {
-        window.scrollTo({ top: scrollY, behavior: 'instant' });
-      } catch {
-        window.scrollTo(0, scrollY);
+      document.body.classList.remove('product-modal-open');
+      const otherLock =
+        document.body.classList.contains('login-modal-open')
+        || document.body.classList.contains('cart-modal-open');
+      if (!otherLock) {
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.left = '';
+        document.body.style.right = '';
+        document.body.style.width = '';
+        document.body.style.overflow = '';
+        try {
+          window.scrollTo({ top: scrollY, left: 0, behavior: 'instant' });
+        } catch {
+          window.scrollTo(0, scrollY);
+        }
       }
     };
   }, [productId]);
@@ -275,7 +281,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
   };
 
   const outOfStock = Number(product.stock) <= 0;
-  const showSaleBadge = shouldShowSaleBadge(product);
+  const showSaleBadge = !outOfStock && shouldShowSaleBadge(product);
   const showPreOrderBadge = shouldShowPreOrderBadge(product) && !isReleased;
 
   const handleAddToCartClick = async () => {
@@ -302,7 +308,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
       variant: 'primary',
       icon: 'fa-shopping-cart',
       rememberKey,
-      rememberLabel: 'Do not show again for my account',
+      rememberLabel: 'Do not show again',
     });
     if (!ok) return;
     onAddToCart({ ...product, appliedPromo, finalPrice: discountedPrice });
@@ -397,16 +403,6 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
     setExpandedReviews(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  useEffect(() => {
-    document.body.classList.add('product-modal-open');
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.classList.remove('product-modal-open');
-      document.body.style.overflow = prevOverflow;
-    };
-  }, []);
-
   return createPortal(
     <>
       <div className="product-modal-overlay" onClick={handleRequestClose} role="presentation">
@@ -435,7 +431,16 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
             <div className="modal-image-section">
               {(showPreOrderBadge || showSaleBadge) && (
                 <div className="modal-badge-stack">
-                  {showSaleBadge && <div className="sale-badge">SALE</div>}
+                  {showSaleBadge && (
+                    <div className="sale-badge">
+                      <span>SALE</span>
+                      {(formatSaleEndShort(product) || formatSaleEndLabel(product)) && (
+                        <span className="sale-badge-end">
+                          {formatSaleEndShort(product) || formatSaleEndLabel(product)}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   {showPreOrderBadge && <div className="pre-order-badge">PRE-ORDER</div>}
                 </div>
               )}
@@ -542,17 +547,17 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
                   ) : (
                     <>
                       <div className={`current-price${showSaleBadge ? ' sale' : ''}`}>₱{product.price.toLocaleString()}</div>
-                      {hasDiscountedPrice(product) && (
+                      {showSaleBadge && hasDiscountedPrice(product) && (
                         <div className="original-price">₱{product.originalPrice.toLocaleString()}</div>
                       )}
                     </>
                   )}
                 </div>
 
-                {showSaleBadge && formatSaleRange(product) && (
+                {showSaleBadge && (formatSaleEndLabel(product) || formatSaleRange(product)) && (
                   <div className="modal-sale-period">
                     <i className="fas fa-clock"></i>
-                    <span>Sale period: {formatSaleRange(product)}</span>
+                    <span>{formatSaleEndLabel(product) || `Sale period: ${formatSaleRange(product)}`}</span>
                   </div>
                 )}
 

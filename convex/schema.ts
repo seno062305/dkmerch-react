@@ -37,6 +37,8 @@ export default defineSchema({
     // ── Single active session (login on another device kicks the old one) ──
     activeSessionId:          v.optional(v.string()),
     activeDeviceAt:           v.optional(v.number()),
+    /** Last time the customer changed username (7-day cooldown). */
+    usernameChangedAt:        v.optional(v.number()),
   })
     .index("by_email", ["email"])
     .index("by_username", ["username"]),

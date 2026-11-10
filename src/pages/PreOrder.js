@@ -8,7 +8,7 @@ import { useConfirm } from '../context/ConfirmContext';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import LoginModal from '../components/LoginModal';
-import { shouldShowSaleBadge, hasDiscountedPrice } from '../utils/saleUtils';
+import { formatSaleEndLabel, formatSaleEndShort, shouldShowSaleBadge, hasDiscountedPrice } from '../utils/saleUtils';
 import { useCloseOnHistoryBack } from '../hooks/useCloseOnHistoryBack';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -171,7 +171,16 @@ const PreOrderCard = ({
   return (
     <div className="preorder-card" onClick={onOpenModal}>
       <div className="preorder-badge-stack">
-        {shouldShowSaleBadge(product) && <div className="preorder-sale-badge">SALE</div>}
+        {shouldShowSaleBadge(product) && (
+          <div className="preorder-sale-badge">
+            <span>SALE</span>
+            {(formatSaleEndShort(product) || formatSaleEndLabel(product)) && (
+              <span className="preorder-sale-badge-end">
+                {formatSaleEndShort(product) || formatSaleEndLabel(product)}
+              </span>
+            )}
+          </div>
+        )}
         <div className="preorder-badge">PRE-ORDER</div>
       </div>
 
@@ -192,7 +201,7 @@ const PreOrderCard = ({
 
         <div className="product-price">
           <span className={`current-price${shouldShowSaleBadge(product) ? ' sale' : ''}`}>₱{product.price?.toLocaleString()}</span>
-          {hasDiscountedPrice(product) && (
+          {shouldShowSaleBadge(product) && hasDiscountedPrice(product) && (
             <>
               <span className="original-price">₱{product.originalPrice?.toLocaleString()}</span>
               <span className="discount">
@@ -201,6 +210,13 @@ const PreOrderCard = ({
             </>
           )}
         </div>
+
+        {shouldShowSaleBadge(product) && formatSaleEndLabel(product) && (
+          <div className="preorder-sale-period">
+            <i className="fas fa-clock"></i>
+            <span>{formatSaleEndLabel(product)}</span>
+          </div>
+        )}
 
         <div className="stock-info">
           <i className="fas fa-box"></i>
@@ -251,7 +267,16 @@ const PreOrderModal = ({
 
         <div className="preorder-modal-image">
           <div className="preorder-badge-stack">
-            {shouldShowSaleBadge(product) && <div className="preorder-sale-badge">SALE</div>}
+            {shouldShowSaleBadge(product) && (
+              <div className="preorder-sale-badge">
+                <span>SALE</span>
+                {(formatSaleEndShort(product) || formatSaleEndLabel(product)) && (
+                  <span className="preorder-sale-badge-end">
+                    {formatSaleEndShort(product) || formatSaleEndLabel(product)}
+                  </span>
+                )}
+              </div>
+            )}
             <div className="preorder-badge">PRE-ORDER</div>
           </div>
           <img src={product.image} alt={product.name} />
@@ -270,10 +295,17 @@ const PreOrderModal = ({
 
           <div className="preorder-modal-price">
             <span className={shouldShowSaleBadge(product) ? 'sale' : ''}>₱{product.price?.toLocaleString()}</span>
-            {hasDiscountedPrice(product) && (
+            {shouldShowSaleBadge(product) && hasDiscountedPrice(product) && (
               <span className="original-price" style={{ marginLeft: 8 }}>₱{product.originalPrice?.toLocaleString()}</span>
             )}
           </div>
+
+          {shouldShowSaleBadge(product) && formatSaleEndLabel(product) && (
+            <div className="preorder-sale-period">
+              <i className="fas fa-clock"></i>
+              <span>{formatSaleEndLabel(product)}</span>
+            </div>
+          )}
 
           {product.description && (
             <p className="preorder-modal-desc">{product.description}</p>

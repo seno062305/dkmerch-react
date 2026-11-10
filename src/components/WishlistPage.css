@@ -214,7 +214,21 @@
   text-transform: uppercase;
   color: #fff;
 }
-.wishlist-sale-badge { background: var(--primary-color, #fc1268); }
+.wishlist-sale-badge {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  background: var(--primary-color, #fc1268);
+  max-width: 140px;
+  line-height: 1.2;
+}
+.wishlist-sale-badge-end {
+  font-size: 8px;
+  font-weight: 600;
+  text-transform: none;
+  opacity: 0.95;
+}
 .wishlist-preorder-badge { background: #2563eb; }
 
 .wishlist-oos-overlay {

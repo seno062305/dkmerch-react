@@ -46,19 +46,37 @@ const CartModal = ({ cart, onClose }) => {
   }, [cartIdsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    const scrollY = window.scrollY;
-    document.body.style.position = 'fixed';
-    document.body.style.top      = `-${scrollY}px`;
-    document.body.style.width    = '100%';
-    document.body.style.overflow = 'hidden';
+    const getScrollY = () => {
+      const bodyTop = document.body.style.top;
+      if (bodyTop) return Math.abs(parseInt(bodyTop, 10)) || 0;
+      return window.scrollY || window.pageYOffset || 0;
+    };
+    const scrollY = getScrollY();
     document.body.classList.add('cart-modal-open');
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.left = '0';
+    document.body.style.right = '0';
+    document.body.style.width = '100%';
+    document.body.style.overflow = 'hidden';
     return () => {
-      document.body.style.position = '';
-      document.body.style.top      = '';
-      document.body.style.width    = '';
-      document.body.style.overflow = '';
       document.body.classList.remove('cart-modal-open');
-      window.scrollTo(0, scrollY);
+      const otherLock =
+        document.body.classList.contains('product-modal-open')
+        || document.body.classList.contains('login-modal-open');
+      if (!otherLock) {
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.left = '';
+        document.body.style.right = '';
+        document.body.style.width = '';
+        document.body.style.overflow = '';
+        try {
+          window.scrollTo({ top: scrollY, left: 0, behavior: 'instant' });
+        } catch {
+          window.scrollTo(0, scrollY);
+        }
+      }
     };
   }, []);
 

@@ -14,6 +14,9 @@ import {
 const AuthContext = createContext(null);
 const AUTH_USER_KEY = "authUser";
 const SESSION_ALIVE_KEY = "dkmerch_session_alive";
+const LAST_ACTIVE_KEY = "dkmerch_last_active";
+/** Stay logged-in without PIN if last activity was within this window (covers mobile reload / soft kill). */
+const RECENT_ACTIVE_MS = 12 * 60 * 60 * 1000; // 12 hours
 
 function readAuthUser() {
   try {
@@ -35,6 +38,7 @@ function clearAuthUser() {
 
 function markSessionAlive() {
   try { sessionStorage.setItem(SESSION_ALIVE_KEY, "1"); } catch { /* ignore */ }
+  try { localStorage.setItem(LAST_ACTIVE_KEY, String(Date.now())); } catch { /* ignore */ }
 }
 
 function clearSessionAlive() {
@@ -49,6 +53,20 @@ function isSessionAlive() {
   }
 }
 
+function getLastActiveMs() {
+  try {
+    const n = Number(localStorage.getItem(LAST_ACTIVE_KEY) || 0);
+    return Number.isFinite(n) ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function wasRecentlyActive() {
+  const last = getLastActiveMs();
+  return last > 0 && Date.now() - last < RECENT_ACTIVE_MS;
+}
+
 /** True when this load is a refresh/reload (not a cold app open). */
 function isPageReload() {
   try {
@@ -58,6 +76,14 @@ function isPageReload() {
     if (typeof performance !== "undefined" && performance.navigation?.type === 1) return true;
   } catch { /* ignore */ }
   return false;
+}
+
+function wasExplicitLogout() {
+  try {
+    return localStorage.getItem("dkmerch_explicit_logout") === "1";
+  } catch {
+    return false;
+  }
 }
 
 /** PIN unlock after close is for installed app only — not regular Brave/Chrome tabs. */
@@ -109,49 +135,72 @@ export const AuthProvider = ({ children }) => {
     const alive = isSessionAlive();
     const pwa = isStandalonePwa();
     const unlock = getDeviceUnlock(); // null after explicit logout
+    const reload = isPageReload();
+    const recent = wasRecentlyActive();
+    const loggedOut = wasExplicitLogout();
 
-    if (storedUser && alive) {
-      // Same session — stay logged in, no PIN; keep current route/tab
-      setUser(storedUser);
-      setRole(storedUser.role);
-      setIsAuthenticated(true);
-      setNeedsDeviceUnlock(false);
-    } else if (storedUser && !alive && isPageReload()) {
-      // Pull-to-refresh / reload — stay on this page, never show PIN
+    const restoreSession = (withPinGate = false) => {
       markSessionAlive();
       setUser(storedUser);
       setRole(storedUser.role);
-      setIsAuthenticated(true);
-      setNeedsDeviceUnlock(false);
-    } else if (storedUser && !alive && pwa) {
-      // Installed app closed then opened — PIN unlock ONLY if last login wasn't Logout
-      const isCustomer = !storedUser.role || storedUser.role === "user";
-      if (isCustomer && unlock?._id && String(unlock._id) === String(storedUser._id)) {
-        setNeedsDeviceUnlock(true);
-        setUser(null);
-        setRole(null);
-        setIsAuthenticated(false);
-      } else {
-        // Logged out earlier, or no unlock profile → require full login next time
+      setIsAuthenticated(true); // keep route/page — never bounce to home on reload
+      setNeedsDeviceUnlock(withPinGate);
+    };
+
+    if (!storedUser || loggedOut) {
+      if (loggedOut) {
         clearAuthUser();
         clearDeviceUnlock();
-        setUser(null);
-        setRole(null);
-        setIsAuthenticated(false);
-        setNeedsDeviceUnlock(false);
       }
-    } else if (storedUser && !alive && !pwa) {
-      // Regular browser (Brave/Chrome): keep session across tab close — no PIN popup
-      markSessionAlive();
-      setUser(storedUser);
-      setRole(storedUser.role);
-      setIsAuthenticated(true);
+      setUser(null);
+      setRole(null);
+      setIsAuthenticated(false);
       setNeedsDeviceUnlock(false);
+      setIsReady(true);
+      return;
+    }
+
+    // Reload / same tab / recent activity / regular browser → stay logged in on this page
+    if (alive || reload || recent || !pwa) {
+      restoreSession(false);
+      setIsReady(true);
+      return;
+    }
+
+    // Installed PWA cold start after long idle — PIN gate, but keep account + current URL
+    const isCustomer = !storedUser.role || storedUser.role === "user";
+    if (isCustomer && unlock?._id && String(unlock._id) === String(storedUser._id)) {
+      restoreSession(true);
     } else {
+      // No unlock profile after long idle → full login next time
+      clearAuthUser();
+      clearDeviceUnlock();
+      setUser(null);
+      setRole(null);
+      setIsAuthenticated(false);
       setNeedsDeviceUnlock(false);
     }
     setIsReady(true);
   }, []);
+
+  // Keep last-active fresh so mobile reload / brief background never looks like logout
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const touch = () => {
+      try { localStorage.setItem(LAST_ACTIVE_KEY, String(Date.now())); } catch { /* ignore */ }
+      markSessionAlive();
+    };
+    touch();
+    const onVis = () => { if (!document.hidden) touch(); };
+    window.addEventListener("focus", touch);
+    document.addEventListener("visibilitychange", onVis);
+    const id = window.setInterval(touch, 60_000);
+    return () => {
+      window.removeEventListener("focus", touch);
+      document.removeEventListener("visibilitychange", onVis);
+      window.clearInterval(id);
+    };
+  }, [isAuthenticated]);
 
   const applySession = (sessionUser) => {
     kickedRef.current = false;
@@ -173,6 +222,7 @@ export const AuthProvider = ({ children }) => {
     kickedRef.current = true;
     clearAuthUser();
     clearSessionAlive();
+    try { localStorage.removeItem(LAST_ACTIVE_KEY); } catch { /* ignore */ }
     markExplicitLogout();
     try { sessionStorage.removeItem("dkmerch_push_asked"); } catch { /* ignore */ }
     setUser(null);
@@ -428,6 +478,7 @@ export const AuthProvider = ({ children }) => {
     }
     clearAuthUser();
     clearSessionAlive();
+    try { localStorage.removeItem(LAST_ACTIVE_KEY); } catch { /* ignore */ }
     // Explicit logout → next open needs email/password login (never leftover PIN unlock)
     markExplicitLogout();
     clearDeviceUnlock();

@@ -10,7 +10,8 @@ import { useConfirm } from '../context/ConfirmContext';
 import ProductModal from '../components/ProductModal';
 import { PointsBadge } from '../utils/pointsUtils';
 import {
-  formatSaleRange,
+  formatSaleEndLabel,
+  formatSaleEndShort,
   shouldShowSaleBadge,
   shouldShowPreOrderBadge,
   hasDiscountedPrice,
@@ -324,13 +325,14 @@ const Collections = () => {
             const hasPromo = isPromoProduct(product);
             const wishlisted = isWishlisted(pid);
 
-            const releaseMs = getReleaseMs(product);
-            const diffMs    = releaseMs !== null ? Date.now() - releaseMs : -1;
-            const showReleasedBadge = diffMs >= 0 && diffMs < JUST_RELEASED_MS;
-            const showNewBadge = !showReleasedBadge && isNewArrival(product);
-
             const stockQty = Number(product.stock ?? 0);
             const isOutOfStock = stockQty <= 0;
+
+            const releaseMs = getReleaseMs(product);
+            const diffMs    = releaseMs !== null ? Date.now() - releaseMs : -1;
+            // Never show "Just Released" on out-of-stock items
+            const showReleasedBadge = !isOutOfStock && diffMs >= 0 && diffMs < JUST_RELEASED_MS;
+            const showNewBadge = !isOutOfStock && !showReleasedBadge && isNewArrival(product);
             const isLowStock = !isOutOfStock && stockQty > 0 && stockQty <= 5;
             const showSale = shouldShowSaleBadge(product);
             const showPreOrder = shouldShowPreOrderBadge(product) && !isReleased(product);
@@ -348,7 +350,16 @@ const Collections = () => {
                   <div className="collection-new-badge">NEW</div>
                 ) : (showSale || showPreOrder) ? (
                   <div className="collection-badge-stack">
-                    {showSale && <div className="collection-sale-badge">SALE</div>}
+                    {showSale && (
+                      <div className="collection-sale-badge">
+                        <span>SALE</span>
+                        {(formatSaleEndShort(product) || formatSaleEndLabel(product)) && (
+                          <span className="collection-sale-badge-end">
+                            {formatSaleEndShort(product) || formatSaleEndLabel(product)}
+                          </span>
+                        )}
+                      </div>
+                    )}
                     {showPreOrder && <div className="collection-preorder-badge">PRE-ORDER</div>}
                   </div>
                 ) : null}
@@ -381,16 +392,16 @@ const Collections = () => {
                     <span className={`collection-card-price ${showSale ? 'sale' : ''}`}>
                       ₱{product.price?.toLocaleString()}
                     </span>
-                    {hasDiscountedPrice(product) && (
+                    {showSale && hasDiscountedPrice(product) && (
                       <span className="collection-card-price-original">₱{product.originalPrice?.toLocaleString()}</span>
                     )}
                     {/* ✅ Points badge */}
                     <PointsBadge price={product.price} />
                   </div>
-                  {showSale && formatSaleRange(product) && (
+                  {showSale && formatSaleEndLabel(product) && (
                     <div className="collection-sale-period">
                       <i className="fas fa-clock"></i>
-                      <span>{formatSaleRange(product)}</span>
+                      <span>{formatSaleEndLabel(product)}</span>
                     </div>
                   )}
                   <div

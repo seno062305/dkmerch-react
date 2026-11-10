@@ -168,6 +168,7 @@ export const loginUser = mutation({
         email: user.email,
         phone: user.phone || "",
         role: user.role,
+        usernameChangedAt: (user as any).usernameChangedAt ?? null,
       };
 
       // Admins skip PIN / second factor — mint session immediately (kick other admin sessions)
@@ -212,7 +213,10 @@ const toSafeUser = (user: any) => ({
   email: user.email,
   phone: user.phone || "",
   role: user.role,
+  usernameChangedAt: user.usernameChangedAt ?? null,
 });
+
+const USERNAME_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** Whether this customer already has a login PIN (for post-update unlock routing). */
 export const hasLoginPin = query({
@@ -863,11 +867,50 @@ export const updateUserProfile = mutation({
     status: v.optional(v.string()),
   },
   handler: async ({ db }, { id, ...updates }) => {
-    const filtered = Object.fromEntries(
+    const existing = await db.get(id);
+    if (!existing) throw new Error("User not found.");
+
+    const filtered: Record<string, unknown> = Object.fromEntries(
       Object.entries(updates).filter(([, val]) => val !== undefined)
     );
-    await db.patch(id, filtered);
-    return { success: true, message: "Profile updated!" };
+
+    if (typeof filtered.username === "string") {
+      const nextUsername = filtered.username.trim();
+      const prevUsername = String((existing as any).username || "");
+      if (nextUsername && nextUsername.toLowerCase() !== prevUsername.toLowerCase()) {
+        const lastChange = Number((existing as any).usernameChangedAt || 0);
+        if (lastChange > 0) {
+          const elapsed = Date.now() - lastChange;
+          if (elapsed < USERNAME_COOLDOWN_MS) {
+            const daysLeft = Math.max(1, Math.ceil((USERNAME_COOLDOWN_MS - elapsed) / (24 * 60 * 60 * 1000)));
+            throw new Error(
+              `Username can only be changed once every 7 days. Try again in ${daysLeft} day${daysLeft === 1 ? "" : "s"}.`
+            );
+          }
+        }
+        const taken = await db
+          .query("users")
+          .withIndex("by_username", (q) => q.eq("username", nextUsername))
+          .first();
+        if (taken && String(taken._id) !== String(id)) {
+          throw new Error("That username is already taken.");
+        }
+        filtered.username = nextUsername;
+        filtered.usernameChangedAt = Date.now();
+      } else {
+        // Unchanged (or case-only) — don't bump cooldown clock
+        delete filtered.username;
+      }
+    }
+
+    await db.patch(id, filtered as any);
+    const updated = await db.get(id);
+    return {
+      success: true,
+      message: "Profile updated!",
+      usernameChangedAt: (updated as any)?.usernameChangedAt ?? null,
+      username: (updated as any)?.username,
+    };
   },
 });
 

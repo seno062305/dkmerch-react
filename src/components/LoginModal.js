@@ -305,11 +305,37 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
   }, [preferPinUnlock, remembered, rememberedLocalPin, unlockPinStatus]);
 
   useEffect(() => {
+    const getScrollY = () => {
+      const bodyTop = document.body.style.top;
+      if (bodyTop) return Math.abs(parseInt(bodyTop, 10)) || 0;
+      return window.scrollY || window.pageYOffset || 0;
+    };
+    const scrollY = getScrollY();
+    document.body.classList.add("login-modal-open");
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.left = "0";
+    document.body.style.right = "0";
+    document.body.style.width = "100%";
     document.body.style.overflow = "hidden";
-    document.body.classList.add('login-modal-open');
     return () => {
-      document.body.style.overflow = "";
-      document.body.classList.remove('login-modal-open');
+      document.body.classList.remove("login-modal-open");
+      const otherLock =
+        document.body.classList.contains("product-modal-open")
+        || document.body.classList.contains("cart-modal-open");
+      if (!otherLock) {
+        document.body.style.position = "";
+        document.body.style.top = "";
+        document.body.style.left = "";
+        document.body.style.right = "";
+        document.body.style.width = "";
+        document.body.style.overflow = "";
+        try {
+          window.scrollTo({ top: scrollY, left: 0, behavior: "instant" });
+        } catch {
+          window.scrollTo(0, scrollY);
+        }
+      }
     };
   }, []);
 

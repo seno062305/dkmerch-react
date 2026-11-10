@@ -22,13 +22,35 @@ export const formatSaleDateTime = (dateStr, timeStr) => {
 };
 
 export const formatSaleRange = (product) => {
-  if (!product?.isSale) return null;
+  if (!product?.isSale && !product?.saleEndDate) return null;
   const start = formatSaleDateTime(product.saleStartDate, product.saleStartTime);
   const end = formatSaleDateTime(product.saleEndDate, product.saleEndTime);
   if (start && end) return `${start} – ${end}`;
   if (end) return `Until ${end}`;
   if (start) return `From ${start}`;
   return null;
+};
+
+/** Short customer-facing label: "Ends Nov 15, 11:59 PM" */
+export const formatSaleEndLabel = (product) => {
+  if (!product?.saleEndDate) return null;
+  // No sale end date on out-of-stock items
+  if (Number(product?.stock ?? 0) <= 0) return null;
+  const end = formatSaleDateTime(product.saleEndDate, product.saleEndTime);
+  return end ? `Ends ${end}` : null;
+};
+
+/** Compact badge line: "Until Nov 15" */
+export const formatSaleEndShort = (product) => {
+  if (!product?.saleEndDate || Number(product?.stock ?? 0) <= 0) return null;
+  const endMs = toPhtMs(product.saleEndDate, product.saleEndTime || '23:59');
+  if (endMs == null) return null;
+  const datePart = new Date(endMs).toLocaleString('en-PH', {
+    timeZone: 'Asia/Manila',
+    month: 'short',
+    day: 'numeric',
+  });
+  return `Until ${datePart}`;
 };
 
 /** True when product is marked on sale and current time is within sale window (if set). */
@@ -47,10 +69,12 @@ export const hasDiscountedPrice = (product) =>
 
 /**
  * Show a SALE badge when admin marked sale (active window) OR price is discounted.
- * Works together with Pre-Order — both can show at once.
+ * Hidden when out of stock — no point advertising a sale you can't buy.
+ * Works together with Pre-Order — both can show at once (while in stock).
  */
 export const shouldShowSaleBadge = (product, now = Date.now()) => {
   if (!product) return false;
+  if (Number(product.stock ?? 0) <= 0) return false;
   if (isSaleActive(product, now)) return true;
   return hasDiscountedPrice(product);
 };

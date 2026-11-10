@@ -134,7 +134,7 @@ const MyPreOrders = () => {
       variant: 'primary',
       icon: 'fa-shopping-cart',
       rememberKey: addToCartConfirmRememberKey(user?.email),
-      rememberLabel: 'Do not show again for my account',
+      rememberLabel: 'Do not show again',
     });
     if (!ok) return;
 
