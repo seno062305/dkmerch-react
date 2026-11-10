@@ -73,7 +73,7 @@
     .splash-logo-wrap {
       position: relative;
       margin-bottom: 32px;
-      animation: splashLogoPop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+      animation: splashLogoPop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
     }
 
     @keyframes splashLogoPop {
@@ -139,7 +139,7 @@
       color: #ffffff;
       letter-spacing: 1px;
       margin: 0 0 6px;
-      animation: splashFadeUp 0.5s ease 0.3s both;
+      animation: splashFadeUp 0.28s ease 0.08s both;
     }
 
     .splash-sub {
@@ -148,8 +148,8 @@
       color: rgba(255,255,255,0.75);
       letter-spacing: 2px;
       text-transform: uppercase;
-      margin: 0 0 48px;
-      animation: splashFadeUp 0.5s ease 0.45s both;
+      margin: 0 0 28px;
+      animation: splashFadeUp 0.28s ease 0.12s both;
     }
 
     @keyframes splashFadeUp {
@@ -164,7 +164,7 @@
       background: rgba(255,255,255,0.25);
       border-radius: 99px;
       overflow: hidden;
-      animation: splashFadeUp 0.5s ease 0.55s both;
+      animation: splashFadeUp 0.28s ease 0.15s both;
     }
 
     .splash-bar {
@@ -173,14 +173,12 @@
       background: #ffffff;
       border-radius: 99px;
       box-shadow: 0 0 8px rgba(255,255,255,0.7);
-      animation: splashBarFill 1.8s cubic-bezier(0.4, 0, 0.2, 1) 0.4s forwards;
+      animation: splashBarFill 0.7s cubic-bezier(0.4, 0, 0.2, 1) 0.1s forwards;
     }
 
     @keyframes splashBarFill {
       0%   { width: 0%; }
-      30%  { width: 40%; }
-      60%  { width: 70%; }
-      85%  { width: 88%; }
+      40%  { width: 55%; }
       100% { width: 100%; }
     }
   </style>
@@ -223,7 +221,7 @@
       var isPwaReopen = window.matchMedia('(display-mode: standalone)').matches
         || window.navigator.standalone === true
         || /source=pwa/i.test(window.location.search);
-      var minShow = isPwaReopen ? 900 : 1800;
+      var minShow = isPwaReopen ? 350 : 550;
       var startTime = Date.now();
       var splashHidden = false;
 
@@ -238,7 +236,7 @@
             splash.classList.add('hide');
             setTimeout(function () {
               if (splash.parentNode) splash.parentNode.removeChild(splash);
-            }, 500);
+            }, 280);
           }
         }, remaining);
       }
@@ -261,8 +259,8 @@
         hideSplash();
       }
 
-      // Fallback: hide after 4s regardless
-      setTimeout(hideSplash, 4000);
+      // Fallback: hide quickly even if React is slow
+      setTimeout(hideSplash, 1600);
 
       // Register Service Worker
       if ('serviceWorker' in navigator) {

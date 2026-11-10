@@ -228,7 +228,20 @@
   gap: 12px;
   flex-wrap: wrap;
 }
-.ar-completed-header { background: #166534; }
+.ar-completed-header {
+  background: #ffffff;
+  border-bottom: 1px solid #e5e7eb;
+}
+.ar-completed-header .ar-remove-btn {
+  background: #fff1f2;
+  color: #e11d48;
+  border: 1.5px solid #fecdd3;
+}
+.ar-completed-header .ar-remove-btn:hover {
+  background: #ffe4e6;
+  border-color: #fda4af;
+  color: #be123c;
+}
 
 .ar-order-id-block { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .ar-order-id { font-size: 15px; font-weight: 800; letter-spacing: 1px; color: rgb(0, 0, 0); }
