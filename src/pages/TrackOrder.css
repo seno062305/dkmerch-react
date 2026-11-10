@@ -1622,6 +1622,15 @@
   color: #6b7280;
   line-height: 1.4;
 }
+.customer-refund-proof-section .customer-pod-label i { color: #0284c7; }
+.customer-refund-proof-link { display: block; }
+.customer-refund-proof-photo {
+  object-fit: contain !important;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  max-height: 420px;
+}
+
 .customer-pod-photo {
   width: 100%;
   max-height: 360px;

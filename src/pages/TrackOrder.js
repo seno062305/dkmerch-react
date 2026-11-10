@@ -987,6 +987,12 @@ const TrackOrder = ({ onProductClick }) => {
               <span>Cancel request declined — order continues</span>
             </div>
           )}
+          {order.cancelRequestStatus === 'approved' && order.cancelRefundProofId && (
+            <div className="order-card-refund-timer" style={{ marginBottom: 6 }}>
+              <i className="fas fa-receipt"></i>
+              <span>Admin refund proof available — open details</span>
+            </div>
+          )}
           {!isGuest && delivered && !order.refundStatus && canRefund && <div className="order-card-refund-timer"><i className="fas fa-hourglass-half"></i><span>Refund window: <strong>{hoursLeft}h left</strong></span></div>}
           {!isGuest && delivered && !order.refundStatus && expired && <div className="order-card-refund-expired"><i className="fas fa-clock"></i><span>Refund window expired</span></div>}
           <div className="order-card-meta">
@@ -1233,6 +1239,12 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
   const [localOtp,          setLocalOtp]          = useState(order.deliveryOtp || null);
   const [continuingPayment, setContinuingPayment] = useState(false);
   const [proofExpanded,     setProofExpanded]     = useState(true);
+  const [refundProofExpanded, setRefundProofExpanded] = useState(true);
+
+  const cancelRefundProofUrl = useQuery(
+    api.orders.getRefundPhotoUrl,
+    order.cancelRefundProofId ? { storageId: order.cancelRefundProofId } : 'skip'
+  );
 
   const isCancelled      = (order.orderStatus || order.status || '').toLowerCase() === 'cancelled';
   const isOutForDelivery = isOutForDeliveryStatus(order);
@@ -1343,6 +1355,40 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
             </div>
           )}
 
+          {isCancelled && order.cancelRefundProofId && (
+            <div className="customer-pod-section customer-refund-proof-section">
+              <button
+                type="button"
+                className="customer-pod-header"
+                onClick={() => setRefundProofExpanded((v) => !v)}
+              >
+                <span className="customer-pod-label">
+                  <i className="fas fa-receipt"></i>
+                  <strong>Admin Refund Proof</strong>
+                </span>
+                <i className={`fas fa-chevron-${refundProofExpanded ? 'up' : 'down'}`}></i>
+              </button>
+              {refundProofExpanded && (
+                <div className="customer-pod-body">
+                  <p className="customer-pod-note">
+                    Screenshot from admin confirming your refund was sent (GCash / Maya / PayMongo).
+                  </p>
+                  {cancelRefundProofUrl ? (
+                    <a href={cancelRefundProofUrl} target="_blank" rel="noreferrer" className="customer-refund-proof-link">
+                      <img
+                        src={cancelRefundProofUrl}
+                        alt="Admin refund proof"
+                        className="customer-pod-photo customer-refund-proof-photo"
+                      />
+                    </a>
+                  ) : (
+                    <div className="customer-pod-note"><i className="fas fa-spinner fa-spin"></i> Loading proof…</div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {canCancel && (
             <button
               type="button"
@@ -1351,8 +1397,8 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
               onClick={() => onCustomerCancel?.(order)}
             >
               {cancelling
-                ? <><i className="fas fa-spinner fa-spin"></i> Cancelling…</>
-                : <><i className="fas fa-ban"></i> Cancel Order{String(order.paymentStatus || '').toLowerCase() === 'paid' ? ' & Auto-Refund' : ''}</>}
+                ? <><i className="fas fa-spinner fa-spin"></i> Submitting…</>
+                : <><i className="fas fa-ban"></i> Request Cancel</>}
             </button>
           )}
 
