@@ -9,16 +9,16 @@
 const MAX_REASONABLE_SEQ = 999999;
 
 function extractSuffix(id) {
-  const dk = String(id || "").match(/^DK-\d+-([A-Z0-9]+)$/i);
+  const dk = String(id || '').match(/^DK-\d+-([A-Z0-9]+)$/i);
   if (dk?.[1]) return dk[1].toUpperCase();
-  const tail = String(id || "").match(/-([A-Z0-9]{4,10})$/i);
+  const tail = String(id || '').match(/-([A-Z0-9]{4,10})$/i);
   if (tail?.[1]) return tail[1].toUpperCase();
-  return "";
+  return '';
 }
 
 export function formatOrderShortId(orderOrId) {
-  const order = orderOrId && typeof orderOrId === "object" ? orderOrId : null;
-  const id = String(order?.orderId ?? orderOrId ?? "").trim();
+  const order = orderOrId && typeof orderOrId === 'object' ? orderOrId : null;
+  const id = String(order?.orderId ?? orderOrId ?? '').trim();
   const suffix = extractSuffix(id);
 
   // Prefer server orderSeq when it is a real short sequence (not Date.now())
@@ -35,12 +35,11 @@ export function formatOrderShortId(orderOrId) {
     if (Number.isFinite(seq) && seq >= 1 && seq <= MAX_REASONABLE_SEQ) {
       return `${seq}-${sequential[2].toUpperCase()}`;
     }
-    // Timestamp wrongly baked into DK-… — show short suffix only style
     if (suffix) return suffix;
   }
 
   // Legacy / failover timestamp ids — keep old last-8 display
-  if (!id) return "N/A";
+  if (!id) return 'N/A';
   return id.slice(-8).toUpperCase();
 }
 

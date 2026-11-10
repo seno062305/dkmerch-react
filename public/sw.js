@@ -1,7 +1,7 @@
 // DKMerch Service Worker — PWA support
-const CACHE_NAME = 'dkmerch-v6-pink-splash';
+const CACHE_NAME = 'dkmerch-v7-orderid-fix';
 
-// Only cache essential static assets
+// Only cache essential static assets (never webpack JS bundles)
 const STATIC_ASSETS = [
   '/',
   '/rider',
@@ -9,6 +9,15 @@ const STATIC_ASSETS = [
   '/manifest.json',
   '/images/dklogo2-removebg-preview.png',
 ];
+
+function isAppShellAsset(url) {
+  const path = url.pathname || '';
+  // Dev + prod JS/CSS must always be network — caching bundle.js caused stale module errors
+  if (path.startsWith('/static/')) return false;
+  if (/\.(?:js|css|map)$/i.test(path)) return false;
+  if (path.includes('hot-update')) return false;
+  return true;
+}
 
 // Install — cache static assets
 self.addEventListener('install', (event) => {
@@ -56,11 +65,16 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Never intercept/cache webpack / CRA bundles (fixes stale "Cannot find module" on localhost)
+  if (!isAppShellAsset(url)) {
+    return;
+  }
+
   // Network first strategy
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // Cache valid responses for static assets
+        // Cache valid responses for static shell assets only
         if (response && response.status === 200 && response.type === 'basic') {
           const responseClone = response.clone();
           caches.open(CACHE_NAME).then((cache) => {

@@ -9,7 +9,7 @@ import { useNotification } from '../context/NotificationContext';
 import DkIcon, { DK_ICONS } from '../components/DkIcon';
 import AdminPager from './AdminPager';
 import { isLbcOrder } from '../utils/deliveryUtils';
-import { formatOrderShortId } from '../utils/orderId.js';
+import { formatOrderShortId } from '../utils/orderId';
 import './AdminOrders.css';
 
 const SITE_URL = 'https://dkmerchwebsite.vercel.app';

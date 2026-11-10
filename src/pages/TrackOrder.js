@@ -10,7 +10,7 @@ import DkIcon, { DK_ICONS } from '../components/DkIcon';
 import { useNotification } from '../context/NotificationContext';
 import DeliveryChatPanel from '../components/DeliveryChatPanel';
 import { useCloseOnHistoryBack } from '../hooks/useCloseOnHistoryBack';
-import { formatOrderShortId } from '../utils/orderId.js';
+import { formatOrderShortId } from '../utils/orderId';
 import './TrackOrder.css';
 
 /** Cancel request allowed only before admin confirms the order. */
