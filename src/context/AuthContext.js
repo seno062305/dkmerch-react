@@ -3,7 +3,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { appendActivityLog } from "../admin/lib/localActivityLog";
-import { saveDeviceUnlock } from "../lib/deviceUnlock";
+import { saveDeviceUnlock, clearDeviceUnlock } from "../lib/deviceUnlock";
 
 const AuthContext = createContext(null);
 
@@ -279,6 +279,9 @@ export const AuthProvider = ({ children }) => {
       });
     }
     localStorage.removeItem("authUser");
+    // Clear device PIN unlock so next open shows email/password login form
+    clearDeviceUnlock();
+    try { sessionStorage.removeItem("dkmerch_push_asked"); } catch { /* ignore */ }
     setUser(null);
     setRole(null);
     setIsAuthenticated(false);
