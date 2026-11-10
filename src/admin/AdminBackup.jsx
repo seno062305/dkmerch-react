@@ -1729,8 +1729,8 @@ const AdminBackup = () => {
                 }
               }}
             >
-              <i className="fas fa-cloud-upload-alt"></i>{' '}
-              {busy === 'app-update' ? 'Publishing…' : 'Publish update + email customers'}
+              <i className="fas fa-cloud-upload-alt" aria-hidden="true"></i>
+              <span>{busy === 'app-update' ? 'Publishing…' : 'Publish update & email'}</span>
             </button>
             {updateMsg && <p className="ab-card-hint" style={{ marginTop: 10 }}>{updateMsg}</p>}
             {appUpdateList[0] && (
