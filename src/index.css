@@ -32,7 +32,20 @@ html.dk-scroll-locked,
 body.dk-scroll-locked {
   overflow: hidden !important;
   overscroll-behavior: none !important;
+  /* Keep page from scrolling; overlays set their own touch-action */
   touch-action: none;
+}
+/* Chat / modals must still receive taps + inner scroll while body is locked */
+body.dk-scroll-locked .dk-chat-window,
+body.dk-scroll-locked .dk-chat-backdrop,
+body.dk-scroll-locked .dk-chat-fab-stack,
+body.dk-scroll-locked #dk-overlay-root,
+body.dk-scroll-locked #dk-overlay-root * {
+  touch-action: manipulation;
+}
+body.dk-scroll-locked .dk-chat-window,
+body.dk-scroll-locked .dk-chat-window * {
+  touch-action: pan-y manipulation;
 }
 
 /* Sibling of <body> — overlays stay viewport-fixed while body scroll is frozen */

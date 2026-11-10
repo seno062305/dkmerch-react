@@ -416,7 +416,8 @@
   }
   .carousel-slide {
     align-items: center;
-    padding: 36px 0 56px;
+    /* Extra bottom room so lowered arrows don’t sit on the CTA / copy */
+    padding: 36px 0 72px;
     box-sizing: border-box;
   }
   .carousel-slide img {
@@ -424,19 +425,21 @@
     min-height: 460px;
   }
   .carousel-content {
-    padding: 8px 56px 12px;
+    /* Keep copy above the lowered side arrows */
+    padding: 8px 20px 64px;
     width: 100%;
   }
   .carousel-content h1 { font-size: 28px; }
   .carousel-content p { font-size: 15px; }
   .carousel-nav {
     top: auto;
-    bottom: 40px;
+    /* Sit near dots — below headline / CTA so text isn’t covered */
+    bottom: 10px;
     transform: none;
-    padding: 0 12px;
+    padding: 0 10px;
   }
   .carousel-btn { width: 36px; height: 36px; font-size: 14px; }
-  .carousel-dots { bottom: 14px; }
+  .carousel-dots { bottom: 10px; }
   .promo-badge { font-size: 11px; padding: 5px 12px; }
   .promo-code-pill { font-size: 14px; padding: 6px 14px; margin-bottom: 14px; }
   .promo-code-pill strong { font-size: 16px; }
@@ -459,12 +462,12 @@
   .carousel-slide { min-height: 440px; }
   .carousel-slide { padding: 28px 0 52px; }
   .carousel-slide img { min-height: 440px; }
-  .carousel-content { padding: 4px 48px 8px; }
+  .carousel-content { padding: 4px 16px 58px; }
   .carousel-content h1 { font-size: 22px; margin-bottom: 10px; }
   .carousel-content p { font-size: 13px; margin-bottom: 10px; line-height: 1.45; }
-  .carousel-nav { bottom: 36px; padding: 0 10px; }
+  .carousel-nav { bottom: 8px; padding: 0 8px; }
   .carousel-btn { width: 32px; height: 32px; font-size: 12px; }
-  .carousel-dots { bottom: 12px; }
+  .carousel-dots { bottom: 8px; }
   .carousel-dot { width: 10px; height: 10px; }
   .promo-code-pill { padding: 5px 10px; gap: 5px; }
   .promo-code-pill strong { font-size: 14px; letter-spacing: 1px; }

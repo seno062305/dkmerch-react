@@ -4,7 +4,6 @@ import InstallAppModal, {
   isStandaloneApp,
   isInsecureInstallHost,
 } from "./InstallAppModal";
-import useBodyScrollLock from "../hooks/useBodyScrollLock";
 
 // ─── DKMerch Brand Colors ───
 const PINK = "#fc1268";
@@ -209,6 +208,7 @@ export default function DKMerchChatBot() {
   const [hasGreeted, setHasGreeted] = useState(false);
   const [showPulse, setShowPulse] = useState(true);
   const bottomRef = useRef(null);
+  const messagesRef = useRef(null);
 
   const [installPrompt, setInstallPrompt] = useState(null);
   const [isInstalled, setIsInstalled] = useState(false);
@@ -250,7 +250,8 @@ export default function DKMerchChatBot() {
     setInstallPrompt(null);
   };
 
-  useBodyScrollLock(open);
+  // Do NOT lock body scroll for this floating panel — lock + scrollIntoView froze iOS taps.
+  // Backdrop already blocks page interaction while open.
 
   useEffect(() => {
     if (open && !hasGreeted) {
@@ -268,8 +269,13 @@ export default function DKMerchChatBot() {
     }
   }, [open, hasGreeted]);
 
+  // Scroll only the chat panel — never scrollIntoView on the page (fights body lock → freeze)
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const box = messagesRef.current;
+    if (!box) return;
+    try {
+      box.scrollTop = box.scrollHeight;
+    } catch { /* ignore */ }
   }, [messages]);
 
   useEffect(() => {
@@ -468,11 +474,18 @@ export default function DKMerchChatBot() {
           </div>
 
           {/* Messages */}
-          <div style={{
-            flex: 1, overflowY: "auto", padding: "16px 14px",
-            display: "flex", flexDirection: "column", gap: 12,
-            background: "#f9f6fb",
-          }}>
+          <div
+            ref={messagesRef}
+            className="dk-chat-messages"
+            style={{
+              flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch",
+              padding: "16px 14px",
+              display: "flex", flexDirection: "column", gap: 12,
+              background: "#f9f6fb",
+              touchAction: "pan-y",
+              overscrollBehavior: "contain",
+            }}
+          >
             {messages.map((msg, i) => (
               <div key={i}>
                 {msg.from === "bot" && (
@@ -495,6 +508,7 @@ export default function DKMerchChatBot() {
                           {msg.options.map((opt, j) => (
                             <button
                               key={j}
+                              type="button"
                               onClick={() => handleOption(opt)}
                               style={{
                                 background: "#fff",
@@ -528,6 +542,7 @@ export default function DKMerchChatBot() {
 
                       {msg.showBack && (
                         <button
+                          type="button"
                           onClick={handleBack}
                           style={{
                             marginTop: 8,
@@ -567,7 +582,7 @@ export default function DKMerchChatBot() {
                 )}
               </div>
             ))}
-            <div ref={bottomRef} />
+            <div ref={bottomRef} aria-hidden="true" />
           </div>
 
           {/* Footer */}
