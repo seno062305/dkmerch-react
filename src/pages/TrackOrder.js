@@ -237,15 +237,29 @@ const RiderMap = ({ orderId, riderName, orderData }) => {
         .bindPopup(`<div class="rider-map-popup"><strong>🛵 ${riderName || 'Your Rider'}</strong><br><small>Waiting for location…</small></div>`);
       mapInstanceRef.current = map; markerRef.current = marker;
       setMapReady(true);
-      setTimeout(() => { try { map.invalidateSize(); } catch {} }, 300);
+      const refresh = () => { try { map.invalidateSize({ animate: false }); } catch {} };
+      [80, 250, 500].forEach((ms) => setTimeout(refresh, ms));
     } catch { setMapError('Failed to initialize map.'); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leafletLoaded]);
 
   useEffect(() => {
-    const h = () => { if (document.visibilityState === 'visible' && mapInstanceRef.current) setTimeout(() => { try { mapInstanceRef.current?.invalidateSize(); } catch {} }, 200); };
+    const refresh = () => {
+      if (mapInstanceRef.current) setTimeout(() => { try { mapInstanceRef.current?.invalidateSize({ animate: false }); } catch {} }, 120);
+    };
+    const h = () => { if (document.visibilityState === 'visible') refresh(); };
     document.addEventListener('visibilitychange', h);
-    return () => document.removeEventListener('visibilitychange', h);
+    window.addEventListener('resize', refresh);
+    let ro = null;
+    if (typeof ResizeObserver !== 'undefined' && mapRef.current) {
+      ro = new ResizeObserver(refresh);
+      ro.observe(mapRef.current);
+    }
+    return () => {
+      document.removeEventListener('visibilitychange', h);
+      window.removeEventListener('resize', refresh);
+      if (ro) { try { ro.disconnect(); } catch {} }
+    };
   }, []);
 
   const clearRoute = useCallback(() => {

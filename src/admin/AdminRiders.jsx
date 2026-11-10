@@ -394,12 +394,15 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
 
     mapObjRef.current = map;
     mapReadyRef.current = true;
-    setTimeout(() => { try { map.invalidateSize(); } catch {} }, 150);
+    const refresh = () => { try { map.invalidateSize({ animate: false }); } catch {} };
+    [80, 250, 500].forEach((ms) => setTimeout(refresh, ms));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leafletReady]);
 
   useEffect(() => {
-    if (mapObjRef.current) setTimeout(() => { try { mapObjRef.current.invalidateSize(); } catch {} }, 150);
+    if (!mapObjRef.current) return;
+    const refresh = () => { try { mapObjRef.current.invalidateSize({ animate: false }); } catch {} };
+    [80, 250, 500].forEach((ms) => setTimeout(refresh, ms));
   }, [isFullscreen]);
 
   // Show last known location when offline

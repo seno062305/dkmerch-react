@@ -177,9 +177,19 @@ function FullscreenMapModal({ order, gpsCoords, onClose }) {
     }
 
     modalMapObjRef.current = map;
-    setTimeout(() => { try { map.invalidateSize(); } catch {} }, 150);
+    const refresh = () => { try { map.invalidateSize({ animate: false }); } catch {} };
+    [80, 250, 500].forEach((ms) => setTimeout(refresh, ms));
+    let ro = null;
+    if (typeof ResizeObserver !== 'undefined' && modalMapRef.current) {
+      ro = new ResizeObserver(refresh);
+      ro.observe(modalMapRef.current);
+    }
 
-    return () => { try { map.remove(); } catch {} modalMapObjRef.current = null; };
+    return () => {
+      if (ro) { try { ro.disconnect(); } catch {} }
+      try { map.remove(); } catch {}
+      modalMapObjRef.current = null;
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

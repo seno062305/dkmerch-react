@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../context/ConfirmContext';
@@ -256,6 +257,16 @@ const NCR_BOUNDS = [[14.3500, 120.8600], [14.8000, 121.1500]];
 const NCR_CENTER = [14.5995, 121.0];
 const NCR_MIN_ZOOM = 11;
 
+const orderIdsMatch = (a, b) => {
+  if (!a || !b) return false;
+  const A = String(a).trim();
+  const B = String(b).trim();
+  if (A === B) return true;
+  const shortA = A.slice(-8).toUpperCase();
+  const shortB = B.slice(-8).toUpperCase();
+  return shortA === shortB || A.endsWith(B) || B.endsWith(A) || A.endsWith(shortB) || B.endsWith(shortA);
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Route fetcher (OSRM)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -345,12 +356,9 @@ const buildRiderIconHtml = (heading) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Fullscreen map modal
-// Fullscreen map covers the viewport (bottom nav stays under overlay).
+// Fullscreen map modal — portaled to body so topbar/bottom-nav cannot clip it
 // ─────────────────────────────────────────────────────────────────────────────
-const SIDEBAR_WIDTH = 0;
-
-const FullscreenMapModal = ({ address, customerName, coords, riderCoords, riderHeading, onClose }) => {
+const FullscreenMapModal = ({ address, customerName, orderId, coords, riderCoords, riderHeading, onClose }) => {
   const mapRef         = useRef(null);
   const mapInstanceRef = useRef(null);
   const unmountedRef   = useRef(false);
@@ -358,23 +366,14 @@ const FullscreenMapModal = ({ address, customerName, coords, riderCoords, riderH
   const riderMarkerRef = useRef(null);
   const routeDrawnRef  = useRef(false);
   const [geocoding, setGeocoding] = useState(!coords);
-  // On mobile (≤768px) use true fullscreen; on desktop offset by sidebar
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
 
   useEffect(() => {
-    const onResize = () => setIsMobile(window.innerWidth <= 768);
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
-
-  useEffect(() => {
+    const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    document.body.style.position = 'fixed';
-    document.body.style.width = '100%';
+    document.body.classList.add('rider-fullscreen-map-open');
     return () => {
-      document.body.style.overflow = '';
-      document.body.style.position = '';
-      document.body.style.width = '';
+      document.body.style.overflow = prevOverflow;
+      document.body.classList.remove('rider-fullscreen-map-open');
     };
   }, []);
 
@@ -383,6 +382,12 @@ const FullscreenMapModal = ({ address, customerName, coords, riderCoords, riderH
     routeDrawnRef.current = false;
     if (!mapRef.current || mapInstanceRef.current) return;
     let intervalId = null;
+    let resizeObs = null;
+    const refreshSize = (map) => {
+      try {
+        map.invalidateSize({ animate: false });
+      } catch { /* ignore */ }
+    };
     const initMap = () => {
       if (!window.L || !mapRef.current || unmountedRef.current) return;
       try {
@@ -411,12 +416,38 @@ const FullscreenMapModal = ({ address, customerName, coords, riderCoords, riderH
           iconSize: [44, 44], iconAnchor: [22, 44], popupAnchor: [0, -48],
         });
         const popupLabel     = customerName ? `${customerName}'s Location` : 'Customer Location';
+        const shortId        = orderId ? String(orderId).slice(-8).toUpperCase() : '';
         const customerMarker = L.marker([startLat, startLng], { icon: customerIcon })
           .addTo(map)
-          .bindPopup(`<div style="font-size:13px;max-width:220px"><strong>📍 ${popupLabel}</strong><br><small>${address}</small></div>`)
-          .openPopup();
+          .bindPopup(
+            `<div style="font-size:13px;max-width:220px"><strong>📍 ${popupLabel}</strong>`
+            + (shortId ? `<br><small>Order #${shortId}</small>` : '')
+            + `<br><small>${address || ''}</small></div>`
+          );
         mapInstanceRef.current = map;
-        setTimeout(() => { try { map.invalidateSize(); } catch {} }, 350);
+
+        const fitWithPadding = (points) => {
+          try {
+            map.fitBounds(points, {
+              paddingTopLeft: [24, 72],
+              paddingBottomRight: [24, 72],
+              maxZoom: 17,
+            });
+          } catch { /* ignore */ }
+        };
+
+        [80, 250, 500].forEach((ms) => setTimeout(() => {
+          if (unmountedRef.current || !mapInstanceRef.current) return;
+          refreshSize(map);
+          if (riderCoords?.lat && riderCoords?.lng) {
+            fitWithPadding([[riderCoords.lat, riderCoords.lng], [startLat, startLng]]);
+          }
+        }, ms));
+
+        if (typeof ResizeObserver !== 'undefined' && mapRef.current) {
+          resizeObs = new ResizeObserver(() => refreshSize(map));
+          resizeObs.observe(mapRef.current);
+        }
 
         if (riderCoords?.lat && riderCoords?.lng && !routeDrawnRef.current) {
           routeDrawnRef.current = true;
@@ -427,7 +458,7 @@ const FullscreenMapModal = ({ address, customerName, coords, riderCoords, riderH
           });
           riderMarkerRef.current = L.marker([riderCoords.lat, riderCoords.lng], { icon: riderIcon })
             .addTo(map).bindPopup('<strong>🛵 Your Location</strong>');
-          map.fitBounds([[riderCoords.lat, riderCoords.lng], [startLat, startLng]], { padding: [40, 40] });
+          fitWithPadding([[riderCoords.lat, riderCoords.lng], [startLat, startLng]]);
           fetchRoute(riderCoords.lat, riderCoords.lng, startLat, startLng).then(latlngs => {
             if (unmountedRef.current || !mapInstanceRef.current || !latlngs) return;
             try {
@@ -435,8 +466,12 @@ const FullscreenMapModal = ({ address, customerName, coords, riderCoords, riderH
               routeLayerRef.current = L.polyline(latlngs, {
                 color: '#fc1268', weight: 5, opacity: 0.85, lineJoin: 'round', lineCap: 'round',
               }).addTo(mapInstanceRef.current);
-            } catch {}
+              refreshSize(map);
+              fitWithPadding(latlngs);
+            } catch { /* ignore */ }
           });
+        } else {
+          setTimeout(() => { try { customerMarker.openPopup(); } catch { /* ignore */ } }, 400);
         }
 
         if (!coords) {
@@ -446,11 +481,20 @@ const FullscreenMapModal = ({ address, customerName, coords, riderCoords, riderH
             if (unmountedRef.current || !mapInstanceRef.current) return;
             if (data?.length > 0) {
               const lat = parseFloat(data[0].lat), lng = parseFloat(data[0].lon);
-              customerMarker.setLatLng([lat, lng]).openPopup();
-              map.flyTo([lat, lng], 17, { animate: true, duration: 1.2 });
+              customerMarker.setLatLng([lat, lng]);
+              if (riderCoords?.lat && riderCoords?.lng) {
+                fitWithPadding([[riderCoords.lat, riderCoords.lng], [lat, lng]]);
+              } else {
+                map.flyTo([lat, lng], 17, { animate: true, duration: 1.0 });
+                setTimeout(() => { try { customerMarker.openPopup(); } catch { /* ignore */ } }, 500);
+              }
             }
             if (!unmountedRef.current) setGeocoding(false);
           }).catch(() => { if (!unmountedRef.current) setGeocoding(false); });
+        } else if (!riderCoords?.lat) {
+          setGeocoding(false);
+        } else {
+          setGeocoding(false);
         }
       } catch (err) {
         console.error('FullscreenMap init error:', err);
@@ -462,74 +506,39 @@ const FullscreenMapModal = ({ address, customerName, coords, riderCoords, riderH
     return () => {
       unmountedRef.current = true;
       if (intervalId !== null) { clearInterval(intervalId); }
-      if (mapInstanceRef.current) { try { mapInstanceRef.current.remove(); } catch {} mapInstanceRef.current = null; }
+      if (resizeObs) { try { resizeObs.disconnect(); } catch { /* ignore */ } }
+      if (mapInstanceRef.current) { try { mapInstanceRef.current.remove(); } catch { /* ignore */ } mapInstanceRef.current = null; }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Mobile: start below the sticky mobile header (52px) so burger stays visible
-  // Desktop: offset left by sidebar width (260px)
-  const MOBILE_HEADER_H = 52;
+  const shortId = orderId ? String(orderId).slice(-8).toUpperCase() : '';
 
-  return (
-    <div
-      style={{
-        position: 'fixed',
-        top: isMobile ? MOBILE_HEADER_H : 0,
-        bottom: 0,
-        left: isMobile ? 0 : SIDEBAR_WIDTH,
-        right: 0,
-        zIndex: 9999, // below mobile header z-index:200, above everything else
-        display: 'flex',
-        flexDirection: 'column',
-        background: '#1a1f36',
-      }}
-      onClick={onClose}
-    >
-      <div
-        style={{ flex: 1, display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Desktop only: show address header. Mobile: hidden, burger is already visible above */}
-        {!isMobile && (
-          <div className="fullscreen-map-header">
-            <div className="fullscreen-map-header-left">
-              <i className="fas fa-map-marked-alt"></i>
-              <div>
-                <strong>{customerName ? `${customerName}'s Location` : 'Customer Location'}</strong>
-                <span>{address}</span>
-              </div>
+  return createPortal(
+    <div className="fullscreen-map-overlay" role="dialog" aria-modal="true" aria-label="Full map">
+      <div className="fullscreen-map-shell" onClick={e => e.stopPropagation()}>
+        <div className="fullscreen-map-header">
+          <div className="fullscreen-map-header-left">
+            <i className="fas fa-map-marked-alt"></i>
+            <div>
+              <strong>
+                {customerName ? `${customerName}'s Location` : 'Customer Location'}
+                {shortId ? ` · #${shortId}` : ''}
+              </strong>
+              <span>{address}</span>
             </div>
-            <button className="fullscreen-map-close" onClick={onClose} type="button" aria-label="Close map">
-              <i className="fas fa-times"></i>
-            </button>
           </div>
-        )}
-        {/* Mobile: minimal close button in top-right corner */}
-        {isMobile && (
-          <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 1000 }}>
-            <button
-              onClick={onClose}
-              type="button"
-              style={{
-                width: 36, height: 36, borderRadius: '50%',
-                background: 'white', border: 'none',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                cursor: 'pointer', fontSize: 14, color: '#374151',
-              }}
-            >
-              <i className="fas fa-times"></i>
-            </button>
-          </div>
-        )}
+          <button className="fullscreen-map-close" onClick={onClose} type="button" aria-label="Close map">
+            <i className="fas fa-times"></i>
+          </button>
+        </div>
         {geocoding && (
           <div className="fullscreen-map-loading">
             <div className="fullscreen-map-loading-bar"></div>
             <span>Locating address on map…</span>
           </div>
         )}
-        <div ref={mapRef} style={{ flex: 1, width: '100%', minHeight: 0 }} />
+        <div ref={mapRef} className="fullscreen-map-canvas" />
         <div className="fullscreen-map-footer">
           <span><i className="fas fa-hand-pointer"></i> Pinch to zoom · Drag to pan</span>
           <span className="fullscreen-map-footer-right">
@@ -539,13 +548,27 @@ const FullscreenMapModal = ({ address, customerName, coords, riderCoords, riderH
           </span>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Customer map (inline) — single Full Map button only, no duplicate link
 // ─────────────────────────────────────────────────────────────────────────────
+const findOrderLoose = (orders, orderId) => {
+  if (!orderId || !orders?.length) return null;
+  const id = String(orderId).trim();
+  const short = id.slice(-8).toUpperCase();
+  return orders.find(o => {
+    const oid = String(o.orderId || '').trim();
+    return oid === id
+      || oid.slice(-8).toUpperCase() === short
+      || oid.endsWith(id)
+      || id.endsWith(oid);
+  }) || null;
+};
+
 const CustomerMap = ({ orderId, allOrders, riderCoords, riderHeading }) => {
   const mapRef             = useRef(null);
   const mapInstanceRef     = useRef(null);
@@ -564,7 +587,7 @@ const CustomerMap = ({ orderId, allOrders, riderCoords, riderHeading }) => {
   const [addressText, setAddressText]     = useState('');
   const [showFullscreen, setShowFullscreen] = useState(false);
 
-  const order        = allOrders.find(o => o.orderId === orderId);
+  const order        = findOrderLoose(allOrders, orderId);
   const address      = order?.shippingAddress || order?.address || order?.deliveryAddress || '';
   const customerName = order?.customerName || order?.name || '';
   const savedCoords  = (order?.addressLat && order?.addressLng)
@@ -621,7 +644,8 @@ const CustomerMap = ({ orderId, allOrders, riderCoords, riderHeading }) => {
       if (savedCoords) marker.openPopup();
       mapInstanceRef.current = map;
       markerRef.current      = marker;
-      setTimeout(() => { try { map.invalidateSize(); } catch {} }, 300);
+      const refresh = () => { try { map.invalidateSize({ animate: false }); } catch {} };
+      [80, 250, 500].forEach((ms) => setTimeout(refresh, ms));
     } catch { setMapError('Failed to initialize map.'); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leafletLoaded]);
@@ -767,6 +791,7 @@ const CustomerMap = ({ orderId, allOrders, riderCoords, riderHeading }) => {
         <FullscreenMapModal
           address={address}
           customerName={customerName}
+          orderId={orderId}
           coords={savedCoords}
           riderCoords={riderCoords}
           riderHeading={riderHeading}
@@ -987,11 +1012,16 @@ const RiderDashboard = () => {
   // Only admin-confirmed paid orders appear here — never raw customer checkouts.
   const claimedStatuses = ['approved', 'out_for_delivery', 'completed'];
 
-  // Newest confirmed orders first so riders see new Available jobs at the top
+  const isOrderClaimed = (orderId) =>
+    allPickups.some(p =>
+      claimedStatuses.includes(p.status) && orderIdsMatch(p.orderId, orderId)
+    );
+
+  // Newest confirmed orders first — each order stays its own Available card (never grouped by customer)
   const availableOrders = allOrders
     .filter(o =>
       (o.orderStatus === 'confirmed' || o.status === 'Confirmed') &&
-      !allPickups.some(p => p.orderId === o.orderId && claimedStatuses.includes(p.status))
+      !isOrderClaimed(o.orderId)
     )
     .sort((a, b) => {
       const aTime = Math.max(
@@ -1005,13 +1035,19 @@ const RiderDashboard = () => {
       return bTime - aTime;
     });
 
-  // Newest accepted / out-for-delivery first so just-scanned orders land at the top
+  // One Deliver card per pickup/order — same customer + same rider still = separate list items
   const myDeliveries = allPickups
     .filter(p =>
       p.riderEmail === user?.email &&
-      (p.status === 'approved' || p.status === 'out_for_delivery') &&
-      allOrders.some(o => o.orderId === p.orderId)
+      (p.status === 'approved' || p.status === 'out_for_delivery')
     )
+    // Dedupe only identical pickup rows / same orderId — never merge different orders by customer
+    .filter((p, idx, arr) => {
+      const firstIdx = arr.findIndex(x =>
+        x._id === p._id || orderIdsMatch(x.orderId, p.orderId)
+      );
+      return firstIdx === idx;
+    })
     .sort((a, b) => {
       const tb = new Date(b.approvedAt || b.requestedAt || b._creationTime || 0).getTime();
       const ta = new Date(a.approvedAt || a.requestedAt || a._creationTime || 0).getTime();
@@ -1202,16 +1238,6 @@ const RiderDashboard = () => {
     setShowWaybillScanner(true);
   };
 
-  const orderIdsMatch = (a, b) => {
-    if (!a || !b) return false;
-    const A = String(a).trim();
-    const B = String(b).trim();
-    if (A === B) return true;
-    const shortA = A.slice(-8).toUpperCase();
-    const shortB = B.slice(-8).toUpperCase();
-    return shortA === shortB || A.endsWith(B) || B.endsWith(A) || A.endsWith(shortB) || B.endsWith(shortA);
-  };
-
   /** Scan waybill for a specific available order → accept → Deliver */
   const handleWaybillScan = async (scannedId) => {
     if (!riderInfo || !scanTargetOrderId) {
@@ -1345,7 +1371,7 @@ const RiderDashboard = () => {
 
   const notifyCustomer = async (delivery) => {
     const shortId = String(delivery.orderId || '').slice(-8).toUpperCase();
-    const ord = allOrders.find(o => o.orderId === delivery.orderId);
+    const ord = findOrderLoose(allOrders, delivery.orderId);
     const ok = await confirm({
       title: 'Notify customer — Out for Delivery?',
       message: `Order #${shortId}\n\nThis will:\n• Mark Out for Delivery\n• Start live GPS for customer & admin\n• Email the customer a 4-digit OTP to give you on arrival`,
@@ -1391,7 +1417,7 @@ const RiderDashboard = () => {
   const confirmDelivery = async (delivery) => {
     const inputOtp = (otpInputs[delivery._id] || '').trim();
     const photo    = photoData[delivery._id];
-    const order    = allOrders.find(o => o.orderId === delivery.orderId || o.orderId?.trim() === delivery.orderId?.trim());
+    const order    = findOrderLoose(allOrders, delivery.orderId);
     if (!order)                         { setOtpErrors(p => ({ ...p, [delivery._id]: '⏳ Order data is still loading. Please wait a moment and try again.' })); return; }
     if (!inputOtp)                      { setOtpErrors(p => ({ ...p, [delivery._id]: 'Please enter the OTP from the customer.' })); return; }
     if (!order.deliveryOtp)             { setOtpErrors(p => ({ ...p, [delivery._id]: '⏳ OTP is still loading. Ask the customer to open Track Order, or wait a moment and try again.' })); return; }
@@ -1707,17 +1733,26 @@ const RiderDashboard = () => {
                   const hasPhoto           = !!photoData[delivery._id];
                   // Every Out-for-Delivery card shows GPS On while rider GPS is live
                   const isThisBeingTracked = isOutForDelivery && !!trackingOrderId && GPS.isActive();
-                  const ord          = allOrders.find(o => o.orderId === delivery.orderId);
+                  const ord          = findOrderLoose(allOrders, delivery.orderId);
                   const customerName = ord?.customerName || ord?.name || delivery.customerName || 'Customer';
                   const addr         = ord?.shippingAddress || ord?.address || ord?.deliveryAddress || delivery.customerAddress || '';
                   const phone        = ord?.phone || '';
+                  // Same customer can have multiple active deliveries — each stays its own card
+                  const sameCustomerCount = myDeliveries.filter(d => {
+                    const other = findOrderLoose(allOrders, d.orderId);
+                    const otherName = (other?.customerName || other?.name || d.customerName || '').trim().toLowerCase();
+                    return otherName && otherName === customerName.trim().toLowerCase();
+                  }).length;
                   return (
                     <div key={delivery._id} className="rider-compact-card">
                       <div className="rider-compact-row">
                         <div className="rider-compact-left">
-                          <span className="rider-order-id">#{delivery.orderId?.slice(-8)}</span>
+                          <span className="rider-order-id">#{String(delivery.orderId || '').slice(-8).toUpperCase()}</span>
                           <span className="rider-compact-customer"><DkIcon name={DK_ICONS.customer} size={12} /> {customerName}</span>
-                          <span className="rider-compact-total">₱{(delivery.total || 0).toLocaleString()}</span>
+                          {sameCustomerCount > 1 && (
+                            <span className="rider-separate-order-tag">Separate order</span>
+                          )}
+                          <span className="rider-compact-total">₱{(delivery.total || ord?.finalTotal || ord?.total || 0).toLocaleString()}</span>
                         </div>
                         <div className="rider-compact-right">
                           <span className={`rider-delivery-badge ${isOutForDelivery ? 'badge-ofd' : ''}`}>
@@ -1744,8 +1779,14 @@ const RiderDashboard = () => {
                                 <i className="fas fa-phone-alt"></i> Call Customer
                               </a>
                             )}
-                            <div className="customer-map-section-title"><DkIcon name={DK_ICONS.livemap} size={15} /> Customer Location</div>
-                            <CustomerMap orderId={delivery.orderId} allOrders={allOrders} riderCoords={currentPosition ? { lat: currentPosition.lat, lng: currentPosition.lng } : null} riderHeading={riderHeading} />
+                            <div className="customer-map-section-title"><DkIcon name={DK_ICONS.livemap} size={15} /> Customer Location · #{String(delivery.orderId || '').slice(-8).toUpperCase()}</div>
+                            <CustomerMap
+                              key={`map-${delivery._id}`}
+                              orderId={delivery.orderId}
+                              allOrders={allOrders}
+                              riderCoords={currentPosition ? { lat: currentPosition.lat, lng: currentPosition.lng } : null}
+                              riderHeading={riderHeading}
+                            />
                           </div>
                           <div className="rider-expanded-section rider-info-preview">
                             <div className="rider-expanded-section-title"><i className="fas fa-id-badge"></i> Your Info (visible to customer)</div>

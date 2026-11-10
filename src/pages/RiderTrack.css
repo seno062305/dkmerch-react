@@ -413,10 +413,11 @@
 .rt-fullmap-overlay {
   position: fixed;
   inset: 0;
-  z-index: 9999;
+  z-index: 100000;
   display: flex;
   flex-direction: column;
   background: #1a1a2e;
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
 }
 
 /* ── Top bar (same style as AdminRiders) ── */
@@ -567,10 +568,11 @@
 .rt-fullmap-overlay {
   position: fixed;
   inset: 0;
-  z-index: 9999;
+  z-index: 100000;
   display: flex;
   flex-direction: column;
   background: #1a1a2e;
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
 }
 .rt-fullmap-bar {
   display: flex;
