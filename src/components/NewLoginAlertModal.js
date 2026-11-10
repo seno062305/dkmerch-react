@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { createPortal } from "react-dom";
 import { isMobileDeviceLabel } from "../utils/deviceInfo";
+import { getOverlayRoot } from "../utils/scrollLock";
 import "./NewLoginAlertModal.css";
 
 function formatWhen(at) {
@@ -48,6 +49,8 @@ const NewLoginAlertModal = ({ alert, onConfirmYes, onConfirmNo }) => {
     }
   };
 
+  const portalTarget = getOverlayRoot() || document.body;
+
   // Confirmation after Yes / No
   if (done === "yes") {
     return createPortal(
@@ -75,7 +78,7 @@ const NewLoginAlertModal = ({ alert, onConfirmYes, onConfirmNo }) => {
           </div>
         </div>
       </div>,
-      document.body
+      portalTarget
     );
   }
 
@@ -101,7 +104,7 @@ const NewLoginAlertModal = ({ alert, onConfirmYes, onConfirmNo }) => {
           </div>
         </div>
       </div>,
-      document.body
+      portalTarget
     );
   }
 
@@ -174,7 +177,7 @@ const NewLoginAlertModal = ({ alert, onConfirmYes, onConfirmNo }) => {
         </p>
       </div>
     </div>,
-    document.body
+    portalTarget
   );
 };
 

@@ -1,5 +1,5 @@
 // src/components/LoginModal.js
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import "./LoginModal.css";
 import {
@@ -14,6 +14,13 @@ import { api } from "../../convex/_generated/api";
 import { QRCodeSVG } from "qrcode.react";
 import { hasLocalPin, getLocalPinLength, savePinWithFallback, verifyPinWithFallback, clearLocalPin } from "../lib/localPin";
 import { getDeviceUnlock } from "../lib/deviceUnlock";
+import {
+  readAuthGate,
+  writeAuthGate,
+  clearAuthGate,
+  readAuthGateStep,
+  writeAuthGateStep,
+} from "../lib/authGate";
 import { guessLocation } from "../utils/deviceInfo";
 import { PRODUCTION_SITE_URL } from "./InstallAppModal";
 import { useNotification } from "../context/NotificationContext";
@@ -80,6 +87,71 @@ function getRemainingLockout() {
   const { lockoutEnd } = getRLState();
   if (!lockoutEnd) return 0;
   return Math.max(0, Math.ceil((lockoutEnd - Date.now()) / 1000));
+}
+
+// ── PIN unlock lockout: 5 fails → 1min, then 5, 10, 20 min ───────────────────
+const PIN_FAIL_LIMIT = 5;
+const PIN_LOCK_MINUTES = [1, 5, 10, 20]; // escalating wait after each lockout
+const pinFailKey = (userId) => `dkmerch_pin_fails_${userId || "anon"}`;
+const pinLockKey = (userId) => `dkmerch_pin_lock_until_${userId || "anon"}`;
+const pinLockLevelKey = (userId) => `dkmerch_pin_lock_level_${userId || "anon"}`;
+
+function getPinFailCount(userId) {
+  try { return parseInt(localStorage.getItem(pinFailKey(userId)) || "0", 10) || 0; }
+  catch { return 0; }
+}
+
+function getPinLockLevel(userId) {
+  try { return parseInt(localStorage.getItem(pinLockLevelKey(userId)) || "0", 10) || 0; }
+  catch { return 0; }
+}
+
+function getPinLockRemaining(userId) {
+  try {
+    const until = parseInt(localStorage.getItem(pinLockKey(userId)) || "0", 10) || 0;
+    if (!until) return 0;
+    return Math.max(0, Math.ceil((until - Date.now()) / 1000));
+  } catch { return 0; }
+}
+
+function clearPinFailState(userId) {
+  if (!userId) return;
+  try {
+    localStorage.removeItem(pinFailKey(userId));
+    localStorage.removeItem(pinLockKey(userId));
+    // keep lock level so next lockout still escalates across sessions
+  } catch { /* ignore */ }
+}
+
+function resetPinLockEscalation(userId) {
+  if (!userId) return;
+  try {
+    localStorage.removeItem(pinFailKey(userId));
+    localStorage.removeItem(pinLockKey(userId));
+    localStorage.removeItem(pinLockLevelKey(userId));
+  } catch { /* ignore */ }
+}
+
+/** Record wrong PIN. Returns { fails, remaining, lockoutSecs }. */
+function recordPinFail(userId) {
+  const fails = getPinFailCount(userId) + 1;
+  try { localStorage.setItem(pinFailKey(userId), String(fails)); } catch { /* ignore */ }
+  let lockoutSecs = 0;
+  if (fails >= PIN_FAIL_LIMIT) {
+    const level = getPinLockLevel(userId);
+    const mins = PIN_LOCK_MINUTES[Math.min(level, PIN_LOCK_MINUTES.length - 1)];
+    lockoutSecs = mins * 60;
+    try {
+      localStorage.setItem(pinLockKey(userId), String(Date.now() + lockoutSecs * 1000));
+      localStorage.setItem(pinLockLevelKey(userId), String(level + 1));
+      localStorage.setItem(pinFailKey(userId), "0");
+    } catch { /* ignore */ }
+  }
+  return {
+    fails: fails >= PIN_FAIL_LIMIT ? 0 : fails,
+    remaining: fails >= PIN_FAIL_LIMIT ? 0 : PIN_FAIL_LIMIT - fails,
+    lockoutSecs,
+  };
 }
 
 // ── PIN reset OTP (cooldown + code survive close + refresh) ──────────────────
@@ -149,19 +221,33 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
 
   // view: "login" | "pin" | "loginOtp" | "createPin" | "forgot" | "reactivate" | "quickSignIn"
   // PIN-first only when installed app cold-start asks for unlock — not every Brave open
-  const remembered = (() => {
+  // Stable ref — getDeviceUnlock() returns a new object every call (JSON.parse)
+  const remembered = useMemo(() => {
     try { return getDeviceUnlock(); } catch { return null; }
-  })();
-  const rememberedLocalPin = !!(remembered?._id && hasLocalPin(remembered._id));
-  const restoredPending = (() => {
+  }, []);
+  const rememberedId = remembered?._id ? String(remembered._id) : "";
+  const rememberedLocalPin = !!(rememberedId && hasLocalPin(rememberedId));
+  const restoredPending = useMemo(() => {
     try { return readPendingLogin(); } catch { return null; }
-  })();
+  }, []);
+  const savedGate = useMemo(() => readAuthGate(), []);
+  const restoreSwitch = savedGate === "switch";
+  const restoreReset = savedGate === "reset";
   // Cold-start unlock: show pink PIN immediately when app asks for it
-  const startUnlockUi = !!(preferPinUnlock && remembered?._id) && !restoredPending;
+  // (unless user was on Use another account / Reset PIN and hard-refreshed)
+  const startUnlockUi =
+    !!(preferPinUnlock && remembered?._id)
+    && !restoredPending
+    && !restoreSwitch
+    && !restoreReset;
   const startWithPin = !!(startUnlockUi && rememberedLocalPin);
   /** Block closing / browsing until login succeeds (PIN gate or Use another account). */
-  const [mustAuthenticate, setMustAuthenticate] = useState(!!preferPinUnlock || !!restoredPending);
-  const [view, setView] = useState(startUnlockUi ? "pin" : "login");
+  const [mustAuthenticate, setMustAuthenticate] = useState(
+    !!preferPinUnlock || !!restoredPending || restoreSwitch || restoreReset
+  );
+  const [view, setView] = useState(
+    restoreReset ? "forgot" : restoreSwitch ? "login" : startUnlockUi ? "pin" : "login"
+  );
   const [qsiToken, setQsiToken] = useState("");
   const [qsiExpiresAt, setQsiExpiresAt] = useState(0);
   const [qsiCreating, setQsiCreating] = useState(false);
@@ -170,14 +256,18 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
   const [qsiNonce, setQsiNonce] = useState(0);
   const qsiFinishingRef = useRef(false);
   const [qsiDesktopHost] = useState(() => canGenerateQuickSignInQr());
-  const [pendingUser, setPendingUser] = useState(startUnlockUi ? remembered : null);
+  const [pendingUser, setPendingUser] = useState(
+    restoreSwitch ? null : (startUnlockUi || restoreReset ? remembered : null)
+  );
   const [deviceUnlockMode, setDeviceUnlockMode] = useState(startUnlockUi);
   /** Pink full-screen login after "Use another account" (stays in PIN-page chrome) */
-  const [switchAccountMode, setSwitchAccountMode] = useState(false);
+  const [switchAccountMode, setSwitchAccountMode] = useState(restoreSwitch);
   /** Pink Reset PIN wizard — Gmail → OTP → new PIN */
-  const [resetPasswordMode, setResetPasswordMode] = useState(false);
+  const [resetPasswordMode, setResetPasswordMode] = useState(restoreReset);
   /** 0=email, 1=code, 2=new PIN, 3=confirm PIN */
-  const [resetPinStep, setResetPinStep] = useState(0);
+  const [resetPinStep, setResetPinStep] = useState(() => (
+    restoreReset ? readAuthGateStep() : 0
+  ));
   /** Waiting for Yes on the other device */
   const [awaitingApproval, setAwaitingApproval] = useState(() => (
     restoredPending?.userId && restoredPending?.sessionId
@@ -190,12 +280,28 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
   ));
   const [loginDenied, setLoginDenied] = useState(false);
   /** Remember who to restore when tapping Back from Use another account */
-  const [pinAccountSnapshot, setPinAccountSnapshot] = useState(startUnlockUi ? remembered : null);
+  const [pinAccountSnapshot, setPinAccountSnapshot] = useState(
+    (startUnlockUi || restoreSwitch || restoreReset) ? remembered : null
+  );
+
+  // Persist current gate so hard refresh stays on Use another account / Reset PIN / PIN
+  useEffect(() => {
+    if (resetPasswordMode) {
+      writeAuthGate("reset");
+      writeAuthGateStep(resetPinStep);
+    } else if (switchAccountMode) {
+      writeAuthGate("switch");
+    } else if (deviceUnlockMode && view === "pin") {
+      writeAuthGate("pin");
+    }
+  }, [resetPasswordMode, switchAccountMode, deviceUnlockMode, view, resetPinStep]);
   const [pinValue, setPinValue] = useState("");
   const [pinConfirmValue, setPinConfirmValue] = useState("");
   const [pinStep, setPinStep] = useState(0); // 0 = enter new, 1 = confirm (set/reset only)
   const [pinLoading, setPinLoading] = useState(false);
   const [pinError, setPinError] = useState("");
+  const [pinCooldown, setPinCooldown] = useState(0); // seconds left when PIN pad is locked
+  const [pinFailsLeft, setPinFailsLeft] = useState(PIN_FAIL_LIMIT);
   const [loginOtpDigits, setLoginOtpDigits] = useState(["", "", "", "", "", ""]);
   const [loginOtpLoading, setLoginOtpLoading] = useState(false);
   const [loginOtpError, setLoginOtpError] = useState("");
@@ -220,7 +326,9 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
   const [loginAttempts, setLoginAttempts] = useState(0);
 
   // ── Forgot password state ──
-  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotEmail, setForgotEmail] = useState(
+    restoreReset ? String(remembered?.email || "").trim() : ""
+  );
   const [verificationCode, setVerificationCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
@@ -334,22 +442,24 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
   }, [view, pinStep]);
 
   // App update / legacy: device unlock remembered but account never created a PIN yet
+  // Never override Use another account / Reset PIN after hard refresh
   useEffect(() => {
-    if (!preferPinUnlock || !remembered?._id || rememberedLocalPin) return;
+    if (switchAccountMode || resetPasswordMode) return;
+    if (!preferPinUnlock || !rememberedId || rememberedLocalPin) return;
     if (unlockPinStatus === undefined) return;
     if (unlockPinStatus?.hasPin) {
-      setPendingUser(remembered);
-      setDeviceUnlockMode(true);
-      setAccountHasPin(true);
-      setView("pin");
+      setPendingUser((prev) => (prev?._id && String(prev._id) === rememberedId ? prev : remembered));
+      setDeviceUnlockMode((v) => (v ? v : true));
+      setAccountHasPin((v) => (v ? v : true));
+      setView((v) => (v === "pin" ? v : "pin"));
       return;
     }
     // No PIN on account — require password, then Create PIN
-    setDeviceUnlockMode(false);
-    setAccountHasPin(false);
-    setPendingUser(null);
-    setView("login");
-  }, [preferPinUnlock, remembered, rememberedLocalPin, unlockPinStatus]);
+    setDeviceUnlockMode((v) => (v ? false : v));
+    setAccountHasPin((v) => (v ? false : v));
+    setPendingUser((prev) => (prev == null ? prev : null));
+    setView((v) => (v === "login" ? v : "login"));
+  }, [preferPinUnlock, remembered, rememberedId, rememberedLocalPin, unlockPinStatus, switchAccountMode, resetPasswordMode]);
 
   useBodyScrollLock(true);
 
@@ -394,6 +504,35 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
     const t = setTimeout(() => setPasswordCooldown(c => c - 1), 1000);
     return () => clearTimeout(t);
   }, [passwordCooldown]);
+
+  // PIN unlock lockout countdown + restore on account change
+  useEffect(() => {
+    const uid = pendingUser?._id;
+    if (!uid || !(deviceUnlockMode && view === "pin")) return;
+    const left = getPinLockRemaining(uid);
+    setPinCooldown(left);
+    const fails = getPinFailCount(uid);
+    setPinFailsLeft(Math.max(0, PIN_FAIL_LIMIT - fails));
+    if (left > 0) {
+      setPinError(`Too many wrong PINs. Try again in ${formatCooldown(left)}.`);
+    }
+  }, [pendingUser?._id, deviceUnlockMode, view]);
+
+  useEffect(() => {
+    if (pinCooldown <= 0) return;
+    const t = setTimeout(() => {
+      setPinCooldown((c) => {
+        const next = Math.max(0, c - 1);
+        if (next <= 0) {
+          setPinError("");
+          const uid = pendingUser?._id;
+          if (uid) setPinFailsLeft(PIN_FAIL_LIMIT - getPinFailCount(uid));
+        }
+        return next;
+      });
+    }, 1000);
+    return () => clearTimeout(t);
+  }, [pinCooldown, pendingUser?._id]);
 
   useEffect(() => {
     if (view !== "quickSignIn") return;
@@ -629,8 +768,12 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
       setLoginAttempts(0);
       setLoginCooldown(0);
 
-      // Customer: password OK → Enter PIN if they have one, else Create PIN (legacy / post-update)
-      if (result.pendingUser && result.role === "user" && !result.pendingApproval) {
+      // Customer + admin: password OK → Enter PIN / Create PIN (never skip — session starts after PIN)
+      if (
+        result.pendingUser
+        && (result.role === "user" || result.role === "admin")
+        && !result.pendingApproval
+      ) {
         setPendingUser(result.pendingUser);
         setIsPinReset(false);
         const localPin = hasLocalPin(result.pendingUser._id);
@@ -672,6 +815,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
   };
 
   const finishLogin = (role) => {
+    clearAuthGate();
     setMustAuthenticate(false);
     if (onLoginSuccess) onLoginSuccess(role);
     else onClose();
@@ -680,11 +824,13 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
   const sanitizePinInput = (raw) => String(raw || "").replace(/\D/g, "").slice(0, 6);
 
   const appendPinDigit = (digit) => {
+    if (pinCooldown > 0 || pinLoading) return;
     setPinError("");
     setPinValue((prev) => sanitizePinInput(`${prev}${digit}`));
   };
 
   const backspacePin = () => {
+    if (pinCooldown > 0 || pinLoading) return;
     setPinError("");
     setPinValue((prev) => prev.slice(0, -1));
   };
@@ -723,6 +869,14 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
   const handleVerifyPin = async () => {
     const pin = pinValue;
     if (!pendingUser?._id) return;
+    const uid = String(pendingUser._id);
+    const lockedFor = getPinLockRemaining(uid);
+    if (lockedFor > 0) {
+      setPinCooldown(lockedFor);
+      setPinError(`Too many wrong PINs. Try again in ${formatCooldown(lockedFor)}.`);
+      setPinValue("");
+      return;
+    }
     if (!accountHasPin && !hasLocalPin(pendingUser._id)) {
       setPinError("No PIN yet — tap Reset PIN below, or use another account.");
       return;
@@ -740,14 +894,28 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
     try {
       const checked = await verifyPinWithFallback(verifyLoginPin, pendingUser._id, pin);
       if (!checked.success) {
-        setPinError(
-          checked.needsPinSetup
-            ? "No PIN yet — tap Reset PIN below, or use another account."
-            : (checked.message || "Incorrect PIN.")
-        );
+        if (checked.needsPinSetup) {
+          setPinError("No PIN yet — tap Reset PIN below, or use another account.");
+          setPinValue("");
+          return;
+        }
+        const { remaining, lockoutSecs } = recordPinFail(uid);
         setPinValue("");
+        if (lockoutSecs > 0) {
+          setPinCooldown(lockoutSecs);
+          setPinFailsLeft(PIN_FAIL_LIMIT);
+          setPinError(`Wrong PIN 5 times. Wait ${formatCooldown(lockoutSecs)} before trying again.`);
+          return;
+        }
+        setPinFailsLeft(remaining);
+        setPinError(
+          `Incorrect PIN. ${remaining} attempt${remaining === 1 ? "" : "s"} left before a ${PIN_LOCK_MINUTES[Math.min(getPinLockLevel(uid), PIN_LOCK_MINUTES.length - 1)]}-min lock.`
+        );
         return;
       }
+      resetPinLockEscalation(uid);
+      setPinFailsLeft(PIN_FAIL_LIMIT);
+      setPinCooldown(0);
       setAccountHasPin(true);
       const done = await completeLogin(
         checked.result?.user || pendingUser,
@@ -760,8 +928,16 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
       setMustAuthenticate(false);
       finishLogin(done.role);
     } catch {
-      setPinError("Incorrect PIN. Try again, or tap Reset PIN.");
+      const { remaining, lockoutSecs } = recordPinFail(uid);
       setPinValue("");
+      if (lockoutSecs > 0) {
+        setPinCooldown(lockoutSecs);
+        setPinFailsLeft(PIN_FAIL_LIMIT);
+        setPinError(`Wrong PIN 5 times. Wait ${formatCooldown(lockoutSecs)} before trying again.`);
+      } else {
+        setPinFailsLeft(remaining);
+        setPinError(`Incorrect PIN. ${remaining} attempt${remaining === 1 ? "" : "s"} left. Or tap Reset PIN.`);
+      }
     } finally {
       setPinLoading(false);
     }
@@ -788,6 +964,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
     setShowRegister(false);
     setSwitchAccountMode(true);
     setView("login");
+    writeAuthGate("switch");
     try { logout?.({ keepDeviceUnlock: true }); } catch { /* ignore */ }
     try { onSwitchAccount?.(); } catch { /* ignore */ }
   };
@@ -799,6 +976,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
     if (!acc?._id) {
       setSwitchAccountMode(false);
       setView("login");
+      clearAuthGate();
       return;
     }
     setPendingUser(acc);
@@ -811,6 +989,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
     setFormData({ email: "", password: "" });
     setMustAuthenticate(true);
     setView("pin");
+    writeAuthGate("pin");
   };
 
   const requestClose = () => {
@@ -886,6 +1065,8 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
     setMustAuthenticate(true);
     setResetPasswordMode(true);
     setView("forgot");
+    writeAuthGate("reset");
+    writeAuthGateStep(0);
   };
 
   const backFromResetPassword = () => {
@@ -919,10 +1100,12 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
       setAccountHasPin(true);
       setMustAuthenticate(true);
       setView("pin");
+      writeAuthGate("pin");
       return;
     }
     setSwitchAccountMode(true);
     setView("login");
+    writeAuthGate("switch");
   };
 
   const handleSendPinResetCode = async () => {
@@ -1361,15 +1544,15 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
 
   const isLockedOut = loginCooldown > 0;
 
-  // Unlock pad: submit only when the exact PIN length is entered
+  // PIN pad: auto-submit when full length entered (unlock + post-password PIN)
   useEffect(() => {
-    if (!(view === "pin" && deviceUnlockMode)) return;
-    if (pinLoading) return;
+    if (view !== "pin") return;
+    if (pinLoading || pinCooldown > 0) return;
     if (pinValue.length !== pinDigitCount) return;
     const t = setTimeout(() => { handleVerifyPin(); }, 120);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pinValue, view, deviceUnlockMode, pinLoading, pinDigitCount]);
+  }, [pinValue, view, pinLoading, pinDigitCount, pinCooldown]);
 
   // Reset-PIN pad: auto-continue when 6 digits entered
   useEffect(() => {
@@ -1771,10 +1954,14 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
         </div>
 
         <div className="pin-unlock-mid">
-          <h2 className="pin-unlock-title">Enter your PIN</h2>
+          <h2 className="pin-unlock-title">
+            {pinCooldown > 0 ? "PIN temporarily locked" : "Enter your PIN"}
+          </h2>
           <p className="pin-unlock-hint">
             <i className="fas fa-info-circle" aria-hidden="true" />
-            Never share your PIN with anyone.
+            {pinCooldown > 0
+              ? `Wait ${formatCooldown(pinCooldown)} before trying again.`
+              : "Never share your PIN with anyone."}
           </p>
           <div className="pin-unlock-dots" aria-hidden="true">
             {Array.from({ length: dots }).map((_, i) => (
@@ -1782,6 +1969,11 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
             ))}
           </div>
           {pinError && <div className="pin-unlock-error">{pinError}</div>}
+          {!pinError && pinCooldown <= 0 && pinFailsLeft < PIN_FAIL_LIMIT && (
+            <div className="pin-unlock-loading">
+              {pinFailsLeft} attempt{pinFailsLeft === 1 ? "" : "s"} left
+            </div>
+          )}
           {pinLoading && <div className="pin-unlock-loading">Checking…</div>}
         </div>
 
@@ -1791,7 +1983,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
               key={n}
               type="button"
               className="pin-unlock-key"
-              disabled={pinLoading || pinValue.length >= dots}
+              disabled={pinCooldown > 0 || pinLoading || pinValue.length >= dots}
               onClick={() => appendPinDigit(String(n))}
             >
               {n}
@@ -1801,7 +1993,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
           <button
             type="button"
             className="pin-unlock-key"
-            disabled={pinLoading || pinValue.length >= dots}
+            disabled={pinCooldown > 0 || pinLoading || pinValue.length >= dots}
             onClick={() => appendPinDigit("0")}
           >
             0
@@ -1809,7 +2001,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
           <button
             type="button"
             className="pin-unlock-key pin-unlock-key--ghost"
-            disabled={pinLoading || !pinValue}
+            disabled={pinCooldown > 0 || pinLoading || !pinValue}
             onClick={backspacePin}
             aria-label="Delete"
           >

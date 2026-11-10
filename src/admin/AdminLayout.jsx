@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { isAuthGateLocked } from '../lib/authGate';
 import AdminSidebar from './AdminSidebar';
 import AdminBottomNav from './AdminBottomNav';
 import './AdminLayout.css';
@@ -22,6 +23,8 @@ const AdminLayout = () => {
 
   useEffect(() => {
     if (!isReady) return;
+    // Soft-logout on Use another account / Reset PIN — stay put under pink gate
+    if (isAuthGateLocked()) return;
     if (!isAuthenticated || role !== 'admin') {
       navigate('/', { replace: true });
     }

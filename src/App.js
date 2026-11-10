@@ -10,7 +10,13 @@ import { BackupProvider } from './context/BackupContext';
 import { RewardsProvider } from './context/RewardsContext';
 import { isPushSupported, subscribeToPush, getNotificationPermission } from './utils/pushNotifications';
 import { scrollPageToTop } from './utils/navScroll';
-import { clearScrollLockIfIdle, isScrollLocked } from './utils/scrollLock';
+import { clearScrollLockIfIdle } from './utils/scrollLock';
+import { isAuthGateLocked } from './lib/authGate';
+
+// Avoid admin↔home bounce while PIN / switch / reset gate is open
+function shouldDeferRoleRedirect() {
+  try { return isAuthGateLocked(); } catch { return false; }
+}
 
 import Header from './components/Header';
 import Footer from './components/Footer';
@@ -68,7 +74,7 @@ const StartupRedirect = ({ children }) => {
 
   useEffect(() => {
     if (!isReady) return;
-    if (isAuthenticated && role) {
+    if (isAuthenticated && role && !shouldDeferRoleRedirect()) {
       const path = location.pathname;
       const isExempt =
         path.startsWith('/rider-track') ||
@@ -87,8 +93,7 @@ const StartupRedirect = ({ children }) => {
       }
     }
     setRedirectDone(true);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReady]);
+  }, [isReady, isAuthenticated, role, location.pathname, navigate]);
 
   // Keep #splash (loading UI) on top — no second pink logo screen
   useEffect(() => {
@@ -175,7 +180,7 @@ function AppContent() {
   const toggleWishlist = useToggleWishlist();
   const wishlistCount  = useWishlistCount();
 
-  const [showLoginModal,    setShowLoginModal]    = useState(false);
+  const [showLoginModal,    setShowLoginModal]    = useState(() => isAuthGateLocked());
   const [showCartModal,     setShowCartModal]     = useState(false);
   const [showProductModal,  setShowProductModal]  = useState(false);
   const [currentProduct,    setCurrentProduct]    = useState(null);
@@ -187,12 +192,10 @@ function AppContent() {
     setShowCartModal(false);
   }, [location.pathname]);
 
-  // Footer / bottom-nav: after landing on a tab, scroll to that page top
+  // Footer / bottom-nav: after landing on a tab, jump to top once
   useEffect(() => {
     if (!location.state?.scrollToTop) return;
-    if (isScrollLocked()) return;
-    scrollPageToTop({ smooth: true });
-    // Clear state so back/forward doesn't re-trigger
+    scrollPageToTop({ smooth: false });
     navigate(`${location.pathname}${location.search}${location.hash}`, {
       replace: true,
       state: { ...(location.state || {}), scrollToTop: false },
@@ -245,6 +248,12 @@ function AppContent() {
     try { sessionStorage.removeItem('redirectAfterLogin'); } catch { /* ignore */ }
     setShowLoginModal(true);
   }, [isReady, needsDeviceUnlock]);
+
+  // Hard refresh while on Use another account / Reset PIN / PIN gate
+  useEffect(() => {
+    if (!isReady) return;
+    if (isAuthGateLocked()) setShowLoginModal(true);
+  }, [isReady]);
 
   // Waiting for "Yes, it's me" on another device — keep the gate up after reload
   useEffect(() => {
@@ -472,7 +481,7 @@ function AppContent() {
               onClearUnlockPrompt={() => clearDeviceUnlockPrompt?.()}
               onClose={() => {
                 // PIN / switch-account / reset-PIN gate — never dismiss to Home
-                if (needsDeviceUnlock) return;
+                if (needsDeviceUnlock || isAuthGateLocked()) return;
                 try { sessionStorage.removeItem('dk_login_customers_only'); } catch { /* ignore */ }
                 clearDeviceUnlockPrompt?.();
                 setShowLoginModal(false);

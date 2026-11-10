@@ -253,8 +253,8 @@ export const hasLoginPin = query({
   },
 });
 
-/** Only treat another device as "online" if it heartbeated very recently. */
-const SESSION_ACTIVE_MS = 90 * 1000;
+/** Treat another device as "online" if it heartbeated within this window. */
+const SESSION_ACTIVE_MS = 10 * 60 * 1000;
 
 function activateSessionPatch(
   sessionId: string,

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { createPortal } from "react-dom";
+import { getOverlayRoot } from "../utils/scrollLock";
 import "./NewLoginAlertModal.css";
 
 /** Full-screen overlay modal — waiting for Yes on the other device. */
@@ -17,7 +18,7 @@ export function WaitingApprovalModal({ onClose }) {
   };
 
   return createPortal(
-    <div className="nla-overlay" role="presentation" style={{ zIndex: 100090 }}>
+    <div className="nla-overlay" role="presentation">
       <div
         className="nla-modal"
         role="alertdialog"
@@ -47,7 +48,7 @@ export function WaitingApprovalModal({ onClose }) {
         </div>
       </div>
     </div>,
-    document.body
+    getOverlayRoot() || document.body
   );
 }
 
@@ -57,7 +58,7 @@ export function WaitingApprovalModal({ onClose }) {
  */
 export function LoginDeniedModal({ onClose }) {
   return createPortal(
-    <div className="nla-overlay" role="presentation" style={{ zIndex: 100090 }}>
+    <div className="nla-overlay" role="presentation">
       <div
         className="nla-modal"
         role="alertdialog"
@@ -79,6 +80,6 @@ export function LoginDeniedModal({ onClose }) {
         </div>
       </div>
     </div>,
-    document.body
+    getOverlayRoot() || document.body
   );
 }

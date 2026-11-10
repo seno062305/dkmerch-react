@@ -10,6 +10,7 @@ import {
   markExplicitLogout,
   clearExplicitLogoutFlag,
 } from "../lib/deviceUnlock";
+import { readAuthGate, isAuthGateLocked } from "../lib/authGate";
 import { collectLoginDeviceInfo } from "../utils/deviceInfo";
 import NewLoginAlertModal from "../components/NewLoginAlertModal";
 import { useNotification } from "./NotificationContext";
@@ -173,6 +174,8 @@ export const AuthProvider = ({ children }) => {
     const unlock = getDeviceUnlock(); // null after explicit logout
     const reload = isPageReload();
     const loggedOut = wasExplicitLogout();
+    const gate = readAuthGate();
+    const gateLocked = isAuthGateLocked(gate);
 
     const restoreSession = (withPinGate = false) => {
       // Don't mark session alive yet when PIN is required — otherwise a soft
@@ -183,6 +186,35 @@ export const AuthProvider = ({ children }) => {
       setIsAuthenticated(true); // keep route/page under the PIN overlay
       setNeedsDeviceUnlock(withPinGate);
     };
+
+    // Use another account — soft-logged-out; keep unlock profile, never wipe on refresh
+    if (gate === "switch") {
+      if (loggedOut) {
+        // Explicit logout elsewhere wins
+        clearAuthUser();
+        clearDeviceUnlock();
+        setUser(null);
+        setRole(null);
+        setIsAuthenticated(false);
+        setNeedsDeviceUnlock(false);
+        setIsReady(true);
+        return;
+      }
+      clearAuthUser();
+      setUser(null);
+      setRole(null);
+      setIsAuthenticated(false);
+      setNeedsDeviceUnlock(false);
+      setIsReady(true);
+      return;
+    }
+
+    // Reset PIN / PIN gate — keep account under overlay; require unlock UI after reload
+    if ((gate === "reset" || gate === "pin") && storedUser && !loggedOut) {
+      restoreSession(true);
+      setIsReady(true);
+      return;
+    }
 
     if (!storedUser || loggedOut) {
       if (loggedOut) {
@@ -197,36 +229,46 @@ export const AuthProvider = ({ children }) => {
       return;
     }
 
-    const isCustomer = !storedUser.role || storedUser.role === "user";
+    const canPinUnlock =
+      !storedUser.role
+      || storedUser.role === "user"
+      || storedUser.role === "admin";
     const hasUnlock =
-      isCustomer
+      canPinUnlock
       && unlock?._id
       && String(unlock._id) === String(storedUser._id);
 
     // Same-tab session already unlocked this visit → stay in (no PIN)
-    if (alive) {
+    // (still honor PIN gate after hard refresh / cold start)
+    if (alive && !reload && !gateLocked) {
       restoreSession(false);
       setIsReady(true);
       return;
     }
 
     // Reload / PWA reopen: keep PIN gate until the user unlocks again
-    if ((reload || pwa) && hasUnlock) {
+    if ((reload || pwa || gateLocked) && hasUnlock) {
       restoreSession(true);
       setIsReady(true);
       return;
     }
 
-    // Regular browser tab reopen (not PWA) without unlock profile → stay logged in
-    if (!pwa) {
+    // Hard refresh without unlock profile but still in-browser → stay logged in
+    // (admin/customer with unlock should have hit the branch above)
+    if (!pwa && !gateLocked) {
       restoreSession(false);
       setIsReady(true);
       return;
     }
 
     // PWA but no unlock profile → require full login
-    clearAuthUser();
-    clearDeviceUnlock();
+    // Don't wipe unlock while a gate is open (reset/switch/pin)
+    if (!gateLocked) {
+      clearAuthUser();
+      clearDeviceUnlock();
+    } else {
+      clearAuthUser();
+    }
     setUser(null);
     setRole(null);
     setIsAuthenticated(false);
@@ -234,13 +276,14 @@ export const AuthProvider = ({ children }) => {
     setIsReady(true);
   }, []);
 
-  // Keep last-active fresh after unlock — never while PIN gate is up.
-  // Also heartbeat the server so "another device online" is accurate.
+  // Keep last-active + server heartbeat while this account is signed in.
+  // Also run during PIN gate so another-device login still triggers Yes/No.
   useEffect(() => {
-    if (!isAuthenticated || needsDeviceUnlock) return;
+    if (!isAuthenticated) return;
     const touchLocal = () => {
       try { localStorage.setItem(LAST_ACTIVE_KEY, String(Date.now())); } catch { /* ignore */ }
-      markSessionAlive();
+      // Don't mark session alive while PIN gate is up (cold start still needs PIN)
+      if (!needsDeviceUnlock) markSessionAlive();
     };
     const touchServer = () => {
       const u = userRef.current;
@@ -259,7 +302,7 @@ export const AuthProvider = ({ children }) => {
     const onVis = () => { if (!document.hidden) touch(); };
     window.addEventListener("focus", touch);
     document.addEventListener("visibilitychange", onVis);
-    const id = window.setInterval(touch, 60_000);
+    const id = window.setInterval(touch, 45_000);
     return () => {
       window.removeEventListener("focus", touch);
       document.removeEventListener("visibilitychange", onVis);
@@ -272,7 +315,9 @@ export const AuthProvider = ({ children }) => {
     clearExplicitLogoutFlag();
     writeAuthUser(sessionUser);
     markSessionAlive();
-    if (sessionUser.role === "user") saveDeviceUnlock(sessionUser);
+    if (sessionUser.role === "user" || sessionUser.role === "admin") {
+      saveDeviceUnlock(sessionUser);
+    }
     setUser(sessionUser);
     setRole(sessionUser.role);
     setIsAuthenticated(true);

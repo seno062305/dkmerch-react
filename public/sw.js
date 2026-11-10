@@ -1,5 +1,5 @@
 // DKMerch Service Worker — PWA support
-const CACHE_NAME = 'dkmerch-v12-single-splash';
+const CACHE_NAME = 'dkmerch-v18-app-icon';
 
 // Only cache essential static assets (never webpack JS bundles)
 const STATIC_ASSETS = [

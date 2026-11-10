@@ -1,11 +1,15 @@
-/** Remember last customer on this device for PIN-only unlock (app / phone). */
+/** Remember last customer/admin on this device for PIN-only unlock (app / phone). */
 
 const KEY = 'dkmerch_device_unlock';
 /** Set on explicit logout so cold start never shows PIN for the previous user. */
 const LOGGED_OUT_KEY = 'dkmerch_explicit_logout';
 
+function canSaveRole(role) {
+  return !role || role === 'user' || role === 'admin';
+}
+
 export function saveDeviceUnlock(user) {
-  if (!user?._id || (user.role && user.role !== 'user')) return;
+  if (!user?._id || !canSaveRole(user.role)) return;
   try {
     localStorage.removeItem(LOGGED_OUT_KEY);
     localStorage.setItem(
@@ -17,7 +21,7 @@ export function saveDeviceUnlock(user) {
         username: user.username || '',
         email: user.email || '',
         phone: user.phone || '',
-        role: 'user',
+        role: user.role === 'admin' ? 'admin' : 'user',
         savedAt: Date.now(),
       })
     );
@@ -31,7 +35,7 @@ export function getDeviceUnlock() {
     if (localStorage.getItem(LOGGED_OUT_KEY) === '1') return null;
     const raw = JSON.parse(localStorage.getItem(KEY) || 'null');
     if (!raw?._id) return null;
-    if (raw.role && raw.role !== 'user') return null;
+    if (raw.role && !canSaveRole(raw.role)) return null;
     return raw;
   } catch {
     return null;

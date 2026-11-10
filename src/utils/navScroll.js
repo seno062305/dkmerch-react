@@ -13,51 +13,37 @@ export function unlockBodyScroll() {
   } catch { /* ignore */ }
 }
 
-/** Scroll window (and common app roots) to the top of the current page. */
-export function scrollPageToTop({ smooth = true } = {}) {
+/** Jump to the top of the current page once (no scroll spam). */
+export function scrollPageToTop({ smooth = false } = {}) {
   unlockBodyScroll();
-  const behavior = smooth ? 'smooth' : 'auto';
-  const go = () => {
-    try {
-      window.scrollTo({ top: 0, left: 0, behavior });
-    } catch {
-      window.scrollTo(0, 0);
-    }
-    try {
-      document.documentElement.scrollTop = 0;
-      document.body.scrollTop = 0;
-    } catch { /* ignore */ }
-    const roots = document.querySelectorAll(
-      '.app-main, .main-content, [data-scroll-root], .legal-page, .collections-page, .preorder-page, .track-order-page'
-    );
-    roots.forEach((el) => {
-      try { el.scrollTop = 0; } catch { /* ignore */ }
-    });
-  };
-  go();
-  requestAnimationFrame(go);
-  setTimeout(go, 80);
-  setTimeout(go, 220);
-  setTimeout(go, 400);
+  try {
+    window.scrollTo({ top: 0, left: 0, behavior: smooth ? 'smooth' : 'auto' });
+  } catch {
+    try { window.scrollTo(0, 0); } catch { /* ignore */ }
+  }
+  try {
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  } catch { /* ignore */ }
 }
 
 /**
- * Footer / bottom-nav: go to the tab route, then scroll to that page top.
- * Same route → just scroll to top.
+ * Footer / bottom-nav: go straight to the route.
+ * Same route → jump to top once. Different route → navigate (direct).
  */
 export function goToCustomerTab(navigate, locationPath, to) {
   const path = String(to || '/');
+  const here = String(locationPath || '');
+  const sameTab =
+    here === path
+    || (path !== '/' && here.startsWith(`${path}/`));
+
   unlockBodyScroll();
-  if (
-    locationPath === path
-    || (path !== '/' && String(locationPath || '').startsWith(`${path}/`))
-  ) {
-    scrollPageToTop({ smooth: true });
+
+  if (sameTab) {
+    scrollPageToTop({ smooth: false });
     return;
   }
+
   navigate(path, { state: { scrollToTop: true } });
-  // After React paints the new route
-  setTimeout(() => scrollPageToTop({ smooth: true }), 50);
-  setTimeout(() => scrollPageToTop({ smooth: true }), 200);
-  setTimeout(() => scrollPageToTop({ smooth: false }), 450);
 }

@@ -4,6 +4,20 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="description" content="DKMerch - Your trusted source for authentic K-Pop merchandise">
+  <!-- Mark PWA ASAP so loading splash paints first (no delayed logo-pop) -->
+  <script>
+    (function () {
+      try {
+        if (
+          window.matchMedia('(display-mode: standalone)').matches
+          || window.navigator.standalone === true
+          || /source=pwa/i.test(window.location.search)
+        ) {
+          document.documentElement.classList.add('splash-pwa');
+        }
+      } catch (e) { /* ignore */ }
+    })();
+  </script>
 
   <!-- PWA Meta Tags -->
   <meta name="theme-color" content="#fc1268">
@@ -16,15 +30,19 @@
   <link rel="manifest" href="/manifest.json">
 
   <!-- Apple Touch Icon -->
-  <link rel="apple-touch-icon" href="/images/pwa-icon-512.png">
-  <link rel="apple-touch-icon" sizes="152x152" href="/images/pwa-icon-192.png">
-  <link rel="apple-touch-icon" sizes="180x180" href="/images/pwa-icon-512.png">
-  <link rel="apple-touch-icon" sizes="167x167" href="/images/pwa-icon-512.png">
+  <link rel="apple-touch-icon" href="/images/pwa-icon-512.png?v=18">
+  <link rel="apple-touch-icon" sizes="152x152" href="/images/pwa-icon-192.png?v=18">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/pwa-icon-512.png?v=18">
+  <link rel="apple-touch-icon" sizes="167x167" href="/images/pwa-icon-512.png?v=18">
 
   <title>DKMerch | K-Pop Merchandise Store</title>
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="icon" href="/images/pwa-icon-192.png" type="image/png">
+  <link rel="icon" href="/images/favicon-32.png?v=18" type="image/png" sizes="32x32">
+  <link rel="icon" href="/images/favicon-48.png?v=18" type="image/png" sizes="48x48">
+  <link rel="icon" href="/images/favicon-64.png?v=18" type="image/png" sizes="64x64">
+  <link rel="shortcut icon" href="/images/favicon-64.png?v=18" type="image/png">
+
 
   <style>
     /* First paint = pink under splash only; app-ready restores white page bg */
@@ -95,7 +113,7 @@
       animation: splashLogoPop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
     }
 
-    /* Installed PWA: no re-animate — continue straight into loading splash */
+    /* Installed PWA: logo/title appear instantly, but loading bar still crawls 0→100% */
     html.splash-pwa .splash-logo-wrap,
     html.splash-pwa .splash-title,
     html.splash-pwa .splash-sub,
@@ -114,15 +132,14 @@
     .splash-logo {
       width: 110px;
       height: 110px;
-      border-radius: 28px;
-      background: rgba(255,255,255,0.18);
-      backdrop-filter: blur(10px);
+      border-radius: 30px;
+      background: #ffffff;
       display: flex;
       align-items: center;
       justify-content: center;
       box-shadow:
         0 8px 32px rgba(0,0,0,0.18),
-        0 0 0 1px rgba(255,255,255,0.25) inset;
+        0 0 0 1px rgba(255,255,255,0.55) inset;
       overflow: hidden;
     }
 
@@ -141,7 +158,7 @@
       justify-content: center;
       font-size: 28px;
       font-weight: 800;
-      color: #fff;
+      color: #fc1268;
       letter-spacing: 0.5px;
     }
 
@@ -185,29 +202,40 @@
       to   { opacity: 1; transform: translateY(0); }
     }
 
-    /* Loading bar */
+    /* Loading bar — white fill crawls left → right (scaleX, not jump) */
     .splash-bar-wrap {
       width: 180px;
       height: 4px;
       background: rgba(255,255,255,0.25);
       border-radius: 99px;
       overflow: hidden;
-      animation: splashFadeUp 0.28s ease 0.15s both;
+      animation: splashFadeUp 0.28s ease 0.12s both;
     }
 
     .splash-bar {
       height: 100%;
-      width: 0%;
+      width: 100%;
       background: #ffffff;
       border-radius: 99px;
       box-shadow: 0 0 8px rgba(255,255,255,0.7);
-      animation: splashBarFill 0.7s cubic-bezier(0.4, 0, 0.2, 1) 0.1s forwards;
+      transform: scaleX(0);
+      transform-origin: left center;
+      will-change: transform;
+      animation: splashBarCrawl 1.6s cubic-bezier(0.33, 0.1, 0.25, 1) 0.2s forwards;
     }
 
-    @keyframes splashBarFill {
-      0%   { width: 0%; }
-      40%  { width: 55%; }
-      100% { width: 100%; }
+    html.splash-pwa .splash-bar {
+      animation: splashBarCrawl 1.6s cubic-bezier(0.33, 0.1, 0.25, 1) 0.15s forwards;
+    }
+
+    @keyframes splashBarCrawl {
+      0%   { transform: scaleX(0); }
+      12%  { transform: scaleX(0.12); }
+      28%  { transform: scaleX(0.28); }
+      48%  { transform: scaleX(0.48); }
+      68%  { transform: scaleX(0.7); }
+      86%  { transform: scaleX(0.9); }
+      100% { transform: scaleX(1); }
     }
   </style>
 </head>
@@ -250,7 +278,8 @@
         try { document.documentElement.classList.add('splash-pwa'); } catch (e) {}
       }
 
-      var minShow = isPwa ? 650 : 800;
+      /* Keep splash up long enough to see the bar crawl 0→100% */
+      var minShow = isPwa ? 1850 : 2000;
       var startTime = Date.now();
       var splashHidden = false;
       var bootReady = false;
