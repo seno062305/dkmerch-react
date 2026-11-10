@@ -1251,13 +1251,13 @@ const Checkout = () => {
                   <i className="fas fa-shield-alt"></i>
                   <span>You will be redirected to a secure <strong>PayMongo</strong> page where you can choose to pay via <strong>GCash</strong> or <strong>Maya</strong>.</span>
                 </div>
-                <div style={{ display: 'flex', gap: '12px', marginTop: '14px', alignItems: 'center' }}>
-                  <div className="payment-icon-wrap payment-icon-gcash" style={{ width: '40px', height: '40px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <i className="fas fa-mobile-alt" style={{ fontSize: '18px' }}></i>
+                <div className="payment-brands-row" style={{ display: 'flex', gap: '12px', marginTop: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div className="payment-icon-wrap payment-icon-gcash" style={{ width: '40px', height: '40px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', padding: 0 }}>
+                    <img src="/images/payments/gcash.svg" alt="GCash" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   </div>
                   <span style={{ fontSize: '14px', fontWeight: 600 }}>GCash</span>
-                  <div className="payment-icon-wrap payment-icon-paymaya" style={{ width: '40px', height: '40px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: '8px' }}>
-                    <i className="fas fa-wallet" style={{ fontSize: '18px' }}></i>
+                  <div className="payment-icon-wrap payment-icon-paymaya" style={{ width: '40px', height: '40px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: '8px', overflow: 'hidden', padding: 0 }}>
+                    <img src="/images/payments/maya.svg" alt="Maya" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   </div>
                   <span style={{ fontSize: '14px', fontWeight: 600 }}>Maya</span>
                 </div>

@@ -7,8 +7,6 @@ import { api } from '../../convex/_generated/api';
 import './Header.css';
 import RiderLoginModal from './RiderLoginModal';
 import RewardsModal from './RewardsModal';
-import DkIcon, { DK_ICONS } from './DkIcon';
-
 const Header = ({ cartCount, wishlistCount, onCartClick }) => {
   const { user, isAuthenticated, logout } = useAuth();
   const { confirm } = useConfirm();
@@ -236,7 +234,7 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
 
               <Link to="/wishlist" className="header-action-item favorites-btn">
                 <span className="icon-wrapper">
-                  <DkIcon name={DK_ICONS.favorite} size={18} alt="Favorites" />
+                  <i className="fas fa-star" aria-hidden="true" style={{ color: '#f5a623', fontSize: 18 }}></i>
                   {isAuthenticated && wishlistCount > 0 && (
                     <span className="wishlist-count">{wishlistCount}</span>
                   )}

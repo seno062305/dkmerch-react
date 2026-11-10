@@ -249,6 +249,17 @@
   z-index: 6;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   transition: all 0.2s ease;
+  color: #cbd5e1;
+  font-size: 15px;
+}
+.collection-card-fav i {
+  color: inherit;
+  line-height: 1;
+}
+.collection-card-fav i.filled,
+.collection-card-fav.active i {
+  color: #f5a623;
+}
   color: #ccc;
   font-size: 15px;
 }

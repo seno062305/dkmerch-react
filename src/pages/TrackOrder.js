@@ -124,10 +124,10 @@ const RefundModal = ({ order, onClose, onSuccess }) => {
             <label className="refund-modal-label"><i className="fas fa-wallet"></i> Refund Method <span className="refund-required">*</span></label>
             <div className="refund-method-row">
               <button type="button" className={`refund-method-btn ${refundMethod === 'gcash' ? 'selected' : ''}`} onClick={() => { setRefundMethod('gcash'); setError(''); }}>
-                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/52/GCash_logo.svg/200px-GCash_logo.svg.png" alt="GCash" className="refund-method-logo" /><span>GCash</span>{refundMethod === 'gcash' && <i className="fas fa-check-circle refund-method-check"></i>}
+                <img src="/images/payments/gcash.svg" alt="GCash" className="refund-method-logo" /><span>GCash</span>{refundMethod === 'gcash' && <i className="fas fa-check-circle refund-method-check"></i>}
               </button>
               <button type="button" className={`refund-method-btn ${refundMethod === 'maya' ? 'selected' : ''}`} onClick={() => { setRefundMethod('maya'); setError(''); }}>
-                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/2/24/Maya_logo.svg/200px-Maya_logo.svg.png" alt="Maya" className="refund-method-logo" /><span>Maya</span>{refundMethod === 'maya' && <i className="fas fa-check-circle refund-method-check"></i>}
+                <img src="/images/payments/maya.svg" alt="Maya" className="refund-method-logo" /><span>Maya</span>{refundMethod === 'maya' && <i className="fas fa-check-circle refund-method-check"></i>}
               </button>
             </div>
           </div>

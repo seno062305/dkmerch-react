@@ -5,8 +5,6 @@ import { useWishlist, useRemoveFromWishlist } from '../context/wishlistUtils';
 import { useAddToCart } from '../context/cartUtils';
 import { useNotification } from '../context/NotificationContext';
 import { useConfirm } from '../context/ConfirmContext';
-import DkIcon, { DK_ICONS } from './DkIcon';
-
 const MAX_WISHLIST = 10;
 
 const WishlistPage = () => {
@@ -79,18 +77,18 @@ const WishlistPage = () => {
         <section className="wishlist-page">
           {count === 0 ? (
             <div className="orders-empty">
-              <DkIcon name={DK_ICONS.favorite} size={48} alt="" />
+              <i className="fas fa-star" style={{ fontSize: 48, color: '#f5a623' }} aria-hidden="true"></i>
               <h3>No favorites yet</h3>
               <p>Click the star on any product to save it here.</p>
               <button className="btn btn-primary" onClick={() => navigate('/collections')}>
-                <DkIcon name={DK_ICONS.browseProducts} size={16} /> Browse Products
+                <i className="fas fa-th-large" aria-hidden="true"></i> Browse Products
               </button>
             </div>
           ) : (
             <>
               {/* ✅ Count bar with x/10 indicator */}
               <div className="wishlist-count-bar">
-                <DkIcon name={DK_ICONS.favorite} size={16} alt="" />
+                <i className="fas fa-star" style={{ color: '#f5a623' }} aria-hidden="true"></i>
                 <span>{count} favorite{count !== 1 ? 's' : ''}</span>
                 <span className="wishlist-slot-indicator">
                   <span className={`wishlist-slot-count ${count >= MAX_WISHLIST ? 'full' : ''}`}>
@@ -120,7 +118,7 @@ const WishlistPage = () => {
                         </div>
                       )}
                       <span className="wishlist-star-badge">
-                        <DkIcon name={DK_ICONS.favorite} size={14} alt="" />
+                        <i className="fas fa-star" aria-hidden="true"></i>
                       </span>
                     </div>
 
@@ -151,7 +149,7 @@ const WishlistPage = () => {
 
               <div className="wishlist-footer-actions">
                 <button className="btn btn-primary" onClick={() => navigate('/collections')}>
-                  <DkIcon name={DK_ICONS.browseProducts} size={16} /> Continue Shopping
+                  <i className="fas fa-th-large" aria-hidden="true"></i> Continue Shopping
                 </button>
                 <button className="btn btn-outline-danger" onClick={handleClearWishlist}>
                   <i className="fas fa-trash"></i> Clear Favorites

@@ -1218,7 +1218,13 @@
 .refund-method-btn:hover { border-color: #d1d5db; background: #f9fafb; }
 .refund-method-btn.selected { border-color: #f59e0b; background: #fffbeb; box-shadow: 0 0 0 3px rgba(245,158,11,0.15); }
 
-.refund-method-logo { width: 56px; height: auto; object-fit: contain; }
+.refund-method-logo {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
 .refund-method-check { position: absolute; top: 8px; right: 8px; font-size: 16px; color: #f59e0b; }
 
 .refund-account-fields { gap: 8px; }

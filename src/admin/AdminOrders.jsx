@@ -15,16 +15,34 @@ const today     = toDateStr(Date.now());
 
 const getPaymentMethodLabel = (order) => {
   const raw = (order.paymentMethod || '').toLowerCase();
-  if (raw === 'gcash' || raw.includes('gcash'))   return { label: 'GCash',        icon: 'fa-mobile-alt',    color: '#007fff' };
-  if (raw === 'maya'  || raw.includes('maya') || raw.includes('paymaya')) return { label: 'Maya', icon: 'fa-wallet', color: '#00b4aa' };
-  if (raw === 'card'  || raw.includes('card'))    return { label: 'Card',         icon: 'fa-credit-card',   color: '#6366f1' };
-  if (raw.includes('paymongo') || raw.includes('online')) return { label: 'GCash / Maya', icon: 'fa-money-bill-wave', color: '#6b7280' };
+  if (raw === 'gcash' || raw.includes('gcash'))   return { label: 'GCash', brand: 'gcash', color: '#007fff' };
+  if (raw === 'maya'  || raw.includes('maya') || raw.includes('paymaya')) return { label: 'Maya', brand: 'maya', color: '#00b4aa' };
+  if (raw === 'card'  || raw.includes('card'))    return { label: 'Card', icon: 'fa-credit-card', color: '#6366f1' };
+  if (raw.includes('paymongo') || raw.includes('online')) return { label: 'GCash / Maya', brands: ['gcash', 'maya'], color: '#6b7280' };
   return { label: order.paymentMethod || '—', icon: 'fa-money-bill', color: '#9ca3af' };
 };
 
 const REFUND_METHOD_LABELS = {
-  gcash: { label: 'GCash', color: '#007fff', icon: 'fa-mobile-alt' },
-  maya:  { label: 'Maya',  color: '#00b4aa', icon: 'fa-wallet'     },
+  gcash: { label: 'GCash', brand: 'gcash', color: '#007fff' },
+  maya:  { label: 'Maya',  brand: 'maya',  color: '#00b4aa' },
+};
+
+const PaymentMethodMark = ({ pm, size = 18 }) => {
+  if (!pm) return null;
+  if (pm.brand) {
+    return <img src={`/images/payments/${pm.brand}.svg`} alt={pm.label} style={{ width: size, height: size, borderRadius: 4, objectFit: 'cover', verticalAlign: 'middle' }} />;
+  }
+  if (pm.brands?.length) {
+    return (
+      <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+        {pm.brands.map((b) => (
+          <img key={b} src={`/images/payments/${b}.svg`} alt={b} style={{ width: size, height: size, borderRadius: 4, objectFit: 'cover' }} />
+        ))}
+      </span>
+    );
+  }
+  if (pm.icon) return <i className={`fas ${pm.icon}`} />;
+  return null;
 };
 
 /* ══════════════════════════════════════
@@ -644,7 +662,7 @@ const AdminOrders = () => {
                         {order.promoCode && <div style={{ fontSize: '11px', color: '#ec4899', fontWeight: 700, marginTop: '3px', display: 'flex', alignItems: 'center', gap: '3px' }}><i className="fas fa-tag"></i> {order.promoCode}</div>}
                       </td>
                       <td data-label="Payment"><span className={`payment-badge ${order.paymentStatus === 'paid' ? 'paid' : 'pending'}`}>{order.paymentStatus === 'paid' ? 'Paid' : 'Pending'}</span></td>
-                      <td data-label="Method"><span className="method-badge" style={{ color: pm.color }}><i className={`fas ${pm.icon}`}></i> {pm.label}</span></td>
+                      <td data-label="Method"><span className="method-badge" style={{ color: pm.color, display: 'inline-flex', alignItems: 'center', gap: 6 }}><PaymentMethodMark pm={pm} /> {pm.label}</span></td>
                       <td data-label="Status"><span className="status-badge" style={{ backgroundColor: getStatusColor(order.orderStatus) }}>{getStatusLabel(order.orderStatus)}</span></td>
                       {activeTab === 'refund' && (
                         <td data-label="Refund">
@@ -776,7 +794,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
               <span className="status-badge" style={{ backgroundColor: getStatusColor(order.orderStatus) }}>{getStatusLabel(order.orderStatus)}</span>
               <span className={`payment-badge ${isPaid ? 'paid' : 'pending'}`}>{isPaid ? 'Paid' : 'Payment Pending'}</span>
-              <span className="method-badge-pill" style={{ color: pm.color, borderColor: pm.color + '44' }}><i className={`fas ${pm.icon}`}></i> {pm.label}</span>
+              <span className="method-badge-pill" style={{ color: pm.color, borderColor: pm.color + '44', display: 'inline-flex', alignItems: 'center', gap: 6 }}><PaymentMethodMark pm={pm} /> {pm.label}</span>
               {hasPromo && <span className="promo-admin-pill"><i className="fas fa-tag"></i> {order.promoCode}</span>}
               {hasRefund && (
                 <span className={`refund-header-pill refund-header-${order.refundStatus}`}>
@@ -813,7 +831,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
             <div className="order-info-grid">
               <div className="info-item"><label>Order ID</label><strong>#{order.orderId}</strong></div>
               <div className="info-item"><label>Date</label><span>{order._creationTime ? new Date(order._creationTime).toLocaleString('en-PH') : 'N/A'}</span></div>
-              <div className="info-item"><label>Payment Method</label><span className="method-display" style={{ color: pm.color }}><i className={`fas ${pm.icon}`}></i> {pm.label}</span></div>
+              <div className="info-item"><label>Payment Method</label><span className="method-display" style={{ color: pm.color, display: 'inline-flex', alignItems: 'center', gap: 6 }}><PaymentMethodMark pm={pm} /> {pm.label}</span></div>
               <div className="info-item"><label>Payment Status</label><span className={`payment-badge ${isPaid ? 'paid' : 'pending'}`}>{isPaid ? 'Paid' : 'Pending'}</span></div>
             </div>
           </div>
@@ -876,7 +894,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                   {order.refundMethod && (
                     <div className="admin-refund-row"><span>Refund to</span>
                       <strong className="admin-refund-method-cell">
-                        <i className={`fas ${REFUND_METHOD_LABELS[order.refundMethod]?.icon}`} style={{ color: REFUND_METHOD_LABELS[order.refundMethod]?.color }}></i>
+                        <PaymentMethodMark pm={REFUND_METHOD_LABELS[order.refundMethod]} size={18} />
                         <span style={{ color: REFUND_METHOD_LABELS[order.refundMethod]?.color }}>{REFUND_METHOD_LABELS[order.refundMethod]?.label}</span>
                         {' · '}{order.refundAccountName}{order.refundAccountNumber ? ` (${order.refundAccountNumber})` : ''}
                       </strong>
