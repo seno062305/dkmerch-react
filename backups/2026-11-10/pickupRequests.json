@@ -1,0 +1,20 @@
+[
+  {
+    "_creationTime": 1794285251461.4292,
+    "_id": "jd79rem4zr0d3hsan9745cczt98hzhs9",
+    "approvedAt": "2026-11-10T04:34:11.461Z",
+    "customerName": "Rhizxcsen",
+    "fromScan": true,
+    "orderId": "DK-1794284856468-12PEL1",
+    "requestedAt": "2026-11-10T04:34:11.461Z",
+    "riderEmail": "nabel.leal04@gmail.com",
+    "riderId": "jn70xt92xxenn1cbhwe9mpd1mx82w5js",
+    "riderName": "samantha",
+    "riderPhone": "09614336575",
+    "riderPlate": "PRO 1234",
+    "riderVehicle": "motorcycle",
+    "scannedAt": "2026-11-10T04:34:11.461Z",
+    "status": "completed",
+    "total": 750
+  }
+]

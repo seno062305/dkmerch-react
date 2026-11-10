@@ -1,0 +1,47 @@
+[
+  {
+    "_creationTime": 1794284856587.3022,
+    "_id": "j972bvsvj4zdtjt55079nakq6h8hy075",
+    "confirmedAt": "2026-11-10T04:30:49.138Z",
+    "customerName": "Rhizxcsen",
+    "deliveryConfirmedAt": "2026-11-10T04:36:02.878Z",
+    "deliveryOtp": "9960",
+    "deliveryOtpVerified": true,
+    "email": "sendomwa00@gmail.com",
+    "items": [
+      {
+        "id": "k172b0hdxxbnxtsknxvh14615582h95c",
+        "image": "/images/NewJeans - NJ Get Up PHOTOCARD SET.png",
+        "isPreOrder": false,
+        "name": "[SHOCKING SALE] NewJeans - NJ Get Up PHOTOCARD SET",
+        "price": 750,
+        "quantity": 1,
+        "releaseDate": null
+      }
+    ],
+    "notes": "",
+    "orderId": "DK-1794284856468-12PEL1",
+    "orderStatus": "completed",
+    "outForDeliveryAt": "2026-11-10T04:34:41.496Z",
+    "paidAt": "2026-11-10T04:28:02.019Z",
+    "paymentLinkId": "cs_9e1a06f02269629dd2e8f2da",
+    "paymentLinkUrl": "https://checkout.paymongo.com/9e1a06f02269629dd2e8f2da",
+    "paymentMethod": "GCash",
+    "paymentStatus": "paid",
+    "phone": "09614336575",
+    "riderId": "jn70xt92xxenn1cbhwe9mpd1mx82w5js",
+    "riderInfo": {
+      "email": "nabel.leal04@gmail.com",
+      "name": "samantha",
+      "phone": "09614336575",
+      "photo": "",
+      "plate": "PRO 1234",
+      "vehicle": "motorcycle"
+    },
+    "shippingAddress": "F. Demetillo Compound, General T. de Leon, Gen. T. De Leon, 2nd District, Valenzuela, Northern Manila District, Metro Manila, 1440, Philippines",
+    "shippingFee": 0,
+    "status": "Delivered",
+    "subtotal": 750,
+    "total": 750
+  }
+]

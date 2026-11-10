@@ -1,0 +1,57 @@
+[
+  {
+    "_creationTime": 1771685121294.6147,
+    "_id": "js7fzdd8620at2z8q5vre8qqvn81k9qk",
+    "address": "Demetillo Street, Jim Homes, General T. de Leon, 2nd District, Valenzuela, Northern Manila District, Metro Manila, 1442, Philippines",
+    "addressLat": 14.6898323,
+    "addressLng": 120.9986926,
+    "city": "Valenzuela",
+    "email": "justinetrajano023@gmail.com",
+    "fullName": "seno",
+    "name": "seno",
+    "password": "Senotrajano_23",
+    "phone": "09614336575",
+    "pin": "02d2cf5fb0c0cdc8128cac3cd292cf20fd6622e02d365894c1fcf365f19dd23a",
+    "role": "user",
+    "status": "active",
+    "username": "seno",
+    "zipCode": "1442"
+  },
+  {
+    "_creationTime": 1771685283245.2297,
+    "_id": "js7dypqrevqs83ty5r2axpd4bh81k79c",
+    "email": "admin",
+    "name": "Administrator",
+    "password": "admin123",
+    "role": "admin",
+    "username": "admin"
+  },
+  {
+    "_creationTime": 1772930815242.9858,
+    "_id": "js79j03jtz8xn290a676hszk1x82hghk",
+    "email": "nabel.leal04@gmail.com",
+    "name": "anabel",
+    "password": "@Nabelleal1",
+    "registeredAt": "2026-03-08T00:46:55.243Z",
+    "role": "user",
+    "status": "active",
+    "username": "anabel"
+  },
+  {
+    "_creationTime": 1794284782970.1953,
+    "_id": "js7f81s40hkden068gea4gc3g18hyn2m",
+    "address": "F. Demetillo Compound, General T. de Leon, Gen. T. De Leon, 2nd District, Valenzuela, Northern Manila District, Metro Manila, 1440, Philippines",
+    "city": "",
+    "email": "sendomwa00@gmail.com",
+    "fullName": "Rhizxcsen",
+    "name": "Rhizxcsen",
+    "password": "@Zxcvbnm143",
+    "phone": "09614336575",
+    "pin": "a48175c4510f08f8d83338e92038c3cc0cda594e8f499e2fd75d0e13bf160fff",
+    "registeredAt": "2026-11-10T04:26:22.970Z",
+    "role": "user",
+    "status": "active",
+    "username": "zxcrzsenhs",
+    "zipCode": ""
+  }
+]
