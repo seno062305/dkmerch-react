@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import './CustomerChat.css';
 
 const CustomerChat = () => {
-  const { user, isAuthenticated, isReady } = useAuth();
+  const { user, isAuthenticated, isReady, role } = useAuth();
   const navigate = useNavigate();
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
@@ -28,12 +28,22 @@ const CustomerChat = () => {
 
   useEffect(() => {
     if (!isReady) return;
+    // Staff must not use customer chat — send them to their own panels
+    if (isAuthenticated && role === 'admin') {
+      navigate('/admin/chat', { replace: true });
+      return;
+    }
+    if (isAuthenticated && role === 'rider') {
+      navigate('/rider', { replace: true });
+      return;
+    }
     if (!isAuthenticated) {
       sessionStorage.setItem('redirectAfterLogin', '/chat');
-      window.dispatchEvent(new Event('openLoginModal'));
+      sessionStorage.setItem('dk_login_customers_only', '1');
+      window.dispatchEvent(new CustomEvent('openLoginModal', { detail: { customersOnly: true } }));
       navigate('/');
     }
-  }, [isReady, isAuthenticated, navigate]);
+  }, [isReady, isAuthenticated, role, navigate]);
 
   // Keep page pinned to top — don't let chat scroll into the footer
   useEffect(() => {
@@ -109,10 +119,14 @@ const CustomerChat = () => {
     }
   };
 
-  if (!isReady || !isAuthenticated) {
+  if (!isReady || !isAuthenticated || role === 'admin' || role === 'rider') {
     return (
       <div className="customer-chat-page">
-        <div className="customer-chat-gate">Please login to chat with admin.</div>
+        <div className="customer-chat-gate">
+          {!isAuthenticated
+            ? 'Please login with a customer account to chat with admin.'
+            : 'Redirecting…'}
+        </div>
       </div>
     );
   }

@@ -101,6 +101,21 @@ export const AuthProvider = ({ children }) => {
             role:     result.user.role,
           };
 
+          // Customer-chat (and other customer-only gates) must not accept staff accounts
+          let customersOnly = false;
+          try {
+            customersOnly = sessionStorage.getItem("dk_login_customers_only") === "1";
+          } catch { /* ignore */ }
+          if (customersOnly && sessionUser.role !== "user") {
+            return {
+              success: false,
+              message:
+                sessionUser.role === "admin"
+                  ? "Admin accounts cannot log in here. Open the admin panel instead."
+                  : "This login is for customers only.",
+            };
+          }
+
           // Customers NEVER fully sign in on password alone —
           // always hand off to LoginModal for PIN (or first-time PIN setup).
           if (sessionUser.role === "user" && !result.skipSecondFactor) {

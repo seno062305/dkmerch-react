@@ -174,16 +174,29 @@ function AppContent() {
   const [currentProduct,    setCurrentProduct]    = useState(null);
 
   useEffect(() => {
-    const handleOpenLogin = () => setShowLoginModal(true);
+    const handleOpenLogin = (e) => {
+      const customersOnly = !!e?.detail?.customersOnly;
+      // Opening login from header/cart/etc. clears the customer-chat-only gate
+      if (!customersOnly) {
+        try { sessionStorage.removeItem('dk_login_customers_only'); } catch { /* ignore */ }
+      }
+      setShowLoginModal(true);
+    };
     window.addEventListener('openLoginModal', handleOpenLogin);
     return () => window.removeEventListener('openLoginModal', handleOpenLogin);
   }, []);
 
   const handleLoginSuccess = (loginRole) => {
     setShowLoginModal(false);
+    try { sessionStorage.removeItem('dk_login_customers_only'); } catch { /* ignore */ }
     const redirect = sessionStorage.getItem('redirectAfterLogin');
     if (redirect) {
       sessionStorage.removeItem('redirectAfterLogin');
+      // Never send staff into customer chat after login
+      if ((loginRole === 'admin' || loginRole === 'rider') && String(redirect).startsWith('/chat')) {
+        navigate(loginRole === 'admin' ? '/admin/chat' : '/rider', { replace: true });
+        return;
+      }
       navigate(redirect, { replace: true });
       return;
     }
@@ -282,7 +295,10 @@ function AppContent() {
           {showLoginModal && (
             <React.Suspense fallback={null}>
               <LoginModal
-                onClose={() => setShowLoginModal(false)}
+                onClose={() => {
+                  try { sessionStorage.removeItem('dk_login_customers_only'); } catch { /* ignore */ }
+                  setShowLoginModal(false);
+                }}
                 onLoginSuccess={handleLoginSuccess}
               />
             </React.Suspense>
