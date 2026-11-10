@@ -875,7 +875,7 @@ body.login-modal-open {
 .error-banner.success-banner svg { color: #059669; }
 .error-banner.success-banner span { color: #065f46; }
 /* --------------------------------------
-   DEVICE UNLOCK — GCash-style pink PIN
+   DEVICE UNLOCK â€” GCash-style pink PIN
    -------------------------------------- */
 .pin-unlock-screen {
   position: fixed;
@@ -887,9 +887,12 @@ body.login-modal-open {
   justify-content: space-between;
   padding: max(20px, env(safe-area-inset-top, 0px)) 24px max(16px, env(safe-area-inset-bottom, 0px));
   box-sizing: border-box;
-  background: linear-gradient(145deg, #fc1268 0%, #ff4d94 48%, #ff85b3 100%);
-  color: #fff;
+  background: #fc1268 !important;
+  background-image: linear-gradient(145deg, #fc1268 0%, #ff4d94 48%, #ff85b3 100%) !important;
+  color: #fff !important;
   overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .pin-unlock-top {

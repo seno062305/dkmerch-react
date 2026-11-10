@@ -2,8 +2,10 @@
    PRODUCT MODAL
    ══════════════════════════════════════ */
 
-/* Hide chrome under the portaled product modal */
-body.product-modal-open .customer-bottom-nav {
+/* Hide chrome under the portaled product modal (header was covering the X on mobile) */
+body.product-modal-open .customer-bottom-nav,
+body.product-modal-open header,
+body.product-modal-open .main-header {
   visibility: hidden !important;
   pointer-events: none !important;
 }
@@ -656,13 +658,14 @@ body.product-modal-open .dk-chat-fab-stack {
    ══════════════════════════════════════ */
 @media (max-width: 768px) {
   .product-modal-overlay {
-    /* Full-viewport shell so nothing is clipped under browser chrome / notches */
-    padding: max(8px, env(safe-area-inset-top, 0px)) 10px max(8px, env(safe-area-inset-bottom, 0px));
-    align-items: stretch;
+    /* Keep modal fully inside the viewport — never under the status bar / old header gap */
+    padding: max(12px, env(safe-area-inset-top, 0px)) 12px max(12px, env(safe-area-inset-bottom, 0px));
+    align-items: center;
     justify-content: center;
     background: rgba(15, 23, 42, 0.55);
     z-index: 100040;
     overflow: hidden;
+    inset: 0;
     height: 100dvh;
     height: 100svh;
     max-height: 100dvh;
@@ -673,8 +676,9 @@ body.product-modal-open .dk-chat-fab-stack {
     border-radius: 16px;
     max-width: 560px;
     width: 100%;
-    height: 100%;
-    max-height: 100%;
+    height: auto;
+    max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 24px);
+    max-height: calc(100svh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 24px);
     min-height: 0;
     overflow: hidden;
     display: flex;
@@ -683,19 +687,20 @@ body.product-modal-open .dk-chat-fab-stack {
     margin: 0 auto;
   }
 
+  /* X sits on the image corner — same plane as the product photo */
   .product-modal-content .modal-close {
     position: absolute;
-    top: max(10px, env(safe-area-inset-top, 0px));
+    top: 10px;
     right: 10px;
     left: auto;
     float: none;
     margin: 0;
     z-index: 40;
-    width: 38px;
-    height: 38px;
+    width: 36px;
+    height: 36px;
   }
 
-  .modal-cart-toast { top: 52px; }
+  .modal-cart-toast { top: 48px; }
 
   /* Scroll only the inner content — modal shell stays fixed */
   .modal-grid {
@@ -704,7 +709,6 @@ body.product-modal-open .dk-chat-fab-stack {
     grid-template-columns: none;
     flex: 1 1 auto;
     min-height: 0;
-    height: 100%;
     max-height: none !important;
     overflow-x: hidden;
     overflow-y: auto;
@@ -714,9 +718,9 @@ body.product-modal-open .dk-chat-fab-stack {
   }
 
   .modal-image-section {
-    border-radius: 0;
-    /* Extra top padding so image clears close button */
-    padding: 52px 16px 14px;
+    border-radius: 16px 16px 0 0;
+    /* Tight top — X overlays the image area instead of sitting above it */
+    padding: 14px 16px 12px;
     min-height: 0;
     width: 100%;
     box-sizing: border-box;
@@ -909,13 +913,20 @@ body.product-modal-open .dk-chat-fab-stack {
 
 @media (max-width: 480px) {
   .product-modal-overlay {
-    padding: max(6px, env(safe-area-inset-top, 0px)) 8px max(6px, env(safe-area-inset-bottom, 0px));
+    padding: max(10px, env(safe-area-inset-top, 0px)) 10px max(10px, env(safe-area-inset-bottom, 0px));
   }
   .product-modal-content {
-    height: 100%;
-    max-height: 100%;
+    height: auto;
+    max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 20px);
+    max-height: calc(100svh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 20px);
   }
-  .modal-image-section { padding: 50px 14px 12px; }
+  .modal-image-section { padding: 12px 14px 10px; }
+  .product-modal-content .modal-close {
+    top: 8px;
+    right: 8px;
+    width: 34px;
+    height: 34px;
+  }
   .modal-product-img {
     width: min(170px, 56vw) !important;
     height: auto !important;

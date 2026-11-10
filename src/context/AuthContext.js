@@ -15,9 +15,6 @@ const AuthContext = createContext(null);
 const AUTH_USER_KEY = "authUser";
 const SESSION_ALIVE_KEY = "dkmerch_session_alive";
 const LAST_ACTIVE_KEY = "dkmerch_last_active";
-/** Stay logged-in without PIN if last activity was within this window (covers mobile reload / soft kill). */
-const RECENT_ACTIVE_MS = 12 * 60 * 60 * 1000; // 12 hours
-
 function readAuthUser() {
   try {
     return JSON.parse(localStorage.getItem(AUTH_USER_KEY) || "null");
@@ -51,20 +48,6 @@ function isSessionAlive() {
   } catch {
     return false;
   }
-}
-
-function getLastActiveMs() {
-  try {
-    const n = Number(localStorage.getItem(LAST_ACTIVE_KEY) || 0);
-    return Number.isFinite(n) ? n : 0;
-  } catch {
-    return 0;
-  }
-}
-
-function wasRecentlyActive() {
-  const last = getLastActiveMs();
-  return last > 0 && Date.now() - last < RECENT_ACTIVE_MS;
 }
 
 /** True when this load is a refresh/reload (not a cold app open). */
@@ -136,14 +119,15 @@ export const AuthProvider = ({ children }) => {
     const pwa = isStandalonePwa();
     const unlock = getDeviceUnlock(); // null after explicit logout
     const reload = isPageReload();
-    const recent = wasRecentlyActive();
     const loggedOut = wasExplicitLogout();
 
     const restoreSession = (withPinGate = false) => {
-      markSessionAlive();
+      // Don't mark session alive yet when PIN is required — otherwise a soft
+      // reopen would skip the pink PIN gate on the next cold start.
+      if (!withPinGate) markSessionAlive();
       setUser(storedUser);
       setRole(storedUser.role);
-      setIsAuthenticated(true); // keep route/page — never bounce to home on reload
+      setIsAuthenticated(true); // keep route/page under the PIN overlay
       setNeedsDeviceUnlock(withPinGate);
     };
 
@@ -160,32 +144,42 @@ export const AuthProvider = ({ children }) => {
       return;
     }
 
-    // Reload / same tab / recent activity / regular browser → stay logged in on this page
-    if (alive || reload || recent || !pwa) {
+    const isCustomer = !storedUser.role || storedUser.role === "user";
+
+    // Same tab / pull-to-refresh → stay logged in, no PIN
+    if (alive || reload) {
       restoreSession(false);
       setIsReady(true);
       return;
     }
 
-    // Installed PWA cold start after long idle — PIN gate, but keep account + current URL
-    const isCustomer = !storedUser.role || storedUser.role === "user";
-    if (isCustomer && unlock?._id && String(unlock._id) === String(storedUser._id)) {
+    // Installed app cold open (close → reopen) → always show PIN for customers
+    if (pwa && isCustomer && unlock?._id && String(unlock._id) === String(storedUser._id)) {
       restoreSession(true);
-    } else {
-      // No unlock profile after long idle → full login next time
-      clearAuthUser();
-      clearDeviceUnlock();
-      setUser(null);
-      setRole(null);
-      setIsAuthenticated(false);
-      setNeedsDeviceUnlock(false);
+      setIsReady(true);
+      return;
     }
+
+    // Regular mobile/desktop browser tab reopen → stay logged in (no PIN popup)
+    if (!pwa) {
+      restoreSession(false);
+      setIsReady(true);
+      return;
+    }
+
+    // PWA but no unlock profile → require full login
+    clearAuthUser();
+    clearDeviceUnlock();
+    setUser(null);
+    setRole(null);
+    setIsAuthenticated(false);
+    setNeedsDeviceUnlock(false);
     setIsReady(true);
   }, []);
 
-  // Keep last-active fresh so mobile reload / brief background never looks like logout
+  // Keep last-active fresh after unlock — never while PIN gate is up
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || needsDeviceUnlock) return;
     const touch = () => {
       try { localStorage.setItem(LAST_ACTIVE_KEY, String(Date.now())); } catch { /* ignore */ }
       markSessionAlive();
@@ -200,7 +194,7 @@ export const AuthProvider = ({ children }) => {
       document.removeEventListener("visibilitychange", onVis);
       window.clearInterval(id);
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, needsDeviceUnlock]);
 
   const applySession = (sessionUser) => {
     kickedRef.current = false;

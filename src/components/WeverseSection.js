@@ -17,7 +17,6 @@ import {
   isNewArrival,
   getProductNewAnchorMs,
   toPhtMs,
-  NEW_ARRIVAL_DAYS,
 } from '../utils/saleUtils';
 import LoginModal from './LoginModal';
 import './WeverseSection.css';
@@ -51,12 +50,18 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
     return product.kpopGroup?.trim().toUpperCase() === activePromo.name.trim().toUpperCase();
   };
 
-  // New Arrivals: only products released (or created) within the last 1–3 days
+  // New Arrivals: newest released / newly added products (latest 5)
+  const NEW_ARRIVALS_LIMIT = 5;
+  const nowMs = Date.now();
   const newArrivals = (products || [])
-    .filter((p) => isNewArrival(p, Date.now(), NEW_ARRIVAL_DAYS))
     .slice()
+    .filter((p) => {
+      const anchor = getProductNewAnchorMs(p);
+      // Only already-released / already-added items (no future pre-orders)
+      return anchor > 0 && anchor <= nowMs;
+    })
     .sort((a, b) => getProductNewAnchorMs(b) - getProductNewAnchorMs(a))
-    .slice(0, 8);
+    .slice(0, NEW_ARRIVALS_LIMIT);
 
   const saleProducts = (products || [])
     .filter(

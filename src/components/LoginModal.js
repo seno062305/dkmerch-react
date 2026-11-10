@@ -131,8 +131,8 @@ function clearPinResetOtpCode(userId) {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
-const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearUnlockPrompt }) => {
-  const { login, completeLogin } = useAuth();
+const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearUnlockPrompt, onSwitchAccount }) => {
+  const { login, completeLogin, logout } = useAuth();
   const { showNotification } = useNotification();
   const navigate = useNavigate();
 
@@ -142,11 +142,12 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
     try { return getDeviceUnlock(); } catch { return null; }
   })();
   const rememberedLocalPin = !!(remembered?._id && hasLocalPin(remembered._id));
-  // Only jump straight to Enter PIN when this device already has a saved PIN
-  const startWithPin = !!(preferPinUnlock && remembered?._id && rememberedLocalPin);
+  // Cold-start unlock: show pink PIN immediately when app asks for it
+  const startUnlockUi = !!(preferPinUnlock && remembered?._id);
+  const startWithPin = !!(startUnlockUi && rememberedLocalPin);
   /** Block closing / browsing until login succeeds (PIN gate or Use another account). */
   const [mustAuthenticate, setMustAuthenticate] = useState(!!preferPinUnlock);
-  const [view, setView] = useState(startWithPin ? "pin" : "login");
+  const [view, setView] = useState(startUnlockUi ? "pin" : "login");
   const [qsiToken, setQsiToken] = useState("");
   const [qsiExpiresAt, setQsiExpiresAt] = useState(0);
   const [qsiCreating, setQsiCreating] = useState(false);
@@ -155,8 +156,8 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
   const [qsiNonce, setQsiNonce] = useState(0);
   const qsiFinishingRef = useRef(false);
   const [qsiDesktopHost] = useState(() => canGenerateQuickSignInQr());
-  const [pendingUser, setPendingUser] = useState(startWithPin ? remembered : null);
-  const [deviceUnlockMode, setDeviceUnlockMode] = useState(startWithPin);
+  const [pendingUser, setPendingUser] = useState(startUnlockUi ? remembered : null);
+  const [deviceUnlockMode, setDeviceUnlockMode] = useState(startUnlockUi);
   const [pinValue, setPinValue] = useState("");
   const [pinConfirmValue, setPinConfirmValue] = useState("");
   const [pinStep, setPinStep] = useState(0); // 0 = enter new, 1 = confirm (set/reset only)
@@ -169,7 +170,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
   const [loginOtpCooldown, setLoginOtpCooldown] = useState(0);
   const [isPinReset, setIsPinReset] = useState(false);
   // Device unlock = already finished email+password+PIN once on this phone
-  const [accountHasPin, setAccountHasPin] = useState(startWithPin);
+  const [accountHasPin, setAccountHasPin] = useState(startUnlockUi);
   const [pinResetSentCode, setPinResetSentCode] = useState(""); // client fallback when Convex PIN OTP isn't deployed
   const [pinResetSending, setPinResetSending] = useState(false);
   const pinInputRef = useRef(null);
@@ -701,9 +702,11 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
   };
 
   const switchToAnotherAccount = () => {
-    markExplicitLogout();
-    clearDeviceUnlock();
-    // Keep local PIN hashes for accounts on this device — only clear unlock profile
+    // Stay on this login screen — never bounce to homepage
+    try { clearDeviceUnlock(); } catch { /* ignore */ }
+    try { markExplicitLogout(); } catch { /* ignore */ }
+    try { logout?.(); } catch { /* ignore */ }
+    try { onSwitchAccount?.(); } catch { /* ignore */ }
     setDeviceUnlockMode(false);
     setAccountHasPin(false);
     setPendingUser(null);
@@ -711,9 +714,8 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
     setPinError("");
     setFormData({ email: "", password: "" });
     setMustAuthenticate(true);
+    setShowRegister(false);
     setView("login");
-    // Drop cold-start unlock flag but KEEP this modal open (do not browse without login)
-    try { onClearUnlockPrompt?.(); } catch { /* ignore */ }
   };
 
   const requestClose = () => {

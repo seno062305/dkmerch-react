@@ -169,7 +169,7 @@ const RiderRoute = ({ children }) => {
 function AppContent() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, isAuthenticated, role, isReady, needsDeviceUnlock, clearDeviceUnlockPrompt } = useAuth();
+  const { user, isAuthenticated, role, isReady, needsDeviceUnlock, clearDeviceUnlockPrompt, logout } = useAuth();
   const savePushSub = useMutation(api.pushSubscriptions.saveSubscription);
 
   const cartItems      = useCart();
@@ -223,11 +223,11 @@ function AppContent() {
     return () => window.removeEventListener('openLoginModal', handleOpenLogin);
   }, []);
 
-  // Cold start after closing the app → PIN unlock (not on normal reload)
+  // Cold start after closing the app → PIN unlock (even if session is restored underneath)
   useEffect(() => {
-    if (!isReady || isAuthenticated || !needsDeviceUnlock) return;
+    if (!isReady || !needsDeviceUnlock) return;
     setShowLoginModal(true);
-  }, [isReady, isAuthenticated, needsDeviceUnlock]);
+  }, [isReady, needsDeviceUnlock]);
 
   // Keep / request push subscription for logged-in customers (needed for phone order alerts)
   useEffect(() => {
@@ -380,8 +380,15 @@ function AppContent() {
                 clearDeviceUnlockPrompt?.();
                 setShowLoginModal(false);
               }}
+              onSwitchAccount={() => {
+                // Stay on login UI — clear session but keep this modal open
+                clearDeviceUnlockPrompt?.();
+                try { logout?.(); } catch { /* ignore */ }
+                setShowLoginModal(true);
+              }}
               onLoginSuccess={(loginRole) => {
                 clearDeviceUnlockPrompt?.();
+                setShowLoginModal(false);
                 handleLoginSuccess(loginRole);
               }}
             />
