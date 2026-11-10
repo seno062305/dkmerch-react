@@ -99,6 +99,18 @@
     filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
 }
 
+.wv-new-badge {
+    position: absolute;
+    top: 8px; left: 8px;
+    background: #111827;
+    color: white;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    padding: 4px 10px;
+    border-radius: 3px;
+    z-index: 2;
+}
 .wv-sale-badge {
     position: absolute;
     top: 8px; left: 8px;

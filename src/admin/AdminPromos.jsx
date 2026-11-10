@@ -4,12 +4,8 @@ import { api } from '../../convex/_generated/api';
 import { useConfirm } from '../context/ConfirmContext';
 import AdminPager from './AdminPager';
 import { runWithFailover } from '../lib/failoverWrite';
+import { useCatalogOptions } from '../hooks/useCatalogOptions';
 import './AdminPromos.css';
-
-const KPOP_GROUPS = [
-  'BTS', 'BLACKPINK', 'TWICE', 'SEVENTEEN',
-  'STRAY KIDS', 'EXO', 'RED VELVET', 'NEWJEANS'
-];
 
 const validateDiscount = (val) => {
   const num = Number(val);
@@ -43,6 +39,8 @@ const toMs = (d, t) => {
 const AdminPromos = () => {
   const { confirm } = useConfirm();
   const promos      = useQuery(api.promos.getAllPromos) || [];
+  const { items: catalogGroups } = useCatalogOptions('kpopGroup');
+  const KPOP_GROUPS = catalogGroups.map((g) => g.value);
   const createPromoMut = useMutation(api.promos.createPromo);
   const updatePromoMut = useMutation(api.promos.updatePromo);
   const deletePromoMut = useMutation(api.promos.deletePromo);

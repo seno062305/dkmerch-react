@@ -664,6 +664,103 @@
 .helper-text { font-size: 12px; color: #94a3b8; margin-top: 5px; display: flex; align-items: center; gap: 5px; }
 .helper-text i { font-size: 11px; }
 
+.catalog-select-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.catalog-select-row select { flex: 1; min-width: 0; }
+.catalog-add-btn {
+  padding: 0 12px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  color: #ee4d2d;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.catalog-add-btn:hover {
+  border-color: #ee4d2d;
+  background: #fff5f2;
+}
+.catalog-del-btn {
+  padding: 0 12px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  color: #dc2626;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s, background 0.15s;
+}
+.catalog-del-btn:hover:not(:disabled) {
+  border-color: #dc2626;
+  background: #fef2f2;
+}
+.catalog-del-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.catalog-del-btn.is-locked {
+  color: #9ca3af;
+  border-color: #e5e7eb;
+  background: #f9fafb;
+}
+.catalog-inuse-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #b45309;
+}
+.catalog-inuse-hint i {
+  font-size: 11px;
+  color: #d97706;
+}
+.catalog-add-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.catalog-add-row input {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+.catalog-save-btn,
+.catalog-cancel-btn {
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+}
+.catalog-save-btn {
+  background: #ee4d2d;
+  color: #fff;
+}
+.catalog-save-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.catalog-cancel-btn {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
 /* Image input */
 .image-input-row { display: flex; gap: 8px; align-items: stretch; }
 .image-input-row input { flex: 1; }

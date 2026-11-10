@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
+import { useCatalogOptions } from '../hooks/useCatalogOptions';
 import { useAddToCart } from '../context/cartUtils';
 import { useWishlist, useToggleWishlist } from '../context/wishlistUtils';
 import { useNotification } from '../context/NotificationContext';
@@ -43,6 +44,8 @@ const Collections = () => {
   const groupRef    = useRef(null);
 
   const products               = useQuery(api.products.getCollectionProducts) || [];
+  const { items: catalogCategories } = useCatalogOptions('category');
+  const { items: catalogGroups } = useCatalogOptions('kpopGroup');
   const wishlistItems          = useWishlist();
   const addToCartMutation      = useAddToCart();
   const toggleWishlistMutation = useToggleWishlist();
@@ -72,7 +75,7 @@ const Collections = () => {
     const scrollToTop = location.state?.scrollToTop;
     if (filterGroup) {
       // Match casing against known groups / product data
-      const known = ['BTS', 'BLACKPINK', 'TWICE', 'SEVENTEEN', 'STRAY KIDS', 'EXO', 'RED VELVET', 'NEWJEANS'];
+      const known = (catalogGroups || []).map((g) => g.value);
       const matched =
         known.find(g => g.toUpperCase() === String(filterGroup).trim().toUpperCase()) ||
         filterGroup;
@@ -80,7 +83,7 @@ const Collections = () => {
       if (scrollToTop) window.scrollTo({ top: 0, behavior: 'smooth' });
       window.history.replaceState({}, document.title);
     }
-  }, [location.pathname, location.state]);
+  }, [location.pathname, location.state, catalogGroups]);
 
   useEffect(() => {
     const productId = searchParams.get('product');
@@ -97,8 +100,8 @@ const Collections = () => {
     }
   }, [searchParams]);
 
-  const categories = ['all', 'albums', 'photocards', 'lightsticks', 'accessories'];
-  const groups     = ['all', 'BTS', 'BLACKPINK', 'TWICE', 'SEVENTEEN', 'STRAY KIDS', 'EXO', 'RED VELVET', 'NEWJEANS'];
+  const categories = ['all', ...catalogCategories.map((c) => c.value)];
+  const groups = ['all', ...catalogGroups.map((g) => g.value)];
 
   const filteredProducts = (products || [])
     .filter(product => {

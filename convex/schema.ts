@@ -154,9 +154,17 @@ export default defineSchema({
     deliveryOtpVerified: v.optional(v.boolean()),
     deliveryProofPhoto: v.optional(v.string()),
     cancelReason: v.optional(v.string()),
+    cancelRequestStatus: v.optional(v.string()),
+    cancelRequestReason: v.optional(v.string()),
+    cancelRequestMethod: v.optional(v.string()),
+    cancelRequestPhone: v.optional(v.string()),
+    cancelRequestedAt: v.optional(v.string()),
+    cancelRequestNote: v.optional(v.string()),
+    cancelResolvedAt: v.optional(v.string()),
     paymentStatus: v.optional(v.string()),
     paymentLinkId: v.optional(v.string()),
     paymentLinkUrl: v.optional(v.string()),
+    paymongoRefundId: v.optional(v.string()),
     paidAt: v.optional(v.string()),
     confirmedAt: v.optional(v.string()),
     shippedAt: v.optional(v.string()),
@@ -165,15 +173,6 @@ export default defineSchema({
     cancelledAt: v.optional(v.string()),
     /** 'customer' | 'admin' */
     cancelledBy: v.optional(v.string()),
-    paymongoRefundId: v.optional(v.string()),
-    /** Customer cancel request (before admin confirms) — admin must approve */
-    cancelRequestStatus:   v.optional(v.string()), // requested | approved | rejected
-    cancelRequestReason:   v.optional(v.string()),
-    cancelRequestPhone:    v.optional(v.string()),
-    cancelRequestMethod:   v.optional(v.string()), // gcash | maya
-    cancelRequestedAt:     v.optional(v.string()),
-    cancelRequestNote:     v.optional(v.string()), // admin note
-    cancelResolvedAt:      v.optional(v.string()),
     refundStatus:          v.optional(v.string()),
     refundReason:          v.optional(v.string()),
     refundComment:         v.optional(v.string()),
@@ -482,4 +481,17 @@ export default defineSchema({
   })
     .index("by_email", ["email"])
     .index("by_endpoint", ["endpoint"]),
+
+
+  // Admin-managed product categories & K-Pop groups (plus defaults in code)
+  catalogOptions: defineTable({
+    type: v.union(v.literal("category"), v.literal("kpopGroup")),
+    value: v.string(),
+    label: v.string(),
+    createdAt: v.number(),
+    isRemoved: v.optional(v.boolean()),
+  })
+    .index("by_type", ["type"])
+    .index("by_type_value", ["type", "value"]),
+
 });

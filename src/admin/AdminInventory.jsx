@@ -5,10 +5,12 @@ import { api } from '../../convex/_generated/api';
 import { useUpdateProduct } from '../utils/productStorage';
 import DkIcon, { DK_ICONS } from '../components/DkIcon';
 import { useNotification } from '../context/NotificationContext';
+import { useCatalogOptions } from '../hooks/useCatalogOptions';
 
 const AdminItemList = () => {
   const { showNotification } = useNotification();
   const products = useQuery(api.products.getAllProductsAdmin) || [];
+  const { items: categories } = useCatalogOptions('category');
   const updateProduct = useUpdateProduct();
 
   const [activeTab, setActiveTab] = useState('stock');
@@ -105,11 +107,9 @@ const AdminItemList = () => {
         </div>
         <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="filter-select">
           <option value="all">All Categories</option>
-          <option value="albums">Albums</option>
-          <option value="photocards">Photocards</option>
-          <option value="lightsticks">Lightsticks</option>
-          <option value="apparel">Apparel</option>
-          <option value="accessories">Accessories</option>
+          {categories.map((c) => (
+            <option key={c.value} value={c.value}>{c.label || c.value}</option>
+          ))}
         </select>
       </div>
 

@@ -1,12 +1,17 @@
 import React, { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import './AdminProducts.css';
-import { useQuery, useAction } from 'convex/react';
+import { useQuery, useAction, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useAddProduct, useUpdateProduct, useDeleteProduct } from '../utils/productStorage';
 import { useConfirm } from '../context/ConfirmContext';
 import DkIcon, { DK_ICONS } from '../components/DkIcon';
 import { formatSaleRange, toPhtMs } from '../utils/saleUtils';
+import {
+  useCatalogOptions,
+  FALLBACK_CATEGORIES,
+  FALLBACK_GROUPS,
+} from '../hooks/useCatalogOptions';
 
 const ALLOWED_IMAGE_TYPES = [
   'image/jpeg', 'image/jpg', 'image/png',
@@ -81,11 +86,123 @@ const showReleasedBadge = (product) => {
 // ══════════════════════════════════════════════════════════════════════════
 //  PRODUCT MODAL
 // ══════════════════════════════════════════════════════════════════════════
-const ProductModal = ({ editingId, initialForm, onClose, onSubmit, submitting }) => {
+const ProductModal = ({
+  editingId, initialForm, onClose, onSubmit, submitting,
+  categories = FALLBACK_CATEGORIES, groups = FALLBACK_GROUPS,
+  onAddCategory, onAddGroup, onRemoveCategory, onRemoveGroup,
+  products = [],
+}) => {
   const [form, setForm]     = useState(initialForm);
   const [errors, setErrors] = useState({});
+  const [addingCategory, setAddingCategory] = useState(false);
+  const [addingGroup, setAddingGroup] = useState(false);
+  const [newCategory, setNewCategory] = useState('');
+  const [newGroup, setNewGroup] = useState('');
+  const [catalogBusy, setCatalogBusy] = useState(false);
+  const [catalogMsg, setCatalogMsg] = useState('');
   const fileInputRef = useRef(null);
   const today = new Date().toISOString().split('T')[0];
+
+  const categoryInUse = products.filter(
+    (p) => String(p.category || '').trim().toLowerCase() === String(form.category || '').trim().toLowerCase()
+  ).length;
+  const groupInUse = products.filter(
+    (p) => String(p.kpopGroup || '').trim().toLowerCase() === String(form.kpopGroup || '').trim().toLowerCase()
+  ).length;
+  const canDeleteCategory = !!form.category && categoryInUse === 0;
+  const canDeleteGroup = !!form.kpopGroup && groupInUse === 0;
+
+  const saveCategory = async () => {
+    if (!onAddCategory || !newCategory.trim()) return;
+    setCatalogBusy(true);
+    setCatalogMsg('');
+    try {
+      const res = await onAddCategory(newCategory.trim());
+      if (res?.success && res.value) {
+        setForm((prev) => ({ ...prev, category: res.value }));
+        setNewCategory('');
+        setAddingCategory(false);
+        setCatalogMsg(res.alreadyExists ? 'Category already exists — selected.' : 'Category added.');
+      } else {
+        setCatalogMsg(res?.message || 'Could not add category.');
+      }
+    } catch {
+      setCatalogMsg('Could not add category.');
+    } finally {
+      setCatalogBusy(false);
+    }
+  };
+
+  const saveGroup = async () => {
+    if (!onAddGroup || !newGroup.trim()) return;
+    setCatalogBusy(true);
+    setCatalogMsg('');
+    try {
+      const res = await onAddGroup(newGroup.trim());
+      if (res?.success && res.value) {
+        setForm((prev) => ({ ...prev, kpopGroup: res.value }));
+        setNewGroup('');
+        setAddingGroup(false);
+        setCatalogMsg(res.alreadyExists ? 'Group already exists — selected.' : 'K-Pop group added.');
+      } else {
+        setCatalogMsg(res?.message || 'Could not add group.');
+      }
+    } catch {
+      setCatalogMsg('Could not add group.');
+    } finally {
+      setCatalogBusy(false);
+    }
+  };
+
+  const deleteCategory = async () => {
+    if (!onRemoveCategory || !form.category) return;
+    if (categoryInUse > 0) {
+      setCatalogMsg(`Cannot delete — ${categoryInUse} product(s) still use this category.`);
+      return;
+    }
+    setCatalogBusy(true);
+    setCatalogMsg('');
+    try {
+      const res = await onRemoveCategory(form.category);
+      if (res?.success) {
+        const next = categories.find((c) => c.value !== form.category)?.value
+          || FALLBACK_CATEGORIES[0].value;
+        setForm((prev) => ({ ...prev, category: next }));
+        setCatalogMsg('Category deleted.');
+      } else {
+        setCatalogMsg(res?.message || 'Could not delete category.');
+      }
+    } catch {
+      setCatalogMsg('Could not delete category.');
+    } finally {
+      setCatalogBusy(false);
+    }
+  };
+
+  const deleteGroup = async () => {
+    if (!onRemoveGroup || !form.kpopGroup) return;
+    if (groupInUse > 0) {
+      setCatalogMsg(`Cannot delete — ${groupInUse} product(s) still use this group.`);
+      return;
+    }
+    setCatalogBusy(true);
+    setCatalogMsg('');
+    try {
+      const res = await onRemoveGroup(form.kpopGroup);
+      if (res?.success) {
+        const next = groups.find((g) => g.value !== form.kpopGroup)?.value
+          || FALLBACK_GROUPS[0].value;
+        setForm((prev) => ({ ...prev, kpopGroup: next }));
+        setCatalogMsg('K-Pop group deleted.');
+      } else {
+        setCatalogMsg(res?.message || 'Could not delete group.');
+      }
+    } catch {
+      setCatalogMsg('Could not delete group.');
+    } finally {
+      setCatalogBusy(false);
+    }
+  };
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -158,21 +275,125 @@ const ProductModal = ({ editingId, initialForm, onClose, onSubmit, submitting })
                   </div>
                   <div className="form-group">
                     <label><i className="fas fa-folder"></i> Category <span className="req">*</span></label>
-                    <select name="category" value={form.category} onChange={handleChange}>
-                      <option value="albums">Albums</option>
-                      <option value="photocards">Photocards</option>
-                      <option value="lightsticks">Lightsticks</option>
-                      <option value="accessories">Accessories</option>
-                    </select>
+                    <div className="catalog-select-row">
+                      <select name="category" value={form.category} onChange={handleChange}>
+                        {!categories.some((c) => c.value === form.category) && form.category && (
+                          <option value={form.category}>{form.category}</option>
+                        )}
+                        {categories.map((c) => (
+                          <option key={c.value} value={c.value}>{c.label}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className="catalog-add-btn"
+                        onClick={() => { setAddingCategory((v) => !v); setAddingGroup(false); setCatalogMsg(''); }}
+                      >
+                        <i className="fas fa-plus"></i> Add
+                      </button>
+                      <button
+                        type="button"
+                        className={`catalog-del-btn${categoryInUse > 0 ? ' is-locked' : ''}`}
+                        title={
+                          categoryInUse > 0
+                            ? `Cannot delete — ${categoryInUse} product(s) still use this category`
+                            : 'Delete selected category'
+                        }
+                        onClick={deleteCategory}
+                        disabled={catalogBusy || !canDeleteCategory}
+                      >
+                        <i className="fas fa-trash"></i>
+                      </button>
+                    </div>
+                    {categoryInUse > 0 && (
+                      <small className="catalog-inuse-hint">
+                        <i className="fas fa-lock"></i>
+                        In use by {categoryInUse} product{categoryInUse === 1 ? '' : 's'} — cannot delete
+                      </small>
+                    )}
+                    {addingCategory && (
+                      <div className="catalog-add-row">
+                        <input
+                          type="text"
+                          placeholder="New category (e.g. Keyrings)"
+                          value={newCategory}
+                          maxLength={40}
+                          onChange={(e) => setNewCategory(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); saveCategory(); } }}
+                          disabled={catalogBusy}
+                        />
+                        <button type="button" className="catalog-save-btn" onClick={saveCategory} disabled={catalogBusy || !newCategory.trim()}>
+                          Save
+                        </button>
+                        <button type="button" className="catalog-cancel-btn" onClick={() => { setAddingCategory(false); setNewCategory(''); }} disabled={catalogBusy}>
+                          Cancel
+                        </button>
+                      </div>
+                    )}
                   </div>
                   <div className="form-group">
                     <label><i className="fas fa-users"></i> K-Pop Group <span className="req">*</span></label>
-                    <select name="kpopGroup" value={form.kpopGroup} onChange={handleChange}>
-                      <option>BTS</option><option>BLACKPINK</option><option>TWICE</option>
-                      <option>SEVENTEEN</option><option>STRAY KIDS</option><option>EXO</option>
-                      <option>RED VELVET</option><option>NEWJEANS</option>
-                    </select>
+                    <div className="catalog-select-row">
+                      <select name="kpopGroup" value={form.kpopGroup} onChange={handleChange}>
+                        {!groups.some((g) => g.value === form.kpopGroup) && form.kpopGroup && (
+                          <option value={form.kpopGroup}>{form.kpopGroup}</option>
+                        )}
+                        {groups.map((g) => (
+                          <option key={g.value} value={g.value}>{g.label}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className="catalog-add-btn"
+                        onClick={() => { setAddingGroup((v) => !v); setAddingCategory(false); setCatalogMsg(''); }}
+                      >
+                        <i className="fas fa-plus"></i> Add
+                      </button>
+                      <button
+                        type="button"
+                        className={`catalog-del-btn${groupInUse > 0 ? ' is-locked' : ''}`}
+                        title={
+                          groupInUse > 0
+                            ? `Cannot delete — ${groupInUse} product(s) still use this group`
+                            : 'Delete selected group'
+                        }
+                        onClick={deleteGroup}
+                        disabled={catalogBusy || !canDeleteGroup}
+                      >
+                        <i className="fas fa-trash"></i>
+                      </button>
+                    </div>
+                    {groupInUse > 0 && (
+                      <small className="catalog-inuse-hint">
+                        <i className="fas fa-lock"></i>
+                        In use by {groupInUse} product{groupInUse === 1 ? '' : 's'} — cannot delete
+                      </small>
+                    )}
+                    {addingGroup && (
+                      <div className="catalog-add-row">
+                        <input
+                          type="text"
+                          placeholder="New group (e.g. aespa)"
+                          value={newGroup}
+                          maxLength={40}
+                          onChange={(e) => setNewGroup(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); saveGroup(); } }}
+                          disabled={catalogBusy}
+                        />
+                        <button type="button" className="catalog-save-btn" onClick={saveGroup} disabled={catalogBusy || !newGroup.trim()}>
+                          Save
+                        </button>
+                        <button type="button" className="catalog-cancel-btn" onClick={() => { setAddingGroup(false); setNewGroup(''); }} disabled={catalogBusy}>
+                          Cancel
+                        </button>
+                      </div>
+                    )}
                   </div>
+                  {catalogMsg && (
+                    <div className="form-group full-width">
+                      <small className="helper-text"><i className="fas fa-info-circle"></i> {catalogMsg}</small>
+                    </div>
+                  )}
                   <div className={`form-group full-width${errors.image ? ' has-error' : ''}`}>
                     <label><i className="fas fa-image"></i> Product Image <span className="req">*</span></label>
                     <div className="image-input-row">
@@ -344,7 +565,7 @@ const ProductModal = ({ editingId, initialForm, onClose, onSubmit, submitting })
 // ══════════════════════════════════════════════════════════════════════════
 //  STOCK MANAGEMENT
 // ══════════════════════════════════════════════════════════════════════════
-const StockManagement = ({ products, updateProduct, onAddProduct }) => {
+const StockManagement = ({ products, updateProduct, onAddProduct, categories = FALLBACK_CATEGORIES }) => {
   const [activeTab, setActiveTab]           = useState('all');
   const [searchTerm, setSearchTerm]         = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
@@ -427,10 +648,9 @@ const StockManagement = ({ products, updateProduct, onAddProduct }) => {
         </div>
         <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className="filter-select">
           <option value="all">All Categories</option>
-          <option value="albums">Albums</option>
-          <option value="photocards">Photocards</option>
-          <option value="lightsticks">Lightsticks</option>
-          <option value="accessories">Accessories</option>
+          {categories.map((c) => (
+            <option key={c.value} value={c.value}>{c.label}</option>
+          ))}
         </select>
       </div>
 
@@ -523,10 +743,65 @@ const StockManagement = ({ products, updateProduct, onAddProduct }) => {
 const AdminProducts = () => {
   const { confirm } = useConfirm();
   const products        = useQuery(api.products.getAllProductsAdmin) || [];
+  const { items: categories, refresh: refreshCategories } = useCatalogOptions('category');
+  const { items: groups, refresh: refreshGroups } = useCatalogOptions('kpopGroup');
+  const addCatalogOption = useMutation(api.catalogOptions.add);
   const addProduct      = useAddProduct();
   const updateProduct   = useUpdateProduct();
   const deleteProduct   = useDeleteProduct();
   const announceNewPreOrder = useAction(api.preOrderRequests.announceNewPreOrderToAllUsers);
+
+  const removeCatalogOption = useMutation(api.catalogOptions.remove);
+  const handleAddCategory = async (name) => {
+    try {
+      const res = await addCatalogOption({ type: 'category', name });
+      await refreshCategories();
+      return res;
+    } catch (err) {
+      return { success: false, message: err?.message || 'Could not add category.' };
+    }
+  };
+  const handleAddGroup = async (name) => {
+    try {
+      const res = await addCatalogOption({ type: 'kpopGroup', name });
+      await refreshGroups();
+      return res;
+    } catch (err) {
+      return { success: false, message: err?.message || 'Could not add group.' };
+    }
+  };
+  const handleRemoveCategory = async (value) => {
+    const ok = await confirm({
+      title: 'Delete category?',
+      message: `Remove "${value}" from the category list? Products using it must be changed first.`,
+      confirmLabel: 'Delete',
+      variant: 'danger',
+    });
+    if (!ok) return { success: false, message: 'Cancelled.' };
+    try {
+      const res = await removeCatalogOption({ type: 'category', value });
+      await refreshCategories();
+      return res;
+    } catch (err) {
+      return { success: false, message: err?.message || 'Could not delete category.' };
+    }
+  };
+  const handleRemoveGroup = async (value) => {
+    const ok = await confirm({
+      title: 'Delete K-Pop group?',
+      message: `Remove "${value}" from the group list? Products using it must be changed first.`,
+      confirmLabel: 'Delete',
+      variant: 'danger',
+    });
+    if (!ok) return { success: false, message: 'Cancelled.' };
+    try {
+      const res = await removeCatalogOption({ type: 'kpopGroup', value });
+      await refreshGroups();
+      return res;
+    } catch (err) {
+      return { success: false, message: err?.message || 'Could not delete group.' };
+    }
+  };
 
   const [showModal,      setShowModal]      = useState(false);
   const [editingId,      setEditingId]      = useState(null);
@@ -652,10 +927,9 @@ const AdminProducts = () => {
               </div>
               <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className="filter-select">
                 <option value="all">All Categories</option>
-                <option value="albums">Albums</option>
-                <option value="photocards">Photocards</option>
-                <option value="lightsticks">Lightsticks</option>
-                <option value="accessories">Accessories</option>
+                {categories.map((c) => (
+                  <option key={c.value} value={c.value}>{c.label}</option>
+                ))}
               </select>
             </div>
           </div>
@@ -723,13 +997,25 @@ const AdminProducts = () => {
       )}
 
       {activeView === 'stock' && (
-        <StockManagement products={products} updateProduct={updateProduct} onAddProduct={openAdd} />
+        <StockManagement
+          products={products}
+          updateProduct={updateProduct}
+          onAddProduct={openAdd}
+          categories={categories}
+        />
       )}
 
       {showModal && (
         <ProductModal
           editingId={editingId} initialForm={modalForm}
           onClose={closeModal} onSubmit={handleModalSubmit} submitting={submitting}
+          categories={categories}
+          groups={groups}
+          onAddCategory={handleAddCategory}
+          onAddGroup={handleAddGroup}
+          onRemoveCategory={handleRemoveCategory}
+          onRemoveGroup={handleRemoveGroup}
+          products={products}
         />
       )}
     </div>

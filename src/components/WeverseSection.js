@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
@@ -20,24 +20,19 @@ const getReleaseMs = (product) => {
   return new Date(`${product.releaseDate}T${rt}:00+08:00`).getTime();
 };
 
-const isReleased = (product) => {
-  const ms = getReleaseMs(product);
-  return ms !== null && Date.now() >= ms;
-};
-
 const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
-  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showLoginModal, setShowLoginModal] = React.useState(false);
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
   const { showNotification } = useNotification();
   const { confirm } = useConfirm();
 
-  const products       = useCollectionProducts();
-  const wishlistItems  = useWishlist();
+  const products = useCollectionProducts();
+  const wishlistItems = useWishlist();
   const toggleWishlist = useToggleWishlist();
 
   const isWishlisted = (productId) =>
-    wishlistItems.some(item => item.productId === productId);
+    wishlistItems.some((item) => item.productId === productId);
 
   const isPromoProduct = (product) => {
     if (!activePromo || !activePromo.isActive) return false;
@@ -45,35 +40,38 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
     return product.kpopGroup?.trim().toUpperCase() === activePromo.name.trim().toUpperCase();
   };
 
-  const saleProducts = (products || [])
-    .filter(p =>
-      p.isSale === true ||
-      (p.originalPrice && Number(p.originalPrice) > Number(p.price))
-    )
-    .sort((a, b) => {
-      const aReleased  = isReleased(a);
-      const bReleased  = isReleased(b);
-      const aReleaseMs = getReleaseMs(a) || 0;
-      const bReleaseMs = getReleaseMs(b) || 0;
-      if (aReleased  && !bReleased) return -1;
-      if (!aReleased && bReleased)  return 1;
-      if (aReleased  && bReleased)  return bReleaseMs - aReleaseMs;
-      return (b._creationTime || 0) - (a._creationTime || 0);
-    })
+  // Newest products first on the homepage
+  const newArrivals = (products || [])
+    .slice()
+    .sort((a, b) => (b._creationTime || 0) - (a._creationTime || 0))
     .slice(0, 8);
 
-  const saleProductIds = useMemo(
-    () => saleProducts.map((p) => String(p._id || p.id)).filter(Boolean),
-    [saleProducts]
-  );
-  const reviewMap = useQuery(
-    api.productStats.getLatestReviewsForProducts,
-    saleProductIds.length ? { productIds: saleProductIds } : 'skip'
-  ) || {};
-  const soldMap = useQuery(
-    api.productStats.getSoldCountsForProducts,
-    saleProductIds.length ? { productIds: saleProductIds } : 'skip'
-  ) || {};
+  const saleProducts = (products || [])
+    .filter(
+      (p) =>
+        p.isSale === true ||
+        (p.originalPrice && Number(p.originalPrice) > Number(p.price))
+    )
+    .sort((a, b) => (b._creationTime || 0) - (a._creationTime || 0))
+    .slice(0, 8);
+
+  const statsProductIds = useMemo(() => {
+    const ids = [...newArrivals, ...saleProducts]
+      .map((p) => String(p._id || p.id))
+      .filter(Boolean);
+    return [...new Set(ids)];
+  }, [newArrivals, saleProducts]);
+
+  const reviewMap =
+    useQuery(
+      api.productStats.getLatestReviewsForProducts,
+      statsProductIds.length ? { productIds: statsProductIds } : 'skip'
+    ) || {};
+  const soldMap =
+    useQuery(
+      api.productStats.getSoldCountsForProducts,
+      statsProductIds.length ? { productIds: statsProductIds } : 'skip'
+    ) || {};
 
   const handleWishlistClick = async (e, product) => {
     e.stopPropagation();
@@ -100,185 +98,219 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
     if (!ok) return;
     toggleWishlist(product);
     showNotification(
-      alreadyWishlisted ? `${product.name} removed from favorites!` : `${product.name} added to favorites!`,
+      alreadyWishlisted
+        ? `${product.name} removed from favorites!`
+        : `${product.name} added to favorites!`,
       'success'
     );
   };
 
-  if (!saleProducts || saleProducts.length === 0) return null;
+  if ((!newArrivals || newArrivals.length === 0) && (!saleProducts || saleProducts.length === 0)) {
+    return null;
+  }
 
   const displayPromo = highlightPromo || activePromo;
 
-  return (
-    <>
-      <section className="weverse-section" id="collections">
-        <div className="wv-section-header">
-          <h2 className="wv-section-title">
-            <i className="fas fa-tag"></i> On Sale
-          </h2>
-          <p className="wv-section-sub">Limited time discounts on selected K-Pop merch</p>
+  const renderProductCard = (product, { showNewBadge = false } = {}) => {
+    const pid = product._id || product.id;
+    const hasPromo = isPromoProduct(product);
 
-          {displayPromo && (
-            <div className={`wv-promo-banner ${highlightPromo ? 'wv-promo-banner-highlight' : ''}`}>
-              <i className="fas fa-tag"></i>
-              <span>
-                <strong>{displayPromo.name} Promo:</strong> Use code{' '}
-                <span className="wv-promo-code">{displayPromo.code}</span> for{' '}
-                {displayPromo.discount}% off {displayPromo.name} merch!
-                {highlightPromo && (
-                  <span className="wv-promo-banner-sub"> · Showing {highlightPromo.name} products only</span>
-                )}
+    const releaseMs = getReleaseMs(product);
+    const diffMs = releaseMs !== null ? Date.now() - releaseMs : -1;
+    const showReleasedBadge = diffMs >= 0 && diffMs < 60 * 60 * 1000;
+
+    const discountPct =
+      product.originalPrice && Number(product.originalPrice) > Number(product.price)
+        ? Math.round(
+            ((Number(product.originalPrice) - Number(product.price)) /
+              Number(product.originalPrice)) *
+              100
+          )
+        : null;
+
+    const stockQty = Number(product.stock ?? 0);
+    const isOutOfStock = !product.isPreOrder && stockQty <= 0;
+    const isLowStock = !isOutOfStock && stockQty > 0 && stockQty <= 5;
+    const isOnSale =
+      Number(product.originalPrice) > Number(product.price) || product.isSale === true;
+
+    return (
+      <div
+        key={pid}
+        className={`wv-card ${hasPromo ? 'wv-card-promo' : ''} ${showReleasedBadge ? 'wv-card-released' : ''} ${isOutOfStock ? 'wv-card-oos' : ''}`}
+        onClick={() => onProductClick && onProductClick(product)}
+      >
+        {showReleasedBadge ? (
+          <div className="wv-released-badge">
+            <i className="fas fa-bolt"></i> Just Released
+          </div>
+        ) : showNewBadge ? (
+          <div className="wv-new-badge">NEW</div>
+        ) : (
+          discountPct && <div className="wv-sale-badge">-{discountPct}%</div>
+        )}
+
+        {hasPromo && !showReleasedBadge && !showNewBadge && (
+          <div className="wv-promo-badge">
+            <i className="fas fa-tag"></i> {activePromo.discount}% OFF
+          </div>
+        )}
+
+        <button
+          className={`wv-card-fav ${isWishlisted(pid) ? 'active' : ''}`}
+          onClick={(e) => handleWishlistClick(e, product)}
+          title={isWishlisted(pid) ? 'Remove from favorites' : 'Add to favorites'}
+        >
+          <i className={`fas fa-star ${isWishlisted(pid) ? 'filled' : ''}`} aria-hidden="true"></i>
+        </button>
+
+        <div className="wv-card-img">
+          <img src={product.image} alt={product.name} />
+          {isOutOfStock && <div className="wv-oos-overlay">Out of Stock</div>}
+        </div>
+
+        <div className="wv-card-info">
+          <div className="wv-card-group">{product.kpopGroup}</div>
+          <div className="wv-card-name">{product.name}</div>
+          <div className="wv-card-price-row">
+            <span className={`wv-card-price-current${isOnSale ? ' sale' : ''}`}>
+              ₱{Number(product.price)?.toLocaleString()}
+            </span>
+            {Number(product.originalPrice) > Number(product.price) && (
+              <span className="wv-card-price-original">
+                ₱{Number(product.originalPrice)?.toLocaleString()}
               </span>
+            )}
+            <PointsBadge price={product.price} />
+          </div>
+          {formatSaleRange(product) && (
+            <div className="wv-sale-period">
+              <i className="fas fa-clock"></i>
+              <span>{formatSaleRange(product)}</span>
+            </div>
+          )}
+          <div
+            className={`wv-stock-badge ${
+              isOutOfStock ? 'stock-out' : isLowStock ? 'stock-low' : 'stock-in'
+            }`}
+          >
+            <i className="fas fa-box"></i>
+            <span>
+              {isOutOfStock
+                ? 'Out of stock'
+                : isLowStock
+                  ? `Only ${stockQty} left`
+                  : `${stockQty} in stock`}
+            </span>
+          </div>
+          <div className="wv-card-sold">
+            <i className="fas fa-shopping-bag"></i>
+            <span>
+              {typeof soldMap[pid] === 'number'
+                ? `${soldMap[pid].toLocaleString()} sold`
+                : '… sold'}
+            </span>
+          </div>
+          {reviewMap[pid] && (
+            <div className="wv-card-review">
+              <div className="wv-card-review-top">
+                <span className="wv-card-review-stars">
+                  {[1, 2, 3, 4, 5].map((s) => (
+                    <i
+                      key={s}
+                      className={`fas fa-star ${s <= reviewMap[pid].rating ? 'on' : ''}`}
+                    />
+                  ))}
+                </span>
+                <span className="wv-card-review-count">
+                  {reviewMap[pid].count} review{reviewMap[pid].count === 1 ? '' : 's'}
+                </span>
+              </div>
+              <p className="wv-card-review-text">
+                {reviewMap[pid].review.length > 42
+                  ? `${reviewMap[pid].review.slice(0, 42).trim()}…`
+                  : reviewMap[pid].review}
+              </p>
+              {reviewMap[pid].review.length > 42 && (
+                <button
+                  type="button"
+                  className="wv-card-review-more"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onProductClick?.(product);
+                  }}
+                >
+                  See more
+                </button>
+              )}
+            </div>
+          )}
+          {hasPromo && (
+            <div className="wv-card-promo-hint">
+              <i className="fas fa-ticket-alt"></i> Promo available · use{' '}
+              <strong>{activePromo.code}</strong>
             </div>
           )}
         </div>
+      </div>
+    );
+  };
 
-        <div className="wv-grid">
-          {saleProducts.map((product) => {
-            const pid      = product._id || product.id;
-            const hasPromo = isPromoProduct(product);
+  return (
+    <>
+      {newArrivals.length > 0 && (
+        <section className="weverse-section" id="new-arrivals">
+          <div className="wv-section-header">
+            <h2 className="wv-section-title">
+              <i className="fas fa-bolt"></i> New Arrivals
+            </h2>
+            <p className="wv-section-sub">Latest drops — newest products first</p>
+          </div>
+          <div className="wv-grid">
+            {newArrivals.map((product) => renderProductCard(product, { showNewBadge: true }))}
+          </div>
+        </section>
+      )}
 
-            const releaseMs = getReleaseMs(product);
-            const diffMs    = releaseMs !== null ? Date.now() - releaseMs : -1;
-            const showReleasedBadge = diffMs >= 0 && diffMs < 60 * 60 * 1000;
+      {saleProducts.length > 0 && (
+        <section className="weverse-section" id="collections">
+          <div className="wv-section-header">
+            <h2 className="wv-section-title">
+              <i className="fas fa-tag"></i> On Sale
+            </h2>
+            <p className="wv-section-sub">Limited time discounts on selected K-Pop merch</p>
 
-            const discountPct =
-              product.originalPrice && Number(product.originalPrice) > Number(product.price)
-                ? Math.round(
-                    ((Number(product.originalPrice) - Number(product.price)) /
-                      Number(product.originalPrice)) * 100
-                  )
-                : null;
-
-            const stockQty = Number(product.stock ?? 0);
-            const isOutOfStock = !product.isPreOrder && stockQty <= 0;
-            const isLowStock = !isOutOfStock && stockQty > 0 && stockQty <= 5;
-
-            return (
+            {displayPromo && (
               <div
-                key={pid}
-                className={`wv-card ${hasPromo ? 'wv-card-promo' : ''} ${showReleasedBadge ? 'wv-card-released' : ''} ${isOutOfStock ? 'wv-card-oos' : ''}`}
-                onClick={() => onProductClick && onProductClick(product)}
+                className={`wv-promo-banner ${highlightPromo ? 'wv-promo-banner-highlight' : ''}`}
               >
-                {showReleasedBadge
-                  ? <div className="wv-released-badge"><i className="fas fa-bolt"></i> Just Released</div>
-                  : discountPct && <div className="wv-sale-badge">-{discountPct}%</div>
-                }
-
-                {hasPromo && !showReleasedBadge && (
-                  <div className="wv-promo-badge">
-                    <i className="fas fa-tag"></i> {activePromo.discount}% OFF
-                  </div>
-                )}
-
-                <button
-                  className={`wv-card-fav ${isWishlisted(pid) ? 'active' : ''}`}
-                  onClick={(e) => handleWishlistClick(e, product)}
-                  title={isWishlisted(pid) ? 'Remove from favorites' : 'Add to favorites'}
-                >
-                  <i className={`fas fa-star ${isWishlisted(pid) ? 'filled' : ''}`} aria-hidden="true"></i>
-                </button>
-
-                <div className="wv-card-img">
-                  <img src={product.image} alt={product.name} />
-                  {isOutOfStock && (
-                    <div className="wv-oos-overlay">Out of Stock</div>
-                  )}
-                </div>
-
-                <div className="wv-card-info">
-                  <div className="wv-card-group">{product.kpopGroup}</div>
-                  <div className="wv-card-name">{product.name}</div>
-                  <div className="wv-card-price-row">
-                    <span className="wv-card-price-current sale">
-                      ₱{Number(product.price)?.toLocaleString()}
+                <i className="fas fa-tag"></i>
+                <span>
+                  <strong>{displayPromo.name} Promo:</strong> Use code{' '}
+                  <span className="wv-promo-code">{displayPromo.code}</span> for{' '}
+                  {displayPromo.discount}% off {displayPromo.name} merch!
+                  {highlightPromo && (
+                    <span className="wv-promo-banner-sub">
+                      {' '}
+                      · Showing {highlightPromo.name} products only
                     </span>
-                    {Number(product.originalPrice) > Number(product.price) && (
-                      <span className="wv-card-price-original">
-                        ₱{Number(product.originalPrice)?.toLocaleString()}
-                      </span>
-                    )}
-                    {/* ✅ Points badge */}
-                    <PointsBadge price={product.price} />
-                  </div>
-                  {formatSaleRange(product) && (
-                    <div className="wv-sale-period">
-                      <i className="fas fa-clock"></i>
-                      <span>{formatSaleRange(product)}</span>
-                    </div>
                   )}
-                  <div
-                    className={`wv-stock-badge ${
-                      isOutOfStock ? 'stock-out' : isLowStock ? 'stock-low' : 'stock-in'
-                    }`}
-                  >
-                    <i className="fas fa-box"></i>
-                    <span>
-                      {isOutOfStock
-                        ? 'Out of stock'
-                        : isLowStock
-                          ? `Only ${stockQty} left`
-                          : `${stockQty} in stock`}
-                    </span>
-                  </div>
-                  <div className="wv-card-sold">
-                    <i className="fas fa-shopping-bag"></i>
-                    <span>
-                      {typeof soldMap[pid] === 'number'
-                        ? `${soldMap[pid].toLocaleString()} sold`
-                        : '… sold'}
-                    </span>
-                  </div>
-                  {reviewMap[pid] && (
-                    <div className="wv-card-review">
-                      <div className="wv-card-review-top">
-                        <span className="wv-card-review-stars">
-                          {[1, 2, 3, 4, 5].map((s) => (
-                            <i
-                              key={s}
-                              className={`fas fa-star ${s <= reviewMap[pid].rating ? 'on' : ''}`}
-                            />
-                          ))}
-                        </span>
-                        <span className="wv-card-review-count">{reviewMap[pid].count} review{reviewMap[pid].count === 1 ? '' : 's'}</span>
-                      </div>
-                      <p className="wv-card-review-text">
-                        {reviewMap[pid].review.length > 42
-                          ? `${reviewMap[pid].review.slice(0, 42).trim()}…`
-                          : reviewMap[pid].review}
-                      </p>
-                      {reviewMap[pid].review.length > 42 && (
-                        <button
-                          type="button"
-                          className="wv-card-review-more"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onProductClick?.(product);
-                          }}
-                        >
-                          See more
-                        </button>
-                      )}
-                    </div>
-                  )}
-                  {hasPromo && (
-                    <div className="wv-card-promo-hint">
-                      <i className="fas fa-ticket-alt"></i> Promo available · use{' '}
-                      <strong>{activePromo.code}</strong>
-                    </div>
-                  )}
-                </div>
+                </span>
               </div>
-            );
-          })}
-        </div>
+            )}
+          </div>
 
-        <div className="wv-see-all-row">
-          <button className="wv-see-all" onClick={() => navigate('/collections')}>
-            See All Items
-          </button>
-        </div>
-      </section>
+          <div className="wv-grid">
+            {saleProducts.map((product) => renderProductCard(product))}
+          </div>
+
+          <div className="wv-see-all-row">
+            <button className="wv-see-all" onClick={() => navigate('/collections')}>
+              See All Items
+            </button>
+          </div>
+        </section>
+      )}
 
       {showLoginModal && <LoginModal onClose={() => setShowLoginModal(false)} />}
     </>

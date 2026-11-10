@@ -13,6 +13,7 @@ import type * as adminCleanup from "../adminCleanup.js";
 import type * as appUpdates from "../appUpdates.js";
 import type * as backup from "../backup.js";
 import type * as cart from "../cart.js";
+import type * as catalogOptions from "../catalogOptions.js";
 import type * as crons from "../crons.js";
 import type * as deliveryChat from "../deliveryChat.js";
 import type * as failoverApply from "../failoverApply.js";
@@ -50,6 +51,7 @@ declare const fullApi: ApiFromModules<{
   appUpdates: typeof appUpdates;
   backup: typeof backup;
   cart: typeof cart;
+  catalogOptions: typeof catalogOptions;
   crons: typeof crons;
   deliveryChat: typeof deliveryChat;
   failoverApply: typeof failoverApply;
