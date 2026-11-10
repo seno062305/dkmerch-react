@@ -26,6 +26,7 @@ import type * as riderNotifications from "../riderNotifications.js";
 import type * as riders from "../riders.js";
 import type * as sendEmail from "../sendEmail.js";
 import type * as settings from "../settings.js";
+import type * as supportChat from "../supportChat.js";
 import type * as users from "../users.js";
 import type * as wishlist from "../wishlist.js";
 
@@ -54,6 +55,7 @@ declare const fullApi: ApiFromModules<{
   riders: typeof riders;
   sendEmail: typeof sendEmail;
   settings: typeof settings;
+  supportChat: typeof supportChat;
   users: typeof users;
   wishlist: typeof wishlist;
 }>;
