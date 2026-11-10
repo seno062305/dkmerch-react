@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useQuery, useAction, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
-import { useUserOrders, useOrdersByEmail, useUpdateOrderOtp } from '../utils/orderStorage';
+import { useUserOrders, useOrdersByEmail } from '../utils/orderStorage';
 import { useProducts, usePreOrderProducts } from '../utils/productStorage';
 import './TrackOrder.css';
 
@@ -781,9 +781,7 @@ const TrackOrder = () => {
 
 // ─── TRACKING MODAL ──────────────────────────────────────────────────────────
 const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusClass, getDisplayStatus, isOutForDeliveryStatus, onRequestRefund, isGuest = false }) => {
-  const updateOrderOtp    = useUpdateOrderOtp();
   const createPaymentLink = useAction(api.payments.createPaymentLink);
-  const [generatingOtp,     setGeneratingOtp]     = useState(false);
   const [localOtp,          setLocalOtp]          = useState(order.deliveryOtp || null);
   const [continuingPayment, setContinuingPayment] = useState(false);
 
@@ -809,17 +807,6 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
   }, [onClose]);
 
   const getProductById = (id) => products.find(p => p._id === id || p.id === id);
-
-  const handleGenerateOtp = async () => {
-    if (localOtp) return;
-    setGeneratingOtp(true);
-    try {
-      const otp = Math.floor(1000 + Math.random() * 9000).toString();
-      await updateOrderOtp({ orderId: order.orderId, deliveryOtp: otp });
-      setLocalOtp(otp);
-    } catch { alert('Failed to generate OTP. Please try again.'); }
-    finally { setGeneratingOtp(false); }
-  };
 
   const handleContinuePayment = async () => {
     setContinuingPayment(true);
@@ -911,30 +898,27 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
 
           {!isGuest && isOutForDelivery && (
             <div className="customer-otp-section">
-              {!localOtp ? (
-                <div className="otp-generate-card">
-                  <div className="otp-generate-header">
-                    <div className="otp-generate-icon"><i className="fas fa-shield-alt"></i></div>
-                    <div><strong>Confirm Your Delivery</strong><p>Generate your OTP to give to the rider upon arrival.</p></div>
-                  </div>
-                  <div className="otp-generate-steps">
-                    <div className="otp-step"><span className="otp-step-num">1</span><span>Tap below to generate your OTP</span></div>
-                    <div className="otp-step"><span className="otp-step-num">2</span><span>Show the code to your rider</span></div>
-                    <div className="otp-step"><span className="otp-step-num">3</span><span>Rider enters code to complete delivery</span></div>
-                  </div>
-                  <button className={`otp-generate-btn ${generatingOtp ? 'generating' : ''}`} onClick={handleGenerateOtp} disabled={generatingOtp}>
-                    {generatingOtp ? <><i className="fas fa-spinner fa-spin"></i> Generating…</> : <><i className="fas fa-key"></i> Generate My OTP</>}
-                  </button>
-                  <p className="otp-generate-warning"><i className="fas fa-exclamation-triangle"></i> Only generate when your rider has arrived.</p>
-                </div>
-              ) : (
+              {localOtp ? (
                 <div className="otp-display-card">
                   <div className="otp-display-header">
                     <div className="otp-display-icon"><i className="fas fa-shield-alt"></i></div>
-                    <div><strong>Your Delivery OTP</strong><p>Show this to your rider when they arrive</p></div>
+                    <div>
+                      <strong>Your Delivery OTP</strong>
+                      <p>Sent when your rider started delivery — also check your email. Give this code to the rider only when you receive your package.</p>
+                    </div>
                   </div>
                   <div className="otp-code-display">{localOtp.split('').map((digit, i) => <span key={i} className="otp-digit">{digit}</span>)}</div>
-                  <div className="otp-display-note"><i className="fas fa-info-circle"></i><span>Only share with your rider upon receiving your package.</span></div>
+                  <div className="otp-display-note"><i className="fas fa-info-circle"></i><span>Do not share this code until the parcel is in your hands.</span></div>
+                </div>
+              ) : (
+                <div className="otp-generate-card">
+                  <div className="otp-generate-header">
+                    <div className="otp-generate-icon"><i className="fas fa-hourglass-half"></i></div>
+                    <div>
+                      <strong>Waiting for delivery OTP</strong>
+                      <p>When your rider taps Notify / Out for Delivery, a 4-digit OTP is emailed to you and shown here automatically.</p>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

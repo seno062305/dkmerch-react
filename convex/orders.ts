@@ -394,47 +394,67 @@ export const resolveRefund = mutation({
 
 // ─── NOTIFY CUSTOMER OUT FOR DELIVERY ────────────────────────────────────────
 
+/**
+ * Rider taps Notify Customer → mark Out for Delivery, create delivery OTP,
+ * email (+ SMS) the customer. Customer shows OTP to rider on arrival.
+ */
 export const notifyCustomerOutForDelivery = mutation({
   args: {
     orderId:       v.string(),
     riderName:     v.string(),
     riderPhone:    v.string(),
     riderPlate:    v.optional(v.string()),
-    customerEmail: v.string(),
+    riderVehicle:  v.optional(v.string()),
+    riderEmail:    v.optional(v.string()),
+    customerEmail: v.optional(v.string()),
     customerPhone: v.optional(v.string()),
   },
-  handler: async ({ db, scheduler }, { orderId, riderName, riderPhone, riderPlate, customerEmail, customerPhone }) => {
+  handler: async ({ db, scheduler }, args) => {
     const order = await db.query("orders")
-      .withIndex("by_orderId", q => q.eq("orderId", orderId))
+      .withIndex("by_orderId", q => q.eq("orderId", args.orderId))
       .first();
     if (!order) throw new Error("Order not found");
 
-    // Generate 4-digit OTP
-    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+    // Reuse OTP if already generated (idempotent re-notify); otherwise create one
+    const otp =
+      (order as any).deliveryOtp && String((order as any).deliveryOtp).length === 4
+        ? String((order as any).deliveryOtp)
+        : Math.floor(1000 + Math.random() * 9000).toString();
     const now = new Date().toISOString();
 
+    const riderInfo = {
+      name: args.riderName,
+      phone: args.riderPhone || "",
+      vehicle: args.riderVehicle || "motorcycle",
+      plate: args.riderPlate || "",
+      email: args.riderEmail || "",
+    };
+
     await db.patch(order._id, {
-      orderStatus:      'out_for_delivery',
-      status:           'Out for Delivery',
+      orderStatus:      "out_for_delivery",
+      status:           "Out for Delivery",
       outForDeliveryAt: now,
       deliveryOtp:      otp,
+      deliveryOtpVerified: false,
+      riderInfo,
     });
 
-    const customerName = order.customerName || 'Customer';
+    const customerName = order.customerName || "Customer";
+    const customerEmail = (args.customerEmail || order.email || "").trim();
+    const phone = args.customerPhone || (order as any).phone;
 
-    // Send email to customer
-    await scheduler.runAfter(0, internal.sendEmail.sendRiderOnTheWayEmail, {
-      to:           customerEmail,
-      customerName,
-      orderId:      order.orderId,
-      riderName,
-      riderPhone,
-      riderPlate,
-      otp,
-    });
+    if (customerEmail) {
+      await scheduler.runAfter(0, internal.sendEmail.sendRiderOnTheWayEmail, {
+        to:           customerEmail,
+        customerName,
+        orderId:      order.orderId,
+        riderName:    args.riderName,
+        riderPhone:   args.riderPhone,
+        riderPlate:   args.riderPlate,
+        otp,
+      });
+    }
 
-    // Send SMS to customer (fallback if no internet/email)
-    const phone = customerPhone || (order as any).phone;
     if (phone) {
       await scheduler.runAfter(0, internal.sendEmail.sendRiderOtpSms, {
         to:      phone,
@@ -444,6 +464,6 @@ export const notifyCustomerOutForDelivery = mutation({
       });
     }
 
-    return { success: true, otp };
+    return { success: true, otp, emailed: !!customerEmail };
   },
 });

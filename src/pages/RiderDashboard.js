@@ -806,6 +806,7 @@ const RiderDashboard = () => {
 
   const acceptOrderMutation = useMutation(api.pickupRequests.acceptOrder);
   const updateOrderFields   = useMutation(api.orders.updateOrderFields);
+  const notifyCustomerOfd   = useMutation(api.orders.notifyCustomerOutForDelivery);
   const updatePickupStatus  = useMutation(api.pickupRequests.updatePickupStatus);
   const deletePickupRequest = useMutation(api.pickupRequests.deletePickupRequest);
   const updateRiderLocation = useMutation(api.riders.updateRiderLocation);
@@ -1147,10 +1148,11 @@ const RiderDashboard = () => {
 
   const notifyCustomer = async (delivery) => {
     const shortId = String(delivery.orderId || '').slice(-8).toUpperCase();
+    const ord = allOrders.find(o => o.orderId === delivery.orderId);
     const ok = await confirm({
-      title: 'Start delivery?',
-      message: `Mark order #${shortId} as Out for Delivery and notify the customer?\n\nLive GPS tracking will start immediately for this order.`,
-      confirmLabel: 'Start Delivery',
+      title: 'Notify customer — Out for Delivery?',
+      message: `Order #${shortId}\n\nThis will:\n• Mark Out for Delivery\n• Start live GPS for customer & admin\n• Email the customer a 4-digit OTP to give you on arrival`,
+      confirmLabel: 'Notify & Start',
       cancelLabel: 'Cancel',
       variant: 'primary',
       icon: 'fa-bell',
@@ -1158,12 +1160,24 @@ const RiderDashboard = () => {
     if (!ok) return;
     setNotifyingId(delivery._id);
     try {
-      await updateOrderFields({ orderId: delivery.orderId, orderStatus: 'out_for_delivery', status: 'Out for Delivery', riderInfo: { name: riderInfo.fullName, phone: riderInfo.phone, vehicle: riderInfo.vehicleType, plate: riderInfo.plateNumber } });
+      const result = await notifyCustomerOfd({
+        orderId: delivery.orderId,
+        riderName: riderInfo.fullName,
+        riderPhone: riderInfo.phone || '',
+        riderPlate: riderInfo.plateNumber || '',
+        riderVehicle: riderInfo.vehicleType || 'motorcycle',
+        riderEmail: user.email,
+        customerEmail: ord?.email || delivery.customerEmail || '',
+        customerPhone: ord?.phone || '',
+      });
       await updatePickupStatus({ requestId: delivery._id, status: 'out_for_delivery' });
       setExpandedDeliveries(prev => ({ ...prev, [delivery._id]: true }));
-      // Restart/refresh GPS so customer + admin see location right away (not after 5s wait)
       startTracking(delivery.orderId);
-      alert('📦 Customer notified!\n\n📍 Live location is sharing now.\nCustomer and admin can track you on the map.\n\nAsk the customer for their OTP code when you arrive.');
+      alert(
+        result?.emailed
+          ? '📦 Customer notified by email with their delivery OTP.\n\n📍 Live location is sharing now.\nAsk for their OTP when you hand over the parcel.'
+          : '📦 Marked Out for Delivery.\n\n📍 Live location is sharing.\nOTP is on the customer Track Order page (email may be missing).'
+      );
     } catch (err) { console.error(err); alert('Failed to notify customer. Please try again.'); }
     finally { setNotifyingId(null); }
   };
@@ -1566,7 +1580,7 @@ const RiderDashboard = () => {
                           {isOutForDelivery && (
                             <div className="rider-confirm-delivery-section">
                               <div className="rider-confirm-title"><i className="fas fa-shield-alt"></i> Confirm Delivery</div>
-                              <p className="rider-confirm-desc">Enter the <strong>OTP code</strong> from the customer's tracking page.</p>
+                              <p className="rider-confirm-desc">Enter the <strong>OTP</strong> emailed to the customer (also on their Track Order page). They should give it only when the parcel is handed over.</p>
                               <div className="rider-otp-group">
                                 <label className="rider-otp-label"><i className="fas fa-key"></i> Customer OTP Code<span className="otp-required-tag">*Required</span></label>
                                 <input type="text" className="rider-otp-input" placeholder="Enter 4-digit OTP" maxLength={4}
