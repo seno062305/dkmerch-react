@@ -43,6 +43,20 @@ function isSessionAlive() {
   }
 }
 
+/** PIN unlock after close is for installed app only — not regular Brave/Chrome tabs. */
+function isStandalonePwa() {
+  try {
+    if (typeof window === "undefined") return false;
+    return (
+      window.matchMedia("(display-mode: standalone)").matches ||
+      window.navigator.standalone === true ||
+      /source=pwa/i.test(window.location.search || "")
+    );
+  } catch {
+    return false;
+  }
+}
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser]                       = useState(null);
   const [role, setRole]                       = useState(null);
@@ -67,32 +81,45 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const storedUser = readAuthUser();
     const alive = isSessionAlive();
+    const pwa = isStandalonePwa();
 
     if (storedUser && alive) {
-      // Reload / same browser tab session — stay logged in, no PIN
+      // Reload / same tab — stay logged in, no PIN
       setUser(storedUser);
       setRole(storedUser.role);
       setIsAuthenticated(true);
       setNeedsDeviceUnlock(false);
-    } else if (storedUser && !alive) {
-      // App was closed and reopened — require PIN for customers with device unlock
+    } else if (storedUser && !alive && pwa) {
+      // Installed app closed then opened — PIN unlock for customers
       const unlock = getDeviceUnlock();
       const isCustomer = !storedUser.role || storedUser.role === "user";
       if (isCustomer && unlock?._id && String(unlock._id) === String(storedUser._id)) {
         setNeedsDeviceUnlock(true);
+        setUser(null);
+        setRole(null);
+        setIsAuthenticated(false);
       } else if (!isCustomer) {
-        // Admin/rider: require full login again after close
         clearAuthUser();
+        setUser(null);
+        setRole(null);
+        setIsAuthenticated(false);
+        setNeedsDeviceUnlock(false);
       } else {
-        // No matching device unlock — full login next time
         clearAuthUser();
         clearDeviceUnlock();
+        setUser(null);
+        setRole(null);
+        setIsAuthenticated(false);
+        setNeedsDeviceUnlock(false);
       }
-      setUser(null);
-      setRole(null);
-      setIsAuthenticated(false);
+    } else if (storedUser && !alive && !pwa) {
+      // Regular browser (Brave/Chrome): keep session across tab close — no PIN popup
+      markSessionAlive();
+      setUser(storedUser);
+      setRole(storedUser.role);
+      setIsAuthenticated(true);
+      setNeedsDeviceUnlock(false);
     } else {
-      // Logged out / fresh — if device unlock remains from old bug, keep for PIN only when user opens login after cold start without stored user
       setNeedsDeviceUnlock(false);
     }
     setIsReady(true);

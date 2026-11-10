@@ -109,17 +109,19 @@ function clearPinResetOtpCode(userId) {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
-const LoginModal = ({ onClose, onLoginSuccess }) => {
+const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
   const { login, completeLogin } = useAuth();
   const navigate = useNavigate();
 
   // view: "login" | "pin" | "loginOtp" | "createPin" | "forgot" | "reactivate"
+  // PIN-first only when installed app cold-start asks for unlock — not every Brave open
   const remembered = (() => {
     try { return getDeviceUnlock(); } catch { return null; }
   })();
-  const [view, setView] = useState(remembered?._id ? "pin" : "login");
-  const [pendingUser, setPendingUser] = useState(remembered?._id ? remembered : null);
-  const [deviceUnlockMode, setDeviceUnlockMode] = useState(!!remembered?._id);
+  const startWithPin = !!(preferPinUnlock && remembered?._id);
+  const [view, setView] = useState(startWithPin ? "pin" : "login");
+  const [pendingUser, setPendingUser] = useState(startWithPin ? remembered : null);
+  const [deviceUnlockMode, setDeviceUnlockMode] = useState(startWithPin);
   const [pinValue, setPinValue] = useState("");
   const [pinConfirmValue, setPinConfirmValue] = useState("");
   const [pinStep, setPinStep] = useState(0); // 0 = enter new, 1 = confirm (set/reset only)
@@ -132,7 +134,7 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
   const [loginOtpCooldown, setLoginOtpCooldown] = useState(0);
   const [isPinReset, setIsPinReset] = useState(false);
   // Device unlock = already finished email+password+PIN once on this phone
-  const [accountHasPin, setAccountHasPin] = useState(!!remembered?._id);
+  const [accountHasPin, setAccountHasPin] = useState(startWithPin);
   const [pinResetSentCode, setPinResetSentCode] = useState(""); // client fallback when Convex PIN OTP isn't deployed
   const [pinResetSending, setPinResetSending] = useState(false);
   const pinInputRef = useRef(null);

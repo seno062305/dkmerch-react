@@ -345,6 +345,7 @@ function AppContent() {
           {showLoginModal && (
             <React.Suspense fallback={null}>
               <LoginModal
+                preferPinUnlock={!!needsDeviceUnlock}
                 onClose={() => {
                   try { sessionStorage.removeItem('dk_login_customers_only'); } catch { /* ignore */ }
                   clearDeviceUnlockPrompt?.();
