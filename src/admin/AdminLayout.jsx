@@ -3,6 +3,7 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { isAuthGateLocked } from '../lib/authGate';
 import { scrollPageToTop } from '../utils/navScroll';
+import { forceUnlockBodyScroll } from '../utils/scrollLock';
 import AdminSidebar from './AdminSidebar';
 import AdminBottomNav from './AdminBottomNav';
 import './AdminLayout.css';
@@ -32,15 +33,22 @@ const AdminLayout = () => {
     }
   }, [isReady, isAuthenticated, role, navigate]);
 
-  /* iOS: keep admin bottom nav pinned + stop leftover locks from nudging scroll */
+  /* Mark admin shell + clear any leftover modal scroll lock (was freezing Chrome/PC) */
   useEffect(() => {
+    document.documentElement.classList.add('has-admin-bottom-nav');
     document.body.classList.add('has-admin-bottom-nav');
+    forceUnlockBodyScroll();
     scrollPageToTop({ smooth: false });
-    return () => document.body.classList.remove('has-admin-bottom-nav');
+    return () => {
+      document.documentElement.classList.remove('has-admin-bottom-nav');
+      document.body.classList.remove('has-admin-bottom-nav');
+      forceUnlockBodyScroll();
+    };
   }, []);
 
   /* Route changes: land at top so Dashboard header isn't scrolled under the status bar */
   useEffect(() => {
+    forceUnlockBodyScroll();
     scrollPageToTop({ smooth: false });
   }, [location.pathname]);
 

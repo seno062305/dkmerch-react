@@ -310,10 +310,9 @@
   .mobile-overlay { display: none !important; }
 
   .admin-layout.admin-layout--bnav {
-    overflow-x: hidden;
-    min-height: 100vh;
-    min-height: 100dvh;
-    min-height: -webkit-fill-available;
+    /* Do not use overflow-x:hidden here — Chromium treats it as a scrollport and freezes page scroll */
+    overflow: visible;
+    min-height: 0;
   }
 
   .admin-content {
@@ -325,15 +324,12 @@
       calc(64px + env(safe-area-inset-bottom, 0px) + 12px)
       10px !important;
     z-index: 1;
-    min-height: 100vh;
-    min-height: 100dvh;
-    min-height: -webkit-fill-available;
+    min-height: 0;
     max-width: 100vw;
     width: 100%;
-    overflow-x: hidden;
+    overflow: visible;
     box-sizing: border-box;
     position: relative;
-    overscroll-behavior-y: contain;
   }
 
   /* Children never wider than viewport — prevent cut-off/overlap */
@@ -380,17 +376,24 @@
   }
 }
 
-/* Body flag while admin bottom tabs are mounted (iOS safe-area helpers) */
+/*
+ * Admin mobile: let the DOCUMENT scroll (Chrome/Android).
+ * Previous 100dvh / -webkit-fill-available + overflow-x:hidden trapped scroll on PC/Android
+ * while iOS Safari still scrolled — remove that trap.
+ */
+html.has-admin-bottom-nav,
 body.has-admin-bottom-nav {
-  overscroll-behavior-y: none;
+  height: auto !important;
+  min-height: 100%;
+  overflow-x: clip;
+  overflow-y: auto !important;
+  overscroll-behavior-y: auto;
+  touch-action: pan-y;
 }
-@media (max-width: 768px) {
-  body.has-admin-bottom-nav,
-  body.has-admin-bottom-nav #root,
-  body.has-admin-bottom-nav .App {
-    /* Avoid 100vh > visual viewport jump that pushes header off-screen on iOS */
-    min-height: 100%;
-    min-height: 100dvh;
-    min-height: -webkit-fill-available;
-  }
+body.has-admin-bottom-nav #root,
+body.has-admin-bottom-nav .App {
+  height: auto !important;
+  min-height: 100%;
+  overflow: visible !important;
+  flex: none;
 }

@@ -20,10 +20,6 @@
     background: #fff;
     border-top: 1px solid #eef2f7;
     box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.08);
-    /* Keep bar pinned to the visual bottom on iOS Safari / PWA */
-    transform: translateZ(0);
-    -webkit-backface-visibility: hidden;
-    backface-visibility: hidden;
   }
 
   .abn-item {
