@@ -3,10 +3,12 @@ import React, { useState, useEffect, useRef } from "react";
 import "./LoginModal.css";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { useMutation, useAction } from "convex/react";
+import { useMutation, useAction, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import { QRCodeSVG } from "qrcode.react";
 import { hasLocalPin, savePinWithFallback, verifyPinWithFallback, clearLocalPin } from "../lib/localPin";
 import { getDeviceUnlock, clearDeviceUnlock } from "../lib/deviceUnlock";
+import { PRODUCTION_SITE_URL } from "./InstallAppModal";
 // Static import — lazy chunk breaks Create Account after HMR / stale builds
 import RegisterModal from "./RegisterModal";
 
@@ -113,13 +115,19 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
   const { login, completeLogin } = useAuth();
   const navigate = useNavigate();
 
-  // view: "login" | "pin" | "loginOtp" | "createPin" | "forgot" | "reactivate"
+  // view: "login" | "pin" | "loginOtp" | "createPin" | "forgot" | "reactivate" | "quickSignIn"
   // PIN-first only when installed app cold-start asks for unlock — not every Brave open
   const remembered = (() => {
     try { return getDeviceUnlock(); } catch { return null; }
   })();
   const startWithPin = !!(preferPinUnlock && remembered?._id);
   const [view, setView] = useState(startWithPin ? "pin" : "login");
+  const [qsiToken, setQsiToken] = useState("");
+  const [qsiExpiresAt, setQsiExpiresAt] = useState(0);
+  const [qsiCreating, setQsiCreating] = useState(false);
+  const [qsiError, setQsiError] = useState("");
+  const [qsiDone, setQsiDone] = useState(false);
+  const [qsiNonce, setQsiNonce] = useState(0);
   const [pendingUser, setPendingUser] = useState(startWithPin ? remembered : null);
   const [deviceUnlockMode, setDeviceUnlockMode] = useState(startWithPin);
   const [pinValue, setPinValue] = useState("");
@@ -186,6 +194,12 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
   const generateReactivationOtp = useMutation(api.users.generateReactivationOtp);
   const reactivateAccount     = useMutation(api.users.reactivateAccount);
   const sendReactivationOTP   = useAction(api.sendEmail.sendReactivationOTP);
+  const createQuickSignIn     = useMutation(api.quickSignIn.createSession);
+  const consumeQuickSignIn    = useMutation(api.quickSignIn.consumeSession);
+  const quickSignInSession    = useQuery(
+    api.quickSignIn.getSession,
+    view === "quickSignIn" && qsiToken ? { token: qsiToken } : "skip"
+  );
   const verifyLoginPin        = useMutation(api.users.verifyLoginPin);
   const setUserPin            = useMutation(api.users.setUserPin);
   const generateLoginOtp      = useMutation(api.users.generateLoginOtp);
@@ -264,6 +278,63 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
     const t = setTimeout(() => setPasswordCooldown(c => c - 1), 1000);
     return () => clearTimeout(t);
   }, [passwordCooldown]);
+
+  useEffect(() => {
+    if (view !== "quickSignIn") return;
+    let cancelled = false;
+    const start = async () => {
+      setQsiCreating(true);
+      setQsiError("");
+      setQsiDone(false);
+      setQsiToken("");
+      try {
+        const result = await createQuickSignIn({});
+        if (cancelled) return;
+        if (!result?.success || !result.token) {
+          setQsiError(result?.error || "Could not create Quick Sign In QR.");
+          return;
+        }
+        setQsiToken(result.token);
+        setQsiExpiresAt(result.expiresAt || Date.now() + 180000);
+      } catch (err) {
+        if (!cancelled) setQsiError(err?.message || "Could not create Quick Sign In QR.");
+      } finally {
+        if (!cancelled) setQsiCreating(false);
+      }
+    };
+    start();
+    return () => { cancelled = true; };
+  }, [view, qsiNonce, createQuickSignIn]);
+
+  useEffect(() => {
+    if (view !== "quickSignIn" || !qsiToken || qsiDone) return;
+    const status = quickSignInSession?.status;
+    if (status !== "approved") return;
+    let cancelled = false;
+    const finish = async () => {
+      const pending = {
+        _id: quickSignInSession.userId,
+        name: quickSignInSession.userName,
+        username: quickSignInSession.username,
+        email: quickSignInSession.userEmail,
+        phone: quickSignInSession.phone || "",
+        role: quickSignInSession.role || "user",
+      };
+      const result = completeLogin(pending, "Quick Sign In (QR) success");
+      if (!result?.success) {
+        setQsiError("Approved, but desktop login failed. Try again.");
+        return;
+      }
+      try { await consumeQuickSignIn({ token: qsiToken }); } catch { /* ignore */ }
+      if (cancelled) return;
+      setQsiDone(true);
+      resetRLState();
+      onLoginSuccess?.(result.role || "user");
+      onClose?.();
+    };
+    finish();
+    return () => { cancelled = true; };
+  }, [view, qsiToken, qsiDone, quickSignInSession, completeLogin, consumeQuickSignIn, onLoginSuccess, onClose]);
 
   useEffect(() => {
     if (view === "forgot") {
@@ -1373,6 +1444,62 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
           </>
         )}
 
+        {/* ── QUICK SIGN IN (desktop QR) ───────────────────────────── */}
+        {view === "quickSignIn" && (
+          <>
+            <div className="login-modal-header">
+              <h2 style={{ background: accentGradient, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
+                Quick Sign In
+              </h2>
+              <p className="login-subtitle">
+                Scan this QR with your phone (Settings → Quick Sign In) while logged in on mobile.
+              </p>
+            </div>
+            <div className="login-form qsi-panel">
+              {qsiCreating && (
+                <div className="qsi-status"><i className="fas fa-spinner fa-spin"></i> Generating QR…</div>
+              )}
+              {qsiError && (
+                <div className="error-banner"><span>{qsiError}</span></div>
+              )}
+              {!qsiCreating && qsiToken && (
+                <>
+                  <div className="qsi-qr-wrap">
+                    <QRCodeSVG
+                      value={`${PRODUCTION_SITE_URL.replace(/\/$/, "")}/?qsi=${encodeURIComponent(qsiToken)}`}
+                      size={200}
+                      level="M"
+                      includeMargin
+                    />
+                  </div>
+                  <p className="qsi-code-label">Or enter this code on mobile</p>
+                  <code className="qsi-code">{qsiToken}</code>
+                  <p className="qsi-hint">
+                    {quickSignInSession?.status === "expired" || (qsiExpiresAt && Date.now() > qsiExpiresAt)
+                      ? "QR expired — generate a new one."
+                      : quickSignInSession?.status === "approved"
+                        ? "Approved — signing you in…"
+                        : "Waiting for mobile scan…"}
+                  </p>
+                  {(quickSignInSession?.status === "expired" || (qsiExpiresAt && Date.now() > qsiExpiresAt)) && (
+                    <button
+                      type="button"
+                      className="login-submit-btn"
+                      style={{ background: accentGradient }}
+                      onClick={() => setQsiNonce((n) => n + 1)}
+                    >
+                      Generate new QR
+                    </button>
+                  )}
+                </>
+              )}
+              <button type="button" className="signup-link" style={{ color: accentColor, marginTop: 12 }} onClick={() => setView("login")}>
+                ← Back to password login
+              </button>
+            </div>
+          </>
+        )}
+
         {/* ── LOGIN VIEW ───────────────────────────────────────────── */}
         {view === "login" && (
           <>
@@ -1457,7 +1584,10 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
                 </div>
               )}
 
-              <div className="forgot-password-wrapper">
+              <div className="forgot-password-wrapper forgot-password-wrapper--row">
+                <button type="button" className="forgot-password-link" style={{ color: accentColor }} onClick={() => setView("quickSignIn")}>
+                  <i className="fas fa-qrcode" aria-hidden="true" /> Quick Sign In
+                </button>
                 <button type="button" className="forgot-password-link" style={{ color: accentColor }} onClick={() => setView("forgot")}>
                   Forgot Password?
                 </button>

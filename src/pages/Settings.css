@@ -434,6 +434,7 @@
 }
 
 .settings-acct-card--warn   .settings-acct-card-icon { background: #fef3c7; color: #f59e0b; }
+.settings-acct-card--qsi    .settings-acct-card-icon { background: #fce7f3; color: #ec4899; }
 .settings-acct-card--danger .settings-acct-card-icon { background: #fee2e2; color: #dc2626; }
 
 .settings-acct-card-info { flex: 1; }
@@ -451,6 +452,13 @@
   flex-shrink: 0;
   white-space: nowrap;
 }
+
+.settings-acct-btn--qsi {
+  background: #fdf2f8;
+  color: #be185d;
+  border: 1.5px solid #f9a8d4;
+}
+.settings-acct-btn--qsi:hover { background: #fce7f3; }
 
 .settings-acct-btn--warn {
   background: #fef3c7;

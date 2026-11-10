@@ -496,4 +496,19 @@ export default defineSchema({
     .index("by_type", ["type"])
     .index("by_type_value", ["type", "value"]),
 
+  // Desktop login QR — approved by scanning on a logged-in mobile app
+  quickSignInSessions: defineTable({
+    token: v.string(),
+    status: v.string(), // pending | approved | consumed | expired
+    createdAt: v.number(),
+    expiresAt: v.number(),
+    approvedAt: v.optional(v.number()),
+    userId: v.optional(v.string()),
+    userEmail: v.optional(v.string()),
+    userName: v.optional(v.string()),
+    username: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    role: v.optional(v.string()),
+  }).index("by_token", ["token"]),
+
 });

@@ -3,6 +3,8 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useMutation, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
+import { useNotification } from '../context/NotificationContext';
+import QuickSignInScannerModal from '../components/QuickSignInScannerModal';
 import './Settings.css';
 
 const DELETE_REASONS = [
@@ -266,6 +268,7 @@ const DeleteModal = ({
 // ─────────────────────────────────────────────────────────────────────────────
 const Settings = () => {
   const { user, isAuthenticated, updateUser, logout } = useAuth();
+  const { showNotification } = useNotification();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -279,6 +282,7 @@ const Settings = () => {
   // ── Modal visibility ──
   const [showDeactModal,  setShowDeactModal]  = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showQuickSignIn, setShowQuickSignIn] = useState(false);
 
   // ── Deactivation state ──
   const [deactStep,     setDeactStep]     = useState(1);
@@ -313,6 +317,7 @@ const Settings = () => {
   const deactivateOwnAccount  = useMutation(api.users.deactivateOwnAccount);
   const softDeleteUser        = useMutation(api.users.softDeleteUser);
   const verifyUserPassword    = useMutation(api.users.verifyUserPassword);
+  const approveQuickSignIn    = useMutation(api.quickSignIn.approveSession);
 
   useEffect(() => {
     const p = passwordForm.newPassword;
@@ -634,6 +639,21 @@ const Settings = () => {
               <h2>Account Management</h2>
               <p className="form-description">Manage your account status. These actions will log you out immediately.</p>
 
+              <div className="settings-acct-card settings-acct-card--qsi">
+                <div className="settings-acct-card-icon"><i className="fas fa-qrcode"></i></div>
+                <div className="settings-acct-card-info">
+                  <h4>Quick Sign In</h4>
+                  <p>Scan the QR on desktop login to sign that browser into this account — no password on desktop.</p>
+                </div>
+                <button
+                  type="button"
+                  className="settings-acct-btn settings-acct-btn--qsi"
+                  onClick={() => setShowQuickSignIn(true)}
+                >
+                  Scan QR
+                </button>
+              </div>
+
               <div className="settings-acct-card settings-acct-card--warn">
                 <div className="settings-acct-card-icon"><i className="fas fa-pause-circle"></i></div>
                 <div className="settings-acct-card-info">
@@ -688,6 +708,22 @@ const Settings = () => {
           deleteError={deleteError}
           onConfirm={handleDelete}
           onClose={closeDelete}
+        />
+      )}
+
+      {showQuickSignIn && (
+        <QuickSignInScannerModal
+          onClose={() => setShowQuickSignIn(false)}
+          onScan={async (token) => {
+            const result = await approveQuickSignIn({
+              token,
+              email: user?.email || '',
+            });
+            if (result?.success) {
+              showNotification('Desktop signed in with this account.', 'success');
+            }
+            return result;
+          }}
         />
       )}
     </div>
