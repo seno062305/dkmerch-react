@@ -1148,7 +1148,28 @@
   .tab-btn { padding: 9px 6px; font-size: 10px; gap: 4px; }
   .tab-btn i { font-size: 11px; }
   .order-info-grid { grid-template-columns: 1fr; }
-  .status-buttons { flex-direction: column; }
+  /* Compact action buttons — not full-bleed across the modal */
+  .status-buttons {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  .status-btn-wrapper {
+    flex: 0 0 auto;
+    width: auto;
+    max-width: 100%;
+  }
+  .status-btn {
+    width: auto !important;
+    max-width: 100%;
+    padding: 8px 12px;
+    font-size: 12px;
+    gap: 6px;
+  }
+  .status-btn span { font-size: 12px; }
+  .status-btn i { font-size: 13px; }
+  .block-reason { justify-content: flex-start; font-size: 10px; }
   .accept-btn, .view-btn { padding: 8px 12px; font-size: 12px; }
   .modal-header h2 { font-size: 18px; }
   .total-row.grand-total { font-size: 16px; }
@@ -1158,12 +1179,27 @@
   .cancel-preset-chip { font-size: 12px; padding: 7px 12px; }
   .modal-section h3 { font-size: 13px; }
   .order-info-grid { grid-template-columns: 1fr; gap: 10px; padding: 12px; }
-  .status-btn { width: 100%; }
   .flow-notice { padding: 12px 14px; font-size: 13px; }
   .flow-notice i { font-size: 16px; }
   .pod-photo-header { flex-direction: column; align-items: flex-start; gap: 8px; }
-  .modal-actions { justify-content: center; }
-  .delete-order-btn { width: 100%; justify-content: center; }
+  .modal-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .print-waybill-btn-bottom {
+    width: auto;
+    margin-right: 0;
+    padding: 8px 12px;
+    font-size: 12px;
+    gap: 6px;
+  }
+  .delete-order-btn {
+    width: auto;
+    justify-content: center;
+    padding: 8px 12px;
+    font-size: 12px;
+  }
   .date-filter-inputs { flex-direction: column; align-items: flex-start; gap: 10px; }
   .date-filter-item input[type="date"] { font-size: 13px; }
   .admin-refund-method-cell { justify-content: flex-start; }
