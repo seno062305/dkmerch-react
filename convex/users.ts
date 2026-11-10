@@ -272,7 +272,8 @@ export const hasLoginPin = query({
 /** Treat another device as "online" if it heartbeated within this window. */
 const SESSION_ACTIVE_MS = 10 * 60 * 1000;
 /** Pending Yes/No login request auto-denies after this. */
-const LOGIN_ALERT_TTL_MS = 60 * 1000;
+/** Give the owner time to open the app, enter PIN, then tap Yes */
+const LOGIN_ALERT_TTL_MS = 5 * 60 * 1000;
 
 function isLoginAlertExpired(alert: any, now = Date.now()) {
   if (!alert) return true;
@@ -442,7 +443,7 @@ export const startUserSession = mutation({
         await scheduler.runAfter(0, internal.webPush.sendToEmail, {
           email: String(user.email).toLowerCase(),
           title: "New login to your DKMerch account",
-          body: `${deviceName} · ${location}. Confirm within 60s if this was you.`,
+          body: `${deviceName} · ${location}. Confirm if this was you.`,
           // Path-only so the installed PWA opens (not a fresh browser tab)
           url: "/?open=loginAlert",
         });

@@ -22,6 +22,8 @@ export function saveDeviceUnlock(user) {
         email: user.email || '',
         phone: user.phone || '',
         role: user.role === 'admin' ? 'admin' : 'user',
+        // Keep session so PIN unlock refreshes THIS device (not a new-login request)
+        ...(user.sessionId ? { sessionId: String(user.sessionId) } : {}),
         savedAt: Date.now(),
       })
     );

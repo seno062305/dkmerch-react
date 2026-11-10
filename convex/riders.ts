@@ -6,7 +6,8 @@ import { v } from "convex/values";
 const genSessionId = () =>
   `${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${Math.random().toString(36).slice(2, 10)}`;
 
-const RIDER_LOGIN_ALERT_TTL_MS = 60 * 1000;
+/** Give the owner time to open the app and confirm */
+const RIDER_LOGIN_ALERT_TTL_MS = 5 * 60 * 1000;
 
 function isRiderLoginAlertExpired(alert: any, now = Date.now()) {
   if (!alert) return true;
@@ -366,16 +367,50 @@ export const loginRider = mutation({
       existingIds.length > 0
       && lastActive > 0
       && (now - lastActive) <= RIDER_SESSION_ACTIVE_MS;
-    const sameDevice =
-      existingIds.length > 0
-      && String((rider as any).activeDeviceName || "") === deviceName
-      && String((rider as any).activeDevicePlatform || "") === platform;
+    const STUCK_PENDING_MS = 15 * 60 * 1000;
+    const pendingAlert = (rider as any).loginAlert;
+    const pendingAge = pendingAlert?.at ? now - Number(pendingAlert.at) : 0;
     const stuckPending =
-      (rider as any).loginAlert
-      && (rider as any).loginAlert.status === "pending"
-      && !(rider as any).loginAlert.resolved;
+      pendingAlert
+      && pendingAlert.status === "pending"
+      && !pendingAlert.resolved
+      && !isRiderLoginAlertExpired(pendingAlert, now)
+      && pendingAge > STUCK_PENDING_MS;
 
-    if (!previousSessionId || !otherStillActive || sameDevice || stuckPending) {
+    // Active pending → keep waiting (PIN unlock uses currentSessionId above)
+    if (
+      previousSessionId
+      && otherStillActive
+      && pendingAlert
+      && pendingAlert.status === "pending"
+      && !pendingAlert.resolved
+      && !stuckPending
+      && !isRiderLoginAlertExpired(pendingAlert, now)
+    ) {
+      const expiresAt = Number(pendingAlert.expiresAt) || now + RIDER_LOGIN_ALERT_TTL_MS;
+      const alert = {
+        sessionId: String(pendingAlert.sessionId || sessionId),
+        previousSessionId,
+        deviceName: deviceName || pendingAlert.deviceName,
+        location: location || pendingAlert.location,
+        platform: platform || pendingAlert.platform || undefined,
+        at: pendingAlert.at || now,
+        expiresAt,
+        status: "pending" as const,
+        resolved: false,
+      };
+      await db.patch(rider._id, { loginAlert: alert } as any);
+      return {
+        success: true,
+        riderExists: true,
+        rider: safeRider,
+        sessionId: String(alert.sessionId),
+        pendingApproval: true,
+        expiresAt,
+      };
+    }
+
+    if (!previousSessionId || !otherStillActive || stuckPending) {
       await db.patch(
         rider._id,
         activateRiderSessionPatch(sessionId, now, deviceName, location, platform) as any,
@@ -415,7 +450,7 @@ export const loginRider = mutation({
         await scheduler.runAfter(0, internal.webPush.sendToEmail, {
           email: String(rider.email).toLowerCase(),
           title: "New login to your DKMerch rider account",
-          body: `${deviceName} · ${location}. Confirm within 60s if this was you.`,
+          body: `${deviceName} · ${location}. Confirm if this was you.`,
           url: "/rider?open=loginAlert",
         });
       } catch { /* push optional */ }

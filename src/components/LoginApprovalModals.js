@@ -123,7 +123,7 @@ export function LoginDeniedModal({ onClose, reason }) {
         <h2 id="deny-title" className="nla-title">Failed to login</h2>
         <p id="deny-desc" className="nla-desc">
           {timedOut
-            ? "This login wasn’t confirmed in time (60 seconds). You were not logged in."
+            ? "This login wasn’t confirmed in time. You were not logged in."
             : "The owner of this account blocked this sign-in. You were not logged in."}
         </p>
         <div className="nla-actions">

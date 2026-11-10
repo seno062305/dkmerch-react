@@ -213,7 +213,7 @@ function clearPinResetOtpCode(userId) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearUnlockPrompt, onSwitchAccount }) => {
-  const { login, completeLogin, finalizePendingLogin, logout } = useAuth();
+  const { login, completeLogin, finalizePendingLogin, logout, user: authUser } = useAuth();
   const { showNotification } = useNotification();
   const navigate = useNavigate();
   const convex = useConvex();
@@ -228,8 +228,14 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
   const rememberedId = remembered?._id ? String(remembered._id) : "";
   const rememberedLocalPin = !!(rememberedId && hasLocalPin(rememberedId));
   const restoredPending = useMemo(() => {
+    // Owner device unlocking via PIN must never resume "waiting for approval"
+    // (that UI is only for the NEW device that tried to sign in).
+    if (preferPinUnlock) {
+      try { clearPendingLogin(); } catch { /* ignore */ }
+      return null;
+    }
     try { return readPendingLogin(); } catch { return null; }
-  }, []);
+  }, [preferPinUnlock]);
   const savedGate = useMemo(() => readAuthGate(), []);
   const restoreSwitch = savedGate === "switch";
   const restoreReset = savedGate === "reset";
@@ -946,10 +952,37 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
       setPinFailsLeft(PIN_FAIL_LIMIT);
       setPinCooldown(0);
       setAccountHasPin(true);
+      const baseUser = checked.result?.user || pendingUser;
+      const unlockUser = {
+        ...baseUser,
+        sessionId:
+          baseUser?.sessionId
+          || pendingUser?.sessionId
+          || authUser?.sessionId
+          || remembered?.sessionId,
+      };
       const done = await completeLogin(
-        checked.result?.user || pendingUser,
+        unlockUser,
         checked.source === "local" ? "Login with local PIN" : "Login with PIN"
       );
+      // PIN unlock on the already-signed-in device must never become "waiting/denied"
+      if (done?.pendingApproval && (deviceUnlockMode || preferPinUnlock)) {
+        clearPendingLogin();
+        setAwaitingApproval(null);
+        setLoginDenied(false);
+        try {
+          finalizePendingLogin?.(
+            {
+              ...unlockUser,
+              sessionId: unlockUser.sessionId || authUser?.sessionId,
+            },
+            "PIN unlock (keep owner session)"
+          );
+        } catch { /* ignore */ }
+        setMustAuthenticate(false);
+        finishLogin(unlockUser.role || done.role || "user");
+        return;
+      }
       if (done?.pendingApproval) {
         beginAwaitingApproval(done);
         return;

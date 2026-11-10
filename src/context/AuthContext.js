@@ -75,17 +75,6 @@ function isSessionAlive() {
   }
 }
 
-/** True when this load is a refresh/reload (not a cold app open). */
-function isPageReload() {
-  try {
-    const nav = performance.getEntriesByType?.("navigation")?.[0];
-    if (nav?.type === "reload") return true;
-    // Legacy Safari / older WebKit
-    if (typeof performance !== "undefined" && performance.navigation?.type === 1) return true;
-  } catch { /* ignore */ }
-  return false;
-}
-
 function wasExplicitLogout() {
   try {
     return localStorage.getItem("dkmerch_explicit_logout") === "1";
@@ -182,7 +171,6 @@ export const AuthProvider = ({ children }) => {
     const alive = isSessionAlive();
     const pwa = isStandalonePwa();
     const unlock = getDeviceUnlock(); // null after explicit logout
-    const reload = isPageReload();
     const loggedOut = wasExplicitLogout();
     const gate = readAuthGate();
     const gateLocked = isAuthGateLocked(gate);
@@ -219,7 +207,7 @@ export const AuthProvider = ({ children }) => {
       return;
     }
 
-    // Reset PIN / PIN gate — keep account under overlay; require unlock UI after reload
+    // Only show PIN/reset UI again if THAT gate was open when they refreshed
     if ((gate === "reset" || gate === "pin") && storedUser && !loggedOut) {
       restoreSession(true);
       setIsReady(true);
@@ -248,31 +236,30 @@ export const AuthProvider = ({ children }) => {
       && unlock?._id
       && String(unlock._id) === String(storedUser._id);
 
-    // Same-tab session already unlocked this visit → stay in (no PIN)
-    // (still honor PIN gate after hard refresh / cold start)
-    if (alive && !reload && !gateLocked) {
+    // Already unlocked in this browser session (incl. hard refresh on dashboard/home/rider)
+    // → stay on the same page; do NOT force PIN again
+    if (alive && !gateLocked) {
       restoreSession(false);
       setIsReady(true);
       return;
     }
 
-    // Reload / PWA reopen: keep PIN gate until the user unlocks again
-    if ((reload || pwa || gateLocked) && hasUnlock) {
+    // True cold start (app killed / new session) with unlock profile → PIN once
+    // Hard refresh keeps sessionStorage alive, so it won't hit this after unlock.
+    if (!alive && hasUnlock && !gateLocked) {
       restoreSession(true);
       setIsReady(true);
       return;
     }
 
-    // Hard refresh without unlock profile but still in-browser → stay logged in
-    // (admin/customer with unlock should have hit the branch above)
+    // Browser tab with stored auth but no unlock profile → stay logged in
     if (!pwa && !gateLocked) {
       restoreSession(false);
       setIsReady(true);
       return;
     }
 
-    // PWA but no unlock profile → require full login
-    // Don't wipe unlock while a gate is open (reset/switch/pin)
+    // PWA cold start without unlock profile → require full login
     if (!gateLocked) {
       clearAuthUser();
       clearDeviceUnlock();
@@ -773,7 +760,19 @@ export const AuthProvider = ({ children }) => {
    */
   const completeLogin = async (pendingUser, details = "Account login success") => {
     if (!pendingUser?._id) return { success: false };
-    let sessionId = pendingUser.sessionId;
+    // PIN unlock profile may omit sessionId — reuse active auth session on this device
+    const storedAuth = readAuthUser();
+    const unlockSnap = (() => {
+      try { return getDeviceUnlock(); } catch { return null; }
+    })();
+    const reuseSessionId = String(
+      pendingUser.sessionId
+      || storedAuth?.sessionId
+      || unlockSnap?.sessionId
+      || userRef.current?.sessionId
+      || ""
+    ).trim();
+    let sessionId = reuseSessionId || pendingUser.sessionId;
     let pendingApproval = false;
     let expiresAt = null;
     try {
@@ -785,9 +784,7 @@ export const AuthProvider = ({ children }) => {
         location: device.location,
         platform: device.platform,
         // PIN unlock / returning visit: reuse local session so we don't ask Yes/No of nobody
-        currentSessionId: pendingUser.sessionId
-          ? String(pendingUser.sessionId)
-          : undefined,
+        currentSessionId: reuseSessionId || undefined,
       });
       if (started?.sessionId) sessionId = started.sessionId;
       pendingApproval = !!started?.pendingApproval;
