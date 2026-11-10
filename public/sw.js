@@ -1,5 +1,5 @@
 // DKMerch Service Worker — PWA support
-const CACHE_NAME = 'dkmerch-v18-app-icon';
+const CACHE_NAME = 'dkmerch-v19-notif-splash';
 
 // Only cache essential static assets (never webpack JS bundles)
 const STATIC_ASSETS = [
@@ -50,53 +50,32 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Skip non-GET requests
-  if (event.request.method !== 'GET') return;
-
-  // Skip Convex, PayMongo, external APIs — always network
+  // Never cache API / Convex / non-GET
   if (
-    url.hostname.includes('convex.cloud') ||
-    url.hostname.includes('convex.dev') ||
-    url.hostname.includes('paymongo.com') ||
-    url.hostname.includes('nominatim.openstreetmap.org') ||
-    url.hostname.includes('router.project-osrm.org') ||
-    url.hostname.includes('resend.com')
+    event.request.method !== 'GET'
+    || url.pathname.startsWith('/api')
+    || url.hostname.includes('convex')
   ) {
     return;
   }
 
-  // Never intercept/cache webpack / CRA bundles (fixes stale "Cannot find module" on localhost)
-  if (!isAppShellAsset(url)) {
-    return;
-  }
+  if (!isAppShellAsset(url)) return;
 
-  // Network first strategy
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // Cache valid responses for static shell assets only
-        if (response && response.status === 200 && response.type === 'basic') {
-          const responseClone = response.clone();
+        const copy = response.clone();
+        if (response.ok && response.type === 'basic') {
           caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseClone);
+            cache.put(event.request, copy).catch(() => {});
           });
         }
         return response;
       })
-      .catch(() => {
-        // Fallback to cache when offline
-        return caches.match(event.request).then((cached) => {
-          if (cached) return cached;
-          // Return offline page for navigation requests
-          if (event.request.mode === 'navigate') {
-            return caches.match('/index.html');
-          }
-        });
-      })
+      .catch(() => caches.match(event.request))
   );
 });
 
-/** Normalize notification target to a same-origin path (keeps opens inside the PWA). */
 function notifPath(raw) {
   try {
     const u = new URL(String(raw || '/'), self.location.origin);
@@ -106,6 +85,22 @@ function notifPath(raw) {
     return `${u.pathname}${u.search}${u.hash}` || '/';
   } catch {
     return '/';
+  }
+}
+
+/** Prefer installed PWA window; keep loginAlert deep-link + source=pwa */
+function openTargetPath(path, open) {
+  try {
+    const u = new URL(path || '/', self.location.origin);
+    if (open === 'loginAlert') {
+      u.searchParams.set('open', 'loginAlert');
+    }
+    if (!u.searchParams.get('source')) {
+      u.searchParams.set('source', 'pwa');
+    }
+    return `${u.pathname}${u.search}${u.hash}` || '/';
+  } catch {
+    return open === 'loginAlert' ? '/?open=loginAlert&source=pwa' : '/?source=pwa';
   }
 }
 
@@ -127,8 +122,8 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title || 'DKMerch', {
       body: data.body || 'You have a new notification',
-      icon: '/images/dklogo2-removebg-preview.png',
-      badge: '/images/dklogo2-removebg-preview.png',
+      icon: '/images/pwa-icon-192.png',
+      badge: '/images/pwa-icon-192.png',
       vibrate: [200, 100, 200],
       tag: open === 'loginAlert' ? 'dkmerch-login-alert' : (data.tag || undefined),
       renotify: open === 'loginAlert',
@@ -137,16 +132,16 @@ self.addEventListener('push', (event) => {
   );
 });
 
-// Notification click — focus installed PWA (not a random browser tab) + deep-link
+// Notification click — focus installed PWA + deep-link to the topic (login alert, etc.)
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const path = notifPath(event.notification.data?.url || '/');
+  const rawPath = notifPath(event.notification.data?.url || '/');
   const open = event.notification.data?.open || '';
+  const path = openTargetPath(rawPath, open);
   const absolute = new URL(path, self.location.origin).href;
 
   event.waitUntil((async () => {
     const list = await clients.matchAll({ type: 'window', includeUncontrolled: true });
-    // Prefer an already-open app window on this origin
     for (const client of list) {
       if (!client.url.startsWith(self.location.origin)) continue;
       try {
@@ -163,7 +158,6 @@ self.addEventListener('notificationclick', (event) => {
       }
       if ('focus' in client) return client.focus();
     }
-    // No open window — openWindow with same-origin URL so Android/iOS reuse the PWA
     if (clients.openWindow) {
       return clients.openWindow(path);
     }

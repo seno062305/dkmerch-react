@@ -30,18 +30,18 @@
   <link rel="manifest" href="/manifest.json">
 
   <!-- Apple Touch Icon -->
-  <link rel="apple-touch-icon" href="/images/pwa-icon-512.png?v=18">
-  <link rel="apple-touch-icon" sizes="152x152" href="/images/pwa-icon-192.png?v=18">
-  <link rel="apple-touch-icon" sizes="180x180" href="/images/pwa-icon-512.png?v=18">
-  <link rel="apple-touch-icon" sizes="167x167" href="/images/pwa-icon-512.png?v=18">
+  <link rel="apple-touch-icon" href="/images/pwa-icon-512.png?v=19">
+  <link rel="apple-touch-icon" sizes="152x152" href="/images/pwa-icon-192.png?v=19">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/pwa-icon-512.png?v=19">
+  <link rel="apple-touch-icon" sizes="167x167" href="/images/pwa-icon-512.png?v=19">
 
   <title>DKMerch | K-Pop Merchandise Store</title>
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="icon" href="/images/favicon-32.png?v=18" type="image/png" sizes="32x32">
-  <link rel="icon" href="/images/favicon-48.png?v=18" type="image/png" sizes="48x48">
-  <link rel="icon" href="/images/favicon-64.png?v=18" type="image/png" sizes="64x64">
-  <link rel="shortcut icon" href="/images/favicon-64.png?v=18" type="image/png">
+  <link rel="icon" href="/images/favicon-32.png?v=19" type="image/png" sizes="32x32">
+  <link rel="icon" href="/images/favicon-48.png?v=19" type="image/png" sizes="48x48">
+  <link rel="icon" href="/images/favicon-64.png?v=19" type="image/png" sizes="64x64">
+  <link rel="shortcut icon" href="/images/favicon-64.png?v=19" type="image/png">
 
 
   <style>
@@ -112,13 +112,14 @@
       left: -60px;
     }
 
+    /* Instant centered splash — matches Android native splash (no pop-in / double flash) */
     .splash-logo-wrap {
       position: relative;
       margin-bottom: 32px;
-      animation: splashLogoPop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+      opacity: 1;
+      transform: none;
     }
 
-    /* Installed PWA: logo/title appear instantly, but loading bar still crawls 0→100% */
     html.splash-pwa .splash-logo-wrap,
     html.splash-pwa .splash-title,
     html.splash-pwa .splash-sub,
@@ -126,12 +127,6 @@
       animation: none !important;
       opacity: 1 !important;
       transform: none !important;
-    }
-
-    @keyframes splashLogoPop {
-      0%   { transform: scale(0.5); opacity: 0; }
-      70%  { transform: scale(1.08); opacity: 1; }
-      100% { transform: scale(1); opacity: 1; }
     }
 
     .splash-logo {
@@ -189,7 +184,7 @@
       color: #ffffff;
       letter-spacing: 1px;
       margin: 0 0 6px;
-      animation: splashFadeUp 0.28s ease 0.08s both;
+      opacity: 1;
     }
 
     .splash-sub {
@@ -199,12 +194,7 @@
       letter-spacing: 2px;
       text-transform: uppercase;
       margin: 0 0 28px;
-      animation: splashFadeUp 0.28s ease 0.12s both;
-    }
-
-    @keyframes splashFadeUp {
-      from { opacity: 0; transform: translateY(12px); }
-      to   { opacity: 1; transform: translateY(0); }
+      opacity: 1;
     }
 
     /* Loading bar — white fill crawls left → right (scaleX, not jump) */
@@ -214,7 +204,7 @@
       background: rgba(255,255,255,0.25);
       border-radius: 99px;
       overflow: hidden;
-      animation: splashFadeUp 0.28s ease 0.12s both;
+      opacity: 1;
     }
 
     .splash-bar {
@@ -226,11 +216,11 @@
       transform: scaleX(0);
       transform-origin: left center;
       will-change: transform;
-      animation: splashBarCrawl 1.6s cubic-bezier(0.33, 0.1, 0.25, 1) 0.2s forwards;
+      animation: splashBarCrawl 1.45s cubic-bezier(0.33, 0.1, 0.25, 1) 0.05s forwards;
     }
 
     html.splash-pwa .splash-bar {
-      animation: splashBarCrawl 1.6s cubic-bezier(0.33, 0.1, 0.25, 1) 0.15s forwards;
+      animation: splashBarCrawl 1.35s cubic-bezier(0.33, 0.1, 0.25, 1) 0.05s forwards;
     }
 
     @keyframes splashBarCrawl {
@@ -284,7 +274,7 @@
       }
 
       /* Keep splash up long enough to see the bar crawl 0→100% */
-      var minShow = isPwa ? 1850 : 2000;
+      var minShow = isPwa ? 1450 : 1600;
       var startTime = Date.now();
       var splashHidden = false;
       var bootReady = false;

@@ -276,12 +276,16 @@ function AppContent() {
         if (u.origin !== window.location.origin) return;
         const open = u.searchParams.get('open') || '';
         if (open === 'loginAlert') {
-          // Keep path; strip only after Auth can read it — mark for AuthContext
+          // Mark for AuthContext — popup shows after PIN unlock (not on PIN page)
           try { sessionStorage.setItem('dkmerch_open_login_alert', '1'); } catch { /* ignore */ }
           window.dispatchEvent(new Event('dkOpenLoginAlert'));
-          // Land on home so the confirm modal is visible (not buried in another route)
-          if (u.pathname !== '/' || location.pathname !== '/') {
-            navigate(`/?open=loginAlert${u.hash || ''}`, { replace: true });
+          // Prefer home so after unlock the Yes/No modal is visible
+          const target = `/?open=loginAlert${u.hash || ''}`;
+          if (`${location.pathname}${location.search}` !== '/?open=loginAlert'
+            && location.pathname !== '/') {
+            navigate(target, { replace: true });
+          } else if (location.pathname === '/' && !location.search.includes('open=loginAlert')) {
+            navigate(target, { replace: true });
           }
           return;
         }

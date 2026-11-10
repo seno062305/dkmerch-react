@@ -359,21 +359,53 @@ export const startUserSession = mutation({
       existingIds.length > 0
       && lastActive > 0
       && (now - lastActive) <= SESSION_ACTIVE_MS;
-    const sameDevice =
-      existingIds.length > 0
-      && String(user.activeDeviceName || "") === deviceName
-      && String(user.activeDevicePlatform || "") === platform;
-    // Stuck / abandoned Yes-No request — don't block login forever
+    // Only treat pending as abandoned after 15m — never skip Yes/No on a fresh retry
+    const STUCK_PENDING_MS = 15 * 60 * 1000;
+    const pendingAlert = user.loginAlert;
+    const pendingAge = pendingAlert?.at ? now - Number(pendingAlert.at) : 0;
     const stuckPending =
-      user.loginAlert
-      && user.loginAlert.status === "pending"
-      && !user.loginAlert.resolved;
+      pendingAlert
+      && pendingAlert.status === "pending"
+      && !pendingAlert.resolved
+      && !isLoginAlertExpired(pendingAlert, now)
+      && pendingAge > STUCK_PENDING_MS;
 
-    // First login / stale / same device / stuck pending → take over now
+    // Active pending request (not stuck) → keep waiting; refresh alert details
+    if (
+      previousSessionId
+      && otherStillActive
+      && pendingAlert
+      && pendingAlert.status === "pending"
+      && !pendingAlert.resolved
+      && !stuckPending
+      && !isLoginAlertExpired(pendingAlert, now)
+    ) {
+      const expiresAt = Number(pendingAlert.expiresAt) || now + LOGIN_ALERT_TTL_MS;
+      const alert = {
+        sessionId: String(pendingAlert.sessionId || sessionId),
+        previousSessionId,
+        deviceName: deviceName || pendingAlert.deviceName,
+        location: location || pendingAlert.location,
+        platform: platform || pendingAlert.platform || undefined,
+        at: pendingAlert.at || now,
+        expiresAt,
+        status: "pending" as const,
+        resolved: false,
+      };
+      await db.patch(args.userId, { loginAlert: alert } as any);
+      return {
+        success: true,
+        sessionId: String(alert.sessionId),
+        pendingApproval: true,
+        replacedSession: true,
+      };
+    }
+
+    // First login / stale / truly stuck pending → take over now
+    // (PIN unlock uses currentSessionId match above — do not skip Yes/No via device name.)
     if (
       !previousSessionId
       || !otherStillActive
-      || sameDevice
       || stuckPending
     ) {
       await db.patch(

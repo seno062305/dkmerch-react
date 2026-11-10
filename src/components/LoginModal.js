@@ -293,10 +293,10 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
       writeAuthGateStep(resetPinStep);
     } else if (switchAccountMode) {
       writeAuthGate("switch");
-    } else if (deviceUnlockMode && view === "pin") {
+    } else if (deviceUnlockMode && view === "pin" && mustAuthenticate) {
       writeAuthGate("pin");
     }
-  }, [resetPasswordMode, switchAccountMode, deviceUnlockMode, view, resetPinStep]);
+  }, [resetPasswordMode, switchAccountMode, deviceUnlockMode, view, resetPinStep, mustAuthenticate]);
   const [pinValue, setPinValue] = useState("");
   const [pinConfirmValue, setPinConfirmValue] = useState("");
   const [pinStep, setPinStep] = useState(0); // 0 = enter new, 1 = confirm (set/reset only)

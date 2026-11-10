@@ -10,7 +10,7 @@ import {
   markExplicitLogout,
   clearExplicitLogoutFlag,
 } from "../lib/deviceUnlock";
-import { readAuthGate, isAuthGateLocked } from "../lib/authGate";
+import { readAuthGate, isAuthGateLocked, clearAuthGate } from "../lib/authGate";
 import { collectLoginDeviceInfo } from "../utils/deviceInfo";
 import NewLoginAlertModal from "../components/NewLoginAlertModal";
 import { useNotification } from "./NotificationContext";
@@ -155,8 +155,7 @@ export const AuthProvider = ({ children }) => {
 
   /**
    * Pending new-device login while THIS device is still signed in.
-   * Customer + admin. Also runs during PIN gate so a tapped push (`?open=loginAlert`)
-   * can show the Yes/No modal on top immediately.
+   * Query stays active during PIN; Yes/No UI waits until unlock (homepage).
    */
   const pendingLoginAlert = useQuery(
     api.users.getPendingLoginAlert,
@@ -332,6 +331,7 @@ export const AuthProvider = ({ children }) => {
   const applySession = (sessionUser) => {
     kickedRef.current = false;
     clearExplicitLogoutFlag();
+    try { clearAuthGate(); } catch { /* ignore */ }
     writeAuthUser(sessionUser);
     markSessionAlive();
     if (sessionUser.role === "user" || sessionUser.role === "admin") {
@@ -385,32 +385,36 @@ export const AuthProvider = ({ children }) => {
     } catch { /* ignore */ }
   };
 
-  // Show FB-style alert while still logged in — new device waits for Yes
+  // Show FB-style alert after PIN unlock only — never interrupt the PIN page
   useEffect(() => {
     const pending = pendingLoginAlert || pendingRiderLoginAlert || null;
     if (!pending) {
-      // Keep confirmation screens (approved / denied) until user taps OK
       setSecurityAlert((prev) => (prev?.mode === "pending" ? null : prev));
       return;
     }
     if (holdLogoutConfirmRef.current) return;
+    if (needsDeviceUnlock) return;
     const current = userRef.current;
     if (!current) return;
+    try { clearAuthGate(); } catch { /* ignore */ }
     setSecurityAlert({
       alert: pending,
       previousUser: current,
       mode: "pending",
     });
     clearLoginAlertDeepLink();
-  }, [pendingLoginAlert, pendingRiderLoginAlert]);
+  }, [pendingLoginAlert, pendingRiderLoginAlert, needsDeviceUnlock]);
 
-  // Push tap while app already open — nudge re-show if Convex already has a pending alert
+  // Push tap — mark intent; show after unlock
   useEffect(() => {
     const bump = () => {
+      try { sessionStorage.setItem("dkmerch_open_login_alert", "1"); } catch { /* ignore */ }
+      if (needsDeviceUnlock) return;
       const current = userRef.current;
       const pending = pendingLoginAlert || pendingRiderLoginAlert;
       if (!current || !pending) return;
       if (holdLogoutConfirmRef.current) return;
+      try { clearAuthGate(); } catch { /* ignore */ }
       setSecurityAlert({
         alert: pending,
         previousUser: current,
@@ -419,7 +423,7 @@ export const AuthProvider = ({ children }) => {
     };
     window.addEventListener("dkOpenLoginAlert", bump);
     return () => window.removeEventListener("dkOpenLoginAlert", bump);
-  }, [pendingLoginAlert, pendingRiderLoginAlert]);
+  }, [pendingLoginAlert, pendingRiderLoginAlert, needsDeviceUnlock]);
 
   // Only sign out if THIS session was removed (stale takeover) — not after Yes
   useEffect(() => {
