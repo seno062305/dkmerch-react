@@ -192,7 +192,8 @@ export const loginUser = mutation({
   },
 });
 
-const PIN_RE = /^\d{4,6}$/;
+const PIN_RE = /^\d{4,6}$/;       // verify existing PINs
+const PIN_SET_RE = /^\d{6}$/;     // new PINs must be exactly 6 digits
 
 async function hashPin(pin: string): Promise<string> {
   const data = new TextEncoder().encode(pin);
@@ -223,22 +224,25 @@ export const hasLoginPin = query({
   args: { userId: v.string() },
   handler: async ({ db }, { userId }) => {
     const id = String(userId || "").trim();
-    if (!id) return { hasPin: false, pinLength: 4 };
+    if (!id) return { hasPin: false, pinLength: 6 };
     try {
       const user = await db.get(id as any);
-      if (!user || (user as any).role === "admin") return { hasPin: false, pinLength: 4 };
+      if (!user || (user as any).role === "admin") return { hasPin: false, pinLength: 6 };
       const pin = (user as any).pin;
       const hasPin = !!(pin && String(pin).length >= 4);
       const len = Number((user as any).pinLength);
-      const pinLength = Number.isFinite(len) && len >= 4 && len <= 6 ? len : 4;
+      const pinLength = Number.isFinite(len) && len >= 4 && len <= 6 ? len : 6;
       return { hasPin, pinLength };
     } catch {
-      return { hasPin: false, pinLength: 4 };
+      return { hasPin: false, pinLength: 6 };
     }
   },
 });
 
-/** Mint a new active session — logs out any other device for this account. */
+/**
+ * Start a session. If another device is already active, create a PENDING login
+ * alert instead of activating immediately (needs Yes on the old device).
+ */
 export const startUserSession = mutation({
   args: {
     userId: v.id("users"),
@@ -260,48 +264,53 @@ export const startUserSession = mutation({
       ? String(user.activeSessionId)
       : undefined;
 
-    const patch: Record<string, unknown> = {
-      activeSessionId: sessionId,
-      activeDeviceAt: now,
-      activeDeviceName: deviceName,
-      activeDeviceLocation: location,
-      activeDevicePlatform: platform || undefined,
-    };
-
-    // Only alert the previous device when a real session is being replaced
-    if (previousSessionId && previousSessionId !== sessionId) {
-      patch.loginAlert = {
-        sessionId,
-        previousSessionId,
-        deviceName,
-        location,
-        platform: platform || undefined,
-        at: now,
-        resolved: false,
-      };
+    // First session on this account → activate immediately
+    if (!previousSessionId) {
+      await db.patch(args.userId, {
+        activeSessionId: sessionId,
+        activeDeviceAt: now,
+        activeDeviceName: deviceName,
+        activeDeviceLocation: location,
+        activeDevicePlatform: platform || undefined,
+      } as any);
+      return { success: true, sessionId, pendingApproval: false };
     }
 
-    await db.patch(args.userId, patch as any);
+    // Another device is active → pending until that device taps Yes
+    const alert = {
+      sessionId,
+      previousSessionId,
+      deviceName,
+      location,
+      platform: platform || undefined,
+      at: now,
+      status: "pending" as const,
+      resolved: false,
+    };
+    await db.patch(args.userId, { loginAlert: alert } as any);
 
-    // Push notify other subscribed devices (best-effort)
-    if (previousSessionId && user.email) {
+    if (user.email) {
       try {
         await scheduler.runAfter(0, internal.webPush.sendToEmail, {
           email: String(user.email).toLowerCase(),
           title: "New login to your DKMerch account",
-          body: `${deviceName} · ${location}. Open the app to confirm if this was you.`,
-          url: "/",
+          body: `${deviceName} · ${location}. Confirm if this was you.`,
+          // Deep-link: open app and surface the Yes / No confirm modal
+          url: "/?open=loginAlert",
         });
-      } catch {
-        /* push optional */
-      }
+      } catch { /* push optional */ }
     }
 
-    return { success: true, sessionId, replacedSession: !!previousSessionId };
+    return {
+      success: true,
+      sessionId,
+      pendingApproval: true,
+      replacedSession: true,
+    };
   },
 });
 
-/** Other devices poll this — invalid means a newer login took over. */
+/** Other devices poll this — invalid means a newer login was approved. */
 export const checkUserSession = query({
   args: {
     userId: v.string(),
@@ -314,17 +323,12 @@ export const checkUserSession = query({
     try {
       const user = await db.get(id as any) as any;
       if (!user) return { valid: false, reason: "not_found" };
-      // Legacy sessions (no server token yet) stay valid until next login
       if (!user.activeSessionId) return { valid: true, reason: "legacy" };
       const ok = user.activeSessionId === sid;
-      const alert = user.loginAlert && !user.loginAlert.resolved
-        ? user.loginAlert
-        : null;
       return {
         valid: ok,
         reason: ok ? "ok" : "new_device_logged_in",
         activeDeviceAt: user.activeDeviceAt ?? null,
-        loginAlert: !ok ? alert : null,
         activeDeviceName: user.activeDeviceName ?? null,
         activeDeviceLocation: user.activeDeviceLocation ?? null,
       };
@@ -334,7 +338,60 @@ export const checkUserSession = query({
   },
 });
 
-/** Old device: "Yes, it's me" — accept the newer login and stay signed out here. */
+/** Old device polls while still logged in — pending new-device approval request. */
+export const getPendingLoginAlert = query({
+  args: { userId: v.string() },
+  handler: async ({ db }, { userId }) => {
+    const id = String(userId || "").trim();
+    if (!id) return null;
+    try {
+      const user = await db.get(id as any) as any;
+      if (!user?.loginAlert) return null;
+      const alert = user.loginAlert;
+      if (alert.resolved) return null;
+      if (alert.status && alert.status !== "pending") return null;
+      return alert;
+    } catch {
+      return null;
+    }
+  },
+});
+
+/** New device polls approval status for its provisional session. */
+export const getLoginApprovalStatus = query({
+  args: {
+    userId: v.string(),
+    sessionId: v.string(),
+  },
+  handler: async ({ db }, { userId, sessionId }) => {
+    const id = String(userId || "").trim();
+    const sid = String(sessionId || "").trim();
+    if (!id || !sid) return { status: "missing" as const };
+    try {
+      const user = await db.get(id as any) as any;
+      if (!user) return { status: "missing" as const };
+      const alert = user.loginAlert;
+      if (alert && String(alert.sessionId) === sid) {
+        const st = alert.status || (alert.resolved ? "approved" : "pending");
+        return {
+          status: st,
+          deviceName: alert.deviceName,
+          location: alert.location,
+          at: alert.at,
+        };
+      }
+      // Approved + activated (alert may already be cleared/resolved)
+      if (String(user.activeSessionId || "") === sid) {
+        return { status: "approved" as const };
+      }
+      return { status: "expired" as const };
+    } catch {
+      return { status: "missing" as const };
+    }
+  },
+});
+
+/** Old device: Yes — activate the pending new-device session. */
 export const confirmLoginAlert = mutation({
   args: {
     userId: v.string(),
@@ -344,68 +401,54 @@ export const confirmLoginAlert = mutation({
     const user = await db.get(userId as any) as any;
     if (!user) return { success: false, message: "Account not found." };
     const alert = user.loginAlert;
-    if (alert && String(alert.sessionId) === String(sessionId)) {
-      await db.patch(user._id, {
-        loginAlert: { ...alert, resolved: true },
-      } as any);
+    if (!alert || String(alert.sessionId) !== String(sessionId)) {
+      return { success: false, message: "No pending login found." };
     }
+    await db.patch(user._id, {
+      activeSessionId: String(alert.sessionId),
+      activeDeviceAt: alert.at || Date.now(),
+      activeDeviceName: alert.deviceName,
+      activeDeviceLocation: alert.location,
+      activeDevicePlatform: alert.platform,
+      loginAlert: { ...alert, status: "approved", resolved: true },
+    } as any);
     return { success: true };
   },
 });
 
-/**
- * Old device: "No, I'm not" — revoke the newer login and restore this device's session.
- */
+/** Old device: No — deny the pending login; keep this device active. */
 export const denyLoginAlert = mutation({
   args: {
     userId: v.string(),
-    previousSessionId: v.string(),
+    previousSessionId: v.optional(v.string()),
     newSessionId: v.string(),
   },
-  handler: async ({ db }, { userId, previousSessionId, newSessionId }) => {
+  handler: async ({ db, scheduler }, { userId, newSessionId }) => {
     const user = await db.get(userId as any) as any;
     if (!user) return { success: false, message: "Account not found." };
 
     const alert = user.loginAlert;
-    const prev = String(previousSessionId || "").trim();
     const neu = String(newSessionId || "").trim();
-    if (!prev || !neu) return { success: false, message: "Invalid session." };
+    if (!neu) return { success: false, message: "Invalid session." };
 
-    // Only reclaim if the alert still points at this takeover
-    if (
-      alert
-      && String(alert.sessionId) === neu
-      && String(alert.previousSessionId || "") === prev
-      && !alert.resolved
-    ) {
+    if (alert && String(alert.sessionId) === neu) {
       await db.patch(user._id, {
-        activeSessionId: prev,
-        activeDeviceAt: Date.now(),
-        loginAlert: { ...alert, resolved: true },
+        loginAlert: { ...alert, status: "denied", resolved: true },
       } as any);
-      return { success: true, sessionId: prev, revoked: true };
     }
 
-    // Alert already resolved / mismatched — if active is still the new one, still reclaim
-    if (String(user.activeSessionId || "") === neu) {
-      const patch: Record<string, unknown> = {
-        activeSessionId: prev,
-        activeDeviceAt: Date.now(),
-      };
-      if (alert) patch.loginAlert = { ...alert, resolved: true };
-      await db.patch(user._id, patch as any);
-      return { success: true, sessionId: prev, revoked: true };
+    if (user.email) {
+      try {
+        await scheduler.runAfter(0, internal.webPush.sendToEmail, {
+          email: String(user.email).toLowerCase(),
+          title: "Login blocked",
+          body: "A login attempt was denied. If this wasn't you, change your password.",
+          url: "/",
+        });
+      } catch { /* optional */ }
     }
 
-    // Already restored or superseded
-    if (String(user.activeSessionId || "") === prev) {
-      return { success: true, sessionId: prev, revoked: false };
-    }
-
-    return {
-      success: false,
-      message: "Could not restore this device. Please log in again.",
-    };
+    return { success: true, revoked: true };
   },
 });
 
@@ -416,8 +459,8 @@ export const setUserPin = mutation({
     pin: v.string(),
   },
   handler: async ({ db }, { userId, pin }) => {
-    if (!PIN_RE.test(pin)) {
-      return { success: false, message: "PIN must be 4–6 digits." };
+    if (!PIN_SET_RE.test(pin)) {
+      return { success: false, message: "PIN must be exactly 6 digits." };
     }
     const user = await db.get(userId);
     if (!user) return { success: false, message: "Account not found." };
@@ -427,11 +470,11 @@ export const setUserPin = mutation({
     const pinHash = await hashPin(pin);
     await db.patch(userId, {
       pin: pinHash,
-      pinLength: pin.length,
+      pinLength: 6,
       loginOtp: undefined,
       loginOtpExpiresAt: undefined,
     } as any);
-    return { success: true, user: toSafeUser(user), pinLength: pin.length };
+    return { success: true, user: toSafeUser(user), pinLength: 6 };
   },
 });
 

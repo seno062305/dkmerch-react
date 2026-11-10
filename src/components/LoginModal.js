@@ -2,7 +2,12 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import "./LoginModal.css";
-import { useAuth } from "../context/AuthContext";
+import {
+  useAuth,
+  readPendingLogin,
+  writePendingLogin,
+  clearPendingLogin,
+} from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useAction, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
@@ -132,7 +137,7 @@ function clearPinResetOtpCode(userId) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearUnlockPrompt, onSwitchAccount }) => {
-  const { login, completeLogin, logout } = useAuth();
+  const { login, completeLogin, finalizePendingLogin, logout } = useAuth();
   const { showNotification } = useNotification();
   const navigate = useNavigate();
 
@@ -142,11 +147,14 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
     try { return getDeviceUnlock(); } catch { return null; }
   })();
   const rememberedLocalPin = !!(remembered?._id && hasLocalPin(remembered._id));
+  const restoredPending = (() => {
+    try { return readPendingLogin(); } catch { return null; }
+  })();
   // Cold-start unlock: show pink PIN immediately when app asks for it
-  const startUnlockUi = !!(preferPinUnlock && remembered?._id);
+  const startUnlockUi = !!(preferPinUnlock && remembered?._id) && !restoredPending;
   const startWithPin = !!(startUnlockUi && rememberedLocalPin);
   /** Block closing / browsing until login succeeds (PIN gate or Use another account). */
-  const [mustAuthenticate, setMustAuthenticate] = useState(!!preferPinUnlock);
+  const [mustAuthenticate, setMustAuthenticate] = useState(!!preferPinUnlock || !!restoredPending);
   const [view, setView] = useState(startUnlockUi ? "pin" : "login");
   const [qsiToken, setQsiToken] = useState("");
   const [qsiExpiresAt, setQsiExpiresAt] = useState(0);
@@ -160,6 +168,19 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
   const [deviceUnlockMode, setDeviceUnlockMode] = useState(startUnlockUi);
   /** Pink full-screen login after "Use another account" (stays in PIN-page chrome) */
   const [switchAccountMode, setSwitchAccountMode] = useState(false);
+  /** Pink Reset Password (Gmail) — same chrome as Use another account */
+  const [resetPasswordMode, setResetPasswordMode] = useState(false);
+  /** Waiting for Yes on the other device */
+  const [awaitingApproval, setAwaitingApproval] = useState(() => (
+    restoredPending?.userId && restoredPending?.sessionId
+      ? {
+          userId: String(restoredPending.userId),
+          sessionId: String(restoredPending.sessionId),
+          user: restoredPending.user,
+        }
+      : null
+  ));
+  const [loginDenied, setLoginDenied] = useState(false);
   /** Remember who to restore when tapping Back from Use another account */
   const [pinAccountSnapshot, setPinAccountSnapshot] = useState(startUnlockUi ? remembered : null);
   const [pinValue, setPinValue] = useState("");
@@ -238,6 +259,12 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
     api.users.hasLoginPin,
     preferPinUnlock && remembered?._id && !rememberedLocalPin
       ? { userId: String(remembered._id) }
+      : "skip"
+  );
+  const loginApprovalStatus   = useQuery(
+    api.users.getLoginApprovalStatus,
+    awaitingApproval?.userId && awaitingApproval?.sessionId
+      ? { userId: String(awaitingApproval.userId), sessionId: String(awaitingApproval.sessionId) }
       : "skip"
   );
   const generateLoginOtp      = useMutation(api.users.generateLoginOtp);
@@ -444,6 +471,11 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
       }
       try { await consumeQuickSignIn({ token: qsiToken }); } catch { /* ignore */ }
       resetRLState();
+      if (result.pendingApproval) {
+        beginAwaitingApproval(result);
+        showNotification("Confirm this login on your other device.", "info");
+        return;
+      }
       showNotification(
         `Signed in as ${pending.name || pending.email || "customer"}`,
         "success"
@@ -660,14 +692,27 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
     }
     const fromServer = Number(unlockPinStatus?.pinLength);
     if (Number.isFinite(fromServer) && fromServer >= 4 && fromServer <= 6) return fromServer;
-    return 4;
+    return 6;
   })();
+
+  const beginAwaitingApproval = (done) => {
+    const payload = {
+      userId: String(done.user?._id || pendingUser?._id),
+      sessionId: String(done.sessionId),
+      user: done.user || pendingUser,
+    };
+    writePendingLogin({ ...payload, at: Date.now() });
+    setAwaitingApproval(payload);
+    setLoginDenied(false);
+    setMustAuthenticate(true);
+    setPinValue("");
+  };
 
   const handleVerifyPin = async () => {
     const pin = pinValue;
     if (!pendingUser?._id) return;
     if (!accountHasPin && !hasLocalPin(pendingUser._id)) {
-      setPinError("No PIN yet — tap Forgot PIN below to create one.");
+      setPinError("No PIN yet — tap Reset Password below, or use another account.");
       return;
     }
     if (pin.length < 4) {
@@ -685,21 +730,25 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
       if (!checked.success) {
         setPinError(
           checked.needsPinSetup
-            ? "No PIN yet — tap Forgot PIN below to create one."
+            ? "No PIN yet — tap Reset Password below, or use another account."
             : (checked.message || "Incorrect PIN.")
         );
         setPinValue("");
         return;
       }
       setAccountHasPin(true);
-      setMustAuthenticate(false);
       const done = await completeLogin(
         checked.result?.user || pendingUser,
         checked.source === "local" ? "Login with local PIN" : "Login with PIN"
       );
+      if (done?.pendingApproval) {
+        beginAwaitingApproval(done);
+        return;
+      }
+      setMustAuthenticate(false);
       finishLogin(done.role);
     } catch {
-      setPinError("Incorrect PIN. Try again, or tap Forgot PIN.");
+      setPinError("Incorrect PIN. Try again, or tap Reset Password.");
       setPinValue("");
     } finally {
       setPinLoading(false);
@@ -798,38 +847,38 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
     return { success: true, email };
   };
 
-  const handleForgotPin = async () => {
-    if (!pendingUser?._id) return;
-    setIsPinReset(true);
-    setLoginOtpError("");
-    setLoginOtpDigits(["", "", "", "", "", ""]);
-    setView("loginOtp");
+  /** Open pink Reset Password UI (Gmail) — replaces Forgot PIN on the PIN page. */
+  const openResetPassword = () => {
+    const email = String(pendingUser?.email || pinAccountSnapshot?.email || "").trim();
+    setForgotEmail(email);
+    setVerificationCode("");
+    setNewPassword("");
+    setConfirmNewPassword("");
+    setSentCode("");
+    setCodeMsg("");
+    setResetMsg("");
+    setShowNewPw(false);
+    setShowConfirmNewPw(false);
+    setSwitchAccountMode(false);
+    setResetPasswordMode(true);
+    setView("forgot");
+  };
 
-    const remaining = getPinOtpCooldownRemaining(pendingUser._id);
-    if (remaining > 0) {
-      setLoginOtpCooldown(remaining);
-      setLoginOtpMsg(`⏳ Please wait ${remaining}s before requesting another code.`);
-      return;
-    }
-
-    setLoginOtpMsg("");
-    setPinResetSentCode("");
-    clearPinResetOtpCode(pendingUser._id);
-    setPinResetSending(true);
-    try {
-      const sent = await issuePinResetOtp();
-      if (sent.success) {
-        const secs = startPinOtpCooldown(pendingUser._id);
-        setLoginOtpCooldown(secs);
-        setLoginOtpMsg(`✅ Reset code sent to ${sent.email || pendingUser.email}`);
-      } else {
-        setLoginOtpError(sent.message || "Could not send OTP. Please tap Resend.");
+  const backFromResetPassword = () => {
+    setResetPasswordMode(false);
+    setCodeMsg("");
+    setResetMsg("");
+    if (deviceUnlockMode || pinAccountSnapshot?._id || pendingUser?._id) {
+      const acc = pendingUser || pinAccountSnapshot || remembered;
+      if (acc?._id) {
+        setPendingUser(acc);
+        setDeviceUnlockMode(true);
+        setAccountHasPin(true);
+        setView("pin");
+        return;
       }
-    } catch {
-      setLoginOtpError("Could not send OTP. Please tap Resend.");
-    } finally {
-      setPinResetSending(false);
     }
+    setView("login");
   };
 
   const handleResendLoginOtp = async () => {
@@ -905,8 +954,8 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
   const handleSaveLoginPin = async () => {
     const pin = pinValue;
     const confirm = pinConfirmValue;
-    if (pin.length < 4) {
-      setPinError("Enter a PIN with at least 4 digits.");
+    if (pin.length !== 6) {
+      setPinError("PIN must be exactly 6 digits.");
       return;
     }
     if (pinStep === 0) {
@@ -930,6 +979,10 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
         return;
       }
       const done = await completeLogin(pendingUser, isPinReset ? "PIN reset" : "Login + PIN created");
+      if (done?.pendingApproval) {
+        beginAwaitingApproval(done);
+        return;
+      }
       finishLogin(done.role);
     } catch (err) {
       setPinError(String(err?.message || "Failed to save PIN.").slice(0, 140));
@@ -1010,7 +1063,14 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
         setTimeout(() => {
           setForgotEmail(""); setVerificationCode(""); setNewPassword("");
           setConfirmNewPassword(""); setSentCode(""); setCodeMsg("");
-          setResetMsg(""); setView("login");
+          setResetMsg("");
+          if (resetPasswordMode) {
+            setResetPasswordMode(false);
+            setSwitchAccountMode(true);
+            setView("login");
+          } else {
+            setView("login");
+          }
         }, 1500);
       } else {
         setResetMsg(`❌ ${result?.message || "No account found with that email."}`);
@@ -1099,8 +1159,94 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pinValue, view, deviceUnlockMode, pinLoading, pinDigitCount]);
 
+  // Poll other-device approval for pending login
+  useEffect(() => {
+    if (!awaitingApproval || loginDenied) return;
+    const status = loginApprovalStatus?.status;
+    if (!status || status === "pending") return;
+    if (status === "approved") {
+      const userPayload = awaitingApproval.user;
+      clearPendingLogin();
+      setAwaitingApproval(null);
+      try {
+        finalizePendingLogin?.(userPayload, "Login approved on other device");
+      } catch { /* ignore */ }
+      setMustAuthenticate(false);
+      finishLogin(userPayload?.role || "user");
+      return;
+    }
+    if (status === "denied" || status === "expired") {
+      clearPendingLogin();
+      setLoginDenied(true);
+    }
+  }, [loginApprovalStatus, awaitingApproval, loginDenied, finalizePendingLogin]);
+
   if (showRegister) {
     return <RegisterModal onClose={handleRegisterSuccess} />;
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  //  WAITING / DENIED — new device until other device taps Yes / No
+  // ════════════════════════════════════════════════════════════════════
+  if (awaitingApproval && !loginDenied) {
+    return createPortal(
+      <div className="pin-unlock-screen pin-switch-login" role="dialog" aria-modal="true" aria-label="Waiting for approval">
+        <div className="pin-unlock-top">
+          <div className="pin-unlock-brand">
+            <img src="/images/dklogo2-removebg-preview.png" alt="" className="pin-unlock-logo" />
+            <span>DKMERCH</span>
+          </div>
+          <div className="pin-await-icon" aria-hidden="true">
+            <i className="fas fa-mobile-alt" />
+          </div>
+          <h2 className="pin-unlock-title">Waiting for approval</h2>
+          <p className="pin-unlock-hint">
+            Confirm this login on your other device. You won’t get into DKMerch until they tap Yes, it’s me.
+          </p>
+        </div>
+        <div className="pin-await-pulse" aria-hidden="true" />
+        <p className="pin-await-note">Keep this screen open — we’ll continue automatically.</p>
+      </div>,
+      document.body
+    );
+  }
+
+  if (loginDenied) {
+    return createPortal(
+      <div className="pin-unlock-screen pin-switch-login" role="dialog" aria-modal="true" aria-label="Login denied">
+        <div className="pin-unlock-top">
+          <div className="pin-unlock-brand">
+            <img src="/images/dklogo2-removebg-preview.png" alt="" className="pin-unlock-logo" />
+            <span>DKMERCH</span>
+          </div>
+          <div className="pin-await-icon pin-await-icon--deny" aria-hidden="true">
+            <i className="fas fa-user-slash" />
+          </div>
+          <h2 className="pin-unlock-title">It’s not your account</h2>
+          <p className="pin-unlock-hint">
+            The owner of this account blocked this login. You were not signed in.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="pin-switch-submit"
+          onClick={() => {
+            setLoginDenied(false);
+            setAwaitingApproval(null);
+            clearPendingLogin();
+            setMustAuthenticate(false);
+            setDeviceUnlockMode(false);
+            setPendingUser(null);
+            setPinValue("");
+            setView("login");
+            try { onClose?.(); } catch { /* ignore */ }
+          }}
+        >
+          Close
+        </button>
+      </div>,
+      document.body
+    );
   }
 
   // ════════════════════════════════════════════════════════════════════
@@ -1182,9 +1328,150 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
           <button
             type="button"
             className="pin-switch-link"
-            onClick={() => { setSwitchAccountMode(false); setView("forgot"); }}
+            onClick={() => {
+              setSwitchAccountMode(false);
+              openResetPassword();
+            }}
           >
-            Forgot Password?
+            Reset Password
+          </button>
+        </form>
+      </div>,
+      document.body
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  //  RESET PASSWORD — pink full-screen (Gmail), same chrome as Use another account
+  // ════════════════════════════════════════════════════════════════════
+  if (resetPasswordMode) {
+    return createPortal(
+      <div className="pin-unlock-screen pin-switch-login" role="dialog" aria-modal="true" aria-label="Reset Password">
+        <button type="button" className="pin-switch-back" onClick={backFromResetPassword}>
+          <i className="fas fa-arrow-left" aria-hidden="true" /> Back
+        </button>
+        <div className="pin-unlock-top">
+          <div className="pin-unlock-brand">
+            <img src="/images/dklogo2-removebg-preview.png" alt="" className="pin-unlock-logo" />
+            <span>DKMERCH</span>
+          </div>
+          <h2 className="pin-unlock-title pin-switch-welcome">Reset Password</h2>
+          <p className="pin-unlock-hint">Enter your Gmail to reset your password</p>
+        </div>
+
+        <form className="pin-switch-form" onSubmit={handleResetPassword}>
+          {codeMsg && (
+            <div className={`pin-switch-banner${codeMsg.startsWith("✅") ? " ok" : ""}`}>
+              {codeMsg.replace(/^✅\s*|^❌\s*/, "")}
+            </div>
+          )}
+          {resetMsg && (
+            <div className={`pin-switch-banner${resetMsg.startsWith("✅") ? " ok" : ""}`}>
+              {resetMsg.replace(/^✅\s*|^❌\s*/, "")}
+            </div>
+          )}
+
+          <label className="pin-switch-label" htmlFor="reset-gmail">Gmail</label>
+          <input
+            id="reset-gmail"
+            type="email"
+            className="pin-switch-input"
+            placeholder="you@gmail.com"
+            value={forgotEmail}
+            onChange={(e) => { setForgotEmail(e.target.value); setCodeMsg(""); }}
+            required
+            autoComplete="email"
+            disabled={resetLoading}
+          />
+
+          <label className="pin-switch-label" htmlFor="reset-code">Verification code</label>
+          <div className="pin-switch-code-row">
+            <input
+              id="reset-code"
+              type="text"
+              inputMode="numeric"
+              className="pin-switch-input"
+              placeholder="6-digit code"
+              value={verificationCode}
+              onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              maxLength={6}
+              disabled={resetLoading}
+            />
+            <button
+              type="button"
+              className="pin-switch-code-btn"
+              onClick={handleSendCode}
+              disabled={sendingCode || passwordCooldown > 0 || resetLoading}
+            >
+              {sendingCode ? "…" : passwordCooldown > 0 ? `${passwordCooldown}s` : "Send"}
+            </button>
+          </div>
+
+          <label className="pin-switch-label" htmlFor="reset-new-pw">New password</label>
+          <div className="pin-switch-password-wrap">
+            <input
+              id="reset-new-pw"
+              type={showNewPw ? "text" : "password"}
+              className="pin-switch-input"
+              placeholder="New password"
+              value={newPassword}
+              onChange={(e) => {
+                const v = e.target.value;
+                setNewPassword(v);
+                setNewPwValidation({
+                  minLength: v.length >= 8,
+                  hasUppercase: /[A-Z]/.test(v),
+                  hasLowercase: /[a-z]/.test(v),
+                  hasNumber: /\d/.test(v),
+                  hasSymbol: /[^A-Za-z0-9]/.test(v),
+                });
+              }}
+              onFocus={() => setNewPwFocused(true)}
+              disabled={resetLoading}
+            />
+            <button
+              type="button"
+              className="pin-switch-eye"
+              onClick={() => setShowNewPw(!showNewPw)}
+              aria-label={showNewPw ? "Hide password" : "Show password"}
+            >
+              <PwToggleIcon show={showNewPw} />
+            </button>
+          </div>
+
+          <label className="pin-switch-label" htmlFor="reset-confirm-pw">Confirm password</label>
+          <div className="pin-switch-password-wrap">
+            <input
+              id="reset-confirm-pw"
+              type={showConfirmNewPw ? "text" : "password"}
+              className="pin-switch-input"
+              placeholder="Confirm password"
+              value={confirmNewPassword}
+              onChange={(e) => setConfirmNewPassword(e.target.value)}
+              disabled={resetLoading}
+            />
+            <button
+              type="button"
+              className="pin-switch-eye"
+              onClick={() => setShowConfirmNewPw(!showConfirmNewPw)}
+              aria-label={showConfirmNewPw ? "Hide password" : "Show password"}
+            >
+              <PwToggleIcon show={showConfirmNewPw} />
+            </button>
+          </div>
+
+          <button
+            type="submit"
+            className="pin-switch-submit"
+            disabled={
+              resetLoading
+              || !sentCode
+              || verificationCode.length !== 6
+              || !isNewPwValid()
+              || !newPasswordsMatch
+            }
+          >
+            {resetLoading ? "Resetting…" : "Reset Password"}
           </button>
         </form>
       </div>,
@@ -1264,14 +1551,19 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
         </div>
 
         <div className="pin-unlock-footer">
-          <button type="button" className="pin-unlock-forgot" onClick={handleForgotPin} disabled={pinLoading}>
-            Forgot PIN
+          <button
+            type="button"
+            className="pin-unlock-forgot"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); openResetPassword(); }}
+            disabled={pinLoading}
+          >
+            Reset Password
           </button>
           <button
             type="button"
             className="pin-unlock-switch"
             disabled={pinLoading}
-            onClick={switchToAnotherAccount}
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); switchToAnotherAccount(); }}
           >
             Use another account
           </button>
@@ -1679,8 +1971,8 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
               </button>
               <div className="signup-section" style={{ marginTop: 0 }}>
                 <p>
-                  <button type="button" className="signup-link" style={{ color: accentColor }} onClick={handleForgotPin}>
-                    Forgot PIN
+                  <button type="button" className="signup-link" style={{ color: accentColor }} onClick={openResetPassword}>
+                    Reset Password
                   </button>
                 </p>
                 <p>
@@ -1798,9 +2090,9 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
               <p className="login-subtitle">
                 {pinStep === 0
                   ? (isPinReset
-                    ? "Choose a new 4–6 digit PIN for faster unlock on this device."
-                    : "This account doesn’t have a PIN yet — create a 4–6 digit PIN to continue after the app update.")
-                  : "Re-enter the same PIN to confirm"}
+                    ? "Choose a new 6-digit PIN for faster unlock on this device."
+                    : "This account doesn’t have a PIN yet — create a 6-digit PIN to continue.")
+                  : "Re-enter the same 6-digit PIN to confirm"}
               </p>
             </div>
             <div className="login-form">
@@ -1819,6 +2111,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
                     inputMode="numeric"
                     autoComplete="off"
                     placeholder="••••••"
+                    maxLength={6}
                     value={pinStep === 0 ? pinValue : pinConfirmValue}
                     onChange={(e) => {
                       const next = sanitizePinInput(e.target.value);
@@ -1839,7 +2132,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
                 type="button"
                 className="login-submit-btn"
                 onClick={handleSaveLoginPin}
-                disabled={pinLoading || (pinStep === 0 ? pinValue.length < 4 : pinConfirmValue.length < 4)}
+                disabled={pinLoading || (pinStep === 0 ? pinValue.length !== 6 : pinConfirmValue.length !== 6)}
                 style={{ background: accentGradient, boxShadow: `0 4px 12px ${accentShadow}`, color: "#fff" }}
               >
                 {pinLoading ? "Saving…" : pinStep === 0 ? "Continue" : "Save PIN & Continue"}

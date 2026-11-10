@@ -57,8 +57,8 @@ const NewLoginAlertModal = ({ alert, onConfirmYes, onConfirmNo }) => {
         </div>
         <h2 id="nla-title" className="nla-title">New login to your account</h2>
         <p id="nla-desc" className="nla-desc">
-          Someone just signed in to your DKMerch account on another device.
-          Was this you?
+          Someone is trying to sign in to your DKMerch account on another device.
+          They won’t get in until you confirm. Was this you?
         </p>
 
         <div className="nla-card">
@@ -108,7 +108,7 @@ const NewLoginAlertModal = ({ alert, onConfirmYes, onConfirmNo }) => {
           </button>
         </div>
         <p className="nla-hint">
-          If this wasn’t you, we’ll sign out the other device and keep you logged in here.
+          Yes activates the other device and signs you out here. No blocks that login and keeps you signed in.
         </p>
       </div>
     </div>,

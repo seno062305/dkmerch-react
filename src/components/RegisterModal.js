@@ -375,8 +375,8 @@ const RegisterModal = ({ onClose }) => {
   const handleSavePin = async () => {
     const pin = pinDigits.join("");
     const confirm = pinConfirmDigits.join("");
-    if (pin.length < 4) {
-      setPinError("PIN must be 4–6 digits.");
+    if (pin.length !== 6) {
+      setPinError("PIN must be exactly 6 digits.");
       return;
     }
     if (pinStep === 0) {
@@ -597,8 +597,8 @@ const RegisterModal = ({ onClose }) => {
               <h2>{pinStep === 0 ? "Create Your PIN" : "Confirm Your PIN"}</h2>
               <p className="register-subtitle">
                 {pinStep === 0
-                  ? "One-time setup — use this PIN instead of email OTP on your next logins"
-                  : "Re-enter the same 4–6 digit PIN to confirm"}
+                  ? "One-time setup — create a 6-digit PIN for your next logins"
+                  : "Re-enter the same 6-digit PIN to confirm"}
               </p>
             </div>
 
@@ -641,10 +641,10 @@ const RegisterModal = ({ onClose }) => {
               <button
                 type="button"
                 onClick={handleSavePin}
-                disabled={pinLoading || (pinStep === 0 ? pinDigits.join("").length < 4 : pinConfirmDigits.join("").length < 4)}
+                disabled={pinLoading || (pinStep === 0 ? pinDigits.join("").length !== 6 : pinConfirmDigits.join("").length !== 6)}
                 style={{
                   width: "100%", padding: "14px",
-                  background: (pinStep === 0 ? pinDigits.join("").length >= 4 : pinConfirmDigits.join("").length >= 4)
+                  background: (pinStep === 0 ? pinDigits.join("").length === 6 : pinConfirmDigits.join("").length === 6)
                     ? "linear-gradient(135deg, #fc1268, #9c27b0)"
                     : "linear-gradient(135deg, #d1d5db, #9ca3af)",
                   color: "white", border: "none", borderRadius: "12px", fontSize: "15px", fontWeight: "700",

@@ -1,5 +1,5 @@
 // DKMerch Service Worker — PWA support
-const CACHE_NAME = 'dkmerch-v7-orderid-fix';
+const CACHE_NAME = 'dkmerch-v8-notif-deeplink';
 
 // Only cache essential static assets (never webpack JS bundles)
 const STATIC_ASSETS = [
@@ -106,30 +106,54 @@ self.addEventListener('push', (event) => {
       data.body = event.data?.text() || data.body;
     } catch { /* ignore */ }
   }
+  const url = data.url || '/';
+  let open = '';
+  try {
+    const u = new URL(url, self.location.origin);
+    open = u.searchParams.get('open') || '';
+  } catch { /* ignore */ }
   event.waitUntil(
     self.registration.showNotification(data.title || 'DKMerch', {
       body: data.body || 'You have a new notification',
       icon: '/images/dklogo2-removebg-preview.png',
       badge: '/images/dklogo2-removebg-preview.png',
       vibrate: [200, 100, 200],
-      data: { url: data.url || '/' },
+      tag: open === 'loginAlert' ? 'dkmerch-login-alert' : (data.tag || undefined),
+      renotify: open === 'loginAlert',
+      data: { url, open },
     })
   );
 });
 
-// Notification click — focus existing tab or open app
+// Notification click — open the deep-link topic (e.g. login Yes/No popup)
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const targetUrl = event.notification.data?.url || '/';
-  event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
-      for (const client of list) {
-        if ('focus' in client) {
-          client.navigate?.(targetUrl);
-          return client.focus();
-        }
+  const open = event.notification.data?.open || '';
+
+  event.waitUntil((async () => {
+    const absolute = (() => {
+      try {
+        return new URL(targetUrl, self.location.origin).href;
+      } catch {
+        return self.location.origin + '/';
       }
-      return clients.openWindow(targetUrl);
-    })
-  );
+    })();
+    const list = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of list) {
+      if (!client.url.startsWith(self.location.origin)) continue;
+      try {
+        client.postMessage({
+          type: 'DK_NOTIFICATION_OPEN',
+          url: absolute,
+          open,
+        });
+      } catch { /* ignore */ }
+      if (typeof client.navigate === 'function') {
+        try { await client.navigate(absolute); } catch { /* ignore */ }
+      }
+      if ('focus' in client) return client.focus();
+    }
+    return clients.openWindow(absolute);
+  })());
 });

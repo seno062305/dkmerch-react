@@ -40,7 +40,10 @@ export default defineSchema({
     activeDeviceName:         v.optional(v.string()),
     activeDeviceLocation:     v.optional(v.string()),
     activeDevicePlatform:     v.optional(v.string()),
-    /** Shown on the previous device when a newer login takes over (FB-style). */
+    /**
+     * Pending new-device login (FB-style).
+     * New device is NOT active until status becomes "approved".
+     */
     loginAlert: v.optional(v.object({
       sessionId: v.string(),
       previousSessionId: v.optional(v.string()),
@@ -48,6 +51,11 @@ export default defineSchema({
       location: v.string(),
       platform: v.optional(v.string()),
       at: v.number(),
+      status: v.optional(v.union(
+        v.literal("pending"),
+        v.literal("approved"),
+        v.literal("denied"),
+      )),
       resolved: v.optional(v.boolean()),
     })),
     /** Last time the customer changed username (7-day cooldown). */

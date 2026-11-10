@@ -17,6 +17,27 @@ const AuthContext = createContext(null);
 const AUTH_USER_KEY = "authUser";
 const SESSION_ALIVE_KEY = "dkmerch_session_alive";
 const LAST_ACTIVE_KEY = "dkmerch_last_active";
+/** New device waiting for "Yes, it's me" on the other device. */
+const PENDING_LOGIN_KEY = "dkmerch_pending_login";
+
+export function readPendingLogin() {
+  try {
+    return JSON.parse(sessionStorage.getItem(PENDING_LOGIN_KEY) || "null");
+  } catch {
+    return null;
+  }
+}
+
+export function writePendingLogin(payload) {
+  try {
+    if (!payload) sessionStorage.removeItem(PENDING_LOGIN_KEY);
+    else sessionStorage.setItem(PENDING_LOGIN_KEY, JSON.stringify(payload));
+  } catch { /* ignore */ }
+}
+
+export function clearPendingLogin() {
+  try { sessionStorage.removeItem(PENDING_LOGIN_KEY); } catch { /* ignore */ }
+}
 function readAuthUser() {
   try {
     return JSON.parse(localStorage.getItem(AUTH_USER_KEY) || "null");
@@ -117,6 +138,20 @@ export const AuthProvider = ({ children }) => {
       : "skip"
   );
 
+  /**
+   * Pending new-device login while THIS device is still the active session.
+   * Also runs during PIN gate so a tapped push (`?open=loginAlert`) can show
+   * the Yes/No modal on top immediately.
+   */
+  const pendingLoginAlert = useQuery(
+    api.users.getPendingLoginAlert,
+    isAuthenticated
+      && user?._id
+      && (user.role === "user" || user.role === "admin")
+      ? { userId: String(user._id) }
+      : "skip"
+  );
+
   useEffect(() => {
     seedAdminMutation({}).catch(() => {});
   }, []);
@@ -153,22 +188,26 @@ export const AuthProvider = ({ children }) => {
     }
 
     const isCustomer = !storedUser.role || storedUser.role === "user";
+    const hasUnlock =
+      isCustomer
+      && unlock?._id
+      && String(unlock._id) === String(storedUser._id);
 
-    // Same tab / pull-to-refresh → stay logged in, no PIN
-    if (alive || reload) {
+    // Same-tab session already unlocked this visit → stay in (no PIN)
+    if (alive) {
       restoreSession(false);
       setIsReady(true);
       return;
     }
 
-    // Installed app cold open (close → reopen) → always show PIN for customers
-    if (pwa && isCustomer && unlock?._id && String(unlock._id) === String(storedUser._id)) {
+    // Reload / PWA reopen: keep PIN gate until the user unlocks again
+    if ((reload || pwa) && hasUnlock) {
       restoreSession(true);
       setIsReady(true);
       return;
     }
 
-    // Regular mobile/desktop browser tab reopen → stay logged in (no PIN popup)
+    // Regular browser tab reopen (not PWA) without unlock profile → stay logged in
     if (!pwa) {
       restoreSession(false);
       setIsReady(true);
@@ -216,38 +255,10 @@ export const AuthProvider = ({ children }) => {
     setNeedsDeviceUnlock(false);
   };
 
-  // Another device logged in → show FB-style Yes / No alert (don't silent-kick)
-  useEffect(() => {
-    if (!sessionCheck || sessionCheck.valid !== false) return;
-    if (sessionCheck.reason !== "new_device_logged_in") return;
-    if (kickedRef.current) return;
-    kickedRef.current = true;
-
-    const current = userRef.current;
-    const alert = sessionCheck.loginAlert || {
-      sessionId: "unknown",
-      previousSessionId: current?.sessionId,
-      deviceName: sessionCheck.activeDeviceName || "Another device",
-      location: sessionCheck.activeDeviceLocation || "Unknown location",
-      at: sessionCheck.activeDeviceAt || Date.now(),
-    };
-
-    setSecurityAlert({
-      alert,
-      previousUser: current,
-    });
-
-    // Soft-lock browsing until they choose Yes / No
-    clearSessionAlive();
-    setIsAuthenticated(false);
-    setNeedsDeviceUnlock(false);
-    setUser(null);
-    setRole(null);
-  }, [sessionCheck]);
-
   const finishSecurityLogout = () => {
     clearAuthUser();
     clearSessionAlive();
+    clearPendingLogin();
     try { localStorage.removeItem(LAST_ACTIVE_KEY); } catch { /* ignore */ }
     markExplicitLogout();
     clearDeviceUnlock();
@@ -268,45 +279,93 @@ export const AuthProvider = ({ children }) => {
     } catch { /* ignore */ }
   };
 
+  // Show FB-style alert while still logged in — new device waits for Yes
+  useEffect(() => {
+    if (!pendingLoginAlert) {
+      setSecurityAlert((prev) => (prev?.mode === "pending" ? null : prev));
+      return;
+    }
+    const current = userRef.current;
+    if (!current?._id) return;
+    setSecurityAlert({
+      alert: pendingLoginAlert,
+      previousUser: current,
+      mode: "pending",
+    });
+    // Clear deep-link markers from push notification click
+    try {
+      sessionStorage.removeItem("dkmerch_open_login_alert");
+      const u = new URL(window.location.href);
+      if (u.searchParams.get("open") === "loginAlert") {
+        u.searchParams.delete("open");
+        const qs = u.searchParams.toString();
+        window.history.replaceState(
+          null,
+          "",
+          `${u.pathname}${qs ? `?${qs}` : ""}${u.hash || ""}`
+        );
+      }
+    } catch { /* ignore */ }
+  }, [pendingLoginAlert]);
+
+  // Push tap while app already open — nudge re-show if Convex already has a pending alert
+  useEffect(() => {
+    const bump = () => {
+      const current = userRef.current;
+      if (!current?._id || !pendingLoginAlert) return;
+      setSecurityAlert({
+        alert: pendingLoginAlert,
+        previousUser: current,
+        mode: "pending",
+      });
+    };
+    window.addEventListener("dkOpenLoginAlert", bump);
+    return () => window.removeEventListener("dkOpenLoginAlert", bump);
+  }, [pendingLoginAlert]);
+
+  // After the other device is approved, this session is invalidated → sign out
+  useEffect(() => {
+    if (!sessionCheck || sessionCheck.valid !== false) return;
+    if (sessionCheck.reason !== "new_device_logged_in") return;
+    if (kickedRef.current) return;
+    kickedRef.current = true;
+    finishSecurityLogout();
+  }, [sessionCheck]);
+
   const handleSecurityYes = async () => {
     const alert = securityAlert?.alert;
     const prev = securityAlert?.previousUser;
-    try {
-      if (prev?._id && alert?.sessionId && alert.sessionId !== "unknown") {
-        await confirmLoginAlert({
-          userId: String(prev._id),
-          sessionId: String(alert.sessionId),
-        });
-      }
-    } catch { /* ignore */ }
+    if (!prev?._id || !alert?.sessionId) {
+      throw new Error("Missing login request. Please try again.");
+    }
+    const result = await confirmLoginAlert({
+      userId: String(prev._id),
+      sessionId: String(alert.sessionId),
+    });
+    if (!result?.success) {
+      throw new Error(result?.message || "Could not approve this login.");
+    }
+    // New device becomes active → sign out here
     finishSecurityLogout();
   };
 
   const handleSecurityNo = async () => {
     const alert = securityAlert?.alert;
     const prev = securityAlert?.previousUser;
-    if (!prev?._id || !prev?.sessionId) {
-      throw new Error("Could not restore this device. Please log in again.");
-    }
-    const newSid = alert?.sessionId && alert.sessionId !== "unknown"
-      ? String(alert.sessionId)
-      : "";
-    if (!newSid) {
-      throw new Error("Missing new-device session. Please log in again.");
+    if (!prev?._id || !alert?.sessionId) {
+      throw new Error("Missing login request. Please try again.");
     }
     const result = await denyLoginAlert({
       userId: String(prev._id),
-      previousSessionId: String(prev.sessionId),
-      newSessionId: newSid,
+      previousSessionId: prev.sessionId ? String(prev.sessionId) : undefined,
+      newSessionId: String(alert.sessionId),
     });
     if (!result?.success) {
-      throw new Error(result?.message || "Could not restore this device.");
+      throw new Error(result?.message || "Could not block this login.");
     }
-    // Restore this device's session and keep browsing
+    // Stay logged in on this device
     kickedRef.current = false;
     setSecurityAlert(null);
-    clearExplicitLogoutFlag();
-    applySession(prev);
   };
 
   const login = async (identifier, password, mode) => {
@@ -497,10 +556,15 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  /** Finish login after PIN verify / PIN create (customer accounts). */
+  /**
+   * Finish login after PIN verify / PIN create (customer accounts).
+   * If another device is already active, returns pendingApproval — do NOT
+   * treat the user as logged in until that device taps Yes.
+   */
   const completeLogin = async (pendingUser, details = "Account login success") => {
     if (!pendingUser?._id) return { success: false };
     let sessionId = pendingUser.sessionId;
+    let pendingApproval = false;
     try {
       const device = await collectLoginDeviceInfo();
       const started = await startUserSession({
@@ -510,6 +574,7 @@ export const AuthProvider = ({ children }) => {
         platform: device.platform,
       });
       if (started?.sessionId) sessionId = started.sessionId;
+      pendingApproval = !!started?.pendingApproval;
     } catch (err) {
       console.warn("startUserSession failed:", err);
     }
@@ -523,6 +588,24 @@ export const AuthProvider = ({ children }) => {
       role:     pendingUser.role || "user",
       ...(sessionId ? { sessionId } : {}),
     };
+
+    if (pendingApproval && sessionId) {
+      writePendingLogin({
+        userId: String(sessionUser._id),
+        sessionId: String(sessionId),
+        user: sessionUser,
+        at: Date.now(),
+      });
+      return {
+        success: true,
+        pendingApproval: true,
+        sessionId,
+        role: sessionUser.role,
+        user: sessionUser,
+      };
+    }
+
+    clearPendingLogin();
     applySession(sessionUser);
     safeLog({
       action: "login",
@@ -531,7 +614,22 @@ export const AuthProvider = ({ children }) => {
       actorRole: sessionUser.role,
       details,
     });
-    return { success: true, role: sessionUser.role };
+    return { success: true, role: sessionUser.role, pendingApproval: false };
+  };
+
+  /** Activate session after the other device approved a pending login. */
+  const finalizePendingLogin = (sessionUser, details = "Login approved on other device") => {
+    if (!sessionUser?._id) return { success: false };
+    clearPendingLogin();
+    applySession(sessionUser);
+    safeLog({
+      action: "login",
+      actorEmail: sessionUser.email,
+      actorName: sessionUser.name,
+      actorRole: sessionUser.role || "user",
+      details,
+    });
+    return { success: true, role: sessionUser.role || "user" };
   };
 
   const updateUser = (updatedFields) => {
@@ -554,6 +652,7 @@ export const AuthProvider = ({ children }) => {
     }
     clearAuthUser();
     clearSessionAlive();
+    clearPendingLogin();
     try { localStorage.removeItem(LAST_ACTIVE_KEY); } catch { /* ignore */ }
     // Explicit logout → next open needs email/password login (never leftover PIN unlock)
     markExplicitLogout();
@@ -578,6 +677,7 @@ export const AuthProvider = ({ children }) => {
         clearDeviceUnlockPrompt,
         login,
         completeLogin,
+        finalizePendingLogin,
         register,
         logout,
         updateUser,
@@ -607,6 +707,7 @@ export const useAuth = () => {
     clearDeviceUnlockPrompt: () => {},
     login: async () => ({ success: false, message: "Auth not ready." }),
     completeLogin: () => ({ success: false }),
+    finalizePendingLogin: () => ({ success: false }),
     register: async () => ({ success: false, message: "Auth not ready." }),
     logout: () => {},
     updateUser: () => {},

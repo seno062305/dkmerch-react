@@ -41,8 +41,68 @@ export function getPlatformLabel() {
   return "Web";
 }
 
-/** Best-effort city/country (IP) with timezone fallback. */
+function formatPlace(parts) {
+  return parts.filter(Boolean).join(", ");
+}
+
+/** Reverse-geocode GPS coords via OpenStreetMap Nominatim. */
+async function reverseGeocode(lat, lon) {
+  try {
+    const ctrl = typeof AbortSignal !== "undefined" && AbortSignal.timeout
+      ? AbortSignal.timeout(4000)
+      : undefined;
+    const url =
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}`
+      + `&lon=${encodeURIComponent(lon)}&zoom=12&addressdetails=1`;
+    const res = await fetch(url, {
+      signal: ctrl,
+      headers: {
+        Accept: "application/json",
+        // Nominatim asks for a valid UA; browsers set their own.
+      },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const a = data?.address || {};
+    const city =
+      a.city
+      || a.town
+      || a.municipality
+      || a.village
+      || a.suburb
+      || a.county
+      || "";
+    const region = a.state || a.region || "";
+    const country = a.country || "";
+    const place = formatPlace([city || region, country]);
+    return place || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Prefer device GPS (city-level); fall back to IP geo / timezone. */
 export async function guessLocation() {
+  // 1) Browser geolocation → reverse geocode (more accurate than ISP IP)
+  try {
+    if (typeof navigator !== "undefined" && navigator.geolocation) {
+      const pos = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: false,
+          timeout: 5000,
+          maximumAge: 10 * 60 * 1000,
+        });
+      });
+      const lat = pos?.coords?.latitude;
+      const lon = pos?.coords?.longitude;
+      if (Number.isFinite(lat) && Number.isFinite(lon)) {
+        const place = await reverseGeocode(lat, lon);
+        if (place) return place;
+      }
+    }
+  } catch { /* permission denied / timeout — fall through */ }
+
+  // 2) IP-based (coarse — often ISP hub city, e.g. Caloocan vs Valenzuela)
   try {
     const ctrl = typeof AbortSignal !== "undefined" && AbortSignal.timeout
       ? AbortSignal.timeout(3500)

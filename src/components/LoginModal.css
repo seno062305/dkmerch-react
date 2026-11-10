@@ -890,9 +890,12 @@ body.login-modal-open {
   background: #fc1268 !important;
   background-image: linear-gradient(145deg, #fc1268 0%, #ff4d94 48%, #ff85b3 100%) !important;
   color: #fff !important;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   -webkit-user-select: none;
   user-select: none;
+  pointer-events: auto;
 }
 
 .pin-unlock-top {
@@ -1012,6 +1015,9 @@ body.login-modal-open {
 }
 
 .pin-unlock-pad {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
   width: 100%;
   max-width: 340px;
   display: grid;
@@ -1060,30 +1066,110 @@ body.login-modal-open {
 }
 
 .pin-unlock-footer {
+  position: relative;
+  z-index: 5;
   width: 100%;
   max-width: 420px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding-top: 4px;
+  padding: 12px 4px max(8px, env(safe-area-inset-bottom, 0px));
+  flex-shrink: 0;
+  pointer-events: auto;
 }
 
 .pin-unlock-forgot,
 .pin-unlock-switch {
+  position: relative;
+  z-index: 6;
   background: none;
   border: none;
   color: #fff;
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  padding: 8px 4px;
+  padding: 12px 8px;
+  min-height: 44px;
   opacity: 0.95;
+  pointer-events: auto;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 .pin-unlock-switch {
   font-weight: 600;
   opacity: 0.85;
+}
+
+.pin-await-icon {
+  width: 72px;
+  height: 72px;
+  margin: 8px auto 16px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+  border: 3px solid rgba(255, 255, 255, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.pin-await-icon--deny {
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.pin-await-pulse {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.85);
+  border-top-color: transparent;
+  animation: pin-await-spin 0.9s linear infinite;
+  margin: 24px auto;
+}
+
+@keyframes pin-await-spin {
+  to { transform: rotate(360deg); }
+}
+
+.pin-await-note {
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.9;
+  text-align: center;
+  max-width: 320px;
+  margin: 0 auto 24px;
+}
+
+.pin-switch-code-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  align-items: center;
+}
+
+.pin-switch-code-row .pin-switch-input {
+  flex: 1;
+}
+
+.pin-switch-code-btn {
+  flex-shrink: 0;
+  border: none;
+  border-radius: 12px;
+  padding: 14px 16px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #fc1268;
+  background: #fff;
+  cursor: pointer;
+  min-width: 72px;
+}
+
+.pin-switch-code-btn:disabled {
+  opacity: 0.65;
+  cursor: default;
 }
 
 @media (max-width: 380px) {

@@ -1,5 +1,6 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { goToCustomerTab } from '../utils/navScroll';
 import './Footer.css';
 
 const Footer = () => {
@@ -15,31 +16,22 @@ const Footer = () => {
     { icon: 'tiktok', url: '#', label: 'TikTok' }
   ];
 
-  const scrollTop = () => {
-    try {
-      window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
-    } catch {
-      window.scrollTo(0, 0);
-    }
-    // Retry after route paint (mobile bottom-nav pages)
-    setTimeout(() => window.scrollTo({ top: 0, left: 0, behavior: 'smooth' }), 80);
-    setTimeout(() => window.scrollTo(0, 0), 220);
-  };
-
   const handleNavClick = (e, path) => {
     e.preventDefault();
-    if (location.pathname === path) {
-      scrollTop();
-      return;
-    }
-    navigate(path, { state: { scrollToTop: true } });
-    scrollTop();
+    e.stopPropagation();
+    goToCustomerTab(navigate, location.pathname, path);
   };
 
   const quickLinks = [
     { label: 'Home', path: '/' },
     { label: 'Collections', path: '/collections' },
     { label: 'Pre-Order', path: '/preorder' }
+  ];
+
+  const serviceLinks = [
+    { label: 'Track Order', path: '/track-order' },
+    { label: 'Terms and Conditions', path: '/terms-and-conditions' },
+    { label: 'Privacy Policy', path: '/privacy-policy' },
   ];
 
   return (
@@ -64,8 +56,8 @@ const Footer = () => {
           <div className="footer-section">
             <h4>Quick Links</h4>
             <ul className="footer-links">
-              {quickLinks.map((link, index) => (
-                <li key={index}>
+              {quickLinks.map((link) => (
+                <li key={link.path}>
                   <a
                     href={link.path}
                     onClick={(e) => handleNavClick(e, link.path)}
@@ -80,30 +72,16 @@ const Footer = () => {
           <div className="footer-section">
             <h4>Customer Service</h4>
             <ul className="footer-links">
-              <li>
-                <a
-                  href="/track-order"
-                  onClick={(e) => handleNavClick(e, '/track-order')}
-                >
-                  Track Order
-                </a>
-              </li>
-              <li>
-                <a
-                  href="/terms-and-conditions"
-                  onClick={(e) => handleNavClick(e, '/terms-and-conditions')}
-                >
-                  Terms and Conditions
-                </a>
-              </li>
-              <li>
-                <a
-                  href="/privacy-policy"
-                  onClick={(e) => handleNavClick(e, '/privacy-policy')}
-                >
-                  Privacy Policy
-                </a>
-              </li>
+              {serviceLinks.map((link) => (
+                <li key={link.path}>
+                  <a
+                    href={link.path}
+                    onClick={(e) => handleNavClick(e, link.path)}
+                  >
+                    {link.label}
+                  </a>
+                </li>
+              ))}
             </ul>
           </div>
 

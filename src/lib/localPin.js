@@ -5,6 +5,7 @@ const keyFor = (userId) => `dkmerch_pin_${userId}`;
 const lenKeyFor = (userId) => `dkmerch_pin_len_${userId}`;
 
 export async function saveLocalPin(userId, pin) {
+  // New PINs are always 6 digits; still accept 4–6 when migrating old local pins
   if (!userId || !/^\d{4,6}$/.test(pin)) return false;
   try {
     const hashed = await hashPin(pin);
@@ -25,14 +26,14 @@ export function getLocalPin(userId) {
   }
 }
 
-/** How many digits the user set (4–6). Defaults to 4 when unknown. */
+/** How many digits the user set (4–6). Defaults to 6 when unknown. */
 export function getLocalPinLength(userId) {
-  if (!userId) return 4;
+  if (!userId) return 6;
   try {
     const n = parseInt(localStorage.getItem(lenKeyFor(userId)) || "", 10);
     if (n >= 4 && n <= 6) return n;
   } catch { /* ignore */ }
-  return 4;
+  return 6;
 }
 
 export function hasLocalPin(userId) {
@@ -107,7 +108,7 @@ export async function verifyPinWithFallback(verifyLoginPinMutation, userId, pin)
     return {
       success: false,
       message: result?.needsPinSetup
-        ? "No PIN yet — tap Forgot PIN to create one."
+        ? "No PIN yet — tap Reset Password or use another account."
         : (result?.message || "Incorrect PIN."),
       needsPinSetup: result?.needsPinSetup,
     };
@@ -129,7 +130,7 @@ export async function verifyPinWithFallback(verifyLoginPinMutation, userId, pin)
     }
     return {
       success: false,
-      message: "No PIN yet — tap Forgot PIN to create one.",
+      message: "No PIN yet — tap Reset Password or use another account.",
       needsPinSetup: true,
     };
   }

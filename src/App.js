@@ -9,6 +9,7 @@ import { useWishlist, useWishlistCount, useToggleWishlist } from './context/wish
 import { BackupProvider } from './context/BackupContext';
 import { RewardsProvider } from './context/RewardsContext';
 import { isPushSupported, subscribeToPush, getNotificationPermission } from './utils/pushNotifications';
+import { scrollPageToTop } from './utils/navScroll';
 
 import Header from './components/Header';
 import Footer from './components/Footer';
@@ -191,6 +192,18 @@ function AppContent() {
     setShowCartModal(false);
   }, [location.pathname]);
 
+  // Footer / bottom-nav: after landing on a tab, scroll to that page top
+  useEffect(() => {
+    if (!location.state?.scrollToTop) return;
+    scrollPageToTop({ smooth: true });
+    // Clear state so back/forward doesn't re-trigger
+    navigate(`${location.pathname}${location.search}${location.hash}`, {
+      replace: true,
+      state: { ...(location.state || {}), scrollToTop: false },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname, location.key]);
+
   // Safety: never leave product/cart lock classes stuck (they disable bottom-nav / scroll)
   useEffect(() => {
     if (!showProductModal) document.body.classList.remove('product-modal-open');
@@ -239,6 +252,71 @@ function AppContent() {
     try { sessionStorage.removeItem('redirectAfterLogin'); } catch { /* ignore */ }
     setShowLoginModal(true);
   }, [isReady, needsDeviceUnlock]);
+
+  // Waiting for "Yes, it's me" on another device — keep the gate up after reload
+  useEffect(() => {
+    if (!isReady || isAuthenticated) return;
+    try {
+      const pending = JSON.parse(sessionStorage.getItem('dkmerch_pending_login') || 'null');
+      if (pending?.userId && pending?.sessionId) setShowLoginModal(true);
+    } catch { /* ignore */ }
+  }, [isReady, isAuthenticated]);
+
+  /**
+   * Push notification click → open the matching screen / modal.
+   * loginAlert: stay on home; AuthContext shows Yes/No popup.
+   * Other urls (track-order, admin, claimPoints): navigate there.
+   */
+  useEffect(() => {
+    const applyDeepLink = (rawUrl) => {
+      try {
+        const u = new URL(rawUrl, window.location.origin);
+        if (u.origin !== window.location.origin) return;
+        const open = u.searchParams.get('open') || '';
+        if (open === 'loginAlert') {
+          // Keep path; strip only after Auth can read it — mark for AuthContext
+          try { sessionStorage.setItem('dkmerch_open_login_alert', '1'); } catch { /* ignore */ }
+          window.dispatchEvent(new Event('dkOpenLoginAlert'));
+          // Land on home so the confirm modal is visible (not buried in another route)
+          if (u.pathname !== '/' || location.pathname !== '/') {
+            navigate(`/?open=loginAlert${u.hash || ''}`, { replace: true });
+          }
+          return;
+        }
+        const next = `${u.pathname}${u.search}${u.hash}`;
+        if (next && next !== `${location.pathname}${location.search}${location.hash}`) {
+          navigate(next);
+        }
+      } catch { /* ignore */ }
+    };
+
+    // Cold start / hard open from notification
+    try {
+      if (new URLSearchParams(window.location.search).get('open') === 'loginAlert') {
+        sessionStorage.setItem('dkmerch_open_login_alert', '1');
+        window.dispatchEvent(new Event('dkOpenLoginAlert'));
+      }
+    } catch { /* ignore */ }
+
+    const onSwMessage = (event) => {
+      if (event?.data?.type !== 'DK_NOTIFICATION_OPEN') return;
+      if (event.data.url) applyDeepLink(event.data.url);
+      else if (event.data.open === 'loginAlert') {
+        try { sessionStorage.setItem('dkmerch_open_login_alert', '1'); } catch { /* ignore */ }
+        window.dispatchEvent(new Event('dkOpenLoginAlert'));
+        navigate('/?open=loginAlert', { replace: true });
+      }
+    };
+
+    if (navigator.serviceWorker) {
+      navigator.serviceWorker.addEventListener('message', onSwMessage);
+    }
+    return () => {
+      if (navigator.serviceWorker) {
+        navigator.serviceWorker.removeEventListener('message', onSwMessage);
+      }
+    };
+  }, [navigate, location.pathname]);
 
   // Keep / request push subscription for logged-in customers (needed for phone order alerts)
   useEffect(() => {

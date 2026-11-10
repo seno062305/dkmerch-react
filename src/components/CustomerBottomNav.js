@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useAuth } from '../context/AuthContext';
+import { goToCustomerTab } from '../utils/navScroll';
 import './CustomerBottomNav.css';
 
 const CustomerBottomNav = () => {
@@ -20,20 +21,10 @@ const CustomerBottomNav = () => {
     return path === to || path.startsWith(`${to}/`);
   };
 
-  const scrollTop = () => {
-    try { window.scrollTo({ top: 0, left: 0, behavior: 'smooth' }); }
-    catch { window.scrollTo(0, 0); }
-    setTimeout(() => window.scrollTo(0, 0), 160);
-  };
-
   const goTo = (e, to) => {
     e.preventDefault();
-    if (path === to || (to !== '/' && path.startsWith(`${to}/`))) {
-      scrollTop();
-      return;
-    }
-    navigate(to, { state: { scrollToTop: true } });
-    scrollTop();
+    e.stopPropagation();
+    goToCustomerTab(navigate, path, to);
   };
 
   return (
