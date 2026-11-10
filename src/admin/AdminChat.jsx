@@ -2,12 +2,14 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useAuth } from '../context/AuthContext';
+import { useConfirm } from '../context/ConfirmContext';
 import './AdminChat.css';
 
 const LONG_PRESS_MS = 520;
 
 const AdminChat = () => {
   const { user } = useAuth();
+  const { confirm } = useConfirm();
   const threads = useQuery(api.supportChat.listThreadsForAdmin) || [];
   const archivedThreads = useQuery(api.supportChat.listArchivedThreadsForAdmin) || [];
   const [activeId, setActiveId] = useState(null);
@@ -120,6 +122,16 @@ const AdminChat = () => {
   const handleArchive = async (thread) => {
     if (!thread?._id) return;
     setHoldMenu(null);
+    const name = thread.customerName || 'this customer';
+    const ok = await confirm({
+      title: 'Archive this chat?',
+      message: `Move the conversation with ${name} to Archived?\n\nYou can restore it later from the Archive list.`,
+      confirmLabel: 'Archive',
+      cancelLabel: 'Cancel',
+      variant: 'warning',
+      icon: 'fa-archive',
+    });
+    if (!ok) return;
     try {
       await archiveThread({ threadId: thread._id });
       if (activeId === thread._id) setActiveId(null);
@@ -130,6 +142,16 @@ const AdminChat = () => {
 
   const handleRestore = async (thread) => {
     if (!thread?._id) return;
+    const name = thread.customerName || 'this customer';
+    const ok = await confirm({
+      title: 'Restore this chat?',
+      message: `Bring back the conversation with ${name} to your active chat list?`,
+      confirmLabel: 'Restore',
+      cancelLabel: 'Cancel',
+      variant: 'primary',
+      icon: 'fa-undo',
+    });
+    if (!ok) return;
     try {
       await unarchiveThread({ threadId: thread._id });
       setActiveId(thread._id);
