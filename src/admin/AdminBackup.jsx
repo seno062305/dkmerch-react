@@ -1835,10 +1835,6 @@ const AdminBackup = () => {
               <i className="fas fa-mobile-alt" style={{ background: '#fff1f5', color: '#fc1268' }}></i>
               <h3>Update the system</h3>
             </div>
-            <p className="ab-card-hint">
-              Publish a customer app update. Registered customers get an email with an <strong>Update</strong> button
-              that opens the live app and shows the update popup (loading → confirm → auto restart).
-            </p>
             <label className="ab-password-label">Version</label>
             <input
               className="ab-oracle-input"
@@ -1904,11 +1900,6 @@ const AdminBackup = () => {
               <span>{busy === 'app-update' ? 'Publishing…' : 'Publish update & email'}</span>
             </button>
             {updateMsg && <p className="ab-card-hint" style={{ marginTop: 10 }}>{updateMsg}</p>}
-            {appUpdateList[0] && (
-              <p className="ab-card-hint" style={{ marginTop: 8 }}>
-                Latest: <strong>v{appUpdateList[0].version}</strong> — {appUpdateList[0].title}
-              </p>
-            )}
           </div>
 
           <div className="ab-card" style={{ display: 'flex', flexDirection: 'column', minHeight: 420 }}>
@@ -1916,7 +1907,6 @@ const AdminBackup = () => {
               <i className="fas fa-history"></i>
               <h3>Download history</h3>
             </div>
-            <p className="ab-card-hint">Backups and archive packages saved in Convex.</p>
             <div className="ab-hist-tabs">
               {[
                 { id: 'all', label: 'All' },
@@ -2068,9 +2058,6 @@ const AdminBackup = () => {
               <i className="fas fa-map-marker-alt" style={{ background: '#fff1f5', color: '#fc1268' }}></i>
               <h3>Store / Pickup Location</h3>
             </div>
-            <p className="ab-card-hint">
-              Used as the starting point for shipping fees in Checkout and rider pickup.
-            </p>
             <div className="ab-store-grid">
               <div className="ab-store-field">
                 <label className="ab-password-label" htmlFor="ab-store-name">Store Name</label>

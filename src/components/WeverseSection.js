@@ -8,16 +8,26 @@ import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { PointsBadge } from '../utils/pointsUtils';
-import { formatSaleRange, shouldShowSaleBadge, shouldShowPreOrderBadge, hasDiscountedPrice } from '../utils/saleUtils';
+import {
+  formatSaleRange,
+  shouldShowSaleBadge,
+  shouldShowPreOrderBadge,
+  hasDiscountedPrice,
+  isNewArrival,
+  getProductNewAnchorMs,
+  toPhtMs,
+  NEW_ARRIVAL_DAYS,
+} from '../utils/saleUtils';
 import LoginModal from './LoginModal';
 import './WeverseSection.css';
 
 const MAX_WISHLIST = 10;
+const JUST_RELEASED_MS = 24 * 60 * 60 * 1000; // first day after release
 
 const getReleaseMs = (product) => {
-  if (!product.isPreOrder || !product.releaseDate) return null;
-  const rt = product.releaseTime || '00:00';
-  return new Date(`${product.releaseDate}T${rt}:00+08:00`).getTime();
+  if (product?.releasedAt) return Number(product.releasedAt);
+  if (!product?.releaseDate) return null;
+  return toPhtMs(product.releaseDate, product.releaseTime);
 };
 
 const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
@@ -40,10 +50,11 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
     return product.kpopGroup?.trim().toUpperCase() === activePromo.name.trim().toUpperCase();
   };
 
-  // Newest products first on the homepage
+  // New Arrivals: only products released (or created) within the last 1–3 days
   const newArrivals = (products || [])
+    .filter((p) => isNewArrival(p, Date.now(), NEW_ARRIVAL_DAYS))
     .slice()
-    .sort((a, b) => (b._creationTime || 0) - (a._creationTime || 0))
+    .sort((a, b) => getProductNewAnchorMs(b) - getProductNewAnchorMs(a))
     .slice(0, 8);
 
   const saleProducts = (products || [])
@@ -117,7 +128,8 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
 
     const releaseMs = getReleaseMs(product);
     const diffMs = releaseMs !== null ? Date.now() - releaseMs : -1;
-    const showReleasedBadge = diffMs >= 0 && diffMs < 60 * 60 * 1000;
+    const showReleasedBadge = diffMs >= 0 && diffMs < JUST_RELEASED_MS;
+    const showNewBadgeResolved = showNewBadge || isNewArrival(product);
 
     const discountPct =
       product.originalPrice && Number(product.originalPrice) > Number(product.price)
@@ -146,7 +158,7 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
           <div className="wv-released-badge">
             <i className="fas fa-bolt"></i> Just Released
           </div>
-        ) : showNewBadge ? (
+        ) : showNewBadgeResolved ? (
           <div className="wv-new-badge">NEW</div>
         ) : (isOnSale || showPreOrder) ? (
           <div className="wv-badge-stack">
@@ -159,7 +171,7 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
           </div>
         ) : null}
 
-        {hasPromo && !showReleasedBadge && !showNewBadge && (
+        {hasPromo && !showReleasedBadge && !showNewBadgeResolved && (
           <div className="wv-promo-badge">
             <i className="fas fa-tag"></i> {activePromo.discount}% OFF
           </div>
@@ -273,7 +285,6 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
             <h2 className="wv-section-title">
               <i className="fas fa-bolt"></i> New Arrivals
             </h2>
-            <p className="wv-section-sub">Latest drops — newest products first</p>
           </div>
           <div className="wv-grid">
             {newArrivals.map((product) => renderProductCard(product, { showNewBadge: true }))}
@@ -287,7 +298,6 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
             <h2 className="wv-section-title">
               <i className="fas fa-tag"></i> On Sale
             </h2>
-            <p className="wv-section-sub">Limited time discounts on selected K-Pop merch</p>
 
             {displayPromo && (
               <div

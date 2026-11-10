@@ -1,13 +1,28 @@
 // src/admin/AdminRiders.jsx
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import './AdminRiders.css';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import DkIcon, { DK_ICONS } from '../components/DkIcon';
+import AdminPager from './AdminPager';
 const SITE_URL = process.env.REACT_APP_SITE_URL || 'https://dkmerchwebsite.vercel.app';
 
 const toDateStr = (ms) => new Date(ms).toISOString().split('T')[0];
 const todayStr  = toDateStr(Date.now());
+
+const ACTIVE_PAGE_SIZES = [6, 12, 18, 24, 30];
+const COMPLETED_PAGE_SIZES = [18, 36, 54, 72, 90];
+
+const getRiderInfo = (order) => {
+  const pickupReq = order._pickupReq || {};
+  const base = order.riderInfo || {};
+  return {
+    name: pickupReq.riderName || base.name || '',
+    phone: pickupReq.riderPhone || base.phone || '',
+    plate: pickupReq.riderPlate || base.plate || '',
+    vehicle: pickupReq.riderVehicle || base.vehicle || '',
+  };
+};
 
 // ── NCR bounds ──
 const NCR_BOUNDS = [[14.3500, 120.8600], [14.8000, 121.1500]];
@@ -685,44 +700,31 @@ const RemoveConfirmModal = ({ order, onConfirm, onClose }) => (
 );
 
 // ─────────────────────────────────────────────────────────────
-// Active Order Card
+// Delivery detail modal (Active)
 // ─────────────────────────────────────────────────────────────
-const ActiveOrderCard = ({ order, collapsed, onToggleCollapse, onOpenMap }) => {
-  const { orderId } = order;
-  const pickupReq   = order._pickupReq || {};
-  const _riderBase  = order.riderInfo  || {};
-  const riderInfo   = {
-    name:    pickupReq.riderName    || _riderBase.name    || '',
-    phone:   pickupReq.riderPhone   || _riderBase.phone   || '',
-    plate:   pickupReq.riderPlate   || _riderBase.plate   || '',
-    vehicle: pickupReq.riderVehicle || '',
-  };
-  const hasRiderInfo    = !!(riderInfo.name?.trim());
-  const alreadyNotified = (order.orderStatus || '').toLowerCase() === 'out_for_delivery' || pickupReq.status === 'out_for_delivery';
+const ActiveDeliveryDetailModal = ({ order, onClose, onOpenMap }) => {
+  const pickupReq = order._pickupReq || {};
+  const riderInfo = getRiderInfo(order);
+  const hasRiderInfo = !!(riderInfo.name?.trim());
+  const alreadyNotified =
+    (order.orderStatus || '').toLowerCase() === 'out_for_delivery' ||
+    pickupReq.status === 'out_for_delivery';
 
   return (
-    <div className={`ar-order-card ${collapsed ? 'ar-card-collapsed' : ''}`}>
-      <div className="ar-order-header">
-        <div className="ar-order-id-block">
-          <span className="ar-order-id">#{orderId?.slice(-8).toUpperCase()}</span>
-          <StatusBadge order={order} />
-          <LiveBadge orderId={orderId} />
+    <div className="id-card-overlay" onClick={onClose}>
+      <div className="app-detail-modal ar-delivery-detail-modal" onClick={(e) => e.stopPropagation()}>
+        <button className="id-card-close" onClick={onClose}>✕</button>
+        <div className="ar-detail-modal-head">
+          <h3 className="app-detail-title" style={{ marginBottom: 0 }}>
+            Delivery #{order.orderId?.slice(-8).toUpperCase()}
+          </h3>
+          <div className="ar-detail-modal-badges">
+            <StatusBadge order={order} />
+            <LiveBadge orderId={order.orderId} />
+          </div>
         </div>
-        <div className="ar-header-actions">
-          <button className="ar-collapse-btn" onClick={() => onToggleCollapse(orderId)}>{collapsed ? '▼' : '▲'}</button>
-        </div>
-      </div>
 
-      {collapsed && (
-        <div className="ar-collapsed-summary">
-          <span className="ar-cs-name">{order.customerName || '—'}</span><span className="ar-cs-sep">·</span>
-          <span className="ar-cs-total">₱{(order.finalTotal ?? order.total ?? 0).toLocaleString()}</span>
-          {riderInfo.name && <><span className="ar-cs-sep">·</span><span className="ar-cs-rider">🛵 {riderInfo.name}</span></>}
-        </div>
-      )}
-
-      {!collapsed && (
-        <div className="ar-order-body">
+        <div className="ar-order-body ar-detail-modal-body">
           <div className="ar-section">
             <div className="ar-section-title">
               <DkIcon name={DK_ICONS.customer} size={16} /> Customer
@@ -743,7 +745,7 @@ const ActiveOrderCard = ({ order, collapsed, onToggleCollapse, onOpenMap }) => {
               <div className="ar-rider-locked-view">
                 <div className="ar-rider-locked-row"><span className="ar-cl">Name</span><span className="ar-cv ar-locked-value">{riderInfo.name}</span></div>
                 <div className="ar-rider-locked-row"><span className="ar-cl">Phone</span><span className="ar-cv ar-locked-value">{riderInfo.phone || '—'}</span></div>
-                {riderInfo.vehicle && <div className="ar-rider-locked-row"><span className="ar-cl">Vehicle</span><span className="ar-cv ar-locked-value" style={{textTransform:'capitalize'}}>{riderInfo.vehicle}</span></div>}
+                {riderInfo.vehicle && <div className="ar-rider-locked-row"><span className="ar-cl">Vehicle</span><span className="ar-cv ar-locked-value" style={{ textTransform: 'capitalize' }}>{riderInfo.vehicle}</span></div>}
                 {riderInfo.plate && <div className="ar-rider-locked-row"><span className="ar-cl">Plate</span><span className="ar-cv ar-locked-plate">{riderInfo.plate}</span></div>}
               </div>
             ) : (
@@ -757,11 +759,12 @@ const ActiveOrderCard = ({ order, collapsed, onToggleCollapse, onOpenMap }) => {
           <div className="ar-notify-section">
             {alreadyNotified
               ? <div className="ar-notify-done"><span>✅ Customer notified — Out for Delivery</span></div>
-              : <div className="ar-rider-waiting-notice" style={{ background: '#fffbeb', borderColor: '#fde68a', color: '#92400e' }}>
+              : (
+                <div className="ar-rider-waiting-notice" style={{ background: '#fffbeb', borderColor: '#fde68a', color: '#92400e' }}>
                   <i className="fas fa-bell"></i>
                   <span>The rider will automatically notify the customer when they accept this delivery in the <strong>Rider Dashboard</strong>.</span>
                 </div>
-            }
+              )}
           </div>
 
           <div className="ar-section ar-section-full ar-gps-compact">
@@ -774,27 +777,120 @@ const ActiveOrderCard = ({ order, collapsed, onToggleCollapse, onOpenMap }) => {
             </div>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };
 
-const CompletedOrderCard = ({ order, onRemove }) => {
-  const riderInfo   = order.riderInfo || {};
+const CompletedDeliveryDetailModal = ({ order, onClose, onRemove }) => {
+  const riderInfo = order.riderInfo || {};
+  const deliveredAt = order.deliveryConfirmedAt
+    ? new Date(order.deliveryConfirmedAt).toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : null;
+
+  return (
+    <div className="id-card-overlay" onClick={onClose}>
+      <div className="app-detail-modal ar-delivery-detail-modal" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
+        <button className="id-card-close" onClick={onClose}>✕</button>
+        <div className="ar-detail-modal-head">
+          <h3 className="app-detail-title" style={{ marginBottom: 0 }}>
+            Delivery #{order.orderId?.slice(-8).toUpperCase()}
+          </h3>
+          <StatusBadge order={order} />
+        </div>
+        <div className="ar-completed-body ar-detail-modal-body">
+          <div className="ar-completed-row"><span className="ar-info-label">Customer</span><span className="ar-info-value">{order.customerName || '—'}</span></div>
+          <div className="ar-completed-row"><span className="ar-info-label">Phone</span><span className="ar-info-value">{order.phone || '—'}</span></div>
+          <div className="ar-completed-row"><span className="ar-info-label">Total</span><span className="ar-info-value ar-total">₱{(order.finalTotal ?? order.total ?? 0).toLocaleString()}</span></div>
+          {riderInfo.name && (
+            <div className="ar-completed-row">
+              <span className="ar-info-label">Rider</span>
+              <span className="ar-info-value">🛵 {riderInfo.name}{riderInfo.plate ? ` · ${riderInfo.plate}` : ''}</span>
+            </div>
+          )}
+          {deliveredAt && (
+            <div className="ar-completed-row">
+              <span className="ar-info-label">Delivered</span>
+              <span className="ar-info-value ar-delivered-time">✅ {deliveredAt}</span>
+            </div>
+          )}
+        </div>
+        <div className="app-detail-actions">
+          <button type="button" className="ar-btn ar-btn-ghost" onClick={onClose}>Close</button>
+          <button type="button" className="ar-btn ar-btn-danger" onClick={() => { onClose(); onRemove(order); }}>Remove</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────
+// Active Order Card
+// ─────────────────────────────────────────────────────────────
+const ActiveOrderCard = ({ order, onViewDetails }) => {
+  const riderInfo = getRiderInfo(order);
+
+  return (
+    <div className="ar-order-card ar-card-compact">
+      <div className="ar-order-header">
+        <div className="ar-order-id-block">
+          <span className="ar-order-id">#{order.orderId?.slice(-8).toUpperCase()}</span>
+          <StatusBadge order={order} />
+          <LiveBadge orderId={order.orderId} />
+        </div>
+      </div>
+
+      <div className="ar-card-preview">
+        <div className="ar-compact-row"><span className="ar-cl">Customer</span><span className="ar-cv">{order.customerName || '—'}</span></div>
+        <div className="ar-compact-row"><span className="ar-cl">Total</span><span className="ar-cv ar-total">₱{(order.finalTotal ?? order.total ?? 0).toLocaleString()}</span></div>
+        <div className="ar-compact-row">
+          <span className="ar-cl">Rider</span>
+          <span className="ar-cv">{riderInfo.name?.trim() ? `🛵 ${riderInfo.name}` : 'Awaiting rider'}</span>
+        </div>
+      </div>
+
+      <div className="ar-card-actions">
+        <button type="button" className="ar-view-details-btn" onClick={() => onViewDetails(order)}>
+          <i className="fas fa-search"></i> View Details
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const CompletedOrderCard = ({ order, onViewDetails }) => {
+  const riderInfo = order.riderInfo || {};
   const deliveredAt = order.deliveryConfirmedAt
     ? new Date(order.deliveryConfirmedAt).toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
     : null;
   return (
-    <div className="ar-order-card ar-completed-card">
+    <div className="ar-order-card ar-completed-card ar-card-compact">
       <div className="ar-order-header ar-completed-header">
-        <div className="ar-order-id-block"><span className="ar-order-id">#{order.orderId?.slice(-8).toUpperCase()}</span><StatusBadge order={order} /></div>
-        <button className="ar-remove-btn" onClick={() => onRemove(order)}>🗑️</button>
+        <div className="ar-order-id-block">
+          <span className="ar-order-id">#{order.orderId?.slice(-8).toUpperCase()}</span>
+          <StatusBadge order={order} />
+        </div>
       </div>
-      <div className="ar-completed-body">
-        <div className="ar-completed-row"><span className="ar-info-label">Customer</span><span className="ar-info-value">{order.customerName || '—'}</span></div>
-        <div className="ar-completed-row"><span className="ar-info-label">Total</span><span className="ar-info-value ar-total">₱{(order.finalTotal ?? order.total ?? 0).toLocaleString()}</span></div>
-        {riderInfo.name && <div className="ar-completed-row"><span className="ar-info-label">Rider</span><span className="ar-info-value">🛵 {riderInfo.name}{riderInfo.plate ? ` · ${riderInfo.plate}` : ''}</span></div>}
-        {deliveredAt && <div className="ar-completed-row"><span className="ar-info-label">Delivered</span><span className="ar-info-value ar-delivered-time">✅ {deliveredAt}</span></div>}
+      <div className="ar-card-preview">
+        <div className="ar-compact-row"><span className="ar-cl">Customer</span><span className="ar-cv">{order.customerName || '—'}</span></div>
+        <div className="ar-compact-row"><span className="ar-cl">Total</span><span className="ar-cv ar-total">₱{(order.finalTotal ?? order.total ?? 0).toLocaleString()}</span></div>
+        {riderInfo.name && (
+          <div className="ar-compact-row">
+            <span className="ar-cl">Rider</span>
+            <span className="ar-cv">🛵 {riderInfo.name}{riderInfo.plate ? ` · ${riderInfo.plate}` : ''}</span>
+          </div>
+        )}
+        {deliveredAt && (
+          <div className="ar-compact-row">
+            <span className="ar-cl">Delivered</span>
+            <span className="ar-cv ar-delivered-time">✅ {deliveredAt}</span>
+          </div>
+        )}
+      </div>
+      <div className="ar-card-actions">
+        <button type="button" className="ar-view-details-btn" onClick={() => onViewDetails(order)}>
+          <i className="fas fa-search"></i> View Details
+        </button>
       </div>
     </div>
   );
@@ -807,9 +903,15 @@ const AdminRiders = () => {
   const [removeTarget,    setRemoveTarget]    = useState(null);
   const [mapOrder,        setMapOrder]        = useState(null);
   const [mapFullscreen,   setMapFullscreen]   = useState(false);
-  const [collapsed,       setCollapsed]       = useState({});
+  const [detailOrder,     setDetailOrder]     = useState(null);
+  const [detailKind,      setDetailKind]      = useState(null); // 'active' | 'completed'
   const [hiddenCompleted, setHiddenCompleted] = useState([]);
   const [tab, setTab] = useState('delivery');
+
+  const [activePage, setActivePage] = useState(0);
+  const [activePageSize, setActivePageSize] = useState(ACTIVE_PAGE_SIZES[0]);
+  const [completedPage, setCompletedPage] = useState(0);
+  const [completedPageSize, setCompletedPageSize] = useState(COMPLETED_PAGE_SIZES[0]);
 
   const [startDate, setStartDate] = useState('');
   const [endDate,   setEndDate]   = useState('');
@@ -829,30 +931,58 @@ const AdminRiders = () => {
     return true;
   };
 
-  const activeDeliveryItems = allPickupRequests
-    .filter(req => req.status === 'approved' || req.status === 'out_for_delivery')
-    .map(req => {
-      const order = allOrders.find(o => o.orderId === req.orderId);
-      if (!order) return null;
-      return { ...order, riderInfo: { name: req.riderName || '', phone: req.riderPhone || '', plate: req.riderPlate || '', email: req.riderEmail || '' }, _pickupReq: req };
-    })
-    .filter(Boolean)
-    .filter(o => matchesDateFilter(o))
-    .sort((a, b) => (b._creationTime || 0) - (a._creationTime || 0));
+  const activeDeliveryItems = useMemo(() => (
+    allPickupRequests
+      .filter(req => req.status === 'approved' || req.status === 'out_for_delivery')
+      .map(req => {
+        const order = allOrders.find(o => o.orderId === req.orderId);
+        if (!order) return null;
+        return { ...order, riderInfo: { name: req.riderName || '', phone: req.riderPhone || '', plate: req.riderPlate || '', email: req.riderEmail || '' }, _pickupReq: req };
+      })
+      .filter(Boolean)
+      .filter(o => matchesDateFilter(o))
+      .sort((a, b) => (b._creationTime || 0) - (a._creationTime || 0))
+  ), [allPickupRequests, allOrders, startDate, endDate]);
 
-  const completedOrders = allOrders
-    .filter(o => completedStatuses.includes((o.orderStatus || o.status || '').toLowerCase()))
-    .filter(o => !hiddenCompleted.includes(o._id))
-    .filter(o => matchesDateFilter(o))
-    .sort((a, b) => {
-      const tb = new Date(b.deliveryConfirmedAt || b._creationTime || 0).getTime();
-      const ta = new Date(a.deliveryConfirmedAt || a._creationTime || 0).getTime();
-      return tb - ta;
-    });
+  const completedOrders = useMemo(() => (
+    allOrders
+      .filter(o => completedStatuses.includes((o.orderStatus || o.status || '').toLowerCase()))
+      .filter(o => !hiddenCompleted.includes(o._id))
+      .filter(o => matchesDateFilter(o))
+      .sort((a, b) => {
+        const tb = new Date(b.deliveryConfirmedAt || b._creationTime || 0).getTime();
+        const ta = new Date(a.deliveryConfirmedAt || a._creationTime || 0).getTime();
+        return tb - ta;
+      })
+  ), [allOrders, hiddenCompleted, startDate, endDate]);
 
-  const handleToggleCollapse = (orderId) => setCollapsed(p => ({ ...p, [orderId]: !p[orderId] }));
-  const confirmRemove        = ()         => { if (!removeTarget) return; setHiddenCompleted(p => [...p, removeTarget._id]); setRemoveTarget(null); };
-  const openMap              = (order, full = false) => { setMapOrder(order); setMapFullscreen(full); };
+  useEffect(() => { setActivePage(0); }, [activePageSize, startDate, endDate, activeDeliveryItems.length]);
+  useEffect(() => { setCompletedPage(0); }, [completedPageSize, startDate, endDate, completedOrders.length]);
+
+  const pagedActive = useMemo(() => {
+    const start = activePage * activePageSize;
+    return activeDeliveryItems.slice(start, start + activePageSize);
+  }, [activeDeliveryItems, activePage, activePageSize]);
+
+  const pagedCompleted = useMemo(() => {
+    const start = completedPage * completedPageSize;
+    return completedOrders.slice(start, start + completedPageSize);
+  }, [completedOrders, completedPage, completedPageSize]);
+
+  const confirmRemove = () => {
+    if (!removeTarget) return;
+    setHiddenCompleted(p => [...p, removeTarget._id]);
+    setRemoveTarget(null);
+  };
+  const openMap = (order, full = false) => {
+    setDetailOrder(null);
+    setDetailKind(null);
+    setMapOrder(order);
+    setMapFullscreen(full);
+  };
+  const openActiveDetails = (order) => { setDetailKind('active'); setDetailOrder(order); };
+  const openCompletedDetails = (order) => { setDetailKind('completed'); setDetailOrder(order); };
+  const closeDetails = () => { setDetailOrder(null); setDetailKind(null); };
 
   const DateFilter = () => (
     <div className="ar-date-filter">
@@ -896,7 +1026,23 @@ const AdminRiders = () => {
           <DateFilter />
           {activeDeliveryItems.length === 0
             ? <div className="ar-empty"><div className="ar-empty-icon"><DkIcon name={DK_ICONS.activeDelivery} size={40} /></div><p>No active deliveries{(startDate || endDate) ? ' for selected dates' : ''}.</p><span>Orders claimed by riders after waybill scan appear here.</span></div>
-            : <div className="ar-orders-list">{activeDeliveryItems.map(o => <ActiveOrderCard key={o._id} order={o} collapsed={!!collapsed[o.orderId]} onToggleCollapse={handleToggleCollapse} onOpenMap={openMap} />)}</div>
+            : (
+              <>
+                <div className="ar-orders-list">
+                  {pagedActive.map(o => (
+                    <ActiveOrderCard key={o._id} order={o} onViewDetails={openActiveDetails} />
+                  ))}
+                </div>
+                <AdminPager
+                  total={activeDeliveryItems.length}
+                  page={activePage}
+                  pageSize={activePageSize}
+                  onPageChange={setActivePage}
+                  onPageSizeChange={setActivePageSize}
+                  pageSizeOptions={ACTIVE_PAGE_SIZES}
+                />
+              </>
+            )
           }
         </>
       )}
@@ -906,11 +1052,33 @@ const AdminRiders = () => {
           <DateFilter />
           {completedOrders.length === 0
             ? <div className="ar-empty"><div className="ar-empty-icon"><DkIcon name={DK_ICONS.completed} size={40} /></div><p>No completed deliveries{(startDate || endDate) ? ' for selected dates' : ''} yet.</p></div>
-            : <div className="ar-orders-list">{completedOrders.map(o => <CompletedOrderCard key={o._id} order={o} onRemove={setRemoveTarget} />)}</div>
+            : (
+              <>
+                <div className="ar-orders-list">
+                  {pagedCompleted.map(o => (
+                    <CompletedOrderCard key={o._id} order={o} onViewDetails={openCompletedDetails} />
+                  ))}
+                </div>
+                <AdminPager
+                  total={completedOrders.length}
+                  page={completedPage}
+                  pageSize={completedPageSize}
+                  onPageChange={setCompletedPage}
+                  onPageSizeChange={setCompletedPageSize}
+                  pageSizeOptions={COMPLETED_PAGE_SIZES}
+                />
+              </>
+            )
           }
         </>
       )}
 
+      {detailKind === 'active' && detailOrder && (
+        <ActiveDeliveryDetailModal order={detailOrder} onClose={closeDetails} onOpenMap={openMap} />
+      )}
+      {detailKind === 'completed' && detailOrder && (
+        <CompletedDeliveryDetailModal order={detailOrder} onClose={closeDetails} onRemove={setRemoveTarget} />
+      )}
       {removeTarget  && <RemoveConfirmModal order={removeTarget} onConfirm={confirmRemove} onClose={() => setRemoveTarget(null)} />}
       {mapOrder      && <LiveMapModal orderId={mapOrder.orderId} order={mapOrder} onClose={() => { setMapOrder(null); setMapFullscreen(false); }} fullscreen={mapFullscreen} />}
     </div>

@@ -1,56 +1,68 @@
 .track-order-page {
   padding: 40px 0 80px;
+  background:
+    radial-gradient(ellipse 70% 40% at 5% 0%, rgba(252, 18, 104, 0.06), transparent 55%),
+    radial-gradient(ellipse 50% 30% at 100% 5%, rgba(156, 39, 176, 0.05), transparent 50%),
+    transparent;
 }
 
 /* FILTERS */
 .orders-filter {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   margin-bottom: 24px;
   flex-wrap: wrap;
 }
 
 .orders-filter .filter-btn {
-  padding: 8px 20px;
-  border: 1.5px solid #ccc;
+  padding: 10px 18px;
+  border: 1.5px solid #e5e7eb;
   background: white;
-  border-radius: 20px;
-  font-weight: 600;
-  color: #333;
+  border-radius: 12px;
+  font-weight: 700;
+  color: #4b5563;
   cursor: pointer;
   transition: all 0.2s;
   font-size: 13px;
+  box-shadow: 0 2px 8px rgba(26, 26, 46, 0.04);
 }
 
-.orders-filter .filter-btn:hover { border-color: var(--primary-color); color: var(--primary-color); }
-.orders-filter .filter-btn.active { background: var(--primary-color); border-color: var(--primary-color); color: white; }
+.orders-filter .filter-btn:hover { border-color: #ffd6e7; color: #fc1268; }
+.orders-filter .filter-btn.active {
+  background: linear-gradient(135deg, #fc1268, #9c27b0);
+  border-color: transparent;
+  color: white;
+  box-shadow: 0 6px 16px rgba(252, 18, 104, 0.25);
+}
 
-/* SQUARE GRID */
+/* 3-up card grid with breathing room */
 .orders-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 0;
-  background: white;
-  border-top: 1px solid #e0e0e0;
-  border-left: 1px solid #e0e0e0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  background: transparent;
+  border: none;
   align-items: stretch;
 }
 
 /* ORDER CARD */
 .order-card {
   background: white;
-  border-right: 1px solid #e0e0e0;
-  border-bottom: 1px solid #e0e0e0;
+  border: 1.5px solid #e8e5ee;
+  border-radius: 16px;
   transition: all 0.3s ease;
   position: relative;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 6px 18px rgba(26, 26, 46, 0.05);
 }
 
 .order-card:hover {
   z-index: 10;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.13);
-  transform: scale(1.02);
+  box-shadow: 0 12px 28px rgba(252, 18, 104, 0.12);
+  transform: translateY(-3px);
+  border-color: #ffd6e7;
 }
 
 /* Square image */
@@ -834,6 +846,13 @@
   position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
   background: rgba(0,0,0,0.45); color: white;
   font-size: 13px; font-weight: 600; padding: 4px 14px; border-radius: 20px; z-index: 10;
+}
+
+@media (max-width: 1100px) {
+  .orders-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
 }
 
 /* RESPONSIVE */

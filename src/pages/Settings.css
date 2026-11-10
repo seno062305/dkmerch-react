@@ -2,7 +2,10 @@
 .settings-page {
   min-height: calc(100vh - 200px);
   padding: 40px 0;
-  background: #f8f9fa;
+  background:
+    radial-gradient(ellipse 70% 45% at 0% 0%, rgba(252, 18, 104, 0.07), transparent 55%),
+    radial-gradient(ellipse 50% 35% at 100% 10%, rgba(156, 39, 176, 0.05), transparent 50%),
+    linear-gradient(180deg, #faf7fb 0%, #f3f4f6 50%, #f8f9fa 100%);
 }
 
 .settings-container {
@@ -13,13 +16,14 @@
 
 .settings-header {
   text-align: center;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .settings-header h1 {
   font-size: 36px;
   color: var(--dark-color);
   margin-bottom: 5px;
+  letter-spacing: -0.02em;
 }
 
 .settings-header p {
@@ -30,10 +34,12 @@
 /* Tabs */
 .settings-tabs {
   display: flex;
-  background: white;
-  border-radius: 12px 12px 0 0;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 14px 14px 0 0;
+  box-shadow: 0 4px 16px rgba(26, 26, 46, 0.06);
   overflow: hidden;
+  border: 1px solid rgba(232, 229, 238, 0.9);
+  border-bottom: none;
 }
 
 .settings-tab {
@@ -59,10 +65,12 @@
 
 /* Content */
 .settings-content {
-  background: white;
+  background: rgba(255, 255, 255, 0.97);
   padding: 40px;
-  border-radius: 0 0 12px 12px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  border-radius: 0 0 14px 14px;
+  box-shadow: 0 8px 24px rgba(26, 26, 46, 0.06);
+  border: 1px solid rgba(232, 229, 238, 0.9);
+  border-top: none;
 }
 
 .settings-form h2 {

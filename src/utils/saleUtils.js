@@ -55,7 +55,44 @@ export const shouldShowSaleBadge = (product, now = Date.now()) => {
   return hasDiscountedPrice(product);
 };
 
-export const shouldShowPreOrderBadge = (product) => !!(product?.isPreOrder || product?.status === 'preorder');
+/** True when a pre-order product's release datetime (PHT) has passed. */
+export const isProductReleased = (product, now = Date.now()) => {
+  if (!product) return false;
+  const isPre = !!(product.isPreOrder || product.status === 'preorder');
+  if (!isPre && product.releasedAt) return true;
+  if (!product.releaseDate) return !isPre;
+  const ms = toPhtMs(product.releaseDate, product.releaseTime);
+  return ms != null && now >= ms;
+};
+
+/** Show PRE-ORDER badge only while still unreleased. */
+export const shouldShowPreOrderBadge = (product, now = Date.now()) => {
+  if (!(product?.isPreOrder || product?.status === 'preorder')) return false;
+  return !isProductReleased(product, now);
+};
+
+/**
+ * New Arrivals window: 1–3 days after release (or createdAt if never a pre-order).
+ * Default window = 3 days.
+ */
+export const NEW_ARRIVAL_DAYS = 3;
+
+export const getProductNewAnchorMs = (product) => {
+  if (!product) return 0;
+  if (product.releasedAt) return Number(product.releasedAt) || 0;
+  if (product.releaseDate) {
+    const ms = toPhtMs(product.releaseDate, product.releaseTime);
+    if (ms != null) return ms;
+  }
+  return Number(product._creationTime) || 0;
+};
+
+export const isNewArrival = (product, now = Date.now(), days = NEW_ARRIVAL_DAYS) => {
+  const anchor = getProductNewAnchorMs(product);
+  if (!anchor) return false;
+  const age = now - anchor;
+  return age >= 0 && age <= days * 24 * 60 * 60 * 1000;
+};
 
 export const getDisplaySalePrice = (product) => {
   if (!product) return { price: 0, originalPrice: null, onSale: false };

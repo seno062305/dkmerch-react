@@ -718,6 +718,21 @@
 
 .collection-released-badge i { font-size: 10px; }
 
+.collection-new-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 2;
+  background: linear-gradient(135deg, #fc1268, #9c27b0);
+  color: white;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 /* Highlight border for released cards */
 .collection-card-released {
   border: 2px solid #10b981 !important;

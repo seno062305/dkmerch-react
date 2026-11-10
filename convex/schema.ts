@@ -88,6 +88,10 @@ export default defineSchema({
     saleEndDate: v.optional(v.string()),
     saleEndTime: v.optional(v.string()),
     isPreOrder: v.optional(v.boolean()),
+    /** Set when cron flips a pre-order into the regular catalog */
+    releasedAt: v.optional(v.number()),
+    /** Prevents re-blasting “new item released” emails on every cron tick */
+    releaseAnnouncedAt: v.optional(v.number()),
   }),
 
   cart: defineTable({

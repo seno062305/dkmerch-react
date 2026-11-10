@@ -2,30 +2,47 @@
    MY PRE-ORDERS PAGE
 ══════════════════════════════════════════ */
 
+.mypreorders-main {
+  min-height: calc(100vh - 120px);
+  background:
+    radial-gradient(ellipse 80% 50% at 10% -10%, rgba(252, 18, 104, 0.08), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 100% 0%, rgba(156, 39, 176, 0.06), transparent 50%),
+    linear-gradient(180deg, #faf7fb 0%, #f3f4f6 40%, #f8f9fa 100%);
+}
+
+.mypreorders-main .page-header {
+  padding: 28px 0 8px;
+}
+
+.mypreorders-main .page-title {
+  letter-spacing: -0.02em;
+}
+
 .mpo-page {
-  padding: 32px 0 80px;
+  padding: 20px 0 80px;
 }
 
 /* ── Stats Row ── */
 .mpo-stats {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 24px;
+  gap: 12px;
+  margin-bottom: 28px;
 }
 
 .mpo-stat {
-  background: white;
+  background: rgba(255, 255, 255, 0.92);
   border: 1.5px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 12px 8px;
+  border-radius: 14px;
+  padding: 16px 10px;
   text-align: center;
   min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 6px;
+  box-shadow: 0 4px 14px rgba(26, 26, 46, 0.04);
 }
 
 .mpo-stat-num {
@@ -121,26 +138,28 @@
 /* ── Grid — always 3 columns ── */
 .mpo-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 22px;
   align-items: stretch;
 }
 
 /* ── Card ── */
 .mpo-card {
   background: white;
-  border-radius: 14px;
+  border-radius: 16px;
   overflow: hidden;
-  border: 1.5px solid #e5e7eb;
+  border: 1.5px solid #e8e5ee;
   position: relative;
-  transition: box-shadow 0.25s, transform 0.25s;
+  transition: box-shadow 0.25s, transform 0.25s, border-color 0.25s;
   display: flex;
   flex-direction: column;
+  box-shadow: 0 6px 18px rgba(26, 26, 46, 0.05);
 }
 
 .mpo-card:hover {
-  box-shadow: 0 8px 24px rgba(0,0,0,0.1);
-  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(252, 18, 104, 0.12);
+  transform: translateY(-3px);
+  border-color: #ffd6e7;
 }
 
 /* Available card glows */

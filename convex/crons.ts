@@ -31,4 +31,12 @@ crons.daily(
   internal.adminCleanup.purgeOldEphemeral
 );
 
+// Release due pre-order products into Home/Collections, mark reservations
+// available, and email customers (every minute).
+crons.interval(
+  "dkmerch-release-preorders",
+  { minutes: 1 },
+  internal.preOrderRequests.checkAndReleasePreOrders
+);
+
 export default crons;

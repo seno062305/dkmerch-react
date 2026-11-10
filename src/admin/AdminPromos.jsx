@@ -236,14 +236,24 @@ const AdminPromos = () => {
 
   return (
     <div className="admin-promos">
+      <div className="promos-toolbar">
+        <div className="promos-toolbar-left">
+          <h1 className="promos-page-title">Promos</h1>
+          <span className="promos-count-pill">{sortedPromos.length} total</span>
+        </div>
+        <button type="button" className="create-btn" onClick={openCreate}>+ Create Promo</button>
+      </div>
 
       {/* ── Desktop Table ── */}
       <div className="promos-table-container">
         {sortedPromos.length === 0 ? (
           <div className="promos-empty-state">
             <i className="fas fa-tag"></i>
-            <p>No promos yet.</p>
-            <button className="create-btn" onClick={openCreate}>+ Create Promo</button>
+            <div>
+              <p>No promos yet.</p>
+              <span>Create a promo code for a K-Pop group.</span>
+            </div>
+            <button type="button" className="create-btn create-btn--ghost" onClick={openCreate}>+ Create Promo</button>
           </div>
         ) : (
           <table className="promos-table">
@@ -251,12 +261,7 @@ const AdminPromos = () => {
               <tr>
                 <th>Code</th><th>K-Pop Group</th><th>Discount</th>
                 <th>Period</th><th>Status</th>
-                <th>
-                  <div className="th-actions-row">
-                    <span>Actions</span>
-                    <button className="create-btn-sm" onClick={openCreate}>+ Create</button>
-                  </div>
-                </th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -354,13 +359,22 @@ const AdminPromos = () => {
                   </select>
                   {errors.name && <span className="field-error">{errors.name}</span>}
                 </div>
-                <div className="form-group">
+
+                <div className="form-group form-group--full">
                   <label>Discount (%) <span className="req">*</span></label>
                   <input type="text" inputMode="numeric" name="discount" value={formData.discount}
                     onChange={handleInputChange} placeholder="e.g., 25" maxLength={3}
                     className={errors.discount ? 'input-error' : ''} />
                   <span className="field-hint">1–100% only</span>
                   {errors.discount && <span className="field-error">{errors.discount}</span>}
+                </div>
+
+                <div className="form-group">
+                  <label>Start Date <span className="req">*</span></label>
+                  <input type="date" name="startDate" value={formData.startDate}
+                    onChange={handleInputChange} min={today} max="9999-12-31"
+                    className={errors.startDate ? 'input-error' : ''} />
+                  {errors.startDate && <span className="field-error">{errors.startDate}</span>}
                 </div>
                 <div className="form-group">
                   <label>Start Time <span className="field-optional">(optional)</span></label>
@@ -371,12 +385,14 @@ const AdminPromos = () => {
                   </div>
                   <span className="field-hint">Blank = 12:00 AM</span>
                 </div>
+
                 <div className="form-group">
-                  <label>Start Date <span className="req">*</span></label>
-                  <input type="date" name="startDate" value={formData.startDate}
-                    onChange={handleInputChange} min={today} max="9999-12-31"
-                    className={errors.startDate ? 'input-error' : ''} />
-                  {errors.startDate && <span className="field-error">{errors.startDate}</span>}
+                  <label>End Date <span className="req">*</span></label>
+                  <input type="date" name="endDate" value={formData.endDate}
+                    onChange={handleInputChange}
+                    min={formData.startDate || today} max="9999-12-31"
+                    className={errors.endDate ? 'input-error' : ''} />
+                  {errors.endDate && <span className="field-error">{errors.endDate}</span>}
                 </div>
                 <div className="form-group">
                   <label>End Time <span className="field-optional">(optional)</span></label>
@@ -389,15 +405,6 @@ const AdminPromos = () => {
                   <span className="field-hint">Blank = 11:59 PM</span>
                   {errors.endTime && <span className="field-error">{errors.endTime}</span>}
                 </div>
-                <div className="form-group">
-                  <label>End Date <span className="req">*</span></label>
-                  <input type="date" name="endDate" value={formData.endDate}
-                    onChange={handleInputChange}
-                    min={formData.startDate || today} max="9999-12-31"
-                    className={errors.endDate ? 'input-error' : ''} />
-                  {errors.endDate && <span className="field-error">{errors.endDate}</span>}
-                </div>
-                <div className="form-group"></div>
               </div>
 
               {(formData.startDate || formData.endDate) && (

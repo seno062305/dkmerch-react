@@ -9,21 +9,27 @@ import { useNotification } from '../context/NotificationContext';
 import { useConfirm } from '../context/ConfirmContext';
 import ProductModal from '../components/ProductModal';
 import { PointsBadge } from '../utils/pointsUtils';
-import { formatSaleRange, shouldShowSaleBadge, shouldShowPreOrderBadge, hasDiscountedPrice } from '../utils/saleUtils';
+import {
+  formatSaleRange,
+  shouldShowSaleBadge,
+  shouldShowPreOrderBadge,
+  hasDiscountedPrice,
+  isNewArrival,
+  isProductReleased,
+  toPhtMs,
+} from '../utils/saleUtils';
 import './Collections.css';
 
 const MAX_WISHLIST = 10;
+const JUST_RELEASED_MS = 24 * 60 * 60 * 1000;
 
 const getReleaseMs = (product) => {
-  if (!product.isPreOrder || !product.releaseDate) return null;
-  const rt = product.releaseTime || '00:00';
-  return new Date(`${product.releaseDate}T${rt}:00+08:00`).getTime();
+  if (product?.releasedAt) return Number(product.releasedAt);
+  if (!product?.releaseDate) return null;
+  return toPhtMs(product.releaseDate, product.releaseTime);
 };
 
-const isReleased = (product) => {
-  const ms = getReleaseMs(product);
-  return ms !== null && Date.now() >= ms;
-};
+const isReleased = (product) => isProductReleased(product);
 
 const Collections = () => {
   const location = useLocation();
@@ -320,7 +326,8 @@ const Collections = () => {
 
             const releaseMs = getReleaseMs(product);
             const diffMs    = releaseMs !== null ? Date.now() - releaseMs : -1;
-            const showReleasedBadge = diffMs >= 0 && diffMs < 60 * 60 * 1000;
+            const showReleasedBadge = diffMs >= 0 && diffMs < JUST_RELEASED_MS;
+            const showNewBadge = !showReleasedBadge && isNewArrival(product);
 
             const stockQty = Number(product.stock ?? 0);
             const isOutOfStock = stockQty <= 0;
@@ -337,6 +344,8 @@ const Collections = () => {
               >
                 {showReleasedBadge ? (
                   <div className="collection-released-badge"><i className="fas fa-bolt"></i> Just Released</div>
+                ) : showNewBadge ? (
+                  <div className="collection-new-badge">NEW</div>
                 ) : (showSale || showPreOrder) ? (
                   <div className="collection-badge-stack">
                     {showSale && <div className="collection-sale-badge">SALE</div>}
@@ -344,7 +353,7 @@ const Collections = () => {
                   </div>
                 ) : null}
 
-                {hasPromo && !showReleasedBadge && (
+                {hasPromo && !showReleasedBadge && !showNewBadge && (
                   <div className="collection-promo-badge">
                     <i className="fas fa-tag"></i> {activePromo.discount}% OFF
                   </div>

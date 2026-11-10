@@ -270,7 +270,6 @@ const AdminChat = () => {
           <img src="/images/dklogo.jpg" alt="DKMerch" className="admin-chat-logo" />
           <div>
             <h1>Customer Chat</h1>
-            <p>Reply to customers about orders and support</p>
           </div>
         </div>
 

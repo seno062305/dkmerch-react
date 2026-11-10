@@ -19,6 +19,7 @@ const LogoMarquee = () => {
   const navigate = useNavigate();
   const convex = useConvex();
   const trackRef = useRef(null);
+  const setRef = useRef(null);
   const [groups, setGroups] = useState(FALLBACK_GROUPS);
 
   const posX = useRef(0);
@@ -27,11 +28,10 @@ const LogoMarquee = () => {
   const dragDistance = useRef(0);
   const isPaused = useRef(false);
   const rafId = useRef(null);
-  const itemSetWidth = useRef(0);
+  const setWidth = useRef(0);
 
-  const SPEED = 0.6;
+  const SPEED = 0.55;
 
-  // Safe load — never crash the homepage if a Convex function is mid-deploy
   useEffect(() => {
     let alive = true;
     const load = async () => {
@@ -43,7 +43,7 @@ const LogoMarquee = () => {
           return;
         }
       } catch {
-        /* try list() fallback below */
+        /* fallback below */
       }
       try {
         const rows = await convex.query(api.catalogOptions.list, { type: 'kpopGroup' });
@@ -64,46 +64,73 @@ const LogoMarquee = () => {
     };
   }, [convex]);
 
-  const tripled = useMemo(() => [...groups, ...groups, ...groups], [groups]);
+  // Enough copies that the viewport is always filled
+  const copies = useMemo(() => {
+    const n = Math.max(3, Math.ceil(8 / Math.max(groups.length, 1)));
+    return Array.from({ length: n }, (_, i) => i);
+  }, [groups.length]);
+
+  const measure = useCallback(() => {
+    const el = setRef.current;
+    if (!el) return 0;
+    // offsetWidth includes the trailing gap (padding-right on .marquee-set)
+    return el.offsetWidth || 0;
+  }, []);
+
+  const wrap = useCallback((x) => {
+    const w = setWidth.current;
+    if (w <= 0) return x;
+    // Normalize into [-w, 0)
+    x = ((x % w) + w) % w;
+    return x === 0 ? 0 : x - w;
+  }, []);
+
+  const applyTransform = useCallback(() => {
+    if (trackRef.current) {
+      trackRef.current.style.transform = `translate3d(${posX.current}px, 0, 0)`;
+    }
+  }, []);
 
   const animate = useCallback(() => {
-    if (!trackRef.current) return;
-
-    const setW = itemSetWidth.current;
-
-    if (!isPaused.current) {
+    if (!isPaused.current && setWidth.current > 0) {
       posX.current -= SPEED;
-    }
-
-    if (setW > 0) {
-      if (posX.current <= -setW * 2) {
-        posX.current += setW;
-      }
-      if (posX.current >= -setW) {
-        posX.current -= setW;
+      if (posX.current <= -setWidth.current) {
+        posX.current += setWidth.current;
       }
     }
-
-    trackRef.current.style.transform = `translateX(${posX.current}px)`;
+    applyTransform();
     rafId.current = requestAnimationFrame(animate);
-  }, []);
+  }, [applyTransform]);
 
   useEffect(() => {
     if (rafId.current) cancelAnimationFrame(rafId.current);
-    const measure = () => {
-      if (!trackRef.current) return;
-      const totalW = trackRef.current.scrollWidth;
-      itemSetWidth.current = totalW / 3;
-      posX.current = -itemSetWidth.current;
-      rafId.current = requestAnimationFrame(animate);
+    posX.current = 0;
+
+    const refresh = () => {
+      const w = measure();
+      if (w > 0) {
+        setWidth.current = w;
+        posX.current = wrap(posX.current);
+        applyTransform();
+      }
     };
 
-    const t = setTimeout(measure, 100);
+    refresh();
+    const t1 = setTimeout(refresh, 80);
+    const t2 = setTimeout(refresh, 400);
+    const t3 = setTimeout(refresh, 1000);
+
+    rafId.current = requestAnimationFrame(animate);
+
+    window.addEventListener('resize', refresh);
     return () => {
-      clearTimeout(t);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      window.removeEventListener('resize', refresh);
       if (rafId.current) cancelAnimationFrame(rafId.current);
     };
-  }, [animate, groups]);
+  }, [animate, applyTransform, groups, measure, wrap]);
 
   const onMouseDown = (e) => {
     isDragging.current = true;
@@ -119,7 +146,12 @@ const LogoMarquee = () => {
     const dx = e.clientX - lastMouseX.current;
     dragDistance.current += Math.abs(dx);
     posX.current += dx;
+    if (setWidth.current > 0) {
+      while (posX.current <= -setWidth.current) posX.current += setWidth.current;
+      while (posX.current > 0) posX.current -= setWidth.current;
+    }
     lastMouseX.current = e.clientX;
+    applyTransform();
   };
 
   const onMouseUp = (e) => {
@@ -148,7 +180,12 @@ const LogoMarquee = () => {
     const dx = e.touches[0].clientX - lastMouseX.current;
     dragDistance.current += Math.abs(dx);
     posX.current += dx;
+    if (setWidth.current > 0) {
+      while (posX.current <= -setWidth.current) posX.current += setWidth.current;
+      while (posX.current > 0) posX.current -= setWidth.current;
+    }
     lastMouseX.current = e.touches[0].clientX;
+    applyTransform();
   };
 
   const onTouchEnd = () => {
@@ -163,6 +200,41 @@ const LogoMarquee = () => {
     });
     setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 100);
   };
+
+  const onImgLoad = () => {
+    const w = measure();
+    if (w > 0) setWidth.current = w;
+  };
+
+  const renderSet = (copyIndex, isMeasureRef) => (
+    <div
+      key={`set-${copyIndex}`}
+      className="marquee-set"
+      ref={isMeasureRef ? setRef : undefined}
+      aria-hidden={copyIndex > 0 ? true : undefined}
+    >
+      {groups.map((group) => (
+        <div
+          key={`${copyIndex}-${group.name}`}
+          className="logo-item"
+          role="button"
+          tabIndex={copyIndex === 0 ? 0 : -1}
+          onClick={() => handleGroupClick(group.name)}
+          onKeyDown={(e) => e.key === 'Enter' && handleGroupClick(group.name)}
+        >
+          <div className="logo-circle">
+            <img
+              src={group.logo}
+              alt={group.name}
+              draggable={false}
+              onLoad={onImgLoad}
+            />
+          </div>
+          <div className="logo-text">{group.name}</div>
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <section className="logo-marquee-section">
@@ -186,21 +258,7 @@ const LogoMarquee = () => {
         <div className="marquee-gradient-right" />
 
         <div ref={trackRef} className="marquee-track">
-          {tripled.map((group, index) => (
-            <div
-              key={`${group.name}-${index}`}
-              className="logo-item"
-              role="button"
-              tabIndex={0}
-              onClick={() => handleGroupClick(group.name)}
-              onKeyDown={(e) => e.key === 'Enter' && handleGroupClick(group.name)}
-            >
-              <div className="logo-circle">
-                <img src={group.logo} alt={group.name} draggable={false} />
-              </div>
-              <div className="logo-text">{group.name}</div>
-            </div>
-          ))}
+          {copies.map((i) => renderSet(i, i === 0))}
         </div>
       </div>
     </section>

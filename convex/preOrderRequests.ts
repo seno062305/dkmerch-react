@@ -202,12 +202,37 @@ export const markPreOrderAvailable = internalMutation({
   },
 });
 
-// ── INTERNAL ACTION: Cron — i-check at i-release kung due na ──
+// ── INTERNAL ACTION: Cron — release products + reservations + emails ──
 export const checkAndReleasePreOrders = internalAction({
   args: {},
   handler: async (ctx) => {
     const nowMs = Date.now();
 
+    // 1) Flip due pre-order products into Home / Collections catalog
+    const newlyReleased: any[] = await ctx.runMutation(
+      internal.products.releaseDuePreOrderProducts,
+      {}
+    );
+
+    // 2) Email ALL registered customers once per newly released product
+    //    (skip users who already get the personal “your pre-order is available” mail)
+    for (const product of newlyReleased) {
+      const reserverEmails: string[] = await ctx.runQuery(
+        internal.preOrderRequests.getReserverEmailsForProduct,
+        { productId: String(product._id) }
+      );
+      await ctx.runAction(internal.preOrderRequests.announceReleasedProductToAllUsers, {
+        productName: product.name,
+        productImage: product.image || "",
+        productPrice: Number(product.price) || 0,
+        skipEmails: reserverEmails,
+      });
+      await ctx.runMutation(internal.products.markProductReleaseAnnounced, {
+        id: product._id,
+      });
+    }
+
+    // 3) Mark due reservations available + email those customers
     const pendingRequests: any[] = await ctx.runQuery(
       internal.preOrderRequests.getAllPendingPreOrders,
       {}
@@ -244,6 +269,93 @@ export const checkAndReleasePreOrders = internalAction({
         }
       }
     }
+  },
+});
+
+export const getReserverEmailsForProduct = internalQuery({
+  args: { productId: v.string() },
+  handler: async ({ db }, { productId }) => {
+    const rows = await db
+      .query("preOrderRequests")
+      .withIndex("by_product", (q) => q.eq("productId", productId))
+      .collect();
+    return rows.map((r) => (r.userEmail || "").trim().toLowerCase()).filter(Boolean);
+  },
+});
+
+/** Blast “New item released” to registered users (excludes skipEmails). */
+export const announceReleasedProductToAllUsers = internalAction({
+  args: {
+    productName: v.string(),
+    productImage: v.string(),
+    productPrice: v.number(),
+    skipEmails: v.optional(v.array(v.string())),
+  },
+  handler: async (ctx, { productName, productImage, productPrice, skipEmails }) => {
+    const absoluteImage = resolveImageUrl(productImage);
+    const skip = new Set((skipEmails || []).map((e) => e.trim().toLowerCase()));
+    const users: any[] = await ctx.runQuery(internal.preOrderRequests.getAllUsers, {});
+    const validUsers = users.filter(
+      (u) => isValidEmail(u.email) && !skip.has(String(u.email).trim().toLowerCase())
+    );
+
+    const shopLink = `${SITE_URL}/collections`;
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const user of validUsers) {
+      const html = `
+        <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.12);">
+          <div style="background: linear-gradient(135deg, #fc1268, #9c27b0); padding: 36px 32px; text-align: center;">
+            <div style="font-size: 48px; margin-bottom: 10px;">🆕</div>
+            <h1 style="color: white; margin: 0 0 8px; font-size: 26px; font-weight: 900;">New Item Released!</h1>
+            <p style="color: rgba(255,255,255,0.9); margin: 0; font-size: 15px;">DKMerch K-Pop Paradise</p>
+          </div>
+          <div style="padding: 32px;">
+            <p style="color: #374151; font-size: 16px; margin: 0 0 24px;">
+              Hi <strong>${user.name || "DKMerch Fan"}</strong>! A pre-order item is now available in Home &amp; Collections.
+            </p>
+            <table width="100%" cellpadding="0" cellspacing="0" style="background: #f8f9fa; border-radius: 12px; margin-bottom: 24px; overflow: hidden;">
+              <tr>
+                <td width="100" style="padding: 16px; vertical-align: middle;">
+                  <img src="${absoluteImage}" alt="${productName}" width="80" height="80"
+                    style="display: block; border-radius: 10px; border: 2px solid #e9ecef; width: 80px; height: 80px;" />
+                </td>
+                <td style="padding: 16px; vertical-align: middle; text-align: left;">
+                  <div style="font-size: 16px; font-weight: 700; color: #1a1a1a; margin-bottom: 6px;">${productName}</div>
+                  <div style="font-size: 20px; font-weight: 800; color: #fc1268;">&#8369;${productPrice.toLocaleString()}</div>
+                </td>
+              </tr>
+            </table>
+            <div style="text-align: center;">
+              <a href="${shopLink}" style="display: inline-block; background: linear-gradient(135deg, #fc1268, #9c27b0); color: white; text-decoration: none; padding: 14px 36px; border-radius: 10px; font-size: 16px; font-weight: 700;">
+                Shop New Arrivals
+              </a>
+            </div>
+          </div>
+          <div style="background: #f8f9fa; padding: 16px; text-align: center; border-top: 1px solid #e9ecef;">
+            <p style="color: #aaa; font-size: 12px; margin: 0;">© 2026 DKMerch · K-Pop Paradise</p>
+          </div>
+        </div>
+      `;
+
+      try {
+        await ctx.runAction(internal.sendEmail.sendEmail, {
+          to: user.email.trim(),
+          subject: `🆕 New item released: "${productName}" | DKMerch`,
+          html,
+        });
+        successCount++;
+      } catch (err) {
+        console.error(`[announceReleased] Failed to send to ${user.email}:`, err);
+        failCount++;
+      }
+
+      await delay(600);
+    }
+
+    console.log(`[announceReleased] Done. Sent: ${successCount}, Failed: ${failCount}`);
+    return { success: true, sent: successCount, failed: failCount };
   },
 });
 
