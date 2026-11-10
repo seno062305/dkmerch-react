@@ -172,7 +172,7 @@ const RiderRoute = ({ children }) => {
 function AppContent() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, isAuthenticated, role } = useAuth();
+  const { user, isAuthenticated, role, isReady, needsDeviceUnlock, clearDeviceUnlockPrompt } = useAuth();
   const savePushSub = useMutation(api.pushSubscriptions.saveSubscription);
 
   const cartItems      = useCart();
@@ -199,6 +199,12 @@ function AppContent() {
     window.addEventListener('openLoginModal', handleOpenLogin);
     return () => window.removeEventListener('openLoginModal', handleOpenLogin);
   }, []);
+
+  // Cold start after closing the app → PIN unlock (not on normal reload)
+  useEffect(() => {
+    if (!isReady || isAuthenticated || !needsDeviceUnlock) return;
+    setShowLoginModal(true);
+  }, [isReady, isAuthenticated, needsDeviceUnlock]);
 
   // Keep / request push subscription for logged-in customers (needed for phone order alerts)
   useEffect(() => {
@@ -341,9 +347,13 @@ function AppContent() {
               <LoginModal
                 onClose={() => {
                   try { sessionStorage.removeItem('dk_login_customers_only'); } catch { /* ignore */ }
+                  clearDeviceUnlockPrompt?.();
                   setShowLoginModal(false);
                 }}
-                onLoginSuccess={handleLoginSuccess}
+                onLoginSuccess={(loginRole) => {
+                  clearDeviceUnlockPrompt?.();
+                  handleLoginSuccess(loginRole);
+                }}
               />
             </React.Suspense>
           )}

@@ -583,6 +583,8 @@ const AdminUsers = () => {
       const auth = JSON.parse(localStorage.getItem('authUser') || 'null');
       if (auth && auth._id === userToSuspend._id) {
         localStorage.removeItem('authUser');
+        try { sessionStorage.removeItem('dkmerch_session_alive'); } catch { /* ignore */ }
+        try { localStorage.removeItem('dkmerch_device_unlock'); } catch { /* ignore */ }
         window.location.href = '/';
       }
       const durationLabel = suspendDays

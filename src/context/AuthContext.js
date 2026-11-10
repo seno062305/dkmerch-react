@@ -3,15 +3,53 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { appendActivityLog } from "../admin/lib/localActivityLog";
-import { saveDeviceUnlock, clearDeviceUnlock } from "../lib/deviceUnlock";
+import { saveDeviceUnlock, clearDeviceUnlock, getDeviceUnlock } from "../lib/deviceUnlock";
 
 const AuthContext = createContext(null);
+const AUTH_USER_KEY = "authUser";
+const SESSION_ALIVE_KEY = "dkmerch_session_alive";
+
+function readAuthUser() {
+  try {
+    return JSON.parse(localStorage.getItem(AUTH_USER_KEY) || "null");
+  } catch {
+    return null;
+  }
+}
+
+function writeAuthUser(user) {
+  try {
+    localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+  } catch { /* ignore */ }
+}
+
+function clearAuthUser() {
+  try { localStorage.removeItem(AUTH_USER_KEY); } catch { /* ignore */ }
+}
+
+function markSessionAlive() {
+  try { sessionStorage.setItem(SESSION_ALIVE_KEY, "1"); } catch { /* ignore */ }
+}
+
+function clearSessionAlive() {
+  try { sessionStorage.removeItem(SESSION_ALIVE_KEY); } catch { /* ignore */ }
+}
+
+function isSessionAlive() {
+  try {
+    return sessionStorage.getItem(SESSION_ALIVE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser]                       = useState(null);
   const [role, setRole]                       = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isReady, setIsReady]                 = useState(false);
+  // Cold start (app closed then opened): prompt PIN unlock, not full login
+  const [needsDeviceUnlock, setNeedsDeviceUnlock] = useState(false);
 
   const loginUserMutation  = useMutation(api.users.loginUser);
   const seedAdminMutation  = useMutation(api.users.seedAdmin);
@@ -27,14 +65,48 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    const storedUser = JSON.parse(localStorage.getItem("authUser") || "null");
-    if (storedUser) {
+    const storedUser = readAuthUser();
+    const alive = isSessionAlive();
+
+    if (storedUser && alive) {
+      // Reload / same browser tab session — stay logged in, no PIN
       setUser(storedUser);
       setRole(storedUser.role);
       setIsAuthenticated(true);
+      setNeedsDeviceUnlock(false);
+    } else if (storedUser && !alive) {
+      // App was closed and reopened — require PIN for customers with device unlock
+      const unlock = getDeviceUnlock();
+      const isCustomer = !storedUser.role || storedUser.role === "user";
+      if (isCustomer && unlock?._id && String(unlock._id) === String(storedUser._id)) {
+        setNeedsDeviceUnlock(true);
+      } else if (!isCustomer) {
+        // Admin/rider: require full login again after close
+        clearAuthUser();
+      } else {
+        // No matching device unlock — full login next time
+        clearAuthUser();
+        clearDeviceUnlock();
+      }
+      setUser(null);
+      setRole(null);
+      setIsAuthenticated(false);
+    } else {
+      // Logged out / fresh — if device unlock remains from old bug, keep for PIN only when user opens login after cold start without stored user
+      setNeedsDeviceUnlock(false);
     }
     setIsReady(true);
   }, []);
+
+  const applySession = (sessionUser) => {
+    writeAuthUser(sessionUser);
+    markSessionAlive();
+    if (sessionUser.role === "user") saveDeviceUnlock(sessionUser);
+    setUser(sessionUser);
+    setRole(sessionUser.role);
+    setIsAuthenticated(true);
+    setNeedsDeviceUnlock(false);
+  };
 
   const login = async (identifier, password, mode) => {
     try {
@@ -70,10 +142,7 @@ export const AuthProvider = ({ children }) => {
           sessionId: riderResult.sessionId,
         };
 
-        localStorage.setItem("authUser", JSON.stringify(sessionRider));
-        setUser(sessionRider);
-        setRole("rider");
-        setIsAuthenticated(true);
+        applySession(sessionRider);
         safeLog({
           action: "login",
           actorEmail: sessionRider.email,
@@ -130,10 +199,7 @@ export const AuthProvider = ({ children }) => {
             };
           }
 
-          localStorage.setItem("authUser", JSON.stringify(sessionUser));
-          setUser(sessionUser);
-          setRole(sessionUser.role);
-          setIsAuthenticated(true);
+          applySession(sessionUser);
           safeLog({
             action: "login",
             actorEmail: sessionUser.email,
@@ -182,10 +248,7 @@ export const AuthProvider = ({ children }) => {
               role:      "rider",
               sessionId: riderResult.sessionId,
             };
-            localStorage.setItem("authUser", JSON.stringify(sessionRider));
-            setUser(sessionRider);
-            setRole("rider");
-            setIsAuthenticated(true);
+            applySession(sessionRider);
             safeLog({
               action: "login",
               actorEmail: sessionRider.email,
@@ -243,12 +306,7 @@ export const AuthProvider = ({ children }) => {
       phone:    pendingUser.phone || "",
       role:     pendingUser.role || "user",
     };
-    localStorage.setItem("authUser", JSON.stringify(sessionUser));
-    // Remember this customer on the device for next PIN-only unlock
-    if (sessionUser.role === "user") saveDeviceUnlock(sessionUser);
-    setUser(sessionUser);
-    setRole(sessionUser.role);
-    setIsAuthenticated(true);
+    applySession(sessionUser);
     safeLog({
       action: "login",
       actorEmail: sessionUser.email,
@@ -262,8 +320,7 @@ export const AuthProvider = ({ children }) => {
   const updateUser = (updatedFields) => {
     setUser(prev => {
       const updated = { ...prev, ...updatedFields };
-      const toStore = { ...updated };
-      localStorage.setItem("authUser", JSON.stringify(toStore));
+      writeAuthUser(updated);
       return updated;
     });
   };
@@ -278,17 +335,35 @@ export const AuthProvider = ({ children }) => {
         details: "User logged out",
       });
     }
-    localStorage.removeItem("authUser");
-    // Clear device PIN unlock so next open shows email/password login form
+    clearAuthUser();
+    clearSessionAlive();
+    // Explicit logout → next time must use email/password (not PIN unlock)
     clearDeviceUnlock();
     try { sessionStorage.removeItem("dkmerch_push_asked"); } catch { /* ignore */ }
     setUser(null);
     setRole(null);
     setIsAuthenticated(false);
+    setNeedsDeviceUnlock(false);
   };
 
+  const clearDeviceUnlockPrompt = () => setNeedsDeviceUnlock(false);
+
   return (
-    <AuthContext.Provider value={{ user, role, isAuthenticated, isReady, login, completeLogin, register, logout, updateUser }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        role,
+        isAuthenticated,
+        isReady,
+        needsDeviceUnlock,
+        clearDeviceUnlockPrompt,
+        login,
+        completeLogin,
+        register,
+        logout,
+        updateUser,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -302,6 +377,8 @@ export const useAuth = () => {
     role: null,
     isAuthenticated: false,
     isReady: false,
+    needsDeviceUnlock: false,
+    clearDeviceUnlockPrompt: () => {},
     login: async () => ({ success: false, message: "Auth not ready." }),
     completeLogin: () => ({ success: false }),
     register: async () => ({ success: false, message: "Auth not ready." }),
