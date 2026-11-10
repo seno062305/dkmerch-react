@@ -235,43 +235,25 @@ export const markOrderPaid = mutation({
 });
 
 /**
- * Customer cancels before rider accepts.
- * If paid → auto-refund via PayMongo to original GCash/Maya, then cancel.
- * No admin approval required; admins get a push notification.
+ * Admin approves a customer cancel request.
+ * If paid → refund via PayMongo, then finalize cancel.
  */
-export const customerCancelOrder = action({
+export const approveCustomerCancel = action({
   args: {
     orderId: v.string(),
-    email: v.string(),
-    reason: v.optional(v.string()),
-    phone: v.optional(v.string()),
-    refundMethod: v.optional(v.union(v.literal("gcash"), v.literal("maya"))),
+    adminNote: v.optional(v.string()),
   },
-  handler: async (ctx, { orderId, email, reason, phone, refundMethod }) => {
+  handler: async (ctx, { orderId, adminNote }) => {
     const order = await ctx.runQuery(api.orders.getOrderById, { orderId });
     if (!order) return { success: false, error: "Order not found." };
 
-    const emailNorm = String(email || "").trim().toLowerCase();
-    const orderEmail = String(order.email || "").trim().toLowerCase();
-    if (!emailNorm || emailNorm !== orderEmail) {
-      return { success: false, error: "You can only cancel your own orders." };
+    if (order.cancelRequestStatus !== "requested") {
+      return { success: false, error: "No pending cancel request for this order." };
     }
 
     const status = String(order.orderStatus || order.status || "").toLowerCase();
     if (status === "cancelled") {
       return { success: false, error: "Order is already cancelled." };
-    }
-    if (["shipped", "out_for_delivery", "delivered", "completed"].includes(status)) {
-      return {
-        success: false,
-        error: "Order can no longer be cancelled — a rider already has it or it was delivered.",
-      };
-    }
-    if (order.riderId || order.riderInfo) {
-      return {
-        success: false,
-        error: "A rider already accepted this order. Contact admin to cancel.",
-      };
     }
 
     const wasPaid = String(order.paymentStatus || "").toLowerCase() === "paid";
@@ -287,7 +269,7 @@ export const customerCancelOrder = action({
       if (!order.paymentLinkId) {
         return {
           success: false,
-          error: "Cannot auto-refund this payment. Please contact admin.",
+          error: "Cannot auto-refund this payment. Process refund manually then try again, or contact support.",
         };
       }
 
@@ -308,7 +290,7 @@ export const customerCancelOrder = action({
         if (!paymentId) {
           return {
             success: false,
-            error: "Payment record not found for refund. Contact admin.",
+            error: "Payment record not found for refund. Contact support.",
           };
         }
 
@@ -325,7 +307,7 @@ export const customerCancelOrder = action({
                 amount: refundAmountCentavos,
                 payment_id: paymentId,
                 reason: "requested_by_customer",
-                notes: `Customer cancel ${orderId}`,
+                notes: `Admin approved cancel ${orderId}`,
               },
             },
           }),
@@ -340,7 +322,7 @@ export const customerCancelOrder = action({
             "Refund failed";
           return {
             success: false,
-            error: `Auto-refund failed: ${detail}. Order was not cancelled.`,
+            error: `Refund failed: ${detail}. Order was not cancelled.`,
           };
         }
 
@@ -358,17 +340,10 @@ export const customerCancelOrder = action({
 
     const result = await ctx.runMutation(api.orders.applyCustomerCancel, {
       orderId,
-      email: emailNorm,
-      reason:
-        reason ||
-        (wasPaid
-          ? "Cancelled by customer — payment refunded automatically"
-          : "Cancelled by customer"),
       refunded,
       refundId: refundId || undefined,
       refundAmount: wasPaid ? amount : 0,
-      phone: phone || undefined,
-      refundMethod: refundMethod || undefined,
+      adminNote: adminNote || undefined,
     });
 
     if (!result?.success) {

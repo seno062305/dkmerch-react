@@ -71,6 +71,70 @@
   text-align: center;
 }
 
+.iam-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+.iam-tab {
+  border: 1.5px solid #e2e8f0;
+  background: #f8fafc;
+  color: #64748b;
+  border-radius: 10px;
+  padding: 10px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.iam-tab.active {
+  border-color: #fc1268;
+  background: #fff0f5;
+  color: #fc1268;
+}
+
+.iam-panel { margin-bottom: 4px; }
+
+.iam-live-warn {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  font-size: 12px;
+  color: #9a3412;
+}
+
+.iam-live-warn p { margin: 0 0 8px; }
+
+.iam-install-native {
+  width: 100%;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin: 0 0 12px;
+  background: #111827;
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.iam-install-native:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
 .iam-live-link {
   display: flex;
   align-items: center;

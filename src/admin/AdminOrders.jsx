@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
-import { useQuery, useMutation } from 'convex/react';
+import { useQuery, useMutation, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { QRCodeSVG } from 'qrcode.react';
 import { useConfirm } from '../context/ConfirmContext';
@@ -436,9 +436,13 @@ const AdminOrders = () => {
   const updateOrderFieldsMutation = useMutation(api.orders.updateOrderFields);
   const deleteOrderMutation       = useMutation(api.orders.deleteOrder);
   const resolveRefundMutation     = useMutation(api.orders.resolveRefund);
+  const rejectCustomerCancelMutation = useMutation(api.orders.rejectCustomerCancel);
+  const approveCustomerCancelAction  = useAction(api.payments.approveCustomerCancel);
 
   const validOrders = orders.filter(o => o.orderId && o.items?.length > 0);
   const refundCount = validOrders.filter(o => o.refundStatus === 'requested').length;
+  const cancelReqCount = validOrders.filter(o => o.cancelRequestStatus === 'requested').length;
+  const refundTabCount = refundCount + cancelReqCount;
 
   const tabCounts = {
     all:       validOrders.length,
@@ -446,7 +450,7 @@ const AdminOrders = () => {
     pending:   validOrders.filter(o => o.orderStatus === 'pending').length,
     confirmed: validOrders.filter(o => o.orderStatus === 'confirmed').length,
     completed: validOrders.filter(o => o.orderStatus === 'completed').length,
-    refund:    refundCount,
+    refund:    refundTabCount,
   };
 
   useEffect(() => { setPage(0); }, [activeTab, searchTerm, startDate, endDate, pageSize]);
@@ -457,7 +461,7 @@ const AdminOrders = () => {
       if (activeTab === 'paid') {
         matchesTab = order.paymentStatus === 'paid' && (!order.orderStatus || order.orderStatus === 'pending');
       } else if (activeTab === 'refund') {
-        matchesTab = !!order.refundStatus;
+        matchesTab = !!order.refundStatus || !!order.cancelRequestStatus;
       } else if (activeTab !== 'all') {
         matchesTab = order.orderStatus === activeTab;
       }
@@ -471,8 +475,14 @@ const AdminOrders = () => {
       return matchesTab && matchesSearch && matchesDate;
     }).sort((a, b) => {
       if (activeTab === 'refund') {
-        const aTime = a.refundRequestedAt ? new Date(a.refundRequestedAt).getTime() : 0;
-        const bTime = b.refundRequestedAt ? new Date(b.refundRequestedAt).getTime() : 0;
+        const aTime = Math.max(
+          a.refundRequestedAt ? new Date(a.refundRequestedAt).getTime() : 0,
+          a.cancelRequestedAt ? new Date(a.cancelRequestedAt).getTime() : 0,
+        );
+        const bTime = Math.max(
+          b.refundRequestedAt ? new Date(b.refundRequestedAt).getTime() : 0,
+          b.cancelRequestedAt ? new Date(b.cancelRequestedAt).getTime() : 0,
+        );
         return bTime - aTime;
       }
       return (b._creationTime || 0) - (a._creationTime || 0);
@@ -593,6 +603,68 @@ const AdminOrders = () => {
     }
   };
 
+  const handleResolveCancelRequest = async (orderId, decision, adminNote) => {
+    const shortId = String(orderId || '').slice(-8).toUpperCase();
+    if (decision === 'approved') {
+      const ok = await confirm({
+        title: 'Approve cancel request?',
+        message: `Approve cancel for order #${shortId}?\n\nIf paid, PayMongo will refund the customer and the order will be cancelled.`,
+        confirmLabel: 'Approve Cancel',
+        cancelLabel: 'Back',
+        variant: 'danger',
+        icon: 'fa-ban',
+      });
+      if (!ok) return;
+      try {
+        const result = await approveCustomerCancelAction({ orderId, adminNote });
+        if (!result?.success) {
+          showNotification(result?.error || 'Failed to approve cancel.', 'error');
+          return;
+        }
+        showNotification(
+          result.refunded
+            ? `Cancel approved. Refund ₱${Number(result.refundAmount || 0).toLocaleString('en-PH')} sent.`
+            : 'Cancel approved. Order cancelled.',
+          'success'
+        );
+        if (selectedOrder?.orderId === orderId) {
+          setSelectedOrder((prev) => ({
+            ...prev,
+            cancelRequestStatus: 'approved',
+            cancelRequestNote: adminNote,
+            cancelResolvedAt: new Date().toISOString(),
+            orderStatus: 'cancelled',
+            status: 'Cancelled',
+          }));
+        }
+      } catch (err) {
+        console.error('Failed to approve cancel:', err);
+        showNotification(err?.data || err?.message || 'Failed to approve cancel.', 'error');
+      }
+      return;
+    }
+
+    try {
+      const result = await rejectCustomerCancelMutation({ orderId, adminNote });
+      if (!result?.success) {
+        showNotification(result?.error || 'Failed to reject cancel request.', 'error');
+        return;
+      }
+      showNotification('Cancel request declined.', 'success');
+      if (selectedOrder?.orderId === orderId) {
+        setSelectedOrder((prev) => ({
+          ...prev,
+          cancelRequestStatus: 'rejected',
+          cancelRequestNote: adminNote,
+          cancelResolvedAt: new Date().toISOString(),
+        }));
+      }
+    } catch (err) {
+      console.error('Failed to reject cancel:', err);
+      showNotification('Failed to reject cancel request.', 'error');
+    }
+  };
+
   const clearDateFilter = () => { setStartDate(''); setEndDate(''); };
 
   const tabs = [
@@ -601,7 +673,7 @@ const AdminOrders = () => {
     { key: 'pending',   icon: 'fa-clock',         label: 'Pending' },
     { key: 'confirmed', icon: 'fa-check-circle',  label: 'Confirmed' },
     { key: 'completed', icon: 'fa-check-double',  label: 'Completed' },
-    { key: 'refund',    icon: 'fa-undo-alt',      label: 'Refunds' },
+    { key: 'refund',    icon: 'fa-undo-alt',      label: 'Refunds / Cancel' },
   ];
 
   return (
@@ -619,10 +691,17 @@ const AdminOrders = () => {
         })}
       </div>
 
-      {activeTab === 'refund' && refundCount > 0 && (
+      {activeTab === 'refund' && refundTabCount > 0 && (
         <div className="admin-refund-info-banner">
           <i className="fas fa-exclamation-circle"></i>
-          <span><strong>{refundCount} pending refund request{refundCount > 1 ? 's' : ''}</strong> — review each below.</span>
+          <span>
+            <strong>
+              {refundCount > 0 && `${refundCount} pending refund${refundCount > 1 ? 's' : ''}`}
+              {refundCount > 0 && cancelReqCount > 0 ? ' · ' : ''}
+              {cancelReqCount > 0 && `${cancelReqCount} cancel request${cancelReqCount > 1 ? 's' : ''}`}
+            </strong>
+            {' '}— review each below.
+          </span>
         </div>
       )}
 
@@ -644,7 +723,7 @@ const AdminOrders = () => {
         {filteredOrders.length === 0 ? (
           <div className="empty-orders">
             <i className={`fas ${activeTab === 'refund' ? 'fa-undo-alt' : 'fa-inbox'}`}></i>
-            <p>{activeTab === 'refund' ? 'No refund requests found' : 'No orders found'}</p>
+            <p>{activeTab === 'refund' ? 'No refund or cancel requests found' : 'No orders found'}</p>
           </div>
         ) : (
           <div className="orders-table-container">
@@ -653,15 +732,16 @@ const AdminOrders = () => {
                 <tr>
                   <th>ORDER ID</th><th>CUSTOMER</th><th>ITEMS</th><th>TOTAL</th>
                   <th>PAYMENT</th><th>METHOD</th><th>STATUS</th>
-                  {activeTab === 'refund' && <th>REFUND</th>}
+                  {activeTab === 'refund' && <th>REQUEST</th>}
                   <th>RIDER</th><th>DATE</th><th>ACTIONS</th>
                 </tr>
               </thead>
               <tbody>
                 {pagedOrders.map(order => {
                   const pm = getPaymentMethodLabel(order);
+                  const pendingRow = order.refundStatus === 'requested' || order.cancelRequestStatus === 'requested';
                   return (
-                    <tr key={order.orderId} className={order.refundStatus === 'requested' ? 'row-refund-pending' : ''}>
+                    <tr key={order.orderId} className={pendingRow ? 'row-refund-pending' : ''}>
                       <td data-label="Order ID"><strong>#{order.orderId.slice(-8)}</strong></td>
                       <td data-label="Customer"><div className="customer-info"><strong>{order.customerName || 'N/A'}</strong><small>{order.email || 'N/A'}</small></div></td>
                       <td data-label="Items">{order.items.length} item(s)</td>
@@ -673,10 +753,13 @@ const AdminOrders = () => {
                       <td data-label="Method"><span className="method-badge" style={{ color: pm.color, display: 'inline-flex', alignItems: 'center', gap: 6 }}><PaymentMethodMark pm={pm} /> {pm.label}</span></td>
                       <td data-label="Status"><span className="status-badge" style={{ backgroundColor: getStatusColor(order.orderStatus) }}>{getStatusLabel(order.orderStatus)}</span></td>
                       {activeTab === 'refund' && (
-                        <td data-label="Refund">
-                          {order.refundStatus === 'requested' && <span className="refund-table-badge refund-table-pending"><i className="fas fa-clock"></i> Pending</span>}
-                          {order.refundStatus === 'approved'  && <span className="refund-table-badge refund-table-approved"><i className="fas fa-check-circle"></i> Approved</span>}
-                          {order.refundStatus === 'rejected'  && <span className="refund-table-badge refund-table-rejected"><i className="fas fa-times-circle"></i> Rejected</span>}
+                        <td data-label="Request">
+                          {order.cancelRequestStatus === 'requested' && <span className="refund-table-badge refund-table-pending"><i className="fas fa-ban"></i> Cancel Pending</span>}
+                          {order.cancelRequestStatus === 'approved' && <span className="refund-table-badge refund-table-approved"><i className="fas fa-check-circle"></i> Cancel Approved</span>}
+                          {order.cancelRequestStatus === 'rejected' && <span className="refund-table-badge refund-table-rejected"><i className="fas fa-times-circle"></i> Cancel Declined</span>}
+                          {order.refundStatus === 'requested' && <span className="refund-table-badge refund-table-pending"><i className="fas fa-clock"></i> Refund Pending</span>}
+                          {order.refundStatus === 'approved'  && <span className="refund-table-badge refund-table-approved"><i className="fas fa-check-circle"></i> Refund Approved</span>}
+                          {order.refundStatus === 'rejected'  && <span className="refund-table-badge refund-table-rejected"><i className="fas fa-times-circle"></i> Refund Rejected</span>}
                         </td>
                       )}
                       <td data-label="Rider">
@@ -712,6 +795,7 @@ const AdminOrders = () => {
           onCancelWithReason={handleCancelWithReason}
           onDelete={handleDelete}
           onResolveRefund={handleResolveRefund}
+          onResolveCancelRequest={handleResolveCancelRequest}
           getStatusColor={getStatusColor}
           getStatusLabel={getStatusLabel}
         />
@@ -749,12 +833,14 @@ const RejectConfirmDialog = ({ order, adminNote, onConfirm, onCancel }) => {
 /* ══════════════════════════════════════
    ORDER MODAL
 ══════════════════════════════════════ */
-const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDelete, onResolveRefund, getStatusColor, getStatusLabel }) => {
+const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDelete, onResolveRefund, onResolveCancelRequest, getStatusColor, getStatusLabel }) => {
   const [showCancelModal,   setShowCancelModal]   = useState(false);
   const [proofExpanded,     setProofExpanded]     = useState(false);
   const [photoExpanded2,    setPhotoExpanded2]    = useState(false);
   const [refundAdminNote,   setRefundAdminNote]   = useState('');
+  const [cancelAdminNote,   setCancelAdminNote]   = useState('');
   const [resolvingRefund,   setResolvingRefund]   = useState(false);
+  const [resolvingCancel,   setResolvingCancel]   = useState(false);
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
   const [showWaybill,       setShowWaybill]       = useState(false);
   const [showItemsModal,    setShowItemsModal]    = useState(false);
@@ -777,12 +863,13 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
   const isDone         = currentStatus === 'completed' || currentStatus === 'cancelled';
   const isLbc          = isLbcOrder(order);
   const isRiderManaged = !isLbc && (currentStatus === 'shipped' || currentStatus === 'out_for_delivery');
-  const canConfirm     = isPaid && currentStatus === 'pending';
+  const canConfirm     = isPaid && currentStatus === 'pending' && order.cancelRequestStatus !== 'requested';
   const canCancel      = !isDone && !isRiderManaged;
   const hasPromo       = !!(order.promoCode && discount > 0);
   const hasDeliveryProof = !!(order.deliveryProofPhoto);
   const otpVerified      = !!(order.deliveryOtpVerified);
   const hasRefund        = !!(order.refundStatus);
+  const hasCancelRequest = !!(order.cancelRequestStatus);
   const pm = getPaymentMethodLabel(order);
 
   const canPrintWaybill = isPaid && currentStatus !== 'pending';
@@ -791,6 +878,13 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
     setResolvingRefund(true);
     try { await onResolveRefund(order.orderId, status, refundAdminNote.trim()); }
     finally { setResolvingRefund(false); setShowRejectConfirm(false); }
+  };
+
+  const handleCancelRequestResolve = async (decision) => {
+    if (!onResolveCancelRequest) return;
+    setResolvingCancel(true);
+    try { await onResolveCancelRequest(order.orderId, decision, cancelAdminNote.trim()); }
+    finally { setResolvingCancel(false); }
   };
 
   return createPortal(
@@ -805,6 +899,12 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
               <span className={`payment-badge ${isPaid ? 'paid' : 'pending'}`}>{isPaid ? 'Paid' : 'Payment Pending'}</span>
               <span className="method-badge-pill" style={{ color: pm.color, borderColor: pm.color + '44', display: 'inline-flex', alignItems: 'center', gap: 6 }}><PaymentMethodMark pm={pm} /> {pm.label}</span>
               {hasPromo && <span className="promo-admin-pill"><i className="fas fa-tag"></i> {order.promoCode}</span>}
+              {hasCancelRequest && (
+                <span className={`refund-header-pill refund-header-${order.cancelRequestStatus === 'requested' ? 'requested' : order.cancelRequestStatus === 'approved' ? 'approved' : 'rejected'}`}>
+                  <i className={`fas ${order.cancelRequestStatus === 'requested' ? 'fa-ban' : order.cancelRequestStatus === 'approved' ? 'fa-check-circle' : 'fa-times-circle'}`}></i>
+                  {order.cancelRequestStatus === 'requested' ? 'Cancel Pending' : order.cancelRequestStatus === 'approved' ? 'Cancel Approved' : 'Cancel Declined'}
+                </span>
+              )}
               {hasRefund && (
                 <span className={`refund-header-pill refund-header-${order.refundStatus}`}>
                   <i className={`fas ${order.refundStatus === 'requested' ? 'fa-clock' : order.refundStatus === 'approved' ? 'fa-check-circle' : 'fa-times-circle'}`}></i>
@@ -823,6 +923,15 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
           {isPaid && currentStatus === 'confirmed' && !isLbc && <div className="flow-notice info"><i className="fas fa-motorcycle"></i><div><strong>Order confirmed</strong><p>Visible to riders. They claim it by scanning the waybill — no admin approval needed.</p></div></div>}
           {isPaid && currentStatus === 'confirmed' && isLbc && <div className="flow-notice info"><i className="fas fa-truck"></i><div><strong>LBC order confirmed</strong><p>Not shown to riders. Ship via LBC Express and send the LBC tracking / order ID to the customer.</p></div></div>}
           {isRiderManaged && <div className="flow-notice purple"><i className="fas fa-shipping-fast"></i><div><strong>Rider is handling delivery</strong><p>Rider confirms via OTP + photo proof.</p></div></div>}
+          {order.cancelRequestStatus === 'requested' && (
+            <div className="flow-notice warning">
+              <i className="fas fa-ban"></i>
+              <div>
+                <strong>Customer requested cancellation</strong>
+                <p>Review their reason below in Refunds / Cancel before confirming this order.</p>
+              </div>
+            </div>
+          )}
 
           <div className="order-modal-split">
           <div className="order-modal-pane order-modal-pane--left">
@@ -889,6 +998,103 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                       <button className="pod-toggle-btn"><i className={`fas ${proofExpanded ? 'fa-chevron-up' : 'fa-chevron-down'}`}></i>{proofExpanded ? 'Hide' : 'Show'}</button>
                     </div>
                     {proofExpanded && <div className="pod-photo-wrap"><img src={order.deliveryProofPhoto} alt="Proof" className="pod-photo" /><a href={order.deliveryProofPhoto} download={`proof-${order.orderId?.slice(-8)}.jpg`} className="pod-download-btn"><i className="fas fa-download"></i> Download</a></div>}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {hasCancelRequest && (
+            <div className="modal-section">
+              <h3><i className="fas fa-ban"></i> Cancel Request</h3>
+              <div className={`admin-refund-card admin-refund-${order.cancelRequestStatus}`}>
+                <div className="admin-refund-details">
+                  <div className="admin-refund-row">
+                    <span>Customer reason</span>
+                    <strong style={{ fontStyle: 'italic' }}>"{order.cancelRequestReason || '—'}"</strong>
+                  </div>
+                  {isPaid && (
+                    <div className="admin-refund-row admin-refund-amount-row">
+                      <span>Refund if approved</span>
+                      <strong className="admin-refund-amount-value">₱{finalTotal.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</strong>
+                    </div>
+                  )}
+                  {order.cancelRequestMethod && (
+                    <div className="admin-refund-row">
+                      <span>Refund to</span>
+                      <strong className="admin-refund-method-cell">
+                        <PaymentMethodMark pm={REFUND_METHOD_LABELS[order.cancelRequestMethod]} size={18} />
+                        <span style={{ color: REFUND_METHOD_LABELS[order.cancelRequestMethod]?.color }}>
+                          {REFUND_METHOD_LABELS[order.cancelRequestMethod]?.label}
+                        </span>
+                        {order.cancelRequestPhone ? ` · ${order.cancelRequestPhone}` : ''}
+                      </strong>
+                    </div>
+                  )}
+                  <div className="admin-refund-row">
+                    <span>Requested at</span>
+                    <strong>{order.cancelRequestedAt ? new Date(order.cancelRequestedAt).toLocaleString('en-PH') : '—'}</strong>
+                  </div>
+                  {order.cancelRequestStatus !== 'requested' && order.cancelResolvedAt && (
+                    <div className="admin-refund-row">
+                      <span>Resolved at</span>
+                      <strong>{new Date(order.cancelResolvedAt).toLocaleString('en-PH')}</strong>
+                    </div>
+                  )}
+                  {order.cancelRequestNote && (
+                    <div className="admin-refund-row">
+                      <span>Admin note</span>
+                      <strong>{order.cancelRequestNote}</strong>
+                    </div>
+                  )}
+                </div>
+                {order.cancelRequestStatus === 'requested' && (
+                  <div className="admin-refund-action">
+                    <div className="admin-refund-confirm-notice">
+                      <i className="fas fa-info-circle"></i>
+                      <span>
+                        Approving will cancel the order
+                        {isPaid ? ` and refund ₱${finalTotal.toLocaleString('en-PH', { minimumFractionDigits: 2 })} via PayMongo` : ''}.
+                      </span>
+                    </div>
+                    <label className="admin-refund-note-label">
+                      <i className="fas fa-comment-alt"></i> Response note <span style={{ color: '#9ca3af', fontWeight: 400 }}>(optional)</span>
+                    </label>
+                    <textarea
+                      className="admin-refund-note-input"
+                      placeholder="e.g. Cancel approved / reason for decline…"
+                      value={cancelAdminNote}
+                      onChange={(e) => setCancelAdminNote(e.target.value)}
+                      rows={2}
+                    />
+                    <div className="admin-refund-action-btns">
+                      <button
+                        className="admin-refund-reject-btn"
+                        onClick={() => handleCancelRequestResolve('rejected')}
+                        disabled={resolvingCancel}
+                      >
+                        {resolvingCancel ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-times-circle"></i>} Decline
+                      </button>
+                      <button
+                        className="admin-refund-approve-btn"
+                        onClick={() => handleCancelRequestResolve('approved')}
+                        disabled={resolvingCancel}
+                      >
+                        {resolvingCancel ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-check-circle"></i>} Approve Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {order.cancelRequestStatus === 'approved' && (
+                  <div className="admin-refund-resolved approved">
+                    <i className="fas fa-check-circle"></i>
+                    <span>Cancel request approved. Order cancelled.</span>
+                  </div>
+                )}
+                {order.cancelRequestStatus === 'rejected' && (
+                  <div className="admin-refund-resolved rejected">
+                    <i className="fas fa-times-circle"></i>
+                    <span>Cancel request declined. Order continues.</span>
                   </div>
                 )}
               </div>

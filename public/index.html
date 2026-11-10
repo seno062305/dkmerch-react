@@ -102,7 +102,6 @@
       height: 80px;
       object-fit: contain;
       display: block;
-      /* Keep original logo colors — invert made reopen look broken when cache lagged */
     }
 
     .splash-logo-fallback {
@@ -216,8 +215,6 @@
   <script>
     // Hide splash when React app is ready
     window.addEventListener('load', function () {
-      // Wait a bit for React to mount, then fade out splash
-      // Shorter splash on PWA reopen so logo/animation don't look stuck/broken
       var isPwaReopen = window.matchMedia('(display-mode: standalone)').matches
         || window.navigator.standalone === true
         || /source=pwa/i.test(window.location.search);

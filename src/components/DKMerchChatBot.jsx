@@ -233,19 +233,19 @@ export default function DKMerchChatBot() {
     };
   }, [isStandalone]);
 
-  const handleInstallClick = async () => {
-    // iPhone/iPad: no native install prompt — guide Add to Home Screen (and block IP shortcuts)
-    if (isIos || isInsecureInstallHost()) {
-      setShowInstallModal(true);
-      return;
-    }
-    if (!installPrompt) {
-      setShowInstallModal(true);
-      return;
-    }
+  const handleInstallClick = () => {
+    // Always open installer with Android/Desktop + iOS options
+    setShowInstallModal(true);
+  };
+
+  const handleNativeInstall = async () => {
+    if (!installPrompt) return;
     installPrompt.prompt();
     const { outcome } = await installPrompt.userChoice;
-    if (outcome === "accepted") setIsInstalled(true);
+    if (outcome === "accepted") {
+      setIsInstalled(true);
+      setShowInstallModal(false);
+    }
     setInstallPrompt(null);
   };
 
@@ -344,8 +344,8 @@ export default function DKMerchChatBot() {
           <button
             type="button"
             onClick={handleInstallClick}
-            title="Download DKMerch app for phone"
-            aria-label="Download app"
+            title="Install DKMerch app"
+            aria-label="Install app"
             style={{
               width: 52, height: 52, borderRadius: "50%",
               background: "#111827",
@@ -408,7 +408,9 @@ export default function DKMerchChatBot() {
       <InstallAppModal
         open={showInstallModal}
         onClose={() => setShowInstallModal(false)}
-        title="Install DKMerch on iPhone"
+        title="Install DKMerch"
+        canNativeInstall={!!installPrompt && !isIos}
+        onNativeInstall={handleNativeInstall}
       />
 
       {/* ── Chat Window — above CartModal (z-index: 9999) and its content (10000) ── */}

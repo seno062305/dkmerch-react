@@ -11,12 +11,13 @@ import { useNotification } from '../context/NotificationContext';
 import DeliveryChatPanel from '../components/DeliveryChatPanel';
 import './TrackOrder.css';
 
-/** Cancel allowed until a rider accepts (no riderId/riderInfo; not shipped+). */
+/** Cancel request allowed only before admin confirms the order. */
 const canCustomerCancelOrder = (order) => {
   if (!order) return false;
   const status = String(order.orderStatus || order.status || '').toLowerCase();
   if (status === 'cancelled') return false;
-  if (['shipped', 'out_for_delivery', 'delivered', 'completed'].includes(status)) return false;
+  if (order.cancelRequestStatus === 'requested') return false;
+  if (status && status !== 'pending' && status !== 'pending payment') return false;
   if (order.riderId || order.riderInfo) return false;
   return true;
 };
@@ -61,14 +62,15 @@ const getRefundWindow = (order) => {
   return { canRefund: true, hoursLeft: Math.floor(msLeft / (1000 * 60 * 60)), minsLeft: Math.floor((msLeft % (1000 * 60 * 60)) / (1000 * 60)), expired: false };
 };
 
-// ─── CANCEL ORDER MODAL (before rider accepts) ───────────────────────────────
+// ─── CANCEL ORDER MODAL (before admin confirms — request for review) ─────────
 const CancelOrderModal = ({ order, userEmail, onClose, onSuccess }) => {
-  const customerCancelOrder = useAction(api.payments.customerCancelOrder);
+  const requestCustomerCancel = useMutation(api.orders.requestCustomerCancel);
   const paid = String(order.paymentStatus || '').toLowerCase() === 'paid';
   const amount = Number(order.finalTotal ?? order.total ?? 0);
   const pmRaw = String(order.paymentMethod || '').toLowerCase();
   const defaultMethod = pmRaw.includes('maya') ? 'maya' : pmRaw.includes('gcash') ? 'gcash' : '';
 
+  const [reason, setReason] = useState('');
   const [phone, setPhone] = useState(String(order.phone || '').replace(/\D/g, '').slice(0, 11));
   const [refundMethod, setRefundMethod] = useState(defaultMethod);
   const [submitting, setSubmitting] = useState(false);
@@ -80,6 +82,11 @@ const CancelOrderModal = ({ order, userEmail, onClose, onSuccess }) => {
   }, []);
 
   const handleSubmit = async () => {
+    const note = reason.trim();
+    if (note.length < 5) {
+      setError('Please explain why you want to cancel (min 5 characters).');
+      return;
+    }
     if (paid) {
       if (!refundMethod) { setError('Please select GCash or Maya (how you paid).'); return; }
       if (!phone.trim()) { setError('Please enter your phone number.'); return; }
@@ -91,21 +98,21 @@ const CancelOrderModal = ({ order, userEmail, onClose, onSuccess }) => {
     setError('');
     setSubmitting(true);
     try {
-      const result = await customerCancelOrder({
+      const result = await requestCustomerCancel({
         orderId: order.orderId,
         email: userEmail,
-        reason: 'Cancelled by customer before rider accepted',
+        reason: note,
         phone: phone.replace(/\s/g, '') || undefined,
         refundMethod: paid ? refundMethod : undefined,
       });
       if (!result?.success) {
-        setError(result?.error || 'Could not cancel order.');
+        setError(result?.error || 'Could not submit cancel request.');
         setSubmitting(false);
         return;
       }
       onSuccess(result);
     } catch (err) {
-      setError(err?.data || err?.message || 'Cancel failed. Please try again.');
+      setError(err?.data || err?.message || 'Request failed. Please try again.');
       setSubmitting(false);
     }
   };
@@ -119,25 +126,38 @@ const CancelOrderModal = ({ order, userEmail, onClose, onSuccess }) => {
             <i className="fas fa-ban" style={{ color: '#dc2626' }}></i>
           </div>
           <div>
-            <h3>Cancel Order</h3>
+            <h3>Request Cancel</h3>
             <p>
               Order #{order.orderId?.slice(-8)}
-              {paid ? <> · <strong>₱{amount.toLocaleString('en-PH')}</strong> auto-refund</> : null}
+              {paid ? <> · <strong>₱{amount.toLocaleString('en-PH')}</strong></> : null}
             </p>
           </div>
         </div>
         <div className="refund-modal-body">
           <p className="cancel-order-note">
-            {paid
-              ? 'Refund goes back to your original payment automatically. Confirm the number and wallet you paid with.'
-              : 'This order has no completed payment. You can cancel it now.'}
+            Cancel is only available before admin confirms your order. Admin will review your reason
+            {paid ? ' and refund if approved' : ''}.
           </p>
+
+          <div className="refund-field-group">
+            <label className="refund-modal-label">
+              <i className="fas fa-comment-alt"></i> Why are you cancelling? <span className="refund-required">*</span>
+            </label>
+            <textarea
+              className="refund-input"
+              rows={3}
+              placeholder="e.g. Ordered by mistake, changed mind, wrong item…"
+              value={reason}
+              maxLength={400}
+              onChange={(e) => { setReason(e.target.value); setError(''); }}
+            />
+          </div>
 
           {paid && (
             <>
               <div className="refund-field-group">
                 <label className="refund-modal-label">
-                  <i className="fas fa-wallet"></i> Payment used <span className="refund-required">*</span>
+                  <i className="fas fa-wallet"></i> Refund to <span className="refund-required">*</span>
                 </label>
                 <div className="refund-method-row">
                   <button
@@ -188,10 +208,8 @@ const CancelOrderModal = ({ order, userEmail, onClose, onSuccess }) => {
           <button type="button" className="refund-cancel-btn" onClick={onClose} disabled={submitting}>Keep Order</button>
           <button type="button" className="refund-submit-btn cancel-order-submit" onClick={handleSubmit} disabled={submitting}>
             {submitting
-              ? <><i className="fas fa-spinner fa-spin"></i> Cancelling…</>
-              : paid
-                ? <><i className="fas fa-ban"></i> Cancel & Refund</>
-                : <><i className="fas fa-ban"></i> Cancel Order</>}
+              ? <><i className="fas fa-spinner fa-spin"></i> Submitting…</>
+              : <><i className="fas fa-paper-plane"></i> Submit Cancel Request</>}
           </button>
         </div>
       </div>
@@ -840,16 +858,13 @@ const TrackOrder = ({ onProductClick }) => {
     setCancelOrder(order);
   };
 
-  const handleCancelOrderSuccess = (result) => {
+  const handleCancelOrderSuccess = () => {
     const orderId = cancelOrder?.orderId;
     setCancelOrder(null);
     showNotification(
-      result?.refunded
-        ? `Order cancelled. ₱${Number(result.refundAmount || 0).toLocaleString('en-PH')} refund is on the way to your wallet.`
-        : 'Order cancelled.',
+      'Cancel request submitted. Admin will review your reason and notify you.',
       'success'
     );
-    setFilter('cancelled');
     if (orderId && selectedOrder?.orderId === orderId) setSelectedOrderId(null);
   };
 
@@ -921,6 +936,18 @@ const TrackOrder = ({ onProductClick }) => {
           </p>
           {releaseDate && <div className="order-card-preorder-badge"><i className="fas fa-calendar-alt"></i><span>Expected: {new Date(releaseDate).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}</span></div>}
           {delivered && order.refundStatus && <div style={{ marginBottom: 6 }}><RefundBadge status={order.refundStatus} /></div>}
+          {order.cancelRequestStatus === 'requested' && (
+            <div className="order-card-refund-timer" style={{ marginBottom: 6 }}>
+              <i className="fas fa-hourglass-half"></i>
+              <span>Cancel request pending admin review</span>
+            </div>
+          )}
+          {order.cancelRequestStatus === 'rejected' && (
+            <div className="order-card-refund-expired" style={{ marginBottom: 6 }}>
+              <i className="fas fa-times-circle"></i>
+              <span>Cancel request declined — order continues</span>
+            </div>
+          )}
           {!isGuest && delivered && !order.refundStatus && canRefund && <div className="order-card-refund-timer"><i className="fas fa-hourglass-half"></i><span>Refund window: <strong>{hoursLeft}h left</strong></span></div>}
           {!isGuest && delivered && !order.refundStatus && expired && <div className="order-card-refund-expired"><i className="fas fa-clock"></i><span>Refund window expired</span></div>}
           <div className="order-card-meta">

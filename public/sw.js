@@ -1,5 +1,5 @@
 // DKMerch Service Worker — PWA support
-const CACHE_NAME = 'dkmerch-v5-splash-pod';
+const CACHE_NAME = 'dkmerch-v6-pink-splash';
 
 // Only cache essential static assets
 const STATIC_ASSETS = [

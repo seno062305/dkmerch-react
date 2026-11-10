@@ -166,6 +166,14 @@ export default defineSchema({
     /** 'customer' | 'admin' */
     cancelledBy: v.optional(v.string()),
     paymongoRefundId: v.optional(v.string()),
+    /** Customer cancel request (before admin confirms) — admin must approve */
+    cancelRequestStatus:   v.optional(v.string()), // requested | approved | rejected
+    cancelRequestReason:   v.optional(v.string()),
+    cancelRequestPhone:    v.optional(v.string()),
+    cancelRequestMethod:   v.optional(v.string()), // gcash | maya
+    cancelRequestedAt:     v.optional(v.string()),
+    cancelRequestNote:     v.optional(v.string()), // admin note
+    cancelResolvedAt:      v.optional(v.string()),
     refundStatus:          v.optional(v.string()),
     refundReason:          v.optional(v.string()),
     refundComment:         v.optional(v.string()),
