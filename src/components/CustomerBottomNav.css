@@ -109,12 +109,22 @@
     margin-bottom: 8px;
   }
 
-  /* Keep chat / install FABs above the bottom nav */
+  /* Keep chat / install FABs above the bottom nav, clear of form fields */
   body.has-customer-bottom-nav .dk-chat-fab-stack {
-    bottom: 88px !important;
+    bottom: calc(76px + env(safe-area-inset-bottom, 0px)) !important;
+    right: 12px !important;
+  }
+  body.has-customer-bottom-nav .dk-chat-fab-stack button {
+    width: 46px !important;
+    height: 46px !important;
+    font-size: 16px !important;
   }
   body.has-customer-bottom-nav .dk-chat-window {
-    bottom: 190px !important;
-    max-height: calc(70vh - 80px) !important;
+    bottom: calc(140px + env(safe-area-inset-bottom, 0px)) !important;
+    right: 10px !important;
+    left: 10px !important;
+    width: auto !important;
+    max-width: none !important;
+    max-height: calc(70vh - 100px) !important;
   }
 }

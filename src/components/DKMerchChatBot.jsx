@@ -324,8 +324,9 @@ export default function DKMerchChatBot() {
       <div
         className="dk-chat-fab-stack"
         style={{
-          position: "fixed", bottom: 24, right: 24, zIndex: 10050,
+          position: "fixed", bottom: 24, right: 24, zIndex: 800,
           display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
+          pointerEvents: "none",
         }}
       >
         {!isInstalled && (
@@ -342,19 +343,21 @@ export default function DKMerchChatBot() {
               display: "flex", alignItems: "center", justifyContent: "center",
               color: "#fff", fontSize: 18,
               boxShadow: "0 4px 16px rgba(15,23,42,0.35)",
+              pointerEvents: "auto",
             }}
           >
             <i className="fas fa-download" aria-hidden="true" />
           </button>
         )}
 
-        <div style={{ position: "relative" }}>
+        <div style={{ position: "relative", pointerEvents: "auto" }}>
           {!open && showPulse && (
             <div style={{
               position: "absolute", inset: -6,
               borderRadius: "50%",
               background: `rgba(252,18,104,0.25)`,
               animation: "dkPulse 1.8s ease-out infinite",
+              pointerEvents: "none",
             }} />
           )}
           <button
@@ -374,6 +377,7 @@ export default function DKMerchChatBot() {
               fontSize: 24, boxShadow: "0 4px 20px rgba(252,18,104,0.45)",
               transition: "transform 0.2s, box-shadow 0.2s",
               position: "relative",
+              pointerEvents: "auto",
             }}
             onMouseEnter={e => {
               e.currentTarget.style.transform = "scale(1.1)";

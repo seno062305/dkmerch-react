@@ -198,9 +198,13 @@ function AppContent() {
   const isVerifyRoute     = location.pathname.startsWith('/verify-email');
 
   const isCustomerChatRoute = location.pathname === '/chat' || location.pathname.startsWith('/chat/');
+  const isSettingsRoute   = location.pathname === '/settings' || location.pathname.startsWith('/settings/');
+  const isMoreRoute       = location.pathname === '/more' || location.pathname.startsWith('/more/');
+  const isCheckoutRoute   = location.pathname === '/checkout' || location.pathname.startsWith('/checkout/');
   const hideHeaderFooter  = isAdminRoute || isPromoRoute || isRiderTrackRoute || isRiderDashRoute || isVerifyRoute;
   const hideFooterOnly    = isCustomerChatRoute;
-  const showChatBot       = !isAdminRoute && !isPromoRoute && !isRiderTrackRoute && !isRiderDashRoute && !isVerifyRoute && !isCustomerChatRoute;
+  // Hide floating chat/install FABs on form-heavy pages so they don't cover inputs
+  const showChatBot       = !isAdminRoute && !isPromoRoute && !isRiderTrackRoute && !isRiderDashRoute && !isVerifyRoute && !isCustomerChatRoute && !isSettingsRoute && !isMoreRoute && !isCheckoutRoute;
   const showCustomerNav   = !hideHeaderFooter;
 
   useEffect(() => {

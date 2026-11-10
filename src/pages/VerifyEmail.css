@@ -171,8 +171,8 @@
   color: #7f1d1d;
 }
 
-/* ── Buttons ── */
-.verify-btn {
+/* ── Buttons (scoped — do not leak onto Settings .verify-btn) ── */
+.verify-email-page .verify-btn {
   width: 100%;
   padding: 14px;
   border-radius: 12px;
@@ -183,18 +183,18 @@
   transition: all 0.2s;
 }
 
-.verify-btn-primary {
+.verify-email-page .verify-btn-primary {
   background: linear-gradient(135deg, #fc1268, #9c27b0);
   color: white;
   box-shadow: 0 4px 15px rgba(252, 18, 104, 0.3);
 }
 
-.verify-btn-primary:hover {
+.verify-email-page .verify-btn-primary:hover {
   transform: translateY(-1px);
   box-shadow: 0 6px 20px rgba(252, 18, 104, 0.4);
 }
 
-.verify-btn-primary:active {
+.verify-email-page .verify-btn-primary:active {
   transform: translateY(0);
 }
 
