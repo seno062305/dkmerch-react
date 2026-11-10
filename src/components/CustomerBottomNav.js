@@ -54,9 +54,9 @@ const CustomerBottomNav = () => {
         </span>
         <span>Chat</span>
       </Link>
-      <Link to="/more" className={`cbn-item ${isActive('/more') ? 'active' : ''}`}>
-        <i className="fas fa-cog"></i>
-        <span>Settings</span>
+      <Link to="/help" className={`cbn-item ${isActive('/help') ? 'active' : ''}`}>
+        <i className="fas fa-question-circle"></i>
+        <span>Help</span>
       </Link>
     </nav>
   );

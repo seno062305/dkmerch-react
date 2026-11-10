@@ -50,26 +50,48 @@ const CustomerChat = () => {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   }, []);
 
-  // Sync layout to visualViewport so keyboard open/close doesn't leave bottom gap
+  // Pin chat flush between header and bottom nav; when keyboard opens, sit on keyboard top (no gap)
   useEffect(() => {
     const root = document.documentElement;
     const sync = () => {
+      const mobile = window.matchMedia('(max-width: 768px)').matches;
+      const headerH = mobile ? 56 : 64;
+      const nav = document.querySelector('.customer-bottom-nav');
+      const bnavH = mobile && nav ? Math.round(nav.getBoundingClientRect().height) : 0;
       const vv = window.visualViewport;
-      const h = vv?.height || window.innerHeight;
-      root.style.setProperty('--chat-vvh', `${Math.round(h)}px`);
+      const layoutH = window.innerHeight;
+
+      if (vv && mobile) {
+        const keyboardOpen = vv.height < layoutH - 140;
+        if (keyboardOpen) {
+          const top = Math.max(0, Math.round(vv.offsetTop + headerH));
+          const bottom = Math.max(0, Math.round(layoutH - (vv.offsetTop + vv.height)));
+          root.style.setProperty('--chat-top', `${top}px`);
+          root.style.setProperty('--chat-bottom', `${bottom}px`);
+          return;
+        }
+      }
+      root.style.setProperty('--chat-top', `${headerH}px`);
+      root.style.setProperty('--chat-bottom', mobile ? `${bnavH}px` : '0px');
     };
+
     sync();
     const vv = window.visualViewport;
     vv?.addEventListener('resize', sync);
     vv?.addEventListener('scroll', sync);
     window.addEventListener('resize', sync);
-    window.addEventListener('focusout', sync);
+    window.addEventListener('orientationchange', sync);
+    window.addEventListener('focusin', sync);
+    window.addEventListener('focusout', () => setTimeout(sync, 50));
     return () => {
       vv?.removeEventListener('resize', sync);
       vv?.removeEventListener('scroll', sync);
       window.removeEventListener('resize', sync);
+      window.removeEventListener('orientationchange', sync);
+      window.removeEventListener('focusin', sync);
       window.removeEventListener('focusout', sync);
-      root.style.removeProperty('--chat-vvh');
+      root.style.removeProperty('--chat-top');
+      root.style.removeProperty('--chat-bottom');
     };
   }, []);
 

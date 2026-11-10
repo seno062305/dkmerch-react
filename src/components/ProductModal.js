@@ -35,6 +35,10 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
     api.reviews.getProductReviews,
     productId ? { productId } : 'skip'
   ) ?? [];
+  const soldCount = useQuery(
+    api.productStats.getProductSoldCount,
+    productId ? { productId: String(productId) } : 'skip'
+  );
 
   const userOrders = useQuery(
     api.orders.getOrdersByEmail,
@@ -48,6 +52,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
     return userOrders.some((order) => {
       const status = String(order.orderStatus || order.status || '').toLowerCase();
       if (!status || status.includes('cancel')) return false;
+      if (status !== 'completed' && status !== 'delivered') return false;
       return (order.items || []).some((item) => {
         const itemId = String(item.id || item.productId || '');
         return itemId === pid;
@@ -431,6 +436,14 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
                 <div className="stock-info">
                   <i className="fas fa-box"></i>
                   <span>{product.stock > 0 ? `${product.stock} items in stock` : 'Out of stock'}</span>
+                </div>
+                <div className="sold-info">
+                  <i className="fas fa-shopping-bag"></i>
+                  <span>
+                    {typeof soldCount === 'number'
+                      ? `${soldCount.toLocaleString()} sold`
+                      : '…'}
+                  </span>
                 </div>
 
                 {isAuthenticated && (

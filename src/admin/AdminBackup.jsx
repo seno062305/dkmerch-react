@@ -1695,13 +1695,24 @@ const AdminBackup = () => {
               className="ab-btn-primary"
               disabled={!!busy}
               onClick={async () => {
+                const version = updateForm.version.trim();
+                const title = updateForm.title.trim();
+                const message = updateForm.message.trim();
+                if (!version || !title || !message) {
+                  setUpdateMsg('Version, title, and message are required.');
+                  return;
+                }
+                const ok = window.confirm(
+                  `Publish app update v${version}?\n\nCustomers will get an email with an Update button, and the in-app update popup will appear.\n\nContinue?`
+                );
+                if (!ok) return;
                 setUpdateMsg('');
                 setBusy('app-update');
                 try {
                   const res = await publishAppUpdate({
-                    version: updateForm.version.trim(),
-                    title: updateForm.title.trim(),
-                    message: updateForm.message.trim(),
+                    version,
+                    title,
+                    message,
                     notifyEmail: true,
                   });
                   if (!res?.success) {
@@ -1709,6 +1720,7 @@ const AdminBackup = () => {
                   } else {
                     setUpdateMsg('Update published. Customers were emailed.');
                     setUpdateForm((p) => ({ ...p, version: '' }));
+                    showNotification('App update published successfully.', 'success');
                   }
                 } catch (err) {
                   setUpdateMsg(String(err?.message || err || 'Failed'));

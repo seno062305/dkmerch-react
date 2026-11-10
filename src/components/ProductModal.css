@@ -418,6 +418,16 @@
 .discount-badge-inline { background: #dcfce7; color: #16a34a; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 4px; }
 
 .stock-info { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #f59e0b; font-weight: 600; }
+.sold-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #6b7280;
+  font-weight: 600;
+  margin-top: 4px;
+}
+.sold-info i { color: #fc1268; }
 
 .modal-promo-section { margin-top: 4px; }
 

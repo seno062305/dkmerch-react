@@ -23,6 +23,7 @@ import type * as orders from "../orders.js";
 import type * as payments from "../payments.js";
 import type * as pickupRequests from "../pickupRequests.js";
 import type * as preOrderRequests from "../preOrderRequests.js";
+import type * as productStats from "../productStats.js";
 import type * as products from "../products.js";
 import type * as promos from "../promos.js";
 import type * as pushSubscriptions from "../pushSubscriptions.js";
@@ -59,6 +60,7 @@ declare const fullApi: ApiFromModules<{
   payments: typeof payments;
   pickupRequests: typeof pickupRequests;
   preOrderRequests: typeof preOrderRequests;
+  productStats: typeof productStats;
   products: typeof products;
   promos: typeof promos;
   pushSubscriptions: typeof pushSubscriptions;

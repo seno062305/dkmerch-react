@@ -1,12 +1,17 @@
 .customer-chat-page {
-  /* Use visualViewport height when keyboard is open (set by JS --chat-vvh) */
-  height: calc(var(--chat-vvh, 100dvh) - 64px - 72px);
-  max-height: calc(var(--chat-vvh, 100dvh) - 64px - 72px);
+  /* Fixed between header and bottom nav; JS sets --chat-top / --chat-bottom for keyboard */
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: var(--chat-top, 64px);
+  bottom: var(--chat-bottom, calc(64px + env(safe-area-inset-bottom, 0px)));
+  height: auto;
+  max-height: none;
   background: linear-gradient(180deg, #fff5f8 0%, #f8fafc 45%, #fff 100%);
-  padding: 10px 10px 8px;
+  padding: 0;
   overflow: hidden;
   box-sizing: border-box;
-  transition: height 0.15s ease, max-height 0.15s ease;
+  z-index: 850;
 }
 
 .customer-chat-shell {
@@ -14,13 +19,13 @@
   height: 100%;
   margin: 0 auto;
   background: #fff;
-  border: 1px solid #eef2f7;
-  border-radius: 16px;
+  border: none;
+  border-radius: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.06);
+  box-shadow: none;
 }
 
 .customer-chat-header {
@@ -212,9 +217,19 @@
 
 @media (max-width: 768px) {
   .customer-chat-page {
-    height: calc(var(--chat-vvh, 100dvh) - 56px - 72px);
-    max-height: calc(var(--chat-vvh, 100dvh) - 56px - 72px);
-    padding: 6px 6px 4px;
+    top: var(--chat-top, 56px);
+    bottom: var(--chat-bottom, calc(64px + env(safe-area-inset-bottom, 0px)));
   }
-  .customer-chat-shell { border-radius: 12px; }
+}
+
+@media (min-width: 769px) {
+  .customer-chat-page {
+    bottom: 0;
+    padding: 10px;
+  }
+  .customer-chat-shell {
+    border: 1px solid #eef2f7;
+    border-radius: 16px;
+    box-shadow: 0 8px 28px rgba(15, 23, 42, 0.06);
+  }
 }

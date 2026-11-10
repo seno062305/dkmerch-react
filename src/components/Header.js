@@ -295,7 +295,7 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
                       </button>
 
                       <Link to="/settings" className="dropdown-item" onClick={() => setShowAccountDropdown(false)}>
-                        <i className="fas fa-user-edit"></i> Edit Profile
+                        <i className="fas fa-cog"></i> Settings
                       </Link>
                       <div className="dropdown-divider"></div>
                       <button className="dropdown-item logout-btn" onClick={handleLogout}>

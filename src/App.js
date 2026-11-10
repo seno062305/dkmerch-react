@@ -271,7 +271,7 @@ function AppContent() {
             <Route path="/" element={<Home onProductClick={(p) => { setCurrentProduct(p); setShowProductModal(true); }} />} />
             <Route path="/collections" element={<Collections onProductClick={(p) => { setCurrentProduct(p); setShowProductModal(true); }} />} />
             <Route path="/preorder"      element={<PreOrder />} />
-            <Route path="/track-order"   element={<TrackOrder />} />
+            <Route path="/track-order"   element={<TrackOrder onProductClick={(p) => { setCurrentProduct(p); setShowProductModal(true); }} />} />
             <Route path="/help"          element={<Help />} />
             <Route path="/wishlist"      element={<WishlistPage onProductClick={(p) => { setCurrentProduct(p); setShowProductModal(true); }} />} />
             <Route path="/checkout"      element={<Checkout />} />

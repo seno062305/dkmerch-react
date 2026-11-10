@@ -17,7 +17,12 @@ function isEligiblePurchaseOrder(order: any): boolean {
   if (!status) return false;
   if (CANCELLED_STATUSES.has(status)) return false;
   if (status.includes("cancel")) return false;
-  return true;
+  // Only delivered / completed purchases can leave a review
+  return (
+    status === "completed" ||
+    status === "delivered" ||
+    status === "Delivered".toLowerCase()
+  );
 }
 
 async function userHasPurchasedProduct(

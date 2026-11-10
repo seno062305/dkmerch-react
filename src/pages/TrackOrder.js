@@ -506,7 +506,7 @@ const RiderMap = ({ orderId, riderName, orderData }) => {
 };
 
 // ─── MAIN TRACK ORDER PAGE ────────────────────────────────────────────────────
-const TrackOrder = () => {
+const TrackOrder = ({ onProductClick }) => {
   const navigate = useNavigate();
   const { showNotification } = useNotification();
   const { user, isAuthenticated } = useAuth();
@@ -772,6 +772,28 @@ const TrackOrder = () => {
             </>
           ) : (
             <button className="btn btn-primary btn-small order-view-btn" onClick={() => onViewDetails(order)}><i className="fas fa-search"></i> View Details</button>
+          )}
+          {!isGuest && delivered && (
+            <button
+              type="button"
+              className="btn order-review-btn"
+              onClick={() => {
+                const item = order.items?.[0];
+                if (!item) return;
+                const product = getProductById(item.id) || {
+                  _id: item.id || item.productId,
+                  id: item.id || item.productId,
+                  name: item.name,
+                  price: item.price,
+                  image: item.image,
+                  stock: item.stock,
+                };
+                if (onProductClick) onProductClick(product);
+                else showNotification('Open the product to leave a review.', 'info');
+              }}
+            >
+              <i className="fas fa-star"></i> Write Review
+            </button>
           )}
           {!isGuest && delivered && !order.refundStatus && canRefund && <button className="btn order-refund-btn" onClick={() => setRefundOrder(order)}><i className="fas fa-undo-alt"></i> Request Refund</button>}
           {!isGuest && delivered && order.refundStatus === 'rejected' && canRefund && <button className="btn order-refund-btn order-refund-retry-btn" onClick={() => setRefundOrder(order)}><i className="fas fa-redo"></i> Request Again</button>}

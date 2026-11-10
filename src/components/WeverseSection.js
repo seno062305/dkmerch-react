@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from 'convex/react';
+import { api } from '../../convex/_generated/api';
 import { useCollectionProducts } from '../utils/productStorage';
 import { useWishlist, useToggleWishlist } from '../context/wishlistUtils';
 import { useAuth } from '../context/AuthContext';
@@ -59,6 +61,16 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
       return (b._creationTime || 0) - (a._creationTime || 0);
     })
     .slice(0, 8);
+
+  const saleProductIds = useMemo(
+    () => saleProducts.map((p) => String(p._id || p.id)).filter(Boolean),
+    [saleProducts]
+  );
+  const reviewMap = useQuery(
+    api.productStats.getLatestReviewsForProducts,
+    saleProductIds.length ? { productIds: saleProductIds } : 'skip'
+  ) || {};
+  const [expandedReviewIds, setExpandedReviewIds] = useState({});
 
   const handleWishlistClick = async (e, product) => {
     e.stopPropagation();
@@ -206,6 +218,44 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
                           : `${stockQty} in stock`}
                     </span>
                   </div>
+                  {reviewMap[pid] && (
+                    <div
+                      className="wv-card-review"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setExpandedReviewIds((prev) => ({ ...prev, [pid]: !prev[pid] }));
+                      }}
+                    >
+                      <div className="wv-card-review-top">
+                        <span className="wv-card-review-stars">
+                          {[1, 2, 3, 4, 5].map((s) => (
+                            <i
+                              key={s}
+                              className={`fas fa-star ${s <= reviewMap[pid].rating ? 'on' : ''}`}
+                            />
+                          ))}
+                        </span>
+                        <span className="wv-card-review-count">{reviewMap[pid].count} review{reviewMap[pid].count === 1 ? '' : 's'}</span>
+                      </div>
+                      <p className="wv-card-review-text">
+                        {expandedReviewIds[pid] || reviewMap[pid].review.length <= 72
+                          ? reviewMap[pid].review
+                          : `${reviewMap[pid].review.slice(0, 72)}…`}
+                      </p>
+                      {reviewMap[pid].review.length > 72 && (
+                        <button
+                          type="button"
+                          className="wv-card-review-more"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpandedReviewIds((prev) => ({ ...prev, [pid]: !prev[pid] }));
+                          }}
+                        >
+                          {expandedReviewIds[pid] ? 'See less' : 'See more'}
+                        </button>
+                      )}
+                    </div>
+                  )}
                   {hasPromo && (
                     <div className="wv-card-promo-hint">
                       <i className="fas fa-ticket-alt"></i> Promo available · use{' '}
