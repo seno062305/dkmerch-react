@@ -520,7 +520,7 @@ const LbcDeliveryBanner = () => (
       <strong>Outside NCR — LBC Express delivery</strong>
       <p>
         This address is outside Metro Manila. Your order will be shipped via <strong>LBC Express</strong>.
-        After we ship, we’ll chat you the LBC tracking number — then track it on the LBC site from your Track page.
+        After we ship, use the <strong>LBC Tracker</strong> button on the Track page and enter your LBC tracking number.
       </p>
     </div>
   </div>
@@ -1448,7 +1448,7 @@ const Checkout = () => {
                 {isOutsideNCR && (
                   <div className="lbc-summary-block">
                     <i className="fas fa-truck"></i>
-                    <span>Outside NCR → ships via <strong>LBC Express</strong>. We’ll chat your LBC tracking number after shipping.</span>
+                    <span>Outside NCR → ships via <strong>LBC Express</strong>. Track it anytime on the Track page with the LBC Tracker button.</span>
                   </div>
                 )}
 
