@@ -1,14 +1,22 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAction, useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
+import { useAuth } from '../context/AuthContext';
 import './OrderSuccess.css';
+
+const homeForRole = (role) => {
+  if (role === 'admin') return '/admin';
+  if (role === 'rider') return '/rider';
+  return '/';
+};
 
 const OrderSuccess = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const orderId = searchParams.get('orderId');
-  const checkPaymentStatus  = useAction(api.payments.checkPaymentStatus);
+  const { role, isReady } = useAuth();
+  const checkPaymentStatus = useAction(api.payments.checkPaymentStatus);
   const sendOrderConfirmation = useAction(api.sendEmail.sendOrderConfirmation);
 
   const [status, setStatus] = useState('checking');
@@ -18,35 +26,57 @@ const OrderSuccess = () => {
     orderId ? { orderId } : 'skip'
   );
 
+  const resolveHome = useCallback(() => {
+    try {
+      const stored = sessionStorage.getItem('dk_post_payment_home');
+      if (stored === '/admin' || stored === '/rider' || stored === '/') return stored;
+    } catch { /* ignore */ }
+    return homeForRole(role);
+  }, [role]);
+
+  const goPayerHome = useCallback(() => {
+    const home = resolveHome();
+    try {
+      sessionStorage.removeItem('dk_post_payment_home');
+      sessionStorage.removeItem('dk_post_payment_order');
+      sessionStorage.removeItem('dk_post_payment_role');
+    } catch { /* ignore */ }
+    navigate(home, { replace: true });
+  }, [navigate, resolveHome]);
+
   useEffect(() => {
     if (!orderId) {
-      navigate('/');
-      return;
+      navigate(resolveHome(), { replace: true });
     }
-  }, [orderId]);
+  }, [orderId, navigate, resolveHome]);
 
   useEffect(() => {
     if (order === undefined) return; // still loading
+    if (!orderId) return;
 
-    // Already paid — just show success (email was already sent at checkout)
+    // Already paid — finish flow
     if (order?.paymentStatus === 'paid') {
+      // Staff accounts should not stay on customer success UI
+      if (isReady && (role === 'admin' || role === 'rider')) {
+        goPayerHome();
+        return;
+      }
       setStatus('paid');
       return;
     }
 
     // Retry up to 6x with increasing delays to wait for PayMongo to confirm
+    let cancelled = false;
     const verifyWithRetry = async () => {
       const delays = [2000, 2500, 3000, 3000, 3000, 3000]; // ~16 seconds max
       for (let attempt = 0; attempt < delays.length; attempt++) {
+        if (cancelled) return;
         await new Promise(res => setTimeout(res, delays[attempt]));
+        if (cancelled) return;
         try {
           const result = await checkPaymentStatus({ orderId });
 
           if (result?.status === 'paid') {
-            setStatus('paid');
-
-            // ✅ Send email notification after payment confirmed
-            // Only send if order has email (avoid duplicate if already sent at checkout)
             if (order?.email && order?.paymentStatus !== 'paid') {
               try {
                 await sendOrderConfirmation({
@@ -68,34 +98,60 @@ const OrderSuccess = () => {
                 console.warn('Email send failed after payment:', emailErr);
               }
             }
+
+            if (isReady && (role === 'admin' || role === 'rider')) {
+              goPayerHome();
+              return;
+            }
+            setStatus('paid');
             return;
           }
 
-          // Still pending — keep retrying
           console.log(`Payment check attempt ${attempt + 1}: still pending...`);
-
         } catch (err) {
           console.warn(`Payment verification attempt ${attempt + 1} failed:`, err);
         }
 
-        // Last attempt — show success anyway (redirect from PayMongo = paid)
+        // Last attempt — treat PayMongo redirect as paid
         if (attempt === delays.length - 1) {
+          if (isReady && (role === 'admin' || role === 'rider')) {
+            goPayerHome();
+            return;
+          }
           setStatus('paid');
         }
       }
     };
 
     verifyWithRetry();
-  }, [order, orderId]);
+    return () => { cancelled = true; };
+  }, [order, orderId, role, isReady, checkPaymentStatus, sendOrderConfirmation, goPayerHome]);
+
+  // If staff lands here before order query resolves, still bounce off customer UI
+  useEffect(() => {
+    if (!isReady || !orderId) return;
+    if (role !== 'admin' && role !== 'rider') return;
+    // Give verification a moment, then force home if still here
+    const t = setTimeout(() => {
+      if (role === 'admin' || role === 'rider') goPayerHome();
+    }, 4500);
+    return () => clearTimeout(t);
+  }, [isReady, role, orderId, goPayerHome]);
+
+  const isStaff = role === 'admin' || role === 'rider';
 
   return (
     <div className="order-success-page">
       <div className="order-success-container">
 
-        {status === 'checking' ? (
+        {status === 'checking' || isStaff ? (
           <div className="success-checking">
             <i className="fas fa-spinner fa-spin"></i>
-            <p>Confirming your payment...</p>
+            <p>
+              {isStaff
+                ? 'Payment received — returning to your dashboard…'
+                : 'Confirming your payment...'}
+            </p>
           </div>
         ) : (
           <>
@@ -150,7 +206,7 @@ const OrderSuccess = () => {
               </button>
               <button
                 className="btn-back-home"
-                onClick={() => navigate('/')}
+                onClick={goPayerHome}
               >
                 <i className="fas fa-home"></i> Back to Home
               </button>

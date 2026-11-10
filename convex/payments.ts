@@ -35,8 +35,11 @@ export const createPaymentLink = action({
     customerPhone: v.optional(v.string()),
     remarks: v.optional(v.string()),
     paymentMethodType: v.optional(v.union(v.literal("gcash"), v.literal("paymaya"))),
+    /** Optional overrides so admin/rider "Back to merchant" does not land on customer UI */
+    successUrl: v.optional(v.string()),
+    cancelUrl: v.optional(v.string()),
   },
-  handler: async (ctx, { orderId, amount, description, customerName, customerEmail, customerPhone, remarks, paymentMethodType }) => {
+  handler: async (ctx, { orderId, amount, description, customerName, customerEmail, customerPhone, remarks, paymentMethodType, successUrl, cancelUrl }) => {
     const secretKey = process.env.PAYMONGO_SECRET_KEY;
     if (!secretKey) throw new Error("PayMongo secret key not configured");
 
@@ -45,6 +48,13 @@ export const createPaymentLink = action({
     const methodTypes = paymentMethodType
       ? [paymentMethodType]
       : ["gcash", "paymaya"];
+
+    const resolvedSuccess =
+      (successUrl && String(successUrl).trim()) ||
+      `${baseUrl}/order-success?orderId=${orderId}`;
+    const resolvedCancel =
+      (cancelUrl && String(cancelUrl).trim()) ||
+      `${baseUrl}/checkout`;
 
     const response = await fetch("https://api.paymongo.com/v1/checkout_sessions", {
       method: "POST",
@@ -68,8 +78,8 @@ export const createPaymentLink = action({
               quantity:    1,
             }],
             payment_method_types: methodTypes,
-            success_url: `${baseUrl}/order-success?orderId=${orderId}`,
-            cancel_url:  `${baseUrl}/checkout`,
+            success_url: resolvedSuccess,
+            cancel_url:  resolvedCancel,
             description: remarks || orderId,
             send_email_receipt: false,
             show_description:   true,

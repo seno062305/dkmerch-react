@@ -543,7 +543,7 @@ const NCRViolationBanner = () => (
 const Checkout = () => {
   const navigate  = useNavigate();
   const location  = useLocation();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, role } = useAuth();
   const { confirm }               = useConfirm();
   const { showNotification }      = useNotification();
 
@@ -902,6 +902,18 @@ const Checkout = () => {
       const payDescription = rewardOrder
         ? `DKMerch Reward Order ${orderId} (Ticket: ${rewardOrder.ticketCode})`
         : `DKMerch Order ${orderId}${promoItem ? ` (Promo: ${promoItem.promoCode})` : ''}`;
+      // Remember who paid so "Back to merchant" returns to their home — not the wrong role UI
+      const origin = window.location.origin;
+      const payerHome =
+        role === 'admin' ? '/admin' :
+        role === 'rider' ? '/rider' :
+        '/';
+      try {
+        sessionStorage.setItem('dk_post_payment_home', payerHome);
+        sessionStorage.setItem('dk_post_payment_order', orderId);
+        sessionStorage.setItem('dk_post_payment_role', role || 'user');
+      } catch { /* ignore */ }
+
       const payArgs = {
         orderId,
         amount:        finalTotal,
@@ -909,6 +921,11 @@ const Checkout = () => {
         customerName:  savedContact.fullName,
         customerEmail: savedContact.email,
         customerPhone: savedContact.phone,
+        // Always land on order-success first (to verify payment), then page routes by role
+        successUrl: `${origin}/order-success?orderId=${encodeURIComponent(orderId)}`,
+        cancelUrl:  role === 'admin' || role === 'rider'
+          ? `${origin}${payerHome}`
+          : `${origin}/checkout`,
       };
 
       try {
