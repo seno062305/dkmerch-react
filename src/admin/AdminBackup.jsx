@@ -682,17 +682,6 @@ const DatabaseStatusPanel = () => {
     if (!isPending && sample) setSamples(prev => ({ ...prev, [key]: sample }));
   }, []);
 
-  const convexUrl = process.env.REACT_APP_CONVEX_URL || '';
-  let host = '—';
-  let deployment = '—';
-  try {
-    if (convexUrl) {
-      const u = new URL(convexUrl);
-      host = u.host;
-      deployment = u.hostname.replace('.convex.cloud', '');
-    }
-  } catch { host = convexUrl || '—'; }
-
   const loading = Object.values(pending).some(Boolean);
   const anyLoaded = Object.keys(samples).length > 0;
   const online = anyLoaded;
@@ -768,7 +757,6 @@ const DatabaseStatusPanel = () => {
       <div className="ab-status-header">
         <div>
           <h2 className="ab-status-title"><i className="fas fa-heartbeat"></i> Convex Database Status</h2>
-          <p className="ab-status-hint">Live health + approximate JSON document footprint</p>
         </div>
         <span className={`ab-status-pill ${loading && !anyLoaded ? 'ab-status-pill--loading' : online ? 'ab-status-pill--ok' : 'ab-status-pill--bad'}`}>
           {loading && !anyLoaded ? 'Checking…' : online ? 'Online' : 'Unreachable'}
@@ -785,8 +773,6 @@ const DatabaseStatusPanel = () => {
             <span className="ab-storage-label">Active records</span>
             <strong className="ab-storage-records">{anyLoaded ? total.toLocaleString() : '—'}</strong>
           </div>
-          <p className="ab-storage-deploy">Deployment: {deployment}</p>
-          <p className="ab-storage-host">{host}</p>
         </div>
         <div
           className="ab-storage-donut"
