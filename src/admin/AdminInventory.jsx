@@ -4,8 +4,10 @@ import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useUpdateProduct } from '../utils/productStorage';
 import DkIcon, { DK_ICONS } from '../components/DkIcon';
+import { useNotification } from '../context/NotificationContext';
 
 const AdminItemList = () => {
+  const { showNotification } = useNotification();
   const products = useQuery(api.products.getAllProductsAdmin) || [];
   const updateProduct = useUpdateProduct();
 
@@ -37,8 +39,9 @@ const AdminItemList = () => {
 
   const handleStockSave = async (productId) => {
     const newStock = parseInt(stockValue) || 0;
-    if (newStock < 0) { alert('Stock cannot be negative'); return; }
+    if (newStock < 0) { showNotification('Stock cannot be negative.', 'warning'); return; }
     await updateProduct({ id: productId, stock: newStock });
+    showNotification('Stock updated.', 'success');
     setEditingStock(null);
     setStockValue('');
   };

@@ -146,7 +146,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 9999;
+  z-index: 20000;
   padding: 16px;
   animation: fadeInOverlay 0.3s ease;
   box-sizing: border-box;
@@ -1093,15 +1093,27 @@
 
   /* Centered modals */
   .order-modal-overlay {
-    padding: 14px;
-    align-items: center;
-    justify-content: center;
+    padding: 14px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    box-sizing: border-box;
   }
   .order-modal {
-    border-radius: 16px;
+    border-radius: 16px !important;
     max-height: min(82dvh, 720px);
     max-width: min(480px, calc(100vw - 28px));
     width: 100%;
+    margin: auto;
+  }
+  .order-items-modal-overlay {
+    padding: 14px !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+  .order-items-modal {
+    border-radius: 16px;
+    max-height: min(82dvh, 720px);
+    max-width: min(480px, calc(100vw - 28px));
     margin: auto;
   }
   .modal-header { padding: 16px 16px 14px; }

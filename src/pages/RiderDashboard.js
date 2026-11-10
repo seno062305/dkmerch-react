@@ -3,10 +3,16 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../context/ConfirmContext';
+import { useNotification } from '../context/NotificationContext';
 import { useQuery, useMutation, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import WaybillScannerModal from '../components/WaybillScannerModal';
 import DkIcon, { DK_ICONS } from '../components/DkIcon';
+import InstallAppModal, {
+  isIosDevice,
+  isStandaloneApp,
+  isInsecureInstallHost,
+} from '../components/InstallAppModal';
 import './RiderDashboard.css';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -897,6 +903,7 @@ const useKickedCountdown = (kickedAt) => {
 const RiderDashboard = () => {
   const { user, logout } = useAuth();
   const { confirm } = useConfirm();
+  const { showNotification } = useNotification();
   const navigate = useNavigate();
 
   const [tab, setTab] = useState(() => {
@@ -943,22 +950,28 @@ const RiderDashboard = () => {
   const remainingCountdown = useKickedCountdown(kickedAtTimestamp);
 
   const [installPrompt, setInstallPrompt]   = useState(null);
-  const [showIosInstall, setShowIosInstall] = useState(false);
+  const [showInstallModal, setShowInstallModal] = useState(false);
   const [isInstalled, setIsInstalled]       = useState(false);
-  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
-  const isInStandaloneMode = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  const isIos = isIosDevice();
+  const isInStandaloneMode = isStandaloneApp();
 
   useEffect(() => {
     if (isInStandaloneMode) { setIsInstalled(true); return; }
     const handler = (e) => { e.preventDefault(); setInstallPrompt(e); };
+    const onInstalled = () => setIsInstalled(true);
     window.addEventListener('beforeinstallprompt', handler);
-    window.addEventListener('appinstalled', () => setIsInstalled(true));
-    return () => window.removeEventListener('beforeinstallprompt', handler);
-  }, []);
+    window.addEventListener('appinstalled', onInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handler);
+      window.removeEventListener('appinstalled', onInstalled);
+    };
+  }, [isInStandaloneMode]);
 
   const handleInstallClick = async () => {
-    if (isIos) { setShowIosInstall(true); return; }
-    if (!installPrompt) return;
+    if (isIos || isInsecureInstallHost() || !installPrompt) {
+      setShowInstallModal(true);
+      return;
+    }
     installPrompt.prompt();
     const { outcome } = await installPrompt.userChoice;
     if (outcome === 'accepted') setIsInstalled(true);
@@ -1302,9 +1315,7 @@ const RiderDashboard = () => {
         setExpandedDeliveries(prev => ({ ...prev, [result.id]: true }));
       }
       // GPS starts only when rider taps Notify Customer — not on accept
-      alert(result.alreadyClaimed
-        ? '✅ This order is already in Deliver.'
-        : '✅ Waybill matched! Order is in Deliver — tap Notify Customer to start live location.');
+      showNotification(result.alreadyClaimed ? 'Order was already claimed.' : (result.message || 'Order claimed.'), result.alreadyClaimed ? 'warning' : 'success');
       return { ok: true };
     } catch (err) {
       console.error(err);
@@ -1396,12 +1407,13 @@ const RiderDashboard = () => {
       await updatePickupStatus({ requestId: delivery._id, status: 'out_for_delivery' });
       setExpandedDeliveries(prev => ({ ...prev, [delivery._id]: true }));
       startTracking(delivery.orderId);
-      alert(
+      showNotification(
         result?.emailed
-          ? '📦 Customer notified by email with their delivery OTP.\n\n📍 Live location is sharing now.\nAsk for their OTP when you hand over the parcel.'
-          : '📦 Marked Out for Delivery.\n\n📍 Live location is sharing.\nOTP is on the customer Track Order page (email may be missing).'
+          ? 'Customer notified by email with their delivery OTP. Live location is sharing now.'
+          : 'Marked Out for Delivery. Live location is sharing. OTP is on the customer Track Order page.',
+        'success'
       );
-    } catch (err) { console.error(err); alert('Failed to notify customer. Please try again.'); }
+    } catch (err) { console.error(err); showNotification('Failed to notify customer. Please try again.', 'error'); }
     finally { setNotifyingId(null); }
   };
 
@@ -1439,14 +1451,14 @@ const RiderDashboard = () => {
       setOtpInputs(p => { const n = { ...p }; delete n[delivery._id]; return n; });
       setPhotoData(p => { const n = { ...p }; delete n[delivery._id]; return n; });
       setOtpErrors(p => { const n = { ...p }; delete n[delivery._id]; return n; });
-      alert('🎉 Delivery confirmed! Order marked as Completed.');
-    } catch (err) { console.error(err); alert('Failed to confirm delivery. Please try again.'); }
+      showNotification('Delivery confirmed! Order marked as Completed.', 'success');
+    } catch (err) { console.error(err); showNotification('Failed to confirm delivery. Please try again.', 'error'); }
     finally { setConfirmingId(null); }
   };
 
   const handleDeletePickup = async (pickupId, status, orderId) => {
     if (status !== 'completed') {
-      alert('❌ You can only remove completed deliveries from My Orders.');
+      showNotification('You can only remove completed deliveries from My Orders.', 'warning');
       return;
     }
     const ok = await confirm({
@@ -1459,7 +1471,7 @@ const RiderDashboard = () => {
     try {
       await deletePickupRequest({ requestId: pickupId });
       if (GPS.activeOrderId() === orderId) { GPS.stopLocal(); setTrackingOrderId(null); setCurrentPosition(null); }
-    } catch (err) { console.error(err); alert('Failed to remove pickup.'); }
+    } catch (err) { console.error(err); showNotification('Failed to remove pickup.', 'error'); }
   };
 
   if (riderInfo === undefined) return <div className="rider-dashboard"><div className="rider-not-approved"><div className="rider-na-icon">🛵</div><h2>Loading...</h2></div></div>;
@@ -1526,17 +1538,11 @@ const RiderDashboard = () => {
         </div>
       </header>
 
-      {showIosInstall && (
-        <div className="rider-ios-install-overlay" onClick={() => setShowIosInstall(false)}>
-          <div className="rider-ios-install-modal" onClick={e => e.stopPropagation()}>
-            <button className="rider-ios-install-close" onClick={() => setShowIosInstall(false)}><i className="fas fa-times"></i></button>
-            <div className="rider-ios-install-icon"><img src="/images/dklogo2-removebg-preview.png" alt="DKMerch" /></div>
-            <h3>Install DKMerch</h3>
-            <p>Install this app on your iPhone for faster access to your deliveries.</p>
-            <button className="rider-ios-install-done" onClick={() => setShowIosInstall(false)}>Got it!</button>
-          </div>
-        </div>
-      )}
+      <InstallAppModal
+        open={showInstallModal}
+        onClose={() => setShowInstallModal(false)}
+        title="Install DKMerch Rider"
+      />
 
       <main className="rider-main">
         {tab === 'available' && (

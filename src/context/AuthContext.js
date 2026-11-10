@@ -3,6 +3,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { appendActivityLog } from "../admin/lib/localActivityLog";
+import { saveDeviceUnlock } from "../lib/deviceUnlock";
 
 const AuthContext = createContext(null);
 
@@ -243,6 +244,8 @@ export const AuthProvider = ({ children }) => {
       role:     pendingUser.role || "user",
     };
     localStorage.setItem("authUser", JSON.stringify(sessionUser));
+    // Remember this customer on the device for next PIN-only unlock
+    if (sessionUser.role === "user") saveDeviceUnlock(sessionUser);
     setUser(sessionUser);
     setRole(sessionUser.role);
     setIsAuthenticated(true);

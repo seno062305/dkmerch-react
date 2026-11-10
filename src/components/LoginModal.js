@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { useMutation, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { hasLocalPin, savePinWithFallback, verifyPinWithFallback, clearLocalPin } from "../lib/localPin";
+import { getDeviceUnlock, clearDeviceUnlock } from "../lib/deviceUnlock";
 // Static import — lazy chunk breaks Create Account after HMR / stale builds
 import RegisterModal from "./RegisterModal";
 
@@ -113,8 +114,12 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
   const navigate = useNavigate();
 
   // view: "login" | "pin" | "loginOtp" | "createPin" | "forgot" | "reactivate"
-  const [view, setView] = useState("login");
-  const [pendingUser, setPendingUser] = useState(null);
+  const remembered = (() => {
+    try { return getDeviceUnlock(); } catch { return null; }
+  })();
+  const [view, setView] = useState(remembered?._id ? "pin" : "login");
+  const [pendingUser, setPendingUser] = useState(remembered?._id ? remembered : null);
+  const [deviceUnlockMode, setDeviceUnlockMode] = useState(!!remembered?._id);
   const [pinValue, setPinValue] = useState("");
   const [pinConfirmValue, setPinConfirmValue] = useState("");
   const [pinStep, setPinStep] = useState(0); // 0 = enter new, 1 = confirm (set/reset only)
@@ -126,7 +131,8 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
   const [loginOtpMsg, setLoginOtpMsg] = useState("");
   const [loginOtpCooldown, setLoginOtpCooldown] = useState(0);
   const [isPinReset, setIsPinReset] = useState(false);
-  const [accountHasPin, setAccountHasPin] = useState(false);
+  // Device unlock = already finished email+password+PIN once on this phone
+  const [accountHasPin, setAccountHasPin] = useState(!!remembered?._id);
   const [pinResetSentCode, setPinResetSentCode] = useState(""); // client fallback when Convex PIN OTP isn't deployed
   const [pinResetSending, setPinResetSending] = useState(false);
   const pinInputRef = useRef(null);
@@ -1137,12 +1143,14 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
           <>
             <div className="login-modal-header">
               <h2 style={{ background: accentGradient, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
-                Enter Your PIN to Continue
+                {deviceUnlockMode ? "Welcome Back" : "Enter Your PIN to Continue"}
               </h2>
               <p className="login-subtitle">
-                {accountHasPin
-                  ? `Hi ${pendingUser?.name || "there"} — enter your PIN to start shopping.`
-                  : `Hi ${pendingUser?.name || "there"} — tap Reset PIN to create your shopping PIN.`}
+                {deviceUnlockMode
+                  ? `Hi ${pendingUser?.name || "there"} — enter your PIN to unlock.`
+                  : accountHasPin
+                    ? `Hi ${pendingUser?.name || "there"} — enter your PIN to start shopping.`
+                    : `Hi ${pendingUser?.name || "there"} — tap Reset PIN to create your shopping PIN.`}
               </p>
             </div>
             <div className="login-form">
@@ -1185,7 +1193,7 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
                 disabled={pinLoading || (accountHasPin && pinValue.length < 4)}
                 style={{ background: accentGradient, boxShadow: `0 4px 12px ${accentShadow}`, color: "#fff" }}
               >
-                {pinLoading ? "Checking…" : "Continue to Shop"}
+                {pinLoading ? "Checking…" : deviceUnlockMode ? "Unlock" : "Continue to Shop"}
               </button>
               <div className="signup-section" style={{ marginTop: 0 }}>
                 <p>
@@ -1194,8 +1202,21 @@ const LoginModal = ({ onClose, onLoginSuccess }) => {
                   </button>
                 </p>
                 <p>
-                  <button type="button" className="signup-link" style={{ color: "#9ca3af" }} onClick={() => { setView("login"); setPendingUser(null); }}>
-                    ← Back
+                  <button
+                    type="button"
+                    className="signup-link"
+                    style={{ color: "#9ca3af" }}
+                    onClick={() => {
+                      if (deviceUnlockMode) clearDeviceUnlock();
+                      setDeviceUnlockMode(false);
+                      setAccountHasPin(false);
+                      setPendingUser(null);
+                      setPinValue("");
+                      setPinError("");
+                      setView("login");
+                    }}
+                  >
+                    {deviceUnlockMode ? "Use another account" : "← Back"}
                   </button>
                 </p>
               </div>

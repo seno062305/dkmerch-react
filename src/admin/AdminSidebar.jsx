@@ -8,7 +8,6 @@ import { useBackup } from '../context/BackupContext';
 import { TABLES } from './AdminBackup';
 import { downloadEncryptedBackupExcel } from './lib/backupExcel';
 import { formatExportCooldownMessage } from './lib/exportCooldown';
-import DkIcon, { DK_ICONS } from '../components/DkIcon';
 import './AdminSidebar.css';
 
 // ── Logout Backup Modal ───────────────────────────────────────────────────────

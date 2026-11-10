@@ -11,7 +11,7 @@ const MORE_LINKS = [
   { to: '/admin/sales-reports', icon: 'fa-chart-bar', label: 'Sales Reports' },
   { to: '/admin/users', icon: 'fa-users', label: 'User Management' },
   { to: '/admin/rewards', icon: 'fa-star', label: 'Rewards' },
-  { to: '/admin/settings', icon: 'fa-tools', label: 'System Maintenance' },
+  { to: '/admin/settings', icon: 'fa-cog', label: 'Settings' },
 ];
 
 const MORE_PATHS = new Set(MORE_LINKS.map((l) => l.to));

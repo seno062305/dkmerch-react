@@ -23,6 +23,7 @@ export const DK_ICONS = {
   userDeactivated: 'user-deactivated',
   userSuspendedDeleted: 'user-suspended-deleted',
   userActive: 'user-active',
+  shoppingBag: 'shopping-bag',
 };
 
 const DkIcon = ({

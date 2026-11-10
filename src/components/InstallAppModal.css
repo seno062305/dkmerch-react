@@ -1,0 +1,140 @@
+.iam-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30000;
+  background: rgba(15, 23, 42, 0.58);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.iam-modal {
+  position: relative;
+  width: min(400px, 100%);
+  background: #fff;
+  border-radius: 18px;
+  padding: 28px 22px 20px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+  box-sizing: border-box;
+}
+
+.iam-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: #f1f5f9;
+  color: #64748b;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.iam-icon-wrap {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 14px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(252, 18, 104, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.iam-icon-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.iam-modal h3 {
+  margin: 0 0 10px;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 800;
+  color: #1a1f36;
+}
+
+.iam-lead {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #475569;
+  text-align: center;
+}
+
+.iam-live-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #fff0f5;
+  border: 1.5px solid #ffd6e7;
+  color: #fc1268;
+  font-weight: 700;
+  font-size: 14px;
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.iam-steps {
+  margin: 0 0 14px;
+  padding-left: 20px;
+  font-size: 13px;
+  color: #334155;
+  line-height: 1.6;
+}
+
+.iam-steps li { margin-bottom: 6px; }
+
+.iam-share-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 18px;
+  margin: 0 2px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: #e2e8f0;
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.iam-hint {
+  margin: 0 0 14px;
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.iam-hint a {
+  color: #fc1268;
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.iam-done {
+  width: 100%;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, #fc1268, #a855f7);
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+}

@@ -260,6 +260,11 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
     setExpandedReviews(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
+  useEffect(() => {
+    document.body.classList.add('product-modal-open');
+    return () => document.body.classList.remove('product-modal-open');
+  }, []);
+
   if (hideProductModal) return <>{showLoginModal && <LoginModal onClose={handleLoginModalClose} />}</>;
 
   return (
@@ -426,7 +431,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
                         <i className="fas fa-shopping-cart"></i> Pre-Order Now
                       </button>
                       <button type="button" className="btn-fav-outline" onClick={handleWishlistClick} title="Add to Favorites" aria-label="Add to favorites">
-                        <i className="fas fa-star" aria-hidden="true"></i>
+                        <i className="fas fa-heart" aria-hidden="true"></i>
                       </button>
                     </>
                   ) : (
@@ -440,7 +445,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
                         </button>
                       )}
                       <button type="button" className="btn-fav-outline" onClick={handleWishlistClick} title="Add to Favorites" aria-label="Add to favorites">
-                        <i className="fas fa-star" aria-hidden="true"></i>
+                        <i className="fas fa-heart" aria-hidden="true"></i>
                       </button>
                     </>
                   )}

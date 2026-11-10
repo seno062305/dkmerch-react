@@ -10,7 +10,7 @@
   align-items: center;
   justify-content: center;
   /* above chat/download FABs (z-index ~10050) */
-  z-index: 11000;
+  z-index: 20000;
   padding: 20px;
   box-sizing: border-box;
   overflow-y: auto;
@@ -421,7 +421,17 @@
 
 .modal-promo-section { margin-top: 4px; }
 
-.modal-actions { display: flex; gap: 10px; margin-top: 6px; flex-wrap: wrap; }
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+  flex-wrap: nowrap;
+  align-items: stretch;
+}
+
+body.product-modal-open .dk-chat-fab-stack {
+  display: none !important;
+}
 
 .btn-add-cart, .btn-preorder, .btn-buy-now {
   flex: 1; padding: 13px 20px;
@@ -459,6 +469,7 @@
   flex-shrink: 0;
   padding: 0;
   gap: 0;
+  line-height: 1;
 }
 
 .btn-fav-outline i {
@@ -466,15 +477,6 @@
   font-size: 18px;
   line-height: 1;
   display: block;
-}
-
-.btn-fav-outline .dk-icon {
-  width: 20px !important;
-  height: 20px !important;
-  filter: none;
-  /* favorite.png is yellow-on-black — show star clearly on cream button */
-  mix-blend-mode: normal;
-  object-fit: contain;
 }
 
 .btn-fav-outline:hover,
@@ -698,8 +700,15 @@
   .current-price { font-size: 18px; }
   .product-description { max-height: 72px; overflow: hidden; font-size: 12px; }
 
-  .btn-add-cart, .btn-preorder, .btn-buy-now { padding: 10px 12px; font-size: 12px; min-width: 0; }
-  .btn-fav-outline { width: 40px; height: 40px; font-size: 15px; }
+  .modal-actions { gap: 6px; }
+  .btn-add-cart, .btn-preorder, .btn-buy-now {
+    padding: 10px 10px;
+    font-size: 12px;
+    min-width: 0;
+    flex: 1 1 0;
+    white-space: nowrap;
+  }
+  .btn-fav-outline { width: 40px; height: 40px; min-width: 40px; font-size: 15px; }
 
   .review-section { padding-bottom: 20px; }
   .modal-left-reviews { max-height: 120px; overflow-y: auto; }

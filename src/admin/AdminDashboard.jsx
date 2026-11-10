@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import DkIcon, { DK_ICONS } from '../components/DkIcon';
+import { useNotification } from '../context/NotificationContext';
 import AdminPager from './AdminPager';
 import './AdminDashboard.css';
 
@@ -63,6 +64,7 @@ const StatModal = ({ data, onClose }) => {
 };
 
 const AdminDashboard = () => {
+  const { showNotification } = useNotification();
   const [statModal, setStatModal] = useState(null);
   const [ordersPageSize, setOrdersPageSize] = useState(5);
   const [ordersPage, setOrdersPage]         = useState(0);
@@ -100,7 +102,7 @@ const AdminDashboard = () => {
   };
 
   const handleDetectLocation = () => {
-    if (!navigator.geolocation) { alert('Geolocation is not supported by your browser.'); return; }
+    if (!navigator.geolocation) { showNotification('Geolocation is not supported by your browser.', 'error'); return; }
     setStoreLocating(true);
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
@@ -125,7 +127,7 @@ const AdminDashboard = () => {
           setStoreLocating(false);
         }
       },
-      () => { alert('Unable to detect location.'); setStoreLocating(false); },
+      () => { showNotification('Unable to detect location.', 'error'); setStoreLocating(false); },
       { enableHighAccuracy: true, timeout: 15000 }
     );
   };
@@ -134,7 +136,7 @@ const AdminDashboard = () => {
     const lat = parseFloat(storeForm.storeLat);
     const lng = parseFloat(storeForm.storeLng);
     if (isNaN(lat) || isNaN(lng)) {
-      alert('Please enter valid coordinates or use Detect Location.');
+      showNotification('Please enter valid coordinates or use Detect Location.', 'warning');
       return;
     }
     try {
@@ -145,9 +147,10 @@ const AdminDashboard = () => {
         storeLng: lng,
       });
       setStoreFormSaved(true);
+      showNotification('Store location saved.', 'success');
     } catch (err) {
       console.error(err);
-      alert('Failed to save store location.');
+      showNotification('Failed to save store location.', 'error');
     }
   };
 

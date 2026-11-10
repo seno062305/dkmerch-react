@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import './AdminProducts.css';
 import { useQuery, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
@@ -131,7 +132,7 @@ const ProductModal = ({ editingId, initialForm, onClose, onSubmit, submitting })
     onSubmit(form);
   };
 
-  return (
+  return createPortal(
     <div className="pm-overlay" onClick={onClose}>
       <div className="pm-modal" onClick={e => e.stopPropagation()}>
         <div className="pm-header">
@@ -335,7 +336,8 @@ const ProductModal = ({ editingId, initialForm, onClose, onSubmit, submitting })
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

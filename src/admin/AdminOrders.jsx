@@ -1,9 +1,11 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { QRCodeSVG } from 'qrcode.react';
 import { useConfirm } from '../context/ConfirmContext';
+import { useNotification } from '../context/NotificationContext';
 import DkIcon, { DK_ICONS } from '../components/DkIcon';
 import AdminPager from './AdminPager';
 import './AdminOrders.css';
@@ -49,6 +51,7 @@ const PaymentMethodMark = ({ pm, size = 18 }) => {
    WAYBILL MODAL
 ══════════════════════════════════════ */
 const WaybillModal = ({ order, onClose }) => {
+  const { showNotification } = useNotification();
   const [printing, setPrinting] = useState(false);
 
   const subtotal    = order.subtotal    || 0;
@@ -117,7 +120,7 @@ const WaybillModal = ({ order, onClose }) => {
       // Open on click so popup blockers stay happy, then fill in the label + QR.
       printWindow = window.open('', '_blank', 'width=480,height=720');
       if (!printWindow) {
-        alert('Pop-up blocked! Please allow pop-ups for this site.');
+        showNotification('Pop-up blocked! Please allow pop-ups for this site.', 'error');
         return;
       }
       printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Preparing…</title>
@@ -312,7 +315,7 @@ const WaybillModal = ({ order, onClose }) => {
     } catch (err) {
       console.error('Waybill print failed:', err);
       try { printWindow?.close(); } catch (_) { /* ignore */ }
-      alert('Failed to open waybill print. Please try again.');
+      showNotification('Failed to open waybill print. Please try again.', 'error');
     } finally {
       setPrinting(false);
     }
@@ -418,6 +421,7 @@ const WaybillModal = ({ order, onClose }) => {
 ══════════════════════════════════════ */
 const AdminOrders = () => {
   const { confirm } = useConfirm();
+  const { showNotification } = useNotification();
   const [activeTab,     setActiveTab]     = useState('all');
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [searchTerm,    setSearchTerm]    = useState('');
@@ -528,7 +532,7 @@ const AdminOrders = () => {
       }
     } catch (err) {
       console.error('Failed to update status:', err);
-      alert('Failed to update order status. Please try again.');
+      showNotification('Failed to update order status. Please try again.', 'error');
     }
   };
 
@@ -552,7 +556,7 @@ const AdminOrders = () => {
       }
     } catch (err) {
       console.error('Failed to cancel order:', err);
-      alert('Failed to cancel order. Please try again.');
+      showNotification('Failed to cancel order. Please try again.', 'error');
     }
   };
 
@@ -581,7 +585,7 @@ const AdminOrders = () => {
       }
     } catch (err) {
       console.error('Failed to resolve refund:', err);
-      alert('Failed to resolve refund. Please try again.');
+      showNotification('Failed to resolve refund. Please try again.', 'error');
     }
   };
 
@@ -784,7 +788,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
     finally { setResolvingRefund(false); setShowRejectConfirm(false); }
   };
 
-  return (
+  return createPortal(
     <div className="order-modal-overlay" onClick={onClose}>
       <div className="order-modal" onClick={e => e.stopPropagation()}>
         {/* ── HEADER ── */}
@@ -1049,7 +1053,8 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
           onClose={() => setShowItemsModal(false)}
         />
       )}
-    </div>
+    </div>,
+    document.body
   );
 };
 

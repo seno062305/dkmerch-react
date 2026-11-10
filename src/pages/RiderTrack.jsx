@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
+import { useNotification } from '../context/NotificationContext';
 import './RiderTrack.css';
 
 const generateSessionId = () =>
@@ -229,6 +230,7 @@ function FullscreenMapModal({ order, gpsCoords, onClose }) {
 ══════════════════════════════════════ */
 export default function RiderTrack() {
   const { orderId } = useParams();
+  const { showNotification } = useNotification();
   const SESSION_ID  = useRef(getTabSessionId()).current;
   const loggedInRider = useRef(getLoggedInRider()).current;
 
@@ -691,8 +693,8 @@ export default function RiderTrack() {
   };
 
   const handleMarkDelivered = async () => {
-    if (!order?.deliveryOtpVerified) { alert('Verify OTP first.'); setActiveTab('otp'); return; }
-    if (!photoFile) { alert('Take a delivery photo first.'); setActiveTab('photo'); return; }
+    if (!order?.deliveryOtpVerified) { showNotification('Verify OTP first.', 'warning'); setActiveTab('otp'); return; }
+    if (!photoFile) { showNotification('Take a delivery photo first.', 'warning'); setActiveTab('photo'); return; }
     setMarking(true);
     try {
       setUploading(true);
@@ -714,7 +716,7 @@ export default function RiderTrack() {
       sessionStorage.removeItem('riderTrackSessionId');
       setDeliveryDone(true);
     } catch {
-      alert('Failed. Please try again.');
+      showNotification('Failed. Please try again.', 'error');
     } finally {
       setMarking(false);
       setUploading(false);

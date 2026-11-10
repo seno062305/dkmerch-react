@@ -1,4 +1,9 @@
 import { useState, useRef, useEffect } from "react";
+import InstallAppModal, {
+  isIosDevice,
+  isStandaloneApp,
+  isInsecureInstallHost,
+} from "./InstallAppModal";
 
 // ─── DKMerch Brand Colors ───
 const PINK = "#fc1268";
@@ -206,11 +211,9 @@ export default function DKMerchChatBot() {
 
   const [installPrompt, setInstallPrompt] = useState(null);
   const [isInstalled, setIsInstalled] = useState(false);
-  const [showIosInstall, setShowIosInstall] = useState(false);
-  const isIos = /iphone|ipad|ipod/i.test(typeof navigator !== "undefined" ? navigator.userAgent : "");
-  const isStandalone =
-    typeof window !== "undefined" &&
-    (window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone);
+  const [showInstallModal, setShowInstallModal] = useState(false);
+  const isIos = isIosDevice();
+  const isStandalone = isStandaloneApp();
 
   useEffect(() => {
     if (isStandalone) {
@@ -231,12 +234,13 @@ export default function DKMerchChatBot() {
   }, [isStandalone]);
 
   const handleInstallClick = async () => {
-    if (isIos) {
-      setShowIosInstall(true);
+    // iPhone/iPad: no native install prompt — guide Add to Home Screen (and block IP shortcuts)
+    if (isIos || isInsecureInstallHost()) {
+      setShowInstallModal(true);
       return;
     }
     if (!installPrompt) {
-      alert("Install is available in supported mobile browsers (Chrome/Edge). Open this site on your phone, then tap Download App.");
+      setShowInstallModal(true);
       return;
     }
     installPrompt.prompt();
@@ -394,43 +398,11 @@ export default function DKMerchChatBot() {
         </div>
       </div>
 
-      {showIosInstall && (
-        <div
-          onClick={() => setShowIosInstall(false)}
-          style={{
-            position: "fixed", inset: 0, zIndex: 10060,
-            background: "rgba(15,23,42,0.55)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            padding: 16,
-          }}
-        >
-          <div
-            onClick={e => e.stopPropagation()}
-            style={{
-              width: "min(360px, 100%)", background: "#fff", borderRadius: 16,
-              padding: "22px 20px 18px", boxShadow: "0 20px 50px rgba(0,0,0,0.25)",
-            }}
-          >
-            <h3 style={{ margin: "0 0 8px", fontSize: 18 }}>Install DKMerch on iPhone</h3>
-            <ol style={{ margin: "0 0 14px", paddingLeft: 18, fontSize: 13, color: "#475569", lineHeight: 1.55 }}>
-              <li>Tap the <strong>Share</strong> button in Safari.</li>
-              <li>Choose <strong>Add to Home Screen</strong>.</li>
-              <li>Tap <strong>Add</strong>.</li>
-            </ol>
-            <button
-              type="button"
-              onClick={() => setShowIosInstall(false)}
-              style={{
-                width: "100%", border: "none", borderRadius: 10, padding: "11px 14px",
-                background: `linear-gradient(135deg, ${PINK}, ${PURPLE})`,
-                color: "#fff", fontWeight: 700, cursor: "pointer",
-              }}
-            >
-              Got it
-            </button>
-          </div>
-        </div>
-      )}
+      <InstallAppModal
+        open={showInstallModal}
+        onClose={() => setShowInstallModal(false)}
+        title="Install DKMerch on iPhone"
+      />
 
       {/* ── Chat Window — above CartModal (z-index: 9999) and its content (10000) ── */}
       {open && (

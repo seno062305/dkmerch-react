@@ -6,6 +6,8 @@ import { api } from '../../convex/_generated/api';
 import { useUserOrders, useOrdersByEmail } from '../utils/orderStorage';
 import { useProducts, usePreOrderProducts } from '../utils/productStorage';
 import { isLbcOrder, openLbcTracker, LBC_TRACK_URL } from '../utils/deliveryUtils';
+import DkIcon, { DK_ICONS } from '../components/DkIcon';
+import { useNotification } from '../context/NotificationContext';
 import './TrackOrder.css';
 
 const LbcTrackPanel = ({ compact = false }) => (
@@ -490,6 +492,7 @@ const RiderMap = ({ orderId, riderName, orderData }) => {
 // ─── MAIN TRACK ORDER PAGE ────────────────────────────────────────────────────
 const TrackOrder = () => {
   const navigate = useNavigate();
+  const { showNotification } = useNotification();
   const { user, isAuthenticated } = useAuth();
   const [searchParams] = useSearchParams();
   const orderIdParam = searchParams.get('order') || searchParams.get('orderId') || searchParams.get('id');
@@ -617,15 +620,15 @@ const TrackOrder = () => {
   });
 
   const FILTERS = [
-    { key: 'active',    icon: 'fa-shopping-bag', label: 'All Orders', count: activeOrders.length,    desc: 'Active & ongoing orders' },
-    { key: 'delivered', icon: 'fa-check-double',  label: 'Delivered',  count: deliveredOrders.length, desc: 'Successfully delivered' },
-    { key: 'cancelled', icon: 'fa-ban',           label: 'Cancelled',  count: cancelledOrders.length, desc: 'Cancelled orders' },
+    { key: 'active',    icon: 'fa-box',           dkIcon: DK_ICONS.shoppingBag, label: 'All Orders', count: activeOrders.length,    desc: 'Active & ongoing orders' },
+    { key: 'delivered', icon: 'fa-check-double',  dkIcon: DK_ICONS.shoppingBag, label: 'Delivered',  count: deliveredOrders.length, desc: 'Successfully delivered' },
+    { key: 'cancelled', icon: 'fa-ban',           dkIcon: DK_ICONS.shoppingBag, label: 'Cancelled',  count: cancelledOrders.length, desc: 'Cancelled orders' },
   ];
 
   const handleFindMyOrders = (e) => {
     e.preventDefault();
     const email = trackingEmail.trim();
-    if (!email) { alert('Please enter your email address'); return; }
+    if (!email) { showNotification('Please enter your email address.', 'warning'); return; }
     setSearchEmail(email); setShowTrackedOrders(true); setSelectedOrderId(null);
   };
 
@@ -672,7 +675,7 @@ const TrackOrder = () => {
         if (order.paymentLinkUrl) { window.location.href = order.paymentLinkUrl; return; }
         const result = await createPaymentLink({ orderId: order.orderId, amount: order.finalTotal ?? order.total, description: `DKMerch Order ${order.orderId}`, customerName: order.customerName, customerEmail: order.email, customerPhone: order.phone });
         window.location.href = result.paymentLinkUrl;
-      } catch { alert('Failed. Please try again.'); setContinuingPayment(false); }
+      } catch { showNotification('Failed. Please try again.', 'error'); setContinuingPayment(false); }
     };
 
     return (
@@ -815,9 +818,14 @@ const TrackOrder = () => {
             <div className="tab-context-bar"><i className={`fas ${activeTab?.icon}`}></i><span><strong>{activeTab?.label}</strong> — {activeTab?.desc}{filteredOrders.length > 0 && <span className="tab-context-count"> · {filteredOrders.length} order{filteredOrders.length !== 1 ? 's' : ''}</span>}</span></div>
             {filteredOrders.length === 0 ? (
               <div className="orders-empty">
-                <i className={`fas ${activeTab?.icon}`}></i><h3>No {activeTab?.label} Yet</h3>
+                <DkIcon name={DK_ICONS.shoppingBag} size={72} className="orders-empty-icon" alt="" />
+                <h3>{filter === 'active' ? 'No Orders Yet' : `No ${activeTab?.label} Yet`}</h3>
                 <p>{filter === 'active' && 'No active orders.'}{filter === 'delivered' && 'No delivered orders.'}{filter === 'cancelled' && 'No cancelled orders.'}</p>
-                {filter === 'active' && <button className="btn btn-primary" onClick={() => navigate('/collections')}><i className="fas fa-shopping-bag"></i> Start Shopping</button>}
+                {filter === 'active' && (
+                  <button className="btn btn-primary" onClick={() => navigate('/collections')}>
+                    <DkIcon name={DK_ICONS.shoppingBag} size={16} alt="" /> Start Shopping
+                  </button>
+                )}
               </div>
             ) : (
               <div className="orders-grid">{filteredOrders.map(order => <OrderCard key={order._id} order={order} onViewDetails={handleOpenModal} isGuest={false} />)}</div>
@@ -912,7 +920,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
       if (order.paymentLinkUrl) { window.location.href = order.paymentLinkUrl; return; }
       const result = await createPaymentLink({ orderId: order.orderId, amount: order.finalTotal ?? order.total, description: `DKMerch Order ${order.orderId}`, customerName: order.customerName, customerEmail: order.email, customerPhone: order.phone });
       window.location.href = result.paymentLinkUrl;
-    } catch { alert('Failed. Please try again.'); setContinuingPayment(false); }
+    } catch { showNotification('Failed. Please try again.', 'error'); setContinuingPayment(false); }
   };
 
   return (

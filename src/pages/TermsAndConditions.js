@@ -170,6 +170,48 @@ const TermsAndConditions = () => {
             </p>
           </section>
 
+          <section className="legal-section">
+            <h2><i className="fas fa-lightbulb"></i> 15. Payo (Advice)</h2>
+            <p>
+              These tips help you avoid common issues. They do not replace the rules above.
+            </p>
+            <ul>
+              <li>
+                <strong>Address &amp; phone:</strong> Double-check your delivery address and mobile number
+                before checkout so the rider can reach you.
+              </li>
+              <li>
+                <strong>Payment:</strong> Complete PayMongo (GCash / Maya) on the official redirect page.
+                Do not share your e-wallet PIN or OTP with anyone claiming to be DKMerch staff.
+              </li>
+              <li>
+                <strong>After paying:</strong> Wait for admin confirmation before expecting rider pickup.
+                You can track status under My Orders / Track Order.
+              </li>
+              <li>
+                <strong>Delivery OTP:</strong> Generate or show your 4-digit OTP only when the rider arrives.
+                Do not post it publicly or send it to unknown contacts.
+              </li>
+              <li>
+                <strong>Refunds:</strong> If an item arrives damaged, request a refund promptly with a clear photo
+                and correct GCash/Maya details for payout.
+              </li>
+              <li>
+                <strong>Install on iPhone:</strong> Open the live site in Safari
+                (<a href="https://dkmerchwebsite.vercel.app">dkmerchwebsite.vercel.app</a>), then Share →
+                Add to Home Screen. Avoid installing from a local IP — that only creates a Safari shortcut.
+              </li>
+              <li>
+                <strong>Riders:</strong> Keep GPS on during active deliveries, scan the waybill/QR to accept,
+                and confirm delivery only with the customer’s valid OTP.
+              </li>
+              <li>
+                <strong>Support:</strong> Use the FAQ chatbot for general questions; email{' '}
+                <a href="mailto:dkmerchtest@gmail.com">dkmerchtest@gmail.com</a> for account-specific help.
+              </li>
+            </ul>
+          </section>
+
           <section className="legal-section legal-contact-section">
             <h2><i className="fas fa-envelope"></i> Contact Us</h2>
             <p>

@@ -242,6 +242,22 @@
 }
 
 .orders-empty i { font-size: 64px; color: #e0e0e0; margin-bottom: 20px; display: block; }
+.orders-empty-icon {
+  display: block;
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 20px;
+  object-fit: contain;
+}
+.orders-empty .btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.orders-empty .btn-primary .dk-icon {
+  filter: brightness(0) invert(1);
+}
 .orders-empty h3 { font-size: 22px; color: var(--dark-color); margin-bottom: 10px; }
 .orders-empty p  { color: var(--gray-color); margin-bottom: 24px; }
 

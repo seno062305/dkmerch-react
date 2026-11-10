@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useMutation, useConvex, useQuery, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useBackup } from '../context/BackupContext';
+import { useNotification } from '../context/NotificationContext';
 import { useAuth } from '../context/AuthContext';
 import {
   downloadEncryptedBackupExcel,
@@ -223,9 +224,6 @@ const PasswordModal = ({
   return (
     <div className="ab-confirm-overlay" onClick={busy ? undefined : onClose}>
       <div className="ab-confirm-modal ab-password-modal" onClick={e => e.stopPropagation()}>
-        <div className="ab-confirm-icon ab-confirm-icon--lock">
-          <i className="fas fa-lock"></i>
-        </div>
         <h3 className="ab-confirm-title">{title}</h3>
         <p className="ab-confirm-message">{message}</p>
         <form onSubmit={submit} className="ab-password-form">
@@ -1181,6 +1179,7 @@ const buildPager = (page, totalPages) => {
 
 // ── Main (SDO /admin/super approach) ──────────────────────────────────────────
 const AdminBackup = () => {
+  const { showNotification } = useNotification();
   const convex = useConvex();
   const { user } = useAuth();
   const {
@@ -1269,7 +1268,7 @@ const AdminBackup = () => {
         details: `Create backup · ${recordCount} records`,
       });
     } catch (err) {
-      alert(formatExportCooldownMessage(err) || err.message || 'Backup failed.');
+      showNotification(formatExportCooldownMessage(err) || err.message || 'Backup failed.', 'error');
     } finally {
       setBusy('');
     }
@@ -1314,7 +1313,7 @@ const AdminBackup = () => {
       setPrefs(readAutoBackupPrefs());
       await refreshOverview();
     } catch (err) {
-      alert(err.message || 'Restore failed.');
+      showNotification(err.message || 'Restore failed.', 'error');
     } finally {
       setBusy('');
     }
@@ -1375,7 +1374,7 @@ const AdminBackup = () => {
           if (!result?.success) throw new Error(result?.message || 'Archive clear failed');
           updateTable(action.table.key, []);
         } catch (err) {
-          alert(`Archive package saved in history. Live clear needs Convex deploy: ${err.message || err}`);
+          showNotification(`Archive package saved in history. Live clear needs Convex deploy: ${err.message || err}`, 'warning');
         }
       } else if (action.type === 'wipe') {
         const result = await clearTableMutation({
@@ -1391,7 +1390,7 @@ const AdminBackup = () => {
       }
       setTypeAction(null);
     } catch (err) {
-      alert(err.message || 'Action failed. If clearTable is missing on Convex, deploy backup functions.');
+      showNotification(err.message || 'Action failed. If clearTable is missing on Convex, deploy backup functions.', 'error');
     } finally {
       setBusy('');
     }
