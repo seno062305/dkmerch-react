@@ -7,7 +7,7 @@
   background: none;
   background-image: none;
   background-color: #f5f5f5;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: none;
   padding: 50px 0;
 }
 
@@ -23,14 +23,13 @@
 /* Sections */
 .help-section {
   padding: 50px 0;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: none;
 }
 
 .help-section:last-child {
   border-bottom: none;
 }
 
-/* h2 with pink underline accent */
 .help-section h2 {
   font-size: 20px;
   color: var(--dark-color);
@@ -39,19 +38,13 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding-bottom: 14px;
-  border-bottom: 2px solid #e0e0e0;
+  padding-bottom: 0;
+  border-bottom: none;
   position: relative;
 }
 
 .help-section h2::after {
-  content: '';
-  position: absolute;
-  bottom: -2px;
-  left: 0;
-  width: 50px;
-  height: 2px;
-  background: var(--primary-color);
+  display: none;
 }
 
 .help-section h2 i {
@@ -59,7 +52,7 @@
   font-size: 20px;
 }
 
-/* FAQ - plain left border, no card */
+/* FAQ — no accent borders */
 .faq-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -67,8 +60,8 @@
 }
 
 .faq-item {
-  border-left: 3px solid var(--primary-color);
-  padding-left: 18px;
+  border-left: none;
+  padding-left: 0;
 }
 
 .faq-item h3 {
@@ -84,7 +77,6 @@
   font-size: 14px;
 }
 
-/* Info cards - plain left border */
 .info-content {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -92,8 +84,8 @@
 }
 
 .info-card {
-  border-left: 3px solid var(--primary-color);
-  padding-left: 18px;
+  border-left: none;
+  padding-left: 0;
 }
 
 .info-card h3 {

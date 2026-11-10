@@ -102,7 +102,7 @@ const AdminChat = () => {
     <div className="admin-chat-page">
       <div className="admin-chat-header">
         <div className="admin-chat-title">
-          <img src="/images/dkmerch-logo-clear.jpg" alt="DKMerch" className="admin-chat-logo" />
+          <img src="/images/dklogo.jpg" alt="DKMerch" className="admin-chat-logo" />
           <div>
             <h1>Customer Chat</h1>
             <p>Reply to customers about orders and support</p>

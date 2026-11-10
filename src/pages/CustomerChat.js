@@ -115,7 +115,7 @@ const CustomerChat = () => {
       <div className="customer-chat-shell">
         <header className="customer-chat-header">
           <div className="customer-chat-brand">
-            <img src="/images/dkmerch-logo-clear.jpg" alt="DKMerch" />
+            <img src="/images/dklogo.jpg" alt="DKMerch" />
             <div>
               <strong>Chat with Admin</strong>
               <span>Ask about orders, shipping, or support</span>

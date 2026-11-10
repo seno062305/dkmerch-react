@@ -13,12 +13,13 @@
 }
 
 .admin-chat-logo {
-  width: 48px;
-  height: 48px;
+  width: 52px;
+  height: 52px;
   object-fit: contain;
   border-radius: 10px;
-  border: 1px solid #fce7f3;
   background: #fff;
+  padding: 3px;
+  filter: contrast(1.12) saturate(1.08) brightness(1.03);
 }
 
 .admin-chat-title h1 {

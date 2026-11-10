@@ -30,12 +30,13 @@
 }
 
 .customer-chat-brand img {
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   object-fit: contain;
   border-radius: 10px;
   background: #fff;
-  border: 1px solid #fce7f3;
+  padding: 3px;
+  filter: contrast(1.12) saturate(1.08) brightness(1.03);
 }
 
 .customer-chat-brand strong {

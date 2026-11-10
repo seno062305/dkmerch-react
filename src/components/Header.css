@@ -32,13 +32,21 @@ header {
 }
 
 .logo img { height: 50px; width: auto; border-radius: 8px; }
-.logo-img-clear {
-  height: 48px;
+
+/* Client logo — same asset, clearer display (no redesign) */
+.logo-img-client {
+  height: 56px;
   width: auto;
-  max-width: 140px;
+  max-width: 160px;
   object-fit: contain;
-  border-radius: 8px;
+  border-radius: 10px;
   background: #fff;
+  padding: 3px 5px;
+  filter: contrast(1.12) saturate(1.08) brightness(1.03);
+  image-rendering: auto;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  transform: translateZ(0);
 }
 
 .logo-text { display: flex; flex-direction: column; }
@@ -517,7 +525,11 @@ header {
   }
 
   .logo img { height: 38px; border-radius: 8px; }
-  .logo-img-clear { height: 36px; max-width: 110px; }
+  .logo-img-client {
+    height: 42px;
+    max-width: 120px;
+    padding: 2px 4px;
+  }
   .logo-text { display: none; }
 
   .search-container { width: 95%; padding: 0 1rem; }

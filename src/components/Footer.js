@@ -34,7 +34,7 @@ const Footer = () => {
         <div className="footer-content">
           <div className="footer-section footer-about">
               <div className="footer-brand-row">
-                <img src="/images/dkmerch-logo-clear.jpg" alt="DKMerch" className="footer-logo-img" />
+                <img src="/images/dklogo.jpg" alt="DKMerch" className="footer-logo-img" />
                 <h3>DKMerch</h3>
               </div>
             <p>Your trusted source for authentic K-Pop merchandise from your favorite groups.</p>

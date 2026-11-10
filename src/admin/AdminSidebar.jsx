@@ -182,7 +182,7 @@ const AdminSidebar = ({ onLinkClick, onClose, onToggleCollapse }) => {
       <div className="admin-logo-container">
         <div className="admin-logo-info">
           <div className="admin-logo">
-            <img src="/images/dkmerch-logo-clear.jpg" alt="DKMerch" className="admin-logo-img" />
+            <img src="/images/dklogo.jpg" alt="DKMerch" className="admin-logo-img" />
             <span>DKMerch</span>
           </div>
           <div className="admin-tagline">Admin Dashboard</div>
