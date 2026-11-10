@@ -321,10 +321,13 @@ export default function DKMerchChatBot() {
   return (
     <>
       {/* ── Floating stack: Download App (above) + Chat ── */}
-      <div style={{
-        position: "fixed", bottom: 24, right: 24, zIndex: 10050,
-        display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
-      }}>
+      <div
+        className="dk-chat-fab-stack"
+        style={{
+          position: "fixed", bottom: 24, right: 24, zIndex: 10050,
+          display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
+        }}
+      >
         {!isInstalled && (
           <button
             type="button"
@@ -427,17 +430,20 @@ export default function DKMerchChatBot() {
 
       {/* ── Chat Window — above CartModal (z-index: 9999) and its content (10000) ── */}
       {open && (
-        <div style={{
-          position: "fixed", bottom: 130, right: 24, zIndex: 10049,
-          width: 360, maxWidth: "calc(100vw - 48px)",
-          background: "#fff",
-          borderRadius: 20,
-          boxShadow: "0 12px 48px rgba(0,0,0,0.18), 0 2px 8px rgba(252,18,104,0.12)",
-          display: "flex", flexDirection: "column",
-          overflow: "hidden",
-          animation: "dkSlideUp 0.3s cubic-bezier(0.34,1.56,0.64,1)",
-          maxHeight: "70vh",
-        }}>
+        <div
+          className="dk-chat-window"
+          style={{
+            position: "fixed", bottom: 130, right: 24, zIndex: 10049,
+            width: 360, maxWidth: "calc(100vw - 48px)",
+            background: "#fff",
+            borderRadius: 20,
+            boxShadow: "0 12px 48px rgba(0,0,0,0.18), 0 2px 8px rgba(252,18,104,0.12)",
+            display: "flex", flexDirection: "column",
+            overflow: "hidden",
+            animation: "dkSlideUp 0.3s cubic-bezier(0.34,1.56,0.64,1)",
+            maxHeight: "70vh",
+          }}
+        >
           {/* Header */}
           <div style={{
             background: `linear-gradient(135deg, ${PINK}, ${PURPLE})`,

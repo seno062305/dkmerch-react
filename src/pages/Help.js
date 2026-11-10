@@ -123,7 +123,7 @@ const Help = () => {
           </section>
 
           {/* Contact */}
-          <section className="help-section contact-section">
+          <section id="contact" className="help-section contact-section">
             <h2><i className="fas fa-envelope"></i> Still Need Help?</h2>
             <p>Our customer support team is here to assist you!</p>
             <div className="contact-options">

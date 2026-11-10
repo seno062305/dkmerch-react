@@ -422,25 +422,12 @@ header {
     justify-content: space-between;
   }
 
-  /* Sidebar */
+  /* Mobile sidebar replaced by CustomerBottomNav */
   .main-nav {
-    position: fixed;
-    top: 0;
-    left: -280px;
-    width: 260px;
-    height: 100vh;
-    background: white;
-    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
-    transition: left 0.3s ease;
-    z-index: 1001;
-    overflow-y: auto;
-    padding: 0;
-    flex-direction: column;
-    justify-content: flex-start;
-    display: flex;
+    display: none !important;
   }
 
-  .main-nav.active { left: 0; }
+  .main-nav.active { display: none !important; }
 
   .mobile-nav-header {
     display: flex;
@@ -478,8 +465,8 @@ header {
   .main-nav a { display: block; padding: 1rem 1.5rem; width: 100%; font-size: 1rem; }
   .main-nav a::after { display: none; }
 
-  .mobile-menu-toggle { display: flex; order: 10; }
-  .mobile-overlay { display: block; }
+  .mobile-menu-toggle { display: none !important; }
+  .mobile-overlay { display: none !important; }
 
   /* Keep rider nav item hidden on mobile too */
   .mobile-nav-rider-item { display: none; }

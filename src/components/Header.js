@@ -246,9 +246,9 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
 
               {isAuthenticated ? (
                 <div className="account-dropdown-wrapper" ref={dropdownRef}>
-                  <button className="account-btn" onClick={() => setShowAccountDropdown(!showAccountDropdown)}>
+                  <button className="account-btn" onClick={() => setShowAccountDropdown(!showAccountDropdown)} aria-label="Profile">
                     <i className="fas fa-user-circle"></i>
-                    <span>{user?.name || 'Account'}</span>
+                    <span>{user?.name || 'Profile'}</span>
                     {hasAvailable && <span className="preorder-dot-indicator"></span>}
                     <i className={`fas fa-chevron-down dropdown-arrow ${showAccountDropdown ? 'rotate' : ''}`}></i>
                   </button>
@@ -274,7 +274,6 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
                         )}
                       </Link>
 
-                      {/* ✅ Rewards — before Settings */}
                       <button
                         className="dropdown-item rewards-dropdown-item"
                         onClick={() => { setShowAccountDropdown(false); setShowRewardsModal(true); }}
@@ -287,7 +286,7 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
                       </button>
 
                       <Link to="/settings" className="dropdown-item" onClick={() => setShowAccountDropdown(false)}>
-                        <i className="fas fa-cog"></i> Settings
+                        <i className="fas fa-user-edit"></i> Edit Profile
                       </Link>
                       <div className="dropdown-divider"></div>
                       <button className="dropdown-item logout-btn" onClick={handleLogout}>
@@ -303,16 +302,10 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
                 </button>
               )}
 
-              {!showMobileMenu && (
-                <button className="mobile-menu-toggle" onClick={() => setShowMobileMenu(true)} aria-label="Open menu">
-                  <span></span><span></span><span></span>
-                </button>
-              )}
+              {/* Mobile uses bottom nav (like rider) instead of hamburger sidebar */}
             </div>
           </div>
         </div>
-
-        {showMobileMenu && <div className="mobile-overlay" onClick={closeMobileMenu}></div>}
 
         {showSearch && (
           <div className="search-overlay" onClick={() => setShowSearch(false)}>

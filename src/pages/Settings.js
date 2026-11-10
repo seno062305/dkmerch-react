@@ -481,8 +481,8 @@ const Settings = () => {
     <div className="settings-page">
       <div className="settings-container">
         <div className="settings-header">
-          <h1>{isForgotPasswordFlow ? 'Reset Password' : 'Account Settings'}</h1>
-          <p>{isForgotPasswordFlow ? 'Enter your email and verification code to reset your password' : 'Manage your account details and security'}</p>
+          <h1>{isForgotPasswordFlow ? 'Reset Password' : 'Edit Profile'}</h1>
+          <p>{isForgotPasswordFlow ? 'Enter your email and verification code to reset your password' : 'Update your personal information and account security'}</p>
         </div>
 
         {!isForgotPasswordFlow && (

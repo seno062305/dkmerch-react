@@ -2,13 +2,14 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
-import { useCart, useRemoveFromCart, useCartCount } from './context/cartUtils';
-import { useWishlist, useWishlistCount } from './context/wishlistUtils';
+import { useCart, useRemoveFromCart, useCartCount, useAddToCart } from './context/cartUtils';
+import { useWishlist, useWishlistCount, useToggleWishlist } from './context/wishlistUtils';
 import { BackupProvider } from './context/BackupContext';
 import { RewardsProvider } from './context/RewardsContext';
 
 import Header from './components/Header';
 import Footer from './components/Footer';
+import CustomerBottomNav from './components/CustomerBottomNav';
 import DKMerchChatBot from './components/DKMerchChatBot';
 
 import Home from './pages/Home';
@@ -17,6 +18,7 @@ import PreOrder from './pages/PreOrder';
 import TrackOrder from './pages/TrackOrder';
 import Help from './pages/Help';
 import Settings from './pages/Settings';
+import MoreSettings from './pages/MoreSettings';
 import PromoRedirect from './pages/PromoRedirect';
 import MyPreOrders from './pages/MyPreOrders';
 import RiderTrack from './pages/RiderTrack';
@@ -160,6 +162,8 @@ function AppContent() {
   const cartItems      = useCart();
   const cartCount      = useCartCount();
   const removeFromCart = useRemoveFromCart();
+  const addToCart      = useAddToCart();
+  const toggleWishlist = useToggleWishlist();
   const wishlistCount  = useWishlistCount();
 
   const [showLoginModal,    setShowLoginModal]    = useState(false);
@@ -193,12 +197,18 @@ function AppContent() {
 
   const hideHeaderFooter  = isAdminRoute || isPromoRoute || isRiderTrackRoute || isRiderDashRoute || isVerifyRoute;
   const showChatBot       = !isAdminRoute && !isPromoRoute && !isRiderTrackRoute && !isRiderDashRoute && !isVerifyRoute;
+  const showCustomerNav   = !hideHeaderFooter;
+
+  useEffect(() => {
+    document.body.classList.toggle('has-customer-bottom-nav', showCustomerNav);
+    return () => document.body.classList.remove('has-customer-bottom-nav');
+  }, [showCustomerNav]);
 
   return (
     <StartupRedirect>
       {/* ✅ RewardsProvider wraps everything so RewardsModal state is accessible from Header */}
       <RewardsProvider>
-        <div className="App">
+        <div className={`App ${showCustomerNav ? 'app-with-customer-bnav' : ''}`}>
           {!hideHeaderFooter && (
             <Header
               cartCount={cartCount}
@@ -217,6 +227,7 @@ function AppContent() {
             <Route path="/wishlist"      element={<WishlistPage />} />
             <Route path="/checkout"      element={<Checkout />} />
             <Route path="/settings"      element={<Settings />} />
+            <Route path="/more"          element={<MoreSettings />} />
             <Route path="/my-orders"     element={<Navigate to="/track-order" replace />} />
             <Route path="/order-success" element={<OrderSuccess />} />
             <Route path="/promo/:code"   element={<PromoRedirect />} />
@@ -255,6 +266,7 @@ function AppContent() {
           </Routes>
 
           {!hideHeaderFooter && <Footer />}
+          {showCustomerNav && <CustomerBottomNav />}
           {showChatBot && <DKMerchChatBot />}
 
           {showLoginModal && (
@@ -278,6 +290,8 @@ function AppContent() {
             <ProductModal
               product={currentProduct}
               onClose={() => setShowProductModal(false)}
+              onAddToCart={(product) => addToCart(product)}
+              onAddToWishlist={(product) => toggleWishlist(product)}
               onRequireLogin={() => { setShowProductModal(false); setShowLoginModal(true); }}
             />
           )}

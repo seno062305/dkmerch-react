@@ -171,6 +171,10 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
       setShowLoginModal(true);
       return;
     }
+    if (!onAddToCart) {
+      showNotification('Unable to add to cart right now.', 'error');
+      return;
+    }
     const priceDisplay = appliedPromo
       ? `₱${discountedPrice.toLocaleString()} (${appliedPromo.discount}% off)`
       : `₱${product.price.toLocaleString()}`;
@@ -184,6 +188,37 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
     if (!ok) return;
     onAddToCart({ ...product, appliedPromo, finalPrice: discountedPrice });
     triggerCartToast();
+  };
+
+  const handleBuyNowClick = async () => {
+    if (!isAuthenticated) {
+      showNotification('Please login to buy now', 'error');
+      setHideProductModal(true);
+      setShowLoginModal(true);
+      return;
+    }
+    if (product.stock === 0) {
+      showNotification('Product is out of stock', 'error');
+      return;
+    }
+    if (!onAddToCart) {
+      showNotification('Unable to checkout right now.', 'error');
+      return;
+    }
+    const priceDisplay = appliedPromo
+      ? `₱${discountedPrice.toLocaleString()} (${appliedPromo.discount}% off)`
+      : `₱${product.price.toLocaleString()}`;
+    const ok = await confirm({
+      title: 'Buy now?',
+      message: `Buy "${product.name}" now?\n\nPrice: ${priceDisplay}\n\nYou'll go straight to checkout.`,
+      confirmLabel: 'Buy Now',
+      variant: 'primary',
+      icon: 'fa-bolt',
+    });
+    if (!ok) return;
+    await onAddToCart({ ...product, appliedPromo, finalPrice: discountedPrice });
+    onClose?.();
+    navigate('/checkout');
   };
 
   const handlePreOrderClick = async () => {
@@ -391,6 +426,11 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
                       <button className="btn btn-add-cart" onClick={handleAddToCartClick} disabled={product.stock === 0}>
                         <i className="fas fa-shopping-cart"></i> Add to Cart
                       </button>
+                      {isAuthenticated && (
+                        <button className="btn btn-buy-now" onClick={handleBuyNowClick} disabled={product.stock === 0}>
+                          <i className="fas fa-bolt"></i> Buy Now
+                        </button>
+                      )}
                       <button className="btn btn-fav-outline" onClick={handleWishlistClick} title="Add to Favorites">
                         <i className="fas fa-star"></i>
                       </button>

@@ -1,0 +1,71 @@
+.customer-bottom-nav {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .customer-bottom-nav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 900;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    align-items: center;
+    gap: 2px;
+    padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+    background: #fff;
+    border-top: 1px solid #eef2f7;
+    box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.08);
+  }
+
+  .cbn-item {
+    border: none;
+    background: transparent;
+    color: #94a3b8;
+    text-decoration: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 6px 2px;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.1;
+    min-width: 0;
+  }
+
+  .cbn-item i {
+    font-size: 16px;
+  }
+
+  .cbn-item.active {
+    color: #fc1268;
+  }
+
+  .cbn-item span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+
+  /* Leave room for fixed bottom nav on customer pages */
+  body.has-customer-bottom-nav {
+    padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  }
+
+  body.has-customer-bottom-nav .footer {
+    margin-bottom: 8px;
+  }
+
+  /* Keep chat / install FABs above the bottom nav */
+  body.has-customer-bottom-nav .dk-chat-fab-stack {
+    bottom: 88px !important;
+  }
+  body.has-customer-bottom-nav .dk-chat-window {
+    bottom: 190px !important;
+    max-height: calc(70vh - 80px) !important;
+  }
+}
