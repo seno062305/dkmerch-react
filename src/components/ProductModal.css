@@ -393,6 +393,25 @@
 }
 
 .price-section { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+
+.modal-sale-period {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 4px 0 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.modal-sale-period i {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
 .current-price { font-size: 24px; font-weight: 800; color: var(--primary-color, #fc1268); }
 .promo-price { color: #16a34a; }
 .original-price { font-size: 14px; color: #999; text-decoration: line-through; }

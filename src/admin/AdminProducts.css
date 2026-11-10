@@ -288,6 +288,7 @@
   word-break: break-word;
 }
 .release-date-info.released { background: #f0fdf4; color: #15803d; border-color: #86efac; }
+.release-date-info.sale-date-info { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
 
 .product-pricing { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
 .price { font-size: 18px; font-weight: 700; color: #ee4d2d; }

@@ -202,6 +202,22 @@
 .wv-card-price-current { font-size: 14px; font-weight: 700; color: var(--primary-color); }
 .wv-card-price-current.sale { color: #dc3545; }
 
+.wv-sale-period {
+    display: flex;
+    align-items: flex-start;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #b91c1c;
+    line-height: 1.35;
+    margin: 0 0 6px;
+}
+.wv-sale-period i {
+    margin-top: 1px;
+    flex-shrink: 0;
+    font-size: 10px;
+}
+
 .wv-stock-badge {
     display: inline-flex;
     align-items: center;

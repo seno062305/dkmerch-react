@@ -89,6 +89,10 @@ export const addProduct = mutation({
     kpopGroup: v.optional(v.string()),
     originalPrice: v.optional(v.number()),
     isSale: v.optional(v.boolean()),
+    saleStartDate: v.optional(v.string()),
+    saleStartTime: v.optional(v.string()),
+    saleEndDate: v.optional(v.string()),
+    saleEndTime: v.optional(v.string()),
     isPreOrder: v.optional(v.boolean()),
   },
   handler: async ({ db }, args) => {
@@ -112,6 +116,10 @@ export const updateProduct = mutation({
     kpopGroup: v.optional(v.string()),
     originalPrice: v.optional(v.number()),
     isSale: v.optional(v.boolean()),
+    saleStartDate: v.optional(v.string()),
+    saleStartTime: v.optional(v.string()),
+    saleEndDate: v.optional(v.string()),
+    saleEndTime: v.optional(v.string()),
     isPreOrder: v.optional(v.boolean()),
   },
   handler: async ({ db }, { id, ...updates }) => {

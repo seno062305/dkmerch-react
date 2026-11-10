@@ -348,6 +348,22 @@
 .collection-card-price.sale { color: #dc3545; }
 .collection-card-price-original { font-size: 12px; color: #999; text-decoration: line-through; }
 
+.collection-sale-period {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #b91c1c;
+  line-height: 1.35;
+  margin: -2px 0 8px;
+}
+.collection-sale-period i {
+  margin-top: 1px;
+  flex-shrink: 0;
+  font-size: 10px;
+}
+
 .collection-stock-badge {
   display: inline-flex;
   align-items: center;

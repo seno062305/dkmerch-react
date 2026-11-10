@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { PointsBadge } from '../utils/pointsUtils';
+import { formatSaleRange } from '../utils/saleUtils';
 import LoginModal from './LoginModal';
 import './WeverseSection.css';
 
@@ -185,6 +186,12 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
                     {/* ✅ Points badge */}
                     <PointsBadge price={product.price} />
                   </div>
+                  {formatSaleRange(product) && (
+                    <div className="wv-sale-period">
+                      <i className="fas fa-clock"></i>
+                      <span>{formatSaleRange(product)}</span>
+                    </div>
+                  )}
                   <div
                     className={`wv-stock-badge ${
                       isOutOfStock ? 'stock-out' : isLowStock ? 'stock-low' : 'stock-in'

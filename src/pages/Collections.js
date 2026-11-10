@@ -8,6 +8,7 @@ import { useNotification } from '../context/NotificationContext';
 import { useConfirm } from '../context/ConfirmContext';
 import ProductModal from '../components/ProductModal';
 import { PointsBadge } from '../utils/pointsUtils';
+import { formatSaleRange } from '../utils/saleUtils';
 import './Collections.css';
 
 const MAX_WISHLIST = 10;
@@ -367,6 +368,12 @@ const Collections = () => {
                     {/* ✅ Points badge */}
                     <PointsBadge price={product.price} />
                   </div>
+                  {product.isSale && formatSaleRange(product) && (
+                    <div className="collection-sale-period">
+                      <i className="fas fa-clock"></i>
+                      <span>{formatSaleRange(product)}</span>
+                    </div>
+                  )}
                   <div
                     className={`collection-stock-badge ${
                       isOutOfStock ? 'stock-out' : isLowStock ? 'stock-low' : 'stock-in'

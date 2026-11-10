@@ -7,6 +7,7 @@ import { useConfirm } from '../context/ConfirmContext';
 import { useNavigate } from 'react-router-dom';
 import LoginModal from './LoginModal';
 import PromoCodeInput from './PromoCodeInput';
+import { formatSaleRange } from '../utils/saleUtils';
 import './ProductModal.css';
 
 const REVIEW_CHAR_LIMIT = 120;
@@ -392,6 +393,13 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
                     </>
                   )}
                 </div>
+
+                {product.isSale && formatSaleRange(product) && (
+                  <div className="modal-sale-period">
+                    <i className="fas fa-clock"></i>
+                    <span>Sale period: {formatSaleRange(product)}</span>
+                  </div>
+                )}
 
                 <div className="stock-info">
                   <i className="fas fa-box"></i>

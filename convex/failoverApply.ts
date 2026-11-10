@@ -218,6 +218,10 @@ export const applyFailoverWrite = internalMutation({
         kpopGroup: payload.kpopGroup ?? args.kpopGroup,
         originalPrice: payload.originalPrice ?? args.originalPrice,
         isSale: payload.isSale ?? args.isSale,
+        saleStartDate: payload.saleStartDate ?? args.saleStartDate,
+        saleStartTime: payload.saleStartTime ?? args.saleStartTime,
+        saleEndDate: payload.saleEndDate ?? args.saleEndDate,
+        saleEndTime: payload.saleEndTime ?? args.saleEndTime,
         isPreOrder: payload.isPreOrder ?? args.isPreOrder,
       } as any);
       return { ok: true, reason: "inserted", convexId };

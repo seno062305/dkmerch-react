@@ -5,6 +5,7 @@ import { api } from '../../convex/_generated/api';
 import { useAddProduct, useUpdateProduct, useDeleteProduct } from '../utils/productStorage';
 import { useConfirm } from '../context/ConfirmContext';
 import DkIcon, { DK_ICONS } from '../components/DkIcon';
+import { formatSaleRange, toPhtMs } from '../utils/saleUtils';
 
 const ALLOWED_IMAGE_TYPES = [
   'image/jpeg', 'image/jpg', 'image/png',
@@ -17,6 +18,8 @@ const emptyForm = {
   price: '', originalPrice: '', image: '', stock: '',
   description: '', isSale: false, isPreOrder: false,
   releaseDate: '', releaseTime: '',
+  saleStartDate: '', saleStartTime: '',
+  saleEndDate: '', saleEndTime: '',
 };
 
 const validateForm = (form) => {
@@ -29,6 +32,15 @@ const validateForm = (form) => {
     if (form.originalPrice === '' || form.originalPrice === null) err.originalPrice = 'Original price is required when item is on sale.';
     else if (isNaN(Number(form.originalPrice)) || Number(form.originalPrice) <= 0) err.originalPrice = 'Original price must be a positive number.';
     else if (Number(form.originalPrice) < Number(form.price)) err.originalPrice = 'Original price should be >= selling price.';
+    if (!form.saleStartDate) err.saleStartDate = 'Sale start date is required.';
+    if (!form.saleStartTime) err.saleStartTime = 'Sale start time is required.';
+    if (!form.saleEndDate) err.saleEndDate = 'Sale end date is required.';
+    if (!form.saleEndTime) err.saleEndTime = 'Sale end time is required.';
+    const startMs = toPhtMs(form.saleStartDate, form.saleStartTime);
+    const endMs = toPhtMs(form.saleEndDate, form.saleEndTime);
+    if (startMs != null && endMs != null && endMs <= startMs) {
+      err.saleEndDate = 'Sale end must be after the start date/time.';
+    }
   }
   if (form.stock === '' || form.stock === null) err.stock = 'Stock quantity is required.';
   else if (isNaN(Number(form.stock)) || Number(form.stock) < 0) err.stock = 'Stock must be 0 or more.';
@@ -79,7 +91,9 @@ const ProductModal = ({ editingId, initialForm, onClose, onSubmit, submitting })
     setForm(prev => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value,
-      ...(name === 'isSale' && !checked ? { originalPrice: '' } : {}),
+      ...(name === 'isSale' && !checked
+        ? { originalPrice: '', saleStartDate: '', saleStartTime: '', saleEndDate: '', saleEndTime: '' }
+        : {}),
       ...(name === 'isPreOrder' && !checked ? { releaseDate: '', releaseTime: '' } : {}),
     }));
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
@@ -231,6 +245,47 @@ const ProductModal = ({ editingId, initialForm, onClose, onSubmit, submitting })
                       </label>
                     </div>
                   </div>
+                  {form.isSale && (
+                    <>
+                      <div className={`form-group${errors.saleStartDate ? ' has-error' : ''}`}>
+                        <label><i className="fas fa-calendar-alt"></i> Sale Start Date <span className="req">*</span></label>
+                        <input type="date" name="saleStartDate" value={form.saleStartDate} onChange={handleChange} max="9999-12-31" />
+                        {errors.saleStartDate && <span className="field-error"><i className="fas fa-exclamation-circle"></i> {errors.saleStartDate}</span>}
+                      </div>
+                      <div className={`form-group${errors.saleStartTime ? ' has-error' : ''}`}>
+                        <label><i className="fas fa-clock"></i> Sale Start Time <span className="req">*</span></label>
+                        <input type="time" name="saleStartTime" value={form.saleStartTime} onChange={handleChange} />
+                        {errors.saleStartTime
+                          ? <span className="field-error"><i className="fas fa-exclamation-circle"></i> {errors.saleStartTime}</span>
+                          : <small className="helper-text"><i className="fas fa-info-circle"></i> Philippine Time (PHT).</small>}
+                      </div>
+                      <div className={`form-group${errors.saleEndDate ? ' has-error' : ''}`}>
+                        <label><i className="fas fa-calendar-check"></i> Sale End Date <span className="req">*</span></label>
+                        <input type="date" name="saleEndDate" value={form.saleEndDate} onChange={handleChange} min={form.saleStartDate || undefined} max="9999-12-31" />
+                        {errors.saleEndDate && <span className="field-error"><i className="fas fa-exclamation-circle"></i> {errors.saleEndDate}</span>}
+                      </div>
+                      <div className={`form-group${errors.saleEndTime ? ' has-error' : ''}`}>
+                        <label><i className="fas fa-clock"></i> Sale End Time <span className="req">*</span></label>
+                        <input type="time" name="saleEndTime" value={form.saleEndTime} onChange={handleChange} />
+                        {errors.saleEndTime && <span className="field-error"><i className="fas fa-exclamation-circle"></i> {errors.saleEndTime}</span>}
+                      </div>
+                      {form.saleStartDate && form.saleStartTime && form.saleEndDate && form.saleEndTime && (
+                        <div className="form-group full-width">
+                          <div className="release-preview">
+                            <i className="fas fa-tag"></i>
+                            <span>
+                              Sale period:{' '}
+                              <strong>
+                                {formatReleaseDateTime(form.saleStartDate, form.saleStartTime)}
+                                {' – '}
+                                {formatReleaseDateTime(form.saleEndDate, form.saleEndTime)}
+                              </strong>
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
                   {form.isPreOrder && (
                     <>
                       <div className={`form-group${errors.releaseDate ? ' has-error' : ''}`}>
@@ -491,6 +546,8 @@ const AdminProducts = () => {
       image: product.image || '', description: product.description || '',
       isSale: product.isSale || false, isPreOrder: product.isPreOrder || false,
       releaseDate: product.releaseDate || '', releaseTime: product.releaseTime || '',
+      saleStartDate: product.saleStartDate || '', saleStartTime: product.saleStartTime || '',
+      saleEndDate: product.saleEndDate || '', saleEndTime: product.saleEndTime || '',
     });
     setEditingId(product._id);
     setShowModal(true);
@@ -507,6 +564,10 @@ const AdminProducts = () => {
       isSale: Boolean(form.isSale), isPreOrder: Boolean(form.isPreOrder),
       releaseDate: form.isPreOrder ? form.releaseDate : '',
       releaseTime: form.isPreOrder ? form.releaseTime : '',
+      saleStartDate: form.isSale ? form.saleStartDate : '',
+      saleStartTime: form.isSale ? form.saleStartTime : '',
+      saleEndDate: form.isSale ? form.saleEndDate : '',
+      saleEndTime: form.isSale ? form.saleEndTime : '',
       status: form.isPreOrder ? 'preorder' : form.isSale ? 'sale' : 'available',
     };
     setSubmitting(true);
@@ -632,6 +693,12 @@ const AdminProducts = () => {
                           <i className={`fas ${released ? 'fa-check-circle' : 'fa-calendar-alt'}`}></i>
                           {released ? 'Released: ' : 'Release: '}
                           {formatReleaseDateTime(product.releaseDate, product.releaseTime)}
+                        </div>
+                      )}
+                      {product.isSale && formatSaleRange(product) && (
+                        <div className="release-date-info sale-date-info">
+                          <i className="fas fa-tag"></i>
+                          Sale: {formatSaleRange(product)}
                         </div>
                       )}
                       <div className="product-pricing">
