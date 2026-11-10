@@ -672,7 +672,6 @@ const TrackOrder = ({ onProductClick }) => {
   const [refundOrder,        setRefundOrder]        = useState(null);
   const [refundSuccess,      setRefundSuccess]      = useState(false);
   const [cancelOrder,        setCancelOrder]        = useState(null);
-  const [cancellingId,       setCancellingId]       = useState(null);
   const openedFromUrlRef = useRef(null);
   const [hiddenOrders,       setHiddenOrders]       = useState(() => {
     try { return JSON.parse(localStorage.getItem('hiddenDeliveredOrders') || '[]'); } catch { return []; }
@@ -844,7 +843,6 @@ const TrackOrder = ({ onProductClick }) => {
   const handleCancelOrderSuccess = (result) => {
     const orderId = cancelOrder?.orderId;
     setCancelOrder(null);
-    setCancellingId(null);
     showNotification(
       result?.refunded
         ? `Order cancelled. ₱${Number(result.refundAmount || 0).toLocaleString('en-PH')} refund is on the way to your wallet.`
