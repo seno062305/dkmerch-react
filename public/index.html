@@ -16,15 +16,15 @@
   <link rel="manifest" href="/manifest.json">
 
   <!-- Apple Touch Icon -->
-  <link rel="apple-touch-icon" href="/images/dklogo2-removebg-preview.png">
-  <link rel="apple-touch-icon" sizes="152x152" href="/images/dklogo2-removebg-preview.png">
-  <link rel="apple-touch-icon" sizes="180x180" href="/images/dklogo2-removebg-preview.png">
-  <link rel="apple-touch-icon" sizes="167x167" href="/images/dklogo2-removebg-preview.png">
+  <link rel="apple-touch-icon" href="/images/pwa-icon-512.png">
+  <link rel="apple-touch-icon" sizes="152x152" href="/images/pwa-icon-192.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/pwa-icon-512.png">
+  <link rel="apple-touch-icon" sizes="167x167" href="/images/pwa-icon-512.png">
 
   <title>DKMerch | K-Pop Merchandise Store</title>
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="icon" href="/images/dklogo2-removebg-preview.png" type="image/png">
+  <link rel="icon" href="/images/pwa-icon-192.png" type="image/png">
 
   <style>
     /* First paint = pink under splash only; app-ready restores white page bg */
@@ -93,6 +93,16 @@
       position: relative;
       margin-bottom: 32px;
       animation: splashLogoPop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    }
+
+    /* Installed PWA: no re-animate — continue straight into loading splash */
+    html.splash-pwa .splash-logo-wrap,
+    html.splash-pwa .splash-title,
+    html.splash-pwa .splash-sub,
+    html.splash-pwa .splash-bar-wrap {
+      animation: none !important;
+      opacity: 1 !important;
+      transform: none !important;
     }
 
     @keyframes splashLogoPop {
@@ -232,14 +242,19 @@
 
   <!-- Register Service Worker + Hide Splash -->
   <script>
-    // Hide splash when React app is ready — keep pink splash visible first
-    window.addEventListener('load', function () {
-      var isPwaReopen = window.matchMedia('(display-mode: standalone)').matches
+    (function () {
+      var isPwa = window.matchMedia('(display-mode: standalone)').matches
         || window.navigator.standalone === true
         || /source=pwa/i.test(window.location.search);
-      var minShow = isPwaReopen ? 700 : 850;
+      if (isPwa) {
+        try { document.documentElement.classList.add('splash-pwa'); } catch (e) {}
+      }
+
+      var minShow = isPwa ? 650 : 800;
       var startTime = Date.now();
       var splashHidden = false;
+      var bootReady = false;
+      var rootReady = false;
 
       function markAppReady() {
         try {
@@ -250,11 +265,12 @@
 
       function hideSplash() {
         if (splashHidden) return;
+        // Wait for React boot so we don't flash a 2nd pink logo loader
+        if (!bootReady && !window.__DKMERCH_BOOT__) return;
         splashHidden = true;
         var elapsed = Date.now() - startTime;
         var remaining = Math.max(0, minShow - elapsed);
         setTimeout(function () {
-          // White page bg under fading splash (never leave pink stuck)
           markAppReady();
           var splash = document.getElementById('splash');
           if (splash) {
@@ -266,34 +282,50 @@
         }, remaining);
       }
 
-      // Hide after React root has content
-      var rootEl = document.getElementById('root');
-      if (rootEl) {
-        if (rootEl.children.length > 0) {
-          hideSplash();
-        } else {
-          var observer = new MutationObserver(function () {
-            if (rootEl.children.length > 0) {
-              observer.disconnect();
-              hideSplash();
-            }
-          });
-          observer.observe(rootEl, { childList: true });
+      function tryHide() {
+        if (bootReady || window.__DKMERCH_BOOT__) hideSplash();
+      }
+
+      window.addEventListener('dkmerch-boot', function () {
+        bootReady = true;
+        tryHide();
+      });
+
+      window.addEventListener('load', function () {
+        var rootEl = document.getElementById('root');
+        if (rootEl) {
+          if (rootEl.children.length > 0) rootReady = true;
+          else {
+            var observer = new MutationObserver(function () {
+              if (rootEl.children.length > 0) {
+                rootReady = true;
+                observer.disconnect();
+                tryHide();
+              }
+            });
+            observer.observe(rootEl, { childList: true });
+          }
         }
-      } else {
-        hideSplash();
-      }
 
-      // Fallback: keep splash a bit longer so pink loading always shows
-      setTimeout(hideSplash, 2200);
+        // If React already booted before this listener
+        if (window.__DKMERCH_BOOT__) {
+          bootReady = true;
+          tryHide();
+        }
 
-      // Register Service Worker
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/sw.js')
-          .then(function (reg) { console.log('SW registered:', reg.scope); })
-          .catch(function (err) { console.log('SW failed:', err); });
-      }
-    });
+        // Hard fallback — never stick on splash forever
+        setTimeout(function () {
+          bootReady = true;
+          tryHide();
+        }, 3500);
+
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.register('/sw.js')
+            .then(function (reg) { console.log('SW registered:', reg.scope); })
+            .catch(function (err) { console.log('SW failed:', err); });
+        }
+      });
+    })();
   </script>
 </body>
 </html>

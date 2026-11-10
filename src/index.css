@@ -47,6 +47,16 @@ body.dk-scroll-locked {
   pointer-events: auto;
 }
 
+/* PIN / login gate — capture all taps; never let Home nav steal Reset PIN */
+body.login-modal-open #dk-overlay-root {
+  pointer-events: auto !important;
+}
+body.login-modal-open .customer-bottom-nav,
+body.login-modal-open footer {
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
 a {
   text-decoration: none;
   color: inherit;

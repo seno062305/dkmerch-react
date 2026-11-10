@@ -898,6 +898,8 @@ body.login-modal-open {
   user-select: none;
   pointer-events: auto !important;
   touch-action: manipulation;
+  /* Sit above Home nav even if overlay stacking glitches */
+  isolation: isolate;
 }
 
 .pin-unlock-top {

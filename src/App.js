@@ -90,23 +90,17 @@ const StartupRedirect = ({ children }) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReady]);
 
+  // Keep #splash (loading UI) on top — no second pink logo screen
+  useEffect(() => {
+    if (!isReady || !redirectDone) return;
+    try {
+      window.__DKMERCH_BOOT__ = true;
+      window.dispatchEvent(new Event('dkmerch-boot'));
+    } catch { /* ignore */ }
+  }, [isReady, redirectDone]);
+
   if (!isReady || !redirectDone) {
-    return (
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', background:'linear-gradient(145deg, #fc1268 0%, #ff4d94 50%, #ff85b3 100%)' }}>
-        <div style={{ textAlign:'center' }}>
-          <img
-            src="/images/dklogo2-removebg-preview.png"
-            alt="DKMerch"
-            width={72}
-            height={72}
-            style={{ width:72, height:72, objectFit:'contain', display:'block', margin:'0 auto 14px' }}
-            onError={(e) => { e.currentTarget.style.display = 'none'; }}
-          />
-          <div style={{ width:40, height:40, border:'3px solid rgba(255,255,255,0.35)', borderTop:'3px solid #fff', borderRadius:'50%', animation:'spin 0.8s linear infinite', margin:'0 auto' }} />
-          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-        </div>
-      </div>
-    );
+    return <div aria-hidden="true" style={{ minHeight: '100vh', background: '#fc1268' }} />;
   }
   return children;
 };
@@ -477,14 +471,14 @@ function AppContent() {
               preferPinUnlock={!!needsDeviceUnlock}
               onClearUnlockPrompt={() => clearDeviceUnlockPrompt?.()}
               onClose={() => {
-                // PIN / auth gate — cannot dismiss to browse without signing in
+                // PIN / switch-account / reset-PIN gate — never dismiss to Home
                 if (needsDeviceUnlock) return;
                 try { sessionStorage.removeItem('dk_login_customers_only'); } catch { /* ignore */ }
                 clearDeviceUnlockPrompt?.();
                 setShowLoginModal(false);
               }}
               onSwitchAccount={() => {
-                // Soft logout — keep PIN unlock profile (handled inside LoginModal)
+                // Stay on pink login UI — do not navigate Home
                 setShowLoginModal(true);
               }}
               onLoginSuccess={(loginRole) => {

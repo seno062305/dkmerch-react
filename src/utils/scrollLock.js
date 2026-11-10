@@ -43,7 +43,7 @@ function onWheelPin(e) {
   const t = e.target;
   if (t && typeof t.closest === 'function') {
     if (t.closest(
-      '#dk-overlay-root, .product-modal-overlay, .modal-overlay, .dk-confirm-overlay, .rm-overlay, .iam-overlay, .rider-modal-overlay, .wb-scan-overlay, .refund-modal-overlay, .tracking-modal-overlay, .cart-modal-overlay, .login-modal-overlay, .register-modal-overlay, .order-modal-overlay, .pm-overlay, .stat-modal-overlay, .smodal-overlay, .lo-modal-overlay, .ar-bell-dropdown, .dk-chat-panel, .fullscreen-map-overlay'
+      '#dk-overlay-root, .pin-unlock-screen, .product-modal-overlay, .modal-overlay, .dk-confirm-overlay, .rm-overlay, .iam-overlay, .rider-modal-overlay, .wb-scan-overlay, .refund-modal-overlay, .tracking-modal-overlay, .cart-modal-overlay, .login-modal-overlay, .register-modal-overlay, .order-modal-overlay, .pm-overlay, .stat-modal-overlay, .smodal-overlay, .lo-modal-overlay, .ar-bell-dropdown, .dk-chat-panel, .fullscreen-map-overlay'
     )) {
       return;
     }
