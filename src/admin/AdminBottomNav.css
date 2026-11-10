@@ -1,0 +1,170 @@
+.admin-bottom-nav {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .admin-bottom-nav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1200;
+    display: grid !important;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    align-items: stretch;
+    height: calc(64px + env(safe-area-inset-bottom, 0px));
+    padding: 4px 2px calc(4px + env(safe-area-inset-bottom, 0px));
+    box-sizing: border-box;
+    background: #fff;
+    border-top: 1px solid #eef2f7;
+    box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.08);
+  }
+
+  .abn-item {
+    border: none !important;
+    background: transparent !important;
+    color: #94a3b8 !important;
+    text-decoration: none !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 2px !important;
+    padding: 4px 1px !important;
+    min-width: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    font-size: 9px !important;
+    font-weight: 700 !important;
+    line-height: 1.1 !important;
+    cursor: pointer;
+  }
+
+  .abn-item i {
+    font-size: 18px !important;
+    width: 20px !important;
+    height: 20px !important;
+    line-height: 20px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  .abn-item.active {
+    color: #fc1268 !important;
+  }
+
+  .abn-item > span:not(.abn-icon-wrap) {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    font-size: 9px !important;
+  }
+
+  .abn-icon-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+  }
+
+  .abn-badge {
+    position: absolute;
+    top: -7px;
+    right: -10px;
+    min-width: 14px;
+    height: 14px;
+    padding: 0 3px;
+    border-radius: 999px;
+    background: #ef4444;
+    color: #fff;
+    font-size: 9px;
+    font-weight: 800;
+    font-style: normal;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 0 2px #fff;
+  }
+
+  .abn-badge.inline {
+    position: static;
+    margin-left: auto;
+    box-shadow: none;
+  }
+
+  .abn-more-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1300;
+    background: rgba(15, 23, 42, 0.45);
+    display: flex;
+    align-items: flex-end;
+  }
+
+  .abn-more-sheet {
+    width: 100%;
+    background: #fff;
+    border-radius: 18px 18px 0 0;
+    padding: 10px 14px calc(18px + env(safe-area-inset-bottom, 0px));
+    max-height: 78vh;
+    overflow-y: auto;
+    box-shadow: 0 -12px 40px rgba(15, 23, 42, 0.18);
+  }
+
+  .abn-more-handle {
+    width: 40px;
+    height: 4px;
+    border-radius: 999px;
+    background: #e2e8f0;
+    margin: 4px auto 12px;
+  }
+
+  .abn-more-title {
+    font-size: 15px;
+    font-weight: 800;
+    color: #111827;
+    margin-bottom: 10px;
+  }
+
+  .abn-more-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .abn-more-link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 12px;
+    border-radius: 12px;
+    text-decoration: none;
+    color: #334155;
+    font-weight: 700;
+    font-size: 14px;
+    border: 1px solid #eef2f7;
+    background: #fff;
+    width: 100%;
+    cursor: pointer;
+  }
+
+  .abn-more-link i {
+    width: 20px;
+    text-align: center;
+    color: #fc1268;
+  }
+
+  .abn-more-link.danger {
+    color: #b91c1c;
+    border-color: #fecaca;
+    background: #fef2f2;
+  }
+
+  .abn-more-link.danger i {
+    color: #b91c1c;
+  }
+}

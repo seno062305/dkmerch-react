@@ -297,36 +297,21 @@
 }
 
 @media (max-width: 768px) {
-  .mobile-menu-toggle { display: flex; }
+  /* Mobile: bottom tabs (like customer) — hide sidebar drawer */
+  .mobile-menu-toggle { display: none !important; }
   .sidebar-expand-toggle { display: none !important; }
-  .admin-sidebar-collapse { display: none; }
-
-  .admin-layout.sidebar-collapsed .admin-sidebar {
-    transform: translateX(-100%);
+  .admin-sidebar-collapse { display: none !important; }
+  .admin-sidebar,
+  .admin-sidebar--desktop {
+    display: none !important;
   }
-
-  .admin-layout.sidebar-collapsed .admin-sidebar.mobile-open {
-    transform: translateX(0);
-    pointer-events: auto;
-  }
-
-  .admin-sidebar {
-    transform: translateX(-100%);
-    width: 260px;
-    z-index: 1000;
-  }
-
-  .admin-sidebar.mobile-open {
-    transform: translateX(0);
-  }
-
-  .mobile-overlay { display: block; }
+  .mobile-overlay { display: none !important; }
 
   .admin-content {
-    margin-left: 0;
-    /* top clears fixed menu button; avoid content sitting under it */
-    padding: 76px 12px 24px 12px;
+    margin-left: 0 !important;
+    padding: 16px 12px calc(84px + env(safe-area-inset-bottom, 0px)) 12px !important;
     z-index: 1;
+    min-height: 100vh;
     max-width: 100vw;
     width: 100%;
     overflow-x: hidden;
@@ -345,8 +330,8 @@
   }
 
   .admin-layout.sidebar-collapsed .admin-content {
-    margin-left: 0;
-    padding-top: 76px;
+    margin-left: 0 !important;
+    padding-top: 16px !important;
   }
 
   .admin-content button,
@@ -361,32 +346,10 @@
     position: relative;
     z-index: 10;
   }
-
-  /* ✅ X close button — show on mobile, beside DKMerch logo */
-  .admin-sidebar-close {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 34px;
-    height: 34px;
-    border-radius: 50%;
-    background: #f3f4f6;
-    border: none;
-    cursor: pointer;
-    color: #6b7280;
-    font-size: 15px;
-    flex-shrink: 0;
-    transition: all 0.2s ease;
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  .admin-sidebar-close:hover {
-    background: #fc1268;
-    color: white;
-  }
 }
 
 @media (max-width: 576px) {
-  .admin-sidebar { width: 240px; }
-  .admin-content { padding: 72px 12px 20px 12px; }
+  .admin-content {
+    padding: 12px 12px calc(84px + env(safe-area-inset-bottom, 0px)) 12px !important;
+  }
 }

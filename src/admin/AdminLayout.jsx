@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import AdminSidebar from './AdminSidebar';
+import AdminBottomNav from './AdminBottomNav';
 import './AdminLayout.css';
 import './adminMobileTables.css';
 
@@ -10,7 +11,6 @@ const SIDEBAR_KEY = 'dkmerch_admin_sidebar_collapsed';
 const AdminLayout = () => {
   const { user, role, isAuthenticated, isReady } = useAuth();
   const navigate = useNavigate();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try {
@@ -26,19 +26,6 @@ const AdminLayout = () => {
       navigate('/', { replace: true });
     }
   }, [isReady, isAuthenticated, role, navigate]);
-
-  useEffect(() => {
-    setMobileMenuOpen(false);
-  }, [window.location.pathname]);
-
-  useEffect(() => {
-    if (mobileMenuOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
-    }
-    return () => { document.body.style.overflow = 'unset'; };
-  }, [mobileMenuOpen]);
 
   useEffect(() => {
     const observer = new MutationObserver(() => {
@@ -123,19 +110,13 @@ const AdminLayout = () => {
 
   if (!isAuthenticated || role !== 'admin') return null;
 
-  const toggleMobileMenu = () => setMobileMenuOpen(!mobileMenuOpen);
-  const closeMobileMenu  = () => setMobileMenuOpen(false);
+  const closeMobileMenu  = () => {};
   const toggleSidebar    = () => setSidebarCollapsed(prev => !prev);
 
   return (
-    <div className={`admin-layout ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+    <div className={`admin-layout ${sidebarCollapsed ? 'sidebar-collapsed' : ''} admin-layout--bnav`}>
 
-      {!mobileMenuOpen && !mapOpen && (
-        <button className="mobile-menu-toggle" onClick={toggleMobileMenu} aria-label="Open menu">
-          <i className="fas fa-bars"></i>
-        </button>
-      )}
-
+      {/* Desktop only — mobile uses bottom tabs like customer app */}
       {sidebarCollapsed && !mapOpen && (
         <button
           type="button"
@@ -148,9 +129,7 @@ const AdminLayout = () => {
         </button>
       )}
 
-      <div className={`mobile-overlay ${mobileMenuOpen ? 'active' : ''}`} onClick={closeMobileMenu}></div>
-
-      <div className={`admin-sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
+      <div className="admin-sidebar admin-sidebar--desktop">
         <AdminSidebar
           onLinkClick={closeMobileMenu}
           onClose={closeMobileMenu}
@@ -161,6 +140,8 @@ const AdminLayout = () => {
       <main className="admin-content">
         <Outlet />
       </main>
+
+      {!mapOpen && <AdminBottomNav />}
     </div>
   );
 };

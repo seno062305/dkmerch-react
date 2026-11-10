@@ -1951,7 +1951,10 @@ const RiderDashboard = () => {
         <button type="button" className={`rider-bnav-item ${tab === 'my-pickups' ? 'active' : ''}`} onClick={() => handleNavClick('my-pickups')}>
           <span className="rider-bnav-icon-wrap">
             <DkIcon name={DK_ICONS.activeDelivery} size={18} />
-            {historyPickupsCount > 0 && <em className={`rider-bnav-badge ${newPickupsCount > 0 ? 'new' : ''}`}>{historyPickupsCount}</em>}
+            {/* Indicator only for unseen updates — clears after viewing My Orders */}
+            {newPickupsCount > 0 && tab !== 'my-pickups' && (
+              <em className="rider-bnav-badge new">{newPickupsCount}</em>
+            )}
           </span>
           <span>My Orders</span>
         </button>
