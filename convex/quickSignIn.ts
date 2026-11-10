@@ -2,12 +2,13 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
 const TTL_MS = 3 * 60 * 1000; // 3 minutes
+const TOKEN_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I
+const TOKEN_LEN = 8;
 
 function randomToken(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789abcdefghijkmnopqrstuvwxyz";
   let out = "";
-  for (let i = 0; i < 32; i++) {
-    out += chars[Math.floor(Math.random() * chars.length)];
+  for (let i = 0; i < TOKEN_LEN; i++) {
+    out += TOKEN_CHARS[Math.floor(Math.random() * TOKEN_CHARS.length)];
   }
   return out;
 }
@@ -17,7 +18,15 @@ export const createSession = mutation({
   args: {},
   handler: async ({ db }) => {
     const now = Date.now();
-    const token = randomToken();
+    let token = randomToken();
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const existing = await db
+        .query("quickSignInSessions")
+        .withIndex("by_token", (q) => q.eq("token", token))
+        .first();
+      if (!existing) break;
+      token = randomToken();
+    }
     await db.insert("quickSignInSessions", {
       token,
       status: "pending",
@@ -32,7 +41,7 @@ export const createSession = mutation({
 export const getSession = query({
   args: { token: v.string() },
   handler: async ({ db }, { token }) => {
-    const t = String(token || "").trim();
+    const t = String(token || "").trim().toUpperCase();
     if (!t) return null;
     const row = await db
       .query("quickSignInSessions")
@@ -58,7 +67,7 @@ export const approveSession = mutation({
     email: v.string(),
   },
   handler: async ({ db }, { token, email }) => {
-    const t = String(token || "").trim();
+    const t = String(token || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
     const emailNorm = String(email || "").trim().toLowerCase();
     if (!t) return { success: false, error: "Invalid QR code." };
     if (!emailNorm) return { success: false, error: "You must be logged in to approve." };
@@ -112,7 +121,7 @@ export const approveSession = mutation({
 export const consumeSession = mutation({
   args: { token: v.string() },
   handler: async ({ db }, { token }) => {
-    const t = String(token || "").trim();
+    const t = String(token || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
     if (!t) return { success: false };
     const row = await db
       .query("quickSignInSessions")

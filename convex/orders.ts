@@ -579,13 +579,25 @@ export const notifyCustomerOutForDelivery = mutation({
         : Math.floor(1000 + Math.random() * 9000).toString();
     const now = new Date().toISOString();
 
+    let resolvedPhoto =
+      args.riderPhoto || (order as any).riderInfo?.photo || "";
+    if (!resolvedPhoto && (args.riderEmail || (order as any).riderInfo?.email)) {
+      const email = String(args.riderEmail || (order as any).riderInfo?.email || "").trim();
+      if (email) {
+        const app = await db
+          .query("riderApplications")
+          .withIndex("by_email", (q: any) => q.eq("email", email))
+          .first();
+        if (app?.riderPhoto) resolvedPhoto = app.riderPhoto;
+      }
+    }
     const riderInfo = {
       name: args.riderName,
       phone: args.riderPhone || "",
       vehicle: args.riderVehicle || "motorcycle",
       plate: args.riderPlate || "",
       email: args.riderEmail || "",
-      photo: args.riderPhoto || (order as any).riderInfo?.photo || "",
+      photo: resolvedPhoto || "",
     };
 
     await db.patch(order._id, {

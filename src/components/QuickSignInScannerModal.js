@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useConfirm } from '../context/ConfirmContext';
 import './WaybillScannerModal.css';
 
 function extractQuickSignInToken(raw) {
@@ -7,26 +8,34 @@ function extractQuickSignInToken(raw) {
   try {
     const url = new URL(text);
     const fromQuery = url.searchParams.get('qsi') || url.searchParams.get('token');
-    if (fromQuery) return fromQuery.trim();
+    if (fromQuery) return fromQuery.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
   } catch { /* not a URL */ }
 
   const qsiMatch = text.match(/[?&]qsi=([^&\s#]+)/i);
-  if (qsiMatch?.[1]) return decodeURIComponent(qsiMatch[1]).trim();
+  if (qsiMatch?.[1]) {
+    return decodeURIComponent(qsiMatch[1]).trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  }
 
   try {
     const parsed = JSON.parse(text);
-    if (parsed?.t === 'qsi' && parsed?.token) return String(parsed.token).trim();
-    if (parsed?.token) return String(parsed.token).trim();
+    if (parsed?.t === 'qsi' && parsed?.token) {
+      return String(parsed.token).trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    }
+    if (parsed?.token) {
+      return String(parsed.token).trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    }
   } catch { /* not JSON */ }
 
-  if (/^[A-Za-z0-9]{20,48}$/.test(text)) return text;
+  const cleaned = text.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (/^[A-Z0-9]{6,16}$/.test(cleaned)) return cleaned;
   return null;
 }
 
 /**
  * Customer Settings — scan desktop Quick Sign In QR to log that browser into this account.
  */
-const QuickSignInScannerModal = ({ onClose, onScan }) => {
+const QuickSignInScannerModal = ({ onClose, onScan, accountLabel = 'this account' }) => {
+  const { confirm } = useConfirm();
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const rafRef = useRef(null);
@@ -61,9 +70,22 @@ const QuickSignInScannerModal = ({ onClose, onScan }) => {
       return;
     }
     busyRef.current = true;
-    setSubmitting(true);
     setError('');
     try {
+      const ok = await confirm({
+        title: 'Approve desktop login?',
+        message: `Sign in the desktop browser as ${accountLabel}?\n\nOnly continue if you opened Quick Sign In on your own computer.`,
+        confirmLabel: 'Sign in desktop',
+        cancelLabel: 'Cancel',
+        variant: 'primary',
+        icon: 'fa-desktop',
+      });
+      if (!ok) {
+        cooldownRef.current = Date.now() + 800;
+        return;
+      }
+
+      setSubmitting(true);
       const result = await onScan(token);
       if (!result?.success) {
         setError(result?.error || 'Could not approve this QR. Generate a new one on desktop.');
@@ -72,7 +94,7 @@ const QuickSignInScannerModal = ({ onClose, onScan }) => {
       }
       setSuccess(true);
       stopCamera();
-      setTimeout(() => onClose?.(), 1200);
+      setTimeout(() => onClose?.(), 900);
     } catch (err) {
       setError(err?.message || 'Scan failed. Try again.');
       cooldownRef.current = Date.now() + 1500;
@@ -80,7 +102,7 @@ const QuickSignInScannerModal = ({ onClose, onScan }) => {
       busyRef.current = false;
       setSubmitting(false);
     }
-  }, [onScan, onClose, stopCamera, success]);
+  }, [onScan, onClose, stopCamera, success, confirm, accountLabel]);
 
   useEffect(() => {
     let cancelled = false;
@@ -157,7 +179,7 @@ const QuickSignInScannerModal = ({ onClose, onScan }) => {
 
   const submitManual = async (e) => {
     e.preventDefault();
-    const token = extractQuickSignInToken(manualToken) || manualToken.trim();
+    const token = extractQuickSignInToken(manualToken) || manualToken.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (!token) {
       setError('Enter the code shown under the desktop QR.');
       return;
@@ -184,7 +206,7 @@ const QuickSignInScannerModal = ({ onClose, onScan }) => {
         {success ? (
           <div className="wb-scan-error" style={{ background: '#ecfdf5', borderColor: '#a7f3d0', color: '#065f46' }}>
             <i className="fas fa-check-circle"></i>
-            <div><strong>Desktop signed in!</strong><span> You can close this.</span></div>
+            <div><strong>Desktop signed in!</strong><span> Closing…</span></div>
           </div>
         ) : (
           <>
@@ -209,13 +231,13 @@ const QuickSignInScannerModal = ({ onClose, onScan }) => {
                 <input
                   id="qsi-manual"
                   value={manualToken}
-                  onChange={(e) => setManualToken(e.target.value)}
-                  placeholder="Code under the QR"
+                  onChange={(e) => setManualToken(e.target.value.toUpperCase())}
+                  placeholder="e.g. ABCD-EFGH"
                   autoComplete="off"
                   disabled={submitting}
                 />
                 <button type="submit" className="wb-scan-submit" disabled={submitting || !manualToken.trim()}>
-                  {submitting ? <i className="fas fa-spinner fa-spin"></i> : 'Approve'}
+                  {submitting ? <i className="fas fa-spinner fa-spin"></i> : 'Continue'}
                 </button>
               </div>
             </form>

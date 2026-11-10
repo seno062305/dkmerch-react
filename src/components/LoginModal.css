@@ -379,11 +379,13 @@ body.login-modal-open {
 .qsi-code {
   display: block;
   max-width: 100%;
-  padding: 8px 10px;
+  padding: 10px 14px;
   border-radius: 8px;
   background: #fdf2f8;
   color: #9d174d;
-  font-size: 11px;
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
   word-break: break-all;
 }
 

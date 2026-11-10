@@ -192,13 +192,22 @@ export const acceptOrder = mutation({
     );
 
     const now = new Date().toISOString();
+    // Prefer live admin photo from riderApplications so customers always see the face pic
+    let resolvedPhoto = args.riderPhoto || "";
+    if (!resolvedPhoto && args.riderEmail) {
+      const app = await db
+        .query("riderApplications")
+        .withIndex("by_email", (q: any) => q.eq("email", String(args.riderEmail).trim()))
+        .first();
+      if (app?.riderPhoto) resolvedPhoto = app.riderPhoto;
+    }
     const riderInfo = {
       name: args.riderName,
       phone: args.riderPhone || "",
       vehicle: args.riderVehicle || "motorcycle",
       plate: args.riderPlate || "",
       email: args.riderEmail,
-      photo: args.riderPhoto || "",
+      photo: resolvedPhoto || "",
     };
 
     if (claimed) {

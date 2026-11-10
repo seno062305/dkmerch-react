@@ -714,13 +714,14 @@ const Settings = () => {
       {showQuickSignIn && (
         <QuickSignInScannerModal
           onClose={() => setShowQuickSignIn(false)}
+          accountLabel={user?.name || user?.email || 'this account'}
           onScan={async (token) => {
             const result = await approveQuickSignIn({
               token,
               email: user?.email || '',
             });
             if (result?.success) {
-              showNotification('Desktop signed in with this account.', 'success');
+              showNotification('Desktop login approved — that browser is signing in now.', 'success');
             }
             return result;
           }}

@@ -730,6 +730,8 @@ const TrackOrder = ({ onProductClick }) => {
   const [refundSuccess,      setRefundSuccess]      = useState(false);
   const [cancelOrder,        setCancelOrder]        = useState(null);
   const openedFromUrlRef = useRef(null);
+  const trackedOrdersRef = useRef(null);
+  const ordersListRef    = useRef(null);
   const [hiddenOrders,       setHiddenOrders]       = useState(() => {
     try { return JSON.parse(localStorage.getItem('hiddenDeliveredOrders') || '[]'); } catch { return []; }
   });
@@ -867,16 +869,42 @@ const TrackOrder = ({ onProductClick }) => {
   });
 
   const FILTERS = [
-    { key: 'active',    icon: 'fa-box',           dkIcon: DK_ICONS.shoppingBag, label: 'All Orders', count: activeOrders.length,    desc: 'Active & ongoing orders' },
+    { key: 'active',    icon: 'fa-box',           dkIcon: DK_ICONS.shoppingBag, label: 'Active',     count: activeOrders.length,    desc: 'Active & ongoing orders' },
     { key: 'delivered', icon: 'fa-check-double',  dkIcon: DK_ICONS.shoppingBag, label: 'Delivered',  count: deliveredOrders.length, desc: 'Successfully delivered' },
     { key: 'cancelled', icon: 'fa-ban',           dkIcon: DK_ICONS.shoppingBag, label: 'Cancelled',  count: cancelledOrders.length, desc: 'Cancelled orders' },
   ];
+
+  const guestActiveOrders = sortByNewest(emailOrders).filter(
+    (o) => !isDelivered(o) && !isCancelledOrder(o)
+  );
+
+  const scrollToTrackedOrders = useCallback(() => {
+    const el = trackedOrdersRef.current;
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
+
+  useEffect(() => {
+    if (!showTrackedOrders || !searchEmail) return undefined;
+    const t = setTimeout(scrollToTrackedOrders, 120);
+    return () => clearTimeout(t);
+  }, [showTrackedOrders, searchEmail, guestActiveOrders.length, emailOrders.length, scrollToTrackedOrders]);
 
   const handleFindMyOrders = (e) => {
     e.preventDefault();
     const email = trackingEmail.trim();
     if (!email) { showNotification('Please enter your email address.', 'warning'); return; }
-    setSearchEmail(email); setShowTrackedOrders(true); setSelectedOrderId(null);
+    setSearchEmail(email);
+    setShowTrackedOrders(true);
+    setSelectedOrderId(null);
+    setTimeout(scrollToTrackedOrders, 80);
+  };
+
+  const handleFilterClick = (key) => {
+    setFilter(key);
+    setTimeout(() => {
+      ordersListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 40);
   };
 
   const getPreOrderReleaseDate = (order) => {
@@ -1133,18 +1161,18 @@ const TrackOrder = ({ onProductClick }) => {
             <LbcTrackPanel />
             <div className="orders-tab-bar">
               {FILTERS.map(f => (
-                <button key={f.key} className={`orders-tab-btn ${filter === f.key ? 'active' : ''}`} onClick={() => setFilter(f.key)}>
+                <button key={f.key} className={`orders-tab-btn ${filter === f.key ? 'active' : ''}`} onClick={() => handleFilterClick(f.key)}>
                   <i className={`fas ${f.icon}`}></i><span className="tab-label">{f.label}</span>
                   {f.count > 0 && <span className={`tab-count ${filter === f.key ? 'tab-count-active' : ''}`}>{f.count}</span>}
                 </button>
               ))}
             </div>
-            <div className="tab-context-bar"><i className={`fas ${activeTab?.icon}`}></i><span><strong>{activeTab?.label}</strong> — {activeTab?.desc}{filteredOrders.length > 0 && <span className="tab-context-count"> · {filteredOrders.length} order{filteredOrders.length !== 1 ? 's' : ''}</span>}</span></div>
+            <div ref={ordersListRef} className="tab-context-bar"><i className={`fas ${activeTab?.icon}`}></i><span><strong>{activeTab?.label}</strong> — {activeTab?.desc}{filteredOrders.length > 0 && <span className="tab-context-count"> · {filteredOrders.length} order{filteredOrders.length !== 1 ? 's' : ''}</span>}</span></div>
             {filteredOrders.length === 0 ? (
               <div className="orders-empty">
                 <DkIcon name={DK_ICONS.shoppingBag} size={72} className="orders-empty-icon" alt="" />
-                <h3>{filter === 'active' ? 'No Orders Yet' : `No ${activeTab?.label} Yet`}</h3>
-                <p>{filter === 'active' && 'No active orders.'}{filter === 'delivered' && 'No delivered orders.'}{filter === 'cancelled' && 'No cancelled orders.'}</p>
+                <h3>{filter === 'active' ? 'No Active Orders' : `No ${activeTab?.label} Yet`}</h3>
+                <p>{filter === 'active' && 'No active orders. Delivered and cancelled are under their own tabs.'}{filter === 'delivered' && 'No delivered orders.'}{filter === 'cancelled' && 'No cancelled orders.'}</p>
                 {filter === 'active' && (
                   <button className="btn btn-primary" onClick={() => navigate('/collections')}>
                     <DkIcon name={DK_ICONS.shoppingBag} size={16} alt="" /> Start Shopping
@@ -1215,15 +1243,46 @@ const TrackOrder = ({ onProductClick }) => {
             </div>
             <div className="tracking-info"><h3>How to Track</h3><ul><li><i className="fas fa-check"></i> Enter your email address</li><li><i className="fas fa-check"></i> View all your orders</li><li><i className="fas fa-check"></i> See real-time status</li><li><i className="fas fa-truck"></i> Outside NCR? Admin sends your LBC ID — use LBC Tracker above</li></ul></div>
           </div>
-          {showTrackedOrders && emailOrders.length > 0 && (
-            <div className="tracked-orders-section">
-              <div className="tracked-orders-header"><h2>Your Orders</h2><p>Found {emailOrders.length} order{emailOrders.length > 1 ? 's' : ''} for {searchEmail}</p>
-                <div className="guest-login-notice"><i className="fas fa-info-circle"></i><span>Viewing as guest. <a href="/login" onClick={e => { e.preventDefault(); navigate('/'); }}>Log in</a> for full access.</span></div>
-              </div>
-              <div className="orders-grid">{sortByNewest(emailOrders).map(order => <OrderCard key={order._id} order={order} onViewDetails={handleOpenModal} isGuest={true} />)}</div>
+          {showTrackedOrders && (
+            <div ref={trackedOrdersRef} className="tracked-orders-section">
+              {guestActiveOrders.length > 0 ? (
+                <>
+                  <div className="tracked-orders-header">
+                    <h2>Your Active Orders</h2>
+                    <p>
+                      Found {guestActiveOrders.length} active order{guestActiveOrders.length > 1 ? 's' : ''} for {searchEmail}
+                      {emailOrders.length > guestActiveOrders.length
+                        ? ` · ${emailOrders.length - guestActiveOrders.length} delivered/cancelled hidden`
+                        : ''}
+                    </p>
+                    <div className="guest-login-notice">
+                      <i className="fas fa-info-circle"></i>
+                      <span>
+                        Viewing as guest.{' '}
+                        <a href="/login" onClick={(e) => { e.preventDefault(); navigate('/'); }}>Log in</a>
+                        {' '}for full access.
+                      </span>
+                    </div>
+                  </div>
+                  <div className="orders-grid">
+                    {guestActiveOrders.map((order) => (
+                      <OrderCard key={order._id} order={order} onViewDetails={handleOpenModal} isGuest={true} />
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="orders-empty">
+                  <i className="fas fa-search"></i>
+                  <h3>{emailOrders.length > 0 ? 'No active orders' : 'No orders found'}</h3>
+                  <p>
+                    {emailOrders.length > 0
+                      ? `Orders for ${searchEmail} are already delivered or cancelled.`
+                      : `No orders for ${searchEmail}.`}
+                  </p>
+                </div>
+              )}
             </div>
           )}
-          {showTrackedOrders && emailOrders.length === 0 && <div className="orders-empty"><i className="fas fa-search"></i><h3>No orders found</h3><p>No orders for {searchEmail}.</p></div>}
         </section>
       </div>
       {selectedOrder && <TrackingModal key={selectedOrderId} order={selectedOrder} products={products} onClose={handleCloseModal} getTimelineSteps={getTimelineSteps} getStatusClass={getStatusClass} getDisplayStatus={getDisplayStatus} isOutForDeliveryStatus={isOutForDeliveryStatus} onRequestRefund={null} isGuest={true} />}
@@ -1245,6 +1304,13 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
     api.orders.getRefundPhotoUrl,
     order.cancelRefundProofId ? { storageId: order.cancelRefundProofId } : 'skip'
   );
+
+  const riderEmail = String(order.riderInfo?.email || '').trim();
+  const riderApp = useQuery(
+    api.riders.getRiderByEmail,
+    riderEmail && !order.riderInfo?.photo ? { email: riderEmail } : 'skip'
+  );
+  const riderPhoto = order.riderInfo?.photo || riderApp?.riderPhoto || '';
 
   const isCancelled      = (order.orderStatus || order.status || '').toLowerCase() === 'cancelled';
   const isOutForDelivery = isOutForDeliveryStatus(order);
@@ -1313,8 +1379,8 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
 
           {order.riderInfo && !isCancelled && !isLbcOrder(order) && (
             <div className="rider-info-banner">
-              {order.riderInfo.photo ? (
-                <img src={order.riderInfo.photo} alt={order.riderInfo.name || 'Rider'} className="rider-info-photo" />
+              {riderPhoto ? (
+                <img src={riderPhoto} alt={order.riderInfo.name || 'Rider'} className="rider-info-photo" />
               ) : (
                 <div className="rider-info-icon"><i className="fas fa-motorcycle"></i></div>
               )}

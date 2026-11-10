@@ -28,6 +28,7 @@ import type * as productStats from "../productStats.js";
 import type * as products from "../products.js";
 import type * as promos from "../promos.js";
 import type * as pushSubscriptions from "../pushSubscriptions.js";
+import type * as quickSignIn from "../quickSignIn.js";
 import type * as reviews from "../reviews.js";
 import type * as rewards from "../rewards.js";
 import type * as riderNotifications from "../riderNotifications.js";
@@ -66,6 +67,7 @@ declare const fullApi: ApiFromModules<{
   products: typeof products;
   promos: typeof promos;
   pushSubscriptions: typeof pushSubscriptions;
+  quickSignIn: typeof quickSignIn;
   reviews: typeof reviews;
   rewards: typeof rewards;
   riderNotifications: typeof riderNotifications;
