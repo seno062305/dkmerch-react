@@ -1164,6 +1164,31 @@
   background: linear-gradient(135deg, #fef2f2, #fee2e2);
 }
 
+.cancel-order-note {
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.45;
+  margin: 0 0 14px;
+}
+
+.cancel-order-submit {
+  background: linear-gradient(135deg, #ef4444, #dc2626) !important;
+  border-color: #dc2626 !important;
+}
+
+.refund-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #991b1b;
+  font-size: 13px;
+  font-weight: 600;
+}
+
 /* Refund button on order card */
 .order-refund-btn {
   width: 100%; justify-content: center; font-size: 11px; padding: 7px 10px;

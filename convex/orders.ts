@@ -655,6 +655,8 @@ export const applyCustomerCancel = mutation({
     refunded: v.optional(v.boolean()),
     refundId: v.optional(v.string()),
     refundAmount: v.optional(v.number()),
+    phone: v.optional(v.string()),
+    refundMethod: v.optional(v.union(v.literal("gcash"), v.literal("maya"))),
   },
   handler: async ({ db, scheduler }, args) => {
     const order = await db
@@ -713,7 +715,21 @@ export const applyCustomerCancel = mutation({
       patch.refundAdminNote = args.refunded
         ? "Auto-refunded to original payment method (PayMongo)"
         : "Customer cancelled — refund processed";
-      if (historyEntry) patch.refundHistory = [...existingHistory, historyEntry];
+      if (args.refundMethod) patch.refundMethod = args.refundMethod;
+      if (args.phone) {
+        patch.refundAccountNumber = String(args.phone).replace(/\s/g, "");
+        patch.refundAccountName = order.customerName || "";
+      }
+      if (historyEntry) {
+        patch.refundHistory = [
+          ...existingHistory,
+          {
+            ...historyEntry,
+            refundMethod: args.refundMethod || "",
+            phone: args.phone || "",
+          },
+        ];
+      }
       if (args.refundId) patch.paymongoRefundId = args.refundId;
     }
 

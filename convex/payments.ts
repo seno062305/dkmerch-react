@@ -244,8 +244,10 @@ export const customerCancelOrder = action({
     orderId: v.string(),
     email: v.string(),
     reason: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    refundMethod: v.optional(v.union(v.literal("gcash"), v.literal("maya"))),
   },
-  handler: async (ctx, { orderId, email, reason }) => {
+  handler: async (ctx, { orderId, email, reason, phone, refundMethod }) => {
     const order = await ctx.runQuery(api.orders.getOrderById, { orderId });
     if (!order) return { success: false, error: "Order not found." };
 
@@ -365,6 +367,8 @@ export const customerCancelOrder = action({
       refunded,
       refundId: refundId || undefined,
       refundAmount: wasPaid ? amount : 0,
+      phone: phone || undefined,
+      refundMethod: refundMethod || undefined,
     });
 
     if (!result?.success) {

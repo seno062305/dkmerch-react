@@ -5,6 +5,8 @@ header {
   z-index: 1000;
   background: white;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  /* iOS PWA / notch — keep header actions tappable below status bar */
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
 .main-header { background: white; padding: 1rem 0; }

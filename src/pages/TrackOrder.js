@@ -8,7 +8,6 @@ import { useProducts, usePreOrderProducts } from '../utils/productStorage';
 import { isLbcOrder, openLbcTracker, LBC_TRACK_URL } from '../utils/deliveryUtils';
 import DkIcon, { DK_ICONS } from '../components/DkIcon';
 import { useNotification } from '../context/NotificationContext';
-import { useConfirm } from '../context/ConfirmContext';
 import DeliveryChatPanel from '../components/DeliveryChatPanel';
 import './TrackOrder.css';
 
@@ -60,6 +59,144 @@ const getRefundWindow = (order) => {
   const msLeft      = deadlineMs - nowMs;
   if (msLeft <= 0) return { canRefund: false, hoursLeft: 0, expired: true };
   return { canRefund: true, hoursLeft: Math.floor(msLeft / (1000 * 60 * 60)), minsLeft: Math.floor((msLeft % (1000 * 60 * 60)) / (1000 * 60)), expired: false };
+};
+
+// ─── CANCEL ORDER MODAL (before rider accepts) ───────────────────────────────
+const CancelOrderModal = ({ order, userEmail, onClose, onSuccess }) => {
+  const customerCancelOrder = useAction(api.payments.customerCancelOrder);
+  const paid = String(order.paymentStatus || '').toLowerCase() === 'paid';
+  const amount = Number(order.finalTotal ?? order.total ?? 0);
+  const pmRaw = String(order.paymentMethod || '').toLowerCase();
+  const defaultMethod = pmRaw.includes('maya') ? 'maya' : pmRaw.includes('gcash') ? 'gcash' : '';
+
+  const [phone, setPhone] = useState(String(order.phone || '').replace(/\D/g, '').slice(0, 11));
+  const [refundMethod, setRefundMethod] = useState(defaultMethod);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = ''; };
+  }, []);
+
+  const handleSubmit = async () => {
+    if (paid) {
+      if (!refundMethod) { setError('Please select GCash or Maya (how you paid).'); return; }
+      if (!phone.trim()) { setError('Please enter your phone number.'); return; }
+      if (!/^09\d{9}$/.test(phone.replace(/\s/g, ''))) {
+        setError('Enter a valid PH mobile number (09XXXXXXXXX).');
+        return;
+      }
+    }
+    setError('');
+    setSubmitting(true);
+    try {
+      const result = await customerCancelOrder({
+        orderId: order.orderId,
+        email: userEmail,
+        reason: 'Cancelled by customer before rider accepted',
+        phone: phone.replace(/\s/g, '') || undefined,
+        refundMethod: paid ? refundMethod : undefined,
+      });
+      if (!result?.success) {
+        setError(result?.error || 'Could not cancel order.');
+        setSubmitting(false);
+        return;
+      }
+      onSuccess(result);
+    } catch (err) {
+      setError(err?.data || err?.message || 'Cancel failed. Please try again.');
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="refund-modal-overlay" onClick={onClose}>
+      <div className="refund-modal cancel-order-modal" onClick={(e) => e.stopPropagation()}>
+        <button type="button" className="refund-modal-close" onClick={onClose}><i className="fas fa-times"></i></button>
+        <div className="refund-modal-header">
+          <div className="refund-modal-icon" style={{ background: '#fee2e2' }}>
+            <i className="fas fa-ban" style={{ color: '#dc2626' }}></i>
+          </div>
+          <div>
+            <h3>Cancel Order</h3>
+            <p>
+              Order #{order.orderId?.slice(-8)}
+              {paid ? <> · <strong>₱{amount.toLocaleString('en-PH')}</strong> auto-refund</> : null}
+            </p>
+          </div>
+        </div>
+        <div className="refund-modal-body">
+          <p className="cancel-order-note">
+            {paid
+              ? 'Refund goes back to your original payment automatically. Confirm the number and wallet you paid with.'
+              : 'This order has no completed payment. You can cancel it now.'}
+          </p>
+
+          {paid && (
+            <>
+              <div className="refund-field-group">
+                <label className="refund-modal-label">
+                  <i className="fas fa-wallet"></i> Payment used <span className="refund-required">*</span>
+                </label>
+                <div className="refund-method-row">
+                  <button
+                    type="button"
+                    className={`refund-method-btn ${refundMethod === 'gcash' ? 'selected' : ''}`}
+                    onClick={() => { setRefundMethod('gcash'); setError(''); }}
+                  >
+                    <img src="/images/payments/gcash.svg" alt="GCash" className="refund-method-logo" />
+                    <span>GCash</span>
+                    {refundMethod === 'gcash' && <i className="fas fa-check-circle refund-method-check"></i>}
+                  </button>
+                  <button
+                    type="button"
+                    className={`refund-method-btn ${refundMethod === 'maya' ? 'selected' : ''}`}
+                    onClick={() => { setRefundMethod('maya'); setError(''); }}
+                  >
+                    <img src="/images/payments/maya.svg" alt="Maya" className="refund-method-logo" />
+                    <span>Maya</span>
+                    {refundMethod === 'maya' && <i className="fas fa-check-circle refund-method-check"></i>}
+                  </button>
+                </div>
+              </div>
+
+              <div className="refund-field-group">
+                <label className="refund-modal-label">
+                  <i className="fas fa-phone"></i> Phone Number <span className="refund-required">*</span>
+                </label>
+                <input
+                  type="tel"
+                  className="refund-input"
+                  placeholder="09XXXXXXXXX"
+                  value={phone}
+                  maxLength={11}
+                  onChange={(e) => {
+                    setPhone(e.target.value.replace(/\D/g, '').slice(0, 11));
+                    setError('');
+                  }}
+                />
+              </div>
+            </>
+          )}
+
+          {error && (
+            <div className="refund-error"><i className="fas fa-exclamation-circle"></i> {error}</div>
+          )}
+        </div>
+        <div className="refund-modal-footer">
+          <button type="button" className="refund-cancel-btn" onClick={onClose} disabled={submitting}>Keep Order</button>
+          <button type="button" className="refund-submit-btn cancel-order-submit" onClick={handleSubmit} disabled={submitting}>
+            {submitting
+              ? <><i className="fas fa-spinner fa-spin"></i> Cancelling…</>
+              : paid
+                ? <><i className="fas fa-ban"></i> Cancel & Refund</>
+                : <><i className="fas fa-ban"></i> Cancel Order</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 // ─── REFUND MODAL ─────────────────────────────────────────────────────────────
@@ -520,9 +657,7 @@ const RiderMap = ({ orderId, riderName, orderData }) => {
 const TrackOrder = ({ onProductClick }) => {
   const navigate = useNavigate();
   const { showNotification } = useNotification();
-  const { confirm } = useConfirm();
   const { user, isAuthenticated } = useAuth();
-  const customerCancelOrder = useAction(api.payments.customerCancelOrder);
   const [searchParams, setSearchParams] = useSearchParams();
   const orderIdParam = searchParams.get('order') || searchParams.get('orderId') || searchParams.get('id');
 
@@ -536,6 +671,7 @@ const TrackOrder = ({ onProductClick }) => {
   const [removeConfirm,      setRemoveConfirm]      = useState(null);
   const [refundOrder,        setRefundOrder]        = useState(null);
   const [refundSuccess,      setRefundSuccess]      = useState(false);
+  const [cancelOrder,        setCancelOrder]        = useState(null);
   const [cancellingId,       setCancellingId]       = useState(null);
   const openedFromUrlRef = useRef(null);
   const [hiddenOrders,       setHiddenOrders]       = useState(() => {
@@ -699,49 +835,24 @@ const TrackOrder = ({ onProductClick }) => {
 
   const handleRefundSuccess = () => { setRefundOrder(null); setRefundSuccess(true); setTimeout(() => setRefundSuccess(false), 4000); };
 
-  const handleCustomerCancel = async (order) => {
+  const openCancelOrder = (order) => {
     if (!order?.orderId || !user?.email) return;
-    const paid = String(order.paymentStatus || '').toLowerCase() === 'paid';
-    const amount = Number(order.finalTotal ?? order.total ?? 0);
-    const ok = await confirm({
-      title: 'Cancel this order?',
-      message: paid
-        ? `Cancel order #${String(order.orderId).slice(-8).toUpperCase()}?\n\nYour payment of ₱${amount.toLocaleString('en-PH')} will be refunded automatically to your GCash/Maya. Admin will be notified — no approval needed.`
-        : `Cancel order #${String(order.orderId).slice(-8).toUpperCase()}?\n\nThis order has no completed payment.`,
-      confirmLabel: paid ? 'Cancel & Refund' : 'Cancel Order',
-      cancelLabel: 'Keep Order',
-      variant: 'danger',
-      icon: 'fa-ban',
-    });
-    if (!ok) return;
+    setSelectedOrderId(null);
+    setCancelOrder(order);
+  };
 
-    setCancellingId(order.orderId);
-    try {
-      const result = await customerCancelOrder({
-        orderId: order.orderId,
-        email: user.email,
-        reason: 'Cancelled by customer before rider accepted',
-      });
-      if (!result?.success) {
-        showNotification(result?.error || 'Could not cancel order.', 'error');
-        return;
-      }
-      if (selectedOrderId && (selectedOrder?._id === order._id || selectedOrder?.orderId === order.orderId)) {
-        setSelectedOrderId(null);
-      }
-      showNotification(
-        result.refunded
-          ? `Order cancelled. ₱${Number(result.refundAmount || 0).toLocaleString('en-PH')} refund is on the way to your wallet.`
-          : 'Order cancelled.',
-        'success'
-      );
-      setFilter('cancelled');
-    } catch (err) {
-      console.error(err);
-      showNotification(err?.message || 'Cancel failed. Please try again.', 'error');
-    } finally {
-      setCancellingId(null);
-    }
+  const handleCancelOrderSuccess = (result) => {
+    const orderId = cancelOrder?.orderId;
+    setCancelOrder(null);
+    setCancellingId(null);
+    showNotification(
+      result?.refunded
+        ? `Order cancelled. ₱${Number(result.refundAmount || 0).toLocaleString('en-PH')} refund is on the way to your wallet.`
+        : 'Order cancelled.',
+      'success'
+    );
+    setFilter('cancelled');
+    if (orderId && selectedOrder?.orderId === orderId) setSelectedOrderId(null);
   };
 
   // ─── ORDER CARD ────────────────────────────────────────────────────────────
@@ -836,12 +947,9 @@ const TrackOrder = ({ onProductClick }) => {
             <button
               type="button"
               className="btn order-cancel-btn"
-              disabled={cancellingId === order.orderId}
-              onClick={() => handleCustomerCancel(order)}
+              onClick={() => openCancelOrder(order)}
             >
-              {cancellingId === order.orderId
-                ? <><i className="fas fa-spinner fa-spin"></i> Cancelling…</>
-                : <><i className="fas fa-ban"></i> Cancel Order</>}
+              <i className="fas fa-ban"></i> Cancel Order
             </button>
           )}
           {!isGuest && delivered && (
@@ -989,9 +1097,17 @@ const TrackOrder = ({ onProductClick }) => {
             getDisplayStatus={getDisplayStatus}
             isOutForDeliveryStatus={isOutForDeliveryStatus}
             onRequestRefund={(order) => { handleCloseModal(); setRefundOrder(order); }}
-            onCustomerCancel={handleCustomerCancel}
-            cancelling={cancellingId === selectedOrder.orderId}
+            onCustomerCancel={openCancelOrder}
+            cancelling={false}
             isGuest={false}
+          />
+        )}
+        {cancelOrder && (
+          <CancelOrderModal
+            order={cancelOrder}
+            userEmail={user.email}
+            onClose={() => setCancelOrder(null)}
+            onSuccess={handleCancelOrderSuccess}
           />
         )}
         {refundOrder && <RefundModal order={refundOrder} onClose={() => setRefundOrder(null)} onSuccess={handleRefundSuccess} />}

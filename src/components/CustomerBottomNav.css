@@ -14,9 +14,10 @@
     grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
     align-items: stretch;
     gap: 0;
-    height: calc(64px + env(safe-area-inset-bottom, 0px));
-    padding: 4px 2px calc(4px + env(safe-area-inset-bottom, 0px));
-    box-sizing: border-box;
+    /* 64px bar + home-indicator padding (do not double-count safe-area in height) */
+    height: 64px;
+    padding: 4px 2px env(safe-area-inset-bottom, 0px);
+    box-sizing: content-box;
     background: #fff;
     border-top: 1px solid #eef2f7;
     box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.08);
@@ -102,7 +103,11 @@
 
   /* Leave room for fixed bottom nav on customer pages */
   body.has-customer-bottom-nav {
-    padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px) + 12px);
+  }
+
+  html, body {
+    background: #fff;
   }
 
   body.has-customer-bottom-nav .footer {
