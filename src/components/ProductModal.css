@@ -581,8 +581,9 @@
     border-radius: 18px 18px 0 0;
     max-width: 100%;
     width: 100%;
-    max-height: 82dvh;
+    max-height: calc(100dvh - 72px);
     min-height: 0;
+    overflow-x: hidden;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     box-shadow: 0 -12px 40px rgba(15, 23, 42, 0.2);
@@ -590,8 +591,8 @@
 
   .product-modal-content .modal-close {
     position: absolute;
-    top: 10px;
-    right: 10px;
+    top: 12px;
+    right: 12px;
     left: auto;
     float: none;
     margin: 0;
@@ -602,35 +603,56 @@
 
   .modal-cart-toast { top: 52px; }
 
+  /* One scroll parent only — nested overflow was clipping the product image */
   .modal-grid {
-    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
+    grid-template-columns: none;
     min-height: 0;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    max-height: min(82dvh, 720px);
+    max-height: none !important;
+    overflow: visible !important;
+    border-radius: 0;
   }
 
   .modal-image-section {
     border-radius: 0;
-    padding: 16px 16px 10px;
+    /* Extra top padding so image clears sheet radius + close button */
+    padding: 52px 16px 14px;
     min-height: 0;
     width: 100%;
     box-sizing: border-box;
-    justify-content: center;
+    justify-content: flex-start;
     align-items: center;
     background: #f8f9fa;
     flex-shrink: 0;
+    overflow: visible;
+    position: relative;
+  }
+
+  .modal-image-section .sale-badge,
+  .modal-image-section .pre-order-badge {
+    top: 14px;
+    left: 14px;
   }
 
   .modal-product-img {
-    width: 140px !important;
-    height: 140px !important;
-    max-width: 140px;
+    width: min(200px, 58vw) !important;
+    height: auto !important;
+    max-width: 200px;
+    max-height: 220px;
     object-fit: contain;
     display: block;
+    margin: 0 auto;
+    border-radius: 12px;
+    background: #fff;
   }
 
-  .modal-img-tap-hint { font-size: 11px; }
+  .modal-img-tap-hint {
+    font-size: 11px;
+    margin-top: 4px;
+    position: relative;
+    z-index: 1;
+  }
 
   /* Rating widget — horizontal on mobile */
   .modal-left-rating {
@@ -647,9 +669,10 @@
   .modal-left-rating-count { font-size: 11px; }
 
   .modal-details-section {
-    padding: 12px 16px 20px;
-    max-height: none;
-    overflow: visible;
+    padding: 14px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+    max-height: none !important;
+    overflow: visible !important;
+    flex: 1 0 auto;
   }
 
   .modal-details-section h2 { font-size: 15px; }
@@ -659,19 +682,20 @@
   .btn-add-cart, .btn-preorder, .btn-buy-now { padding: 10px 12px; font-size: 12px; min-width: 0; }
   .btn-fav-outline { width: 40px; height: 40px; font-size: 15px; }
 
-  .review-section { padding-bottom: 16px; }
+  .review-section { padding-bottom: 20px; }
   .modal-left-reviews { max-height: 120px; overflow-y: auto; }
 }
 
 @media (max-width: 480px) {
-  .product-modal-content { max-height: 80dvh; }
-  .modal-image-section { padding: 12px 12px 8px; }
+  .product-modal-content { max-height: calc(100dvh - 64px); }
+  .modal-image-section { padding: 50px 14px 12px; }
   .modal-product-img {
-    width: 120px !important;
-    height: 120px !important;
-    max-width: 120px;
+    width: min(170px, 56vw) !important;
+    height: auto !important;
+    max-width: 170px;
+    max-height: 190px;
   }
-  .modal-details-section { padding: 10px 14px 18px; }
+  .modal-details-section { padding: 12px 14px calc(22px + env(safe-area-inset-bottom, 0px)); }
   .modal-details-section h2 { font-size: 14px; }
   .current-price { font-size: 17px; }
 }
