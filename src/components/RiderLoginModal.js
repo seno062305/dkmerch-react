@@ -3,12 +3,18 @@ import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import "./LoginModal.css";
 import "./RiderLoginModal.css";
-import { useAuth } from "../context/AuthContext";
+import {
+  useAuth,
+  readPendingLogin,
+  writePendingLogin,
+  clearPendingLogin,
+} from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { useMutation, useAction } from "convex/react";
+import { useMutation, useAction, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import useBodyScrollLock from "../hooks/useBodyScrollLock";
 import { getOverlayRoot } from "../utils/scrollLock";
+import { WaitingApprovalModal, LoginDeniedModal } from "./LoginApprovalModals";
 // ── Rate limit helpers ─────────────────────────────────────────────────────
 const RL_KEY_ATTEMPTS = "dkmerch_rider_login_attempts";
 const RL_KEY_LOCKOUT  = "dkmerch_rider_login_lockout_until";
@@ -57,7 +63,7 @@ const PwToggleIcon = ({ show }) => show ? (
 );
 
 const RiderLoginModal = ({ onClose, onLoginSuccess }) => {
-  const { login } = useAuth();
+  const { login, finalizePendingLogin } = useAuth();
   const navigate  = useNavigate();
 
   // view: "login" | "forgot"
@@ -71,6 +77,20 @@ const RiderLoginModal = ({ onClose, onLoginSuccess }) => {
   const [loginCooldown, setLoginCooldown] = useState(0);
   const [loginAttempts, setLoginAttempts] = useState(0);
   const [pwTouched, setPwTouched]         = useState(false);
+  const [awaitingApproval, setAwaitingApproval] = useState(() => {
+    try {
+      const p = readPendingLogin();
+      if (p?.kind !== "rider") return null;
+      return {
+        ...p,
+        expiresAt: p.expiresAt || (Number(p.at) || Date.now()) + 60_000,
+      };
+    } catch {
+      return null;
+    }
+  });
+  const [loginDenied, setLoginDenied] = useState(false);
+  const [denyReason, setDenyReason] = useState(null);
 
   // ── Forgot password state ─────────────────────────────────────
   const [forgotEmail, setForgotEmail]         = useState("");
@@ -89,6 +109,13 @@ const RiderLoginModal = ({ onClose, onLoginSuccess }) => {
 
   const resetPasswordByEmail  = useMutation(api.riders.resetRiderPasswordByEmail);
   const sendPasswordResetCode = useAction(api.sendEmail.sendPasswordResetCode);
+  const cancelPendingRiderLogin = useMutation(api.riders.cancelPendingRiderLogin);
+  const riderApprovalStatus = useQuery(
+    api.riders.getRiderLoginApprovalStatus,
+    awaitingApproval?.email && awaitingApproval?.sessionId
+      ? { email: String(awaitingApproval.email), sessionId: String(awaitingApproval.sessionId) }
+      : "skip"
+  );
 
   // ── Restore lockout on mount ──────────────────────────────────
   useEffect(() => {
@@ -194,6 +221,25 @@ const RiderLoginModal = ({ onClose, onLoginSuccess }) => {
       resetRLState();
       setLoginAttempts(0);
       setLoginCooldown(0);
+
+      if (result.pendingApproval) {
+        const at = Date.now();
+        const payload = {
+          userId: String(result.user?._id || result.pendingUser?._id || ""),
+          sessionId: String(result.sessionId),
+          user: result.user || result.pendingUser,
+          email: String(result.user?.email || result.pendingUser?.email || formData.email),
+          kind: "rider",
+          at,
+          expiresAt: Number(result.expiresAt) || at + 60_000,
+        };
+        writePendingLogin(payload);
+        setAwaitingApproval(payload);
+        setLoginDenied(false);
+        setDenyReason(null);
+        return;
+      }
+
       if (onLoginSuccess) { onLoginSuccess("rider"); }
       else { navigate("/rider", { replace: true }); onClose(); }
     } catch {
@@ -202,6 +248,35 @@ const RiderLoginModal = ({ onClose, onLoginSuccess }) => {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!awaitingApproval || loginDenied) return;
+    const status = riderApprovalStatus?.status;
+    if (!status || status === "pending") return;
+    if (status === "approved") {
+      const userPayload = awaitingApproval.user;
+      clearPendingLogin();
+      setAwaitingApproval(null);
+      try {
+        finalizePendingLogin?.(userPayload, "Rider login approved on other device");
+      } catch { /* ignore */ }
+      if (onLoginSuccess) onLoginSuccess("rider");
+      else { navigate("/rider", { replace: true }); onClose?.(); }
+      return;
+    }
+    if (status === "denied" || status === "expired") {
+      clearPendingLogin();
+      setDenyReason(status === "expired" ? "timeout" : "blocked");
+      setLoginDenied(true);
+      return;
+    }
+    if (status === "missing") {
+      clearPendingLogin();
+      setAwaitingApproval(null);
+      setLoginDenied(false);
+      try { onClose?.(); } catch { /* ignore */ }
+    }
+  }, [riderApprovalStatus, awaitingApproval, loginDenied, finalizePendingLogin, onClose, onLoginSuccess, navigate]);
 
   // ── Forgot: send code ─────────────────────────────────────────
   const handleSendCode = async () => {
@@ -259,7 +334,57 @@ const RiderLoginModal = ({ onClose, onLoginSuccess }) => {
     }
   };
 
-  // ── Show registration modal ───────────────────────────────────
+  if (awaitingApproval && !loginDenied) {
+    return (
+      <WaitingApprovalModal
+        expiresAt={awaitingApproval.expiresAt || riderApprovalStatus?.expiresAt}
+        onTimeout={async () => {
+          try {
+            if (awaitingApproval.email && awaitingApproval.sessionId) {
+              await cancelPendingRiderLogin({
+                email: String(awaitingApproval.email),
+                sessionId: String(awaitingApproval.sessionId),
+              });
+            }
+          } catch { /* ignore */ }
+          clearPendingLogin();
+          setDenyReason("timeout");
+          setLoginDenied(true);
+        }}
+        onClose={async () => {
+          try {
+            if (awaitingApproval.email && awaitingApproval.sessionId) {
+              await cancelPendingRiderLogin({
+                email: String(awaitingApproval.email),
+                sessionId: String(awaitingApproval.sessionId),
+              });
+            }
+          } catch { /* ignore */ }
+          clearPendingLogin();
+          setAwaitingApproval(null);
+          setLoginDenied(false);
+          setDenyReason(null);
+          try { onClose?.(); } catch { /* ignore */ }
+        }}
+      />
+    );
+  }
+
+  if (loginDenied) {
+    return (
+      <LoginDeniedModal
+        reason={denyReason}
+        onClose={() => {
+          setLoginDenied(false);
+          setDenyReason(null);
+          setAwaitingApproval(null);
+          clearPendingLogin();
+          try { onClose?.(); } catch { /* ignore */ }
+        }}
+      />
+    );
+  }
+
   // ═══════════════════════════════════════════
   // FORGOT PASSWORD VIEW
   // ═══════════════════════════════════════════

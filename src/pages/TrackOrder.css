@@ -1550,8 +1550,8 @@
 /* -- LBC tracking panel -- */
 .lbc-track-panel {
   display: flex;
-  gap: 12px;
-  align-items: flex-start;
+  gap: 14px;
+  align-items: center;
   margin: 0 0 16px;
   padding: 14px;
   background: #fff7ed;
@@ -1567,14 +1567,20 @@
   justify-content: center;
 }
 .lbc-track-panel-icon {
-  width: 40px; height: 40px; border-radius: 10px;
-  background: #ea580c; color: #fff;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0; font-size: 16px;
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: #ea580c;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 24px;
 }
 .lbc-track-panel-body { flex: 1; min-width: 0; }
 .lbc-track-panel-body strong {
-  display: block; font-size: 14px; color: #9a3412; margin-bottom: 4px;
+  display: block; font-size: 14px; color: #9a3412; margin-bottom: 8px;
 }
 .lbc-track-panel-body p {
   margin: 0 0 10px; font-size: 12px; color: #c2410c; line-height: 1.45;

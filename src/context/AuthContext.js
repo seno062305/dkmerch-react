@@ -128,8 +128,12 @@ export const AuthProvider = ({ children }) => {
   const endUserSession     = useMutation(api.users.endUserSession);
   const confirmLoginAlert  = useMutation(api.users.confirmLoginAlert);
   const denyLoginAlert     = useMutation(api.users.denyLoginAlert);
+  const touchRiderSession  = useMutation(api.riders.touchRiderSession);
+  const endRiderSession    = useMutation(api.riders.endRiderSession);
+  const confirmRiderLoginAlert = useMutation(api.riders.confirmRiderLoginAlert);
+  const denyRiderLoginAlert    = useMutation(api.riders.denyRiderLoginAlert);
   const kickedRef = useRef(false);
-  /** After Yes: keep confirmation UI open; don't auto-kick until OK */
+  /** After Yes/No: keep confirmation UI open until OK */
   const holdLogoutConfirmRef = useRef(false);
   const userRef = useRef(null);
   userRef.current = user;
@@ -138,7 +142,7 @@ export const AuthProvider = ({ children }) => {
     try { appendActivityLog(payload); } catch {}
   };
 
-  // Customer + admin — kick when another device was approved
+  // Customer + admin — session still valid unless this device was removed
   const sessionCheck = useQuery(
     api.users.checkUserSession,
     isAuthenticated
@@ -150,7 +154,7 @@ export const AuthProvider = ({ children }) => {
   );
 
   /**
-   * Pending new-device login while THIS device is still the active session.
+   * Pending new-device login while THIS device is still signed in.
    * Customer + admin. Also runs during PIN gate so a tapped push (`?open=loginAlert`)
    * can show the Yes/No modal on top immediately.
    */
@@ -160,6 +164,13 @@ export const AuthProvider = ({ children }) => {
       && user?._id
       && (user.role === "user" || user.role === "admin")
       ? { userId: String(user._id) }
+      : "skip"
+  );
+
+  const pendingRiderLoginAlert = useQuery(
+    api.riders.getPendingRiderLoginAlert,
+    isAuthenticated && user?.role === "rider" && user?.email
+      ? { email: String(user.email) }
       : "skip"
   );
 
@@ -287,7 +298,15 @@ export const AuthProvider = ({ children }) => {
     };
     const touchServer = () => {
       const u = userRef.current;
-      if (!u?._id || !u?.sessionId) return;
+      if (!u?.sessionId) return;
+      if (u.role === "rider" && u.email) {
+        touchRiderSession({
+          email: String(u.email),
+          sessionId: String(u.sessionId),
+        }).catch(() => {});
+        return;
+      }
+      if (!u?._id) return;
       if (u.role !== "user" && u.role !== "admin") return;
       touchUserSession({
         userId: String(u._id),
@@ -308,7 +327,7 @@ export const AuthProvider = ({ children }) => {
       document.removeEventListener("visibilitychange", onVis);
       window.clearInterval(id);
     };
-  }, [isAuthenticated, needsDeviceUnlock, touchUserSession]);
+  }, [isAuthenticated, needsDeviceUnlock, touchUserSession, touchRiderSession]);
 
   const applySession = (sessionUser) => {
     kickedRef.current = false;
@@ -343,28 +362,14 @@ export const AuthProvider = ({ children }) => {
       if (
         window.location.pathname.startsWith("/admin")
         || window.location.pathname.startsWith("/settings")
+        || window.location.pathname.startsWith("/rider")
       ) {
         window.location.assign("/");
       }
     } catch { /* ignore */ }
   };
 
-  // Show FB-style alert while still logged in — new device waits for Yes
-  useEffect(() => {
-    if (!pendingLoginAlert) {
-      // Keep confirmation screens (approved / denied) until user taps OK
-      setSecurityAlert((prev) => (prev?.mode === "pending" ? null : prev));
-      return;
-    }
-    if (holdLogoutConfirmRef.current) return;
-    const current = userRef.current;
-    if (!current?._id) return;
-    setSecurityAlert({
-      alert: pendingLoginAlert,
-      previousUser: current,
-      mode: "pending",
-    });
-    // Clear deep-link markers from push notification click
+  const clearLoginAlertDeepLink = () => {
     try {
       sessionStorage.removeItem("dkmerch_open_login_alert");
       const u = new URL(window.location.href);
@@ -378,26 +383,45 @@ export const AuthProvider = ({ children }) => {
         );
       }
     } catch { /* ignore */ }
-  }, [pendingLoginAlert]);
+  };
+
+  // Show FB-style alert while still logged in — new device waits for Yes
+  useEffect(() => {
+    const pending = pendingLoginAlert || pendingRiderLoginAlert || null;
+    if (!pending) {
+      // Keep confirmation screens (approved / denied) until user taps OK
+      setSecurityAlert((prev) => (prev?.mode === "pending" ? null : prev));
+      return;
+    }
+    if (holdLogoutConfirmRef.current) return;
+    const current = userRef.current;
+    if (!current) return;
+    setSecurityAlert({
+      alert: pending,
+      previousUser: current,
+      mode: "pending",
+    });
+    clearLoginAlertDeepLink();
+  }, [pendingLoginAlert, pendingRiderLoginAlert]);
 
   // Push tap while app already open — nudge re-show if Convex already has a pending alert
   useEffect(() => {
     const bump = () => {
       const current = userRef.current;
-      if (!current?._id || !pendingLoginAlert) return;
+      const pending = pendingLoginAlert || pendingRiderLoginAlert;
+      if (!current || !pending) return;
       if (holdLogoutConfirmRef.current) return;
       setSecurityAlert({
-        alert: pendingLoginAlert,
+        alert: pending,
         previousUser: current,
         mode: "pending",
       });
     };
     window.addEventListener("dkOpenLoginAlert", bump);
     return () => window.removeEventListener("dkOpenLoginAlert", bump);
-  }, [pendingLoginAlert]);
+  }, [pendingLoginAlert, pendingRiderLoginAlert]);
 
-  // After the other device is approved, this session is invalidated → sign out
-  // (skipped while confirmation screen is showing after Yes)
+  // Only sign out if THIS session was removed (stale takeover) — not after Yes
   useEffect(() => {
     if (!sessionCheck || sessionCheck.valid !== false) return;
     if (sessionCheck.reason !== "new_device_logged_in") return;
@@ -408,31 +432,42 @@ export const AuthProvider = ({ children }) => {
   }, [sessionCheck]);
 
   const handleSecurityYes = async (opts = {}) => {
-    // Second step: user tapped OK on confirmation → sign out this device
-    if (opts?.finishLogout) {
-      finishSecurityLogout();
+    // Second step: dismiss confirmation — stay signed in on this device
+    if (opts?.finishLogout || opts?.dismiss) {
+      holdLogoutConfirmRef.current = false;
+      kickedRef.current = false;
+      setSecurityAlert(null);
       return;
     }
 
     const alert = securityAlert?.alert;
     const prev = securityAlert?.previousUser;
-    if (!prev?._id || !alert?.sessionId) {
+    if (!alert?.sessionId || !prev) {
       throw new Error("Missing login request. Please try again.");
     }
-    const result = await confirmLoginAlert({
-      userId: String(prev._id),
-      sessionId: String(alert.sessionId),
-    });
+
+    let result;
+    if (prev.role === "rider") {
+      if (!prev.email) throw new Error("Missing login request. Please try again.");
+      result = await confirmRiderLoginAlert({
+        email: String(prev.email),
+        sessionId: String(alert.sessionId),
+      });
+    } else {
+      if (!prev._id) throw new Error("Missing login request. Please try again.");
+      result = await confirmLoginAlert({
+        userId: String(prev._id),
+        sessionId: String(alert.sessionId),
+      });
+    }
     if (!result?.success) {
       throw new Error(result?.message || "Could not approve this login.");
     }
     holdLogoutConfirmRef.current = true;
-    setSecurityAlert((prev) =>
-      prev ? { ...prev, mode: "approved" } : prev
-    );
+    setSecurityAlert((s) => (s ? { ...s, mode: "approved" } : s));
     const device = alert.deviceName || "the other device";
     showNotification(
-      `Login approved on ${device}. Your account opened there — signing you out here.`,
+      `Login approved on ${device}. You’re still signed in here.`,
       "success",
       { duration: 5000, dedupeKey: "login-alert-yes" }
     );
@@ -449,20 +484,29 @@ export const AuthProvider = ({ children }) => {
 
     const alert = securityAlert?.alert;
     const prev = securityAlert?.previousUser;
-    if (!prev?._id || !alert?.sessionId) {
+    if (!alert?.sessionId || !prev) {
       throw new Error("Missing login request. Please try again.");
     }
-    const result = await denyLoginAlert({
-      userId: String(prev._id),
-      previousSessionId: prev.sessionId ? String(prev.sessionId) : undefined,
-      newSessionId: String(alert.sessionId),
-    });
+
+    let result;
+    if (prev.role === "rider") {
+      if (!prev.email) throw new Error("Missing login request. Please try again.");
+      result = await denyRiderLoginAlert({
+        email: String(prev.email),
+        newSessionId: String(alert.sessionId),
+      });
+    } else {
+      if (!prev._id) throw new Error("Missing login request. Please try again.");
+      result = await denyLoginAlert({
+        userId: String(prev._id),
+        previousSessionId: prev.sessionId ? String(prev.sessionId) : undefined,
+        newSessionId: String(alert.sessionId),
+      });
+    }
     if (!result?.success) {
       throw new Error(result?.message || "Could not block this login.");
     }
-    setSecurityAlert((prev) =>
-      prev ? { ...prev, mode: "denied" } : prev
-    );
+    setSecurityAlert((s) => (s ? { ...s, mode: "denied" } : s));
     showNotification(
       "Login blocked. You’re still signed in on this device.",
       "success",
@@ -476,7 +520,14 @@ export const AuthProvider = ({ children }) => {
       // RIDER LOGIN
       // ══════════════════════════════════════════
       if (mode === "rider") {
-        const riderResult = await loginRiderMutation({ email: identifier, password });
+        const device = await collectLoginDeviceInfo({ fast: true });
+        const riderResult = await loginRiderMutation({
+          email: identifier,
+          password,
+          deviceName: device.deviceName,
+          location: device.location,
+          platform: device.platform,
+        });
 
         if (!riderResult.riderExists) {
           return {
@@ -503,6 +554,29 @@ export const AuthProvider = ({ children }) => {
           role:      "rider",
           sessionId: riderResult.sessionId,
         };
+
+        if (riderResult.pendingApproval && riderResult.sessionId) {
+          const at = Date.now();
+          const exp = Number(riderResult.expiresAt) || at + 60_000;
+          writePendingLogin({
+            userId: String(sessionRider._id),
+            sessionId: String(riderResult.sessionId),
+            user: sessionRider,
+            at,
+            expiresAt: exp,
+            kind: "rider",
+            email: String(sessionRider.email),
+          });
+          return {
+            success: true,
+            pendingApproval: true,
+            sessionId: riderResult.sessionId,
+            expiresAt: exp,
+            role: "rider",
+            user: sessionRider,
+            pendingUser: sessionRider,
+          };
+        }
 
         applySession(sessionRider);
         safeLog({
@@ -549,9 +623,7 @@ export const AuthProvider = ({ children }) => {
             };
           }
 
-          // Customers + admin NEVER fully sign in on password alone —
-          // hand off to LoginModal for PIN entry OR first-time Create PIN (no OTP).
-          // Forgot password / Forgot PIN still use email OTP.
+          // Customer + admin: password OK → PIN entry OR first-time Create PIN
           if (sessionUser.role === "user" || sessionUser.role === "admin") {
             const needsPin = !!result.needsPin;
             const needsPinSetup = !!result.needsPinSetup && !needsPin;
@@ -561,31 +633,12 @@ export const AuthProvider = ({ children }) => {
               needsPinSetup,
               pendingUser: sessionUser,
               role: sessionUser.role,
-              // Always require second factor — never skip for admin/customer
               requirePin: true,
             };
           }
-
-          // Admin (and any skipSecondFactor account): start session with Yes/No gate
-          const done = await completeLogin(
-            sessionUser,
-            sessionUser.role === "admin" ? "Admin login" : "Account login success"
-          );
-          if (done?.pendingApproval) {
-            return {
-              success: true,
-              pendingApproval: true,
-              sessionId: done.sessionId,
-              role: sessionUser.role,
-              user: done.user || sessionUser,
-              pendingUser: done.user || sessionUser,
-            };
-          }
-          return { success: true, role: sessionUser.role };
         }
 
-        // ── Self-deactivated account — pass through the flag so LoginModal
-        //    can show the reactivation flow instead of the generic error ──
+        // ── Self-deactivated / soft-deleted (within 30 days) → reactivation UI ──
         if (result.deactivated) {
           return {
             success:   false,
@@ -593,6 +646,18 @@ export const AuthProvider = ({ children }) => {
             userEmail: result.userEmail,
             userName:  result.userName,
             message:   result.message,
+          };
+        }
+        if (result.deleted) {
+          return {
+            success: false,
+            deleted: true,
+            recoverable: !!result.recoverable,
+            userEmail: result.userEmail,
+            userName: result.userName,
+            deletedAt: result.deletedAt,
+            recoverUntil: result.recoverUntil,
+            message: result.message,
           };
         }
 
@@ -610,7 +675,14 @@ export const AuthProvider = ({ children }) => {
         }
 
         // Legacy fallback to rider
-        const riderResult = await loginRiderMutation({ email: identifier, password });
+        const device = await collectLoginDeviceInfo({ fast: true });
+        const riderResult = await loginRiderMutation({
+          email: identifier,
+          password,
+          deviceName: device.deviceName,
+          location: device.location,
+          platform: device.platform,
+        });
 
         if (riderResult.riderExists) {
           if (riderResult.success && riderResult.rider) {
@@ -622,6 +694,28 @@ export const AuthProvider = ({ children }) => {
               role:      "rider",
               sessionId: riderResult.sessionId,
             };
+            if (riderResult.pendingApproval && riderResult.sessionId) {
+              const at = Date.now();
+              const exp = Number(riderResult.expiresAt) || at + 60_000;
+              writePendingLogin({
+                userId: String(sessionRider._id),
+                sessionId: String(riderResult.sessionId),
+                user: sessionRider,
+                at,
+                expiresAt: exp,
+                kind: "rider",
+                email: String(sessionRider.email),
+              });
+              return {
+                success: true,
+                pendingApproval: true,
+                sessionId: riderResult.sessionId,
+                expiresAt: exp,
+                role: "rider",
+                user: sessionRider,
+                pendingUser: sessionRider,
+              };
+            }
             applySession(sessionRider);
             safeLog({
               action: "login",
@@ -677,6 +771,7 @@ export const AuthProvider = ({ children }) => {
     if (!pendingUser?._id) return { success: false };
     let sessionId = pendingUser.sessionId;
     let pendingApproval = false;
+    let expiresAt = null;
     try {
       // Fast device info — don't block PIN login on GPS / IP geolocation
       const device = await collectLoginDeviceInfo({ fast: true });
@@ -692,6 +787,7 @@ export const AuthProvider = ({ children }) => {
       });
       if (started?.sessionId) sessionId = started.sessionId;
       pendingApproval = !!started?.pendingApproval;
+      if (started?.expiresAt) expiresAt = Number(started.expiresAt);
     } catch (err) {
       console.warn("startUserSession failed:", err);
     }
@@ -707,16 +803,20 @@ export const AuthProvider = ({ children }) => {
     };
 
     if (pendingApproval && sessionId) {
+      const at = Date.now();
+      const exp = expiresAt || at + 60_000;
       writePendingLogin({
         userId: String(sessionUser._id),
         sessionId: String(sessionId),
         user: sessionUser,
-        at: Date.now(),
+        at,
+        expiresAt: exp,
       });
       return {
         success: true,
         pendingApproval: true,
         sessionId,
+        expiresAt: exp,
         role: sessionUser.role,
         user: sessionUser,
       };
@@ -772,10 +872,16 @@ export const AuthProvider = ({ children }) => {
         actorRole: prev.role || role || undefined,
         details: keepUnlock ? "Switch account (keep PIN unlock)" : "User logged out",
       });
-      // Drop ghost server session so the next login isn't stuck waiting for Yes
+      // Drop this device's server session (other devices stay signed in)
       if ((prev.role === "user" || prev.role === "admin") && prev._id) {
         endUserSession({
           userId: String(prev._id),
+          sessionId: prev.sessionId ? String(prev.sessionId) : undefined,
+        }).catch(() => {});
+      }
+      if (prev.role === "rider" && prev.email) {
+        endRiderSession({
+          email: String(prev.email),
           sessionId: prev.sessionId ? String(prev.sessionId) : undefined,
         }).catch(() => {});
       }

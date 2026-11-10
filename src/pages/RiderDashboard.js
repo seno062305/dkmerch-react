@@ -878,29 +878,6 @@ const RiderNotifBell = ({ onGoToAvailable }) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Kicked-out countdown
-// ─────────────────────────────────────────────────────────────────────────────
-const KICKED_DURATION_SEC = 180;
-
-const useKickedCountdown = (kickedAt) => {
-  const [remaining, setRemaining] = useState(null);
-  useEffect(() => {
-    if (!kickedAt) { setRemaining(null); return; }
-    const tick = () => {
-      const elapsed = Math.floor((Date.now() - kickedAt) / 1000);
-      const left    = Math.max(0, KICKED_DURATION_SEC - elapsed);
-      setRemaining(left);
-      return left;
-    };
-    const left = tick();
-    if (left === 0) return;
-    const id = setInterval(() => { const l = tick(); if (l === 0) clearInterval(id); }, 1000);
-    return () => clearInterval(id);
-  }, [kickedAt]);
-  return remaining;
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Main dashboard
 // ─────────────────────────────────────────────────────────────────────────────
 const RiderDashboard = () => {
@@ -947,11 +924,6 @@ const RiderDashboard = () => {
   const autoStartAttemptedRef = useRef(false);
   const fileInputRefs         = useRef({});
 
-  const [kickedOut, setKickedOut]             = useState(false);
-  const hasBeenKickedRef                      = useRef(false);
-  const [kickedAtTimestamp, setKickedAtTimestamp] = useState(null);
-  const remainingCountdown = useKickedCountdown(kickedAtTimestamp);
-
   const [installPrompt, setInstallPrompt]   = useState(null);
   const [showInstallModal, setShowInstallModal] = useState(false);
   const [isInstalled, setIsInstalled]       = useState(false);
@@ -997,7 +969,6 @@ const RiderDashboard = () => {
   const updateRiderLocation = useMutation(api.riders.updateRiderLocation);
   const updateRiderLocationsBatch = useMutation(api.riders.updateRiderLocationsBatch);
   const stopRiderTracking   = useMutation(api.riders.stopRiderTracking);
-  const setRiderKickedAt    = useMutation(api.riders.setRiderKickedAt);
   const resetPasswordByEmail  = useMutation(api.riders.resetRiderPasswordByEmail);
   const sendPasswordResetCode = useAction(api.sendEmail.sendPasswordResetCode);
   const [showWaybillScanner, setShowWaybillScanner] = useState(false);
@@ -1023,22 +994,6 @@ const RiderDashboard = () => {
     }, 2000);
     return () => clearInterval(sync);
   }, []);
-
-  useEffect(() => {
-    if (!riderInfo) return;
-    if (hasBeenKickedRef.current) return;
-    if (!riderInfo.kickedAt) return;
-    const elapsed = Math.floor((Date.now() - riderInfo.kickedAt) / 1000);
-    const left    = KICKED_DURATION_SEC - elapsed;
-    if (left > 0) {
-      hasBeenKickedRef.current = true;
-      setKickedOut(true);
-      setKickedAtTimestamp(riderInfo.kickedAt);
-      GPS.stopLocal();
-      setTrackingOrderId(null);
-      setCurrentPosition(null);
-    }
-  }, [riderInfo]);
 
   // Only admin-confirmed paid orders appear here — never raw customer checkouts.
   const claimedStatuses = ['approved', 'out_for_delivery', 'completed'];
@@ -1166,28 +1121,13 @@ const RiderDashboard = () => {
     if (first?._id) setExpandedDeliveries(prev => ({ ...prev, [first._id]: true }));
   }, [riderInfo, myDeliveries, user, updateRiderLocation, updateRiderLocationsBatch, ofdOrderIds.join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleForcedLogout = useCallback(() => {
-    logout(); navigate('/', { replace: true });
-  }, [logout, navigate]);
-
-  useEffect(() => {
-    if (kickedOut && remainingCountdown === 0) handleForcedLogout();
-  }, [kickedOut, remainingCountdown, handleForcedLogout]);
-
+  // Session removed only on stale takeover — Yes keeps both devices signed in
   useEffect(() => {
     if (!sessionCheck) return;
-    if (hasBeenKickedRef.current) return;
-    if (!sessionCheck.valid && sessionCheck.reason === 'new_device_logged_in') {
-      hasBeenKickedRef.current = true;
-      const now = Date.now();
-      setKickedOut(true);
-      setKickedAtTimestamp(now);
+    if (sessionCheck.valid === false && sessionCheck.reason === 'new_device_logged_in') {
       GPS.stopLocal();
-      setTrackingOrderId(null);
-      setCurrentPosition(null);
-      if (user?.email) {
-        setRiderKickedAt({ email: user.email, kickedAt: now }).catch(e => console.error('setRiderKickedAt failed:', e));
-      }
+      logout();
+      navigate('/', { replace: true });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionCheck]);
@@ -1486,30 +1426,6 @@ const RiderDashboard = () => {
       <button className="rider-logout-btn" onClick={handleLogout}>Logout</button>
     </div></div>
   );
-
-  if (kickedOut && remainingCountdown !== null && remainingCountdown > 0) {
-    const mins = Math.floor(remainingCountdown / 60);
-    const secs = remainingCountdown % 60;
-    return (
-      <div className="rider-dashboard">
-        <div className="rider-kicked-overlay">
-          <div className="rider-kicked-card">
-            <div className="rider-kicked-icon">📱</div>
-            <h2>Logged In on Another Device</h2>
-            <p>Your rider account was just logged in on a <strong>new device</strong>. GPS tracking has automatically switched to that device.</p>
-            <p className="rider-kicked-note">If this wasn't you, please change your password immediately.</p>
-            <div className="rider-kicked-countdown">
-              <span className="rider-kicked-timer">{mins}:{secs.toString().padStart(2, '0')}</span>
-              <small>This session will close automatically</small>
-            </div>
-            <button className="rider-kicked-logout-btn" onClick={handleForcedLogout}>
-              <i className="fas fa-sign-out-alt"></i> Logout Now
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   const riderHeading = currentPosition?.heading ?? null;
   const tabTitle = {

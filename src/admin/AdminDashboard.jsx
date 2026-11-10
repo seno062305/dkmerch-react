@@ -254,15 +254,15 @@ const AdminDashboard = () => {
             }}
           >
             <div className="stat-card-top">
+              <div className="stat-icon-chip" style={{ background: `${card.color}18`, color: card.color }}>
+                <DkIcon name={card.icon} size={26} />
+              </div>
               <div className="stat-card-copy">
                 <h3>{card.label}</h3>
                 <p className={`stat-value ${card.loading ? 'is-loading' : ''}`}>
                   {card.loading ? '—' : card.value}
                 </p>
                 <span className={`stat-label ${card.warn ? 'warn' : ''}`}>{card.hint}</span>
-              </div>
-              <div className="stat-icon-chip" style={{ background: `${card.color}18`, color: card.color }}>
-                <DkIcon name={card.icon} size={22} />
               </div>
             </div>
           </div>

@@ -275,10 +275,12 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
           userId: String(restoredPending.userId),
           sessionId: String(restoredPending.sessionId),
           user: restoredPending.user,
+          expiresAt: restoredPending.expiresAt || (Number(restoredPending.at) || Date.now()) + 60_000,
         }
       : null
   ));
   const [loginDenied, setLoginDenied] = useState(false);
+  const [denyReason, setDenyReason] = useState(null); // 'timeout' | 'blocked' | null
   /** Remember who to restore when tapping Back from Use another account */
   const [pinAccountSnapshot, setPinAccountSnapshot] = useState(
     (startUnlockUi || restoreSwitch || restoreReset) ? remembered : null
@@ -357,6 +359,9 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
   const [reactivateLoading, setReactivateLoading]   = useState(false);
   const [reactivateCooldown, setReactivateCooldown] = useState(0);
   const [reactivateStep, setReactivateStep]         = useState(0); // 0=confirm, 1=send code, 2=enter code
+  /** 'deactivated' | 'deleted' — copy for recovery flow */
+  const [reactivateKind, setReactivateKind]         = useState("deactivated");
+  const [recoverUntil, setRecoverUntil]             = useState(null);
 
   const resetPasswordByEmail  = useMutation(api.users.resetPasswordByEmail);
   const sendPasswordResetCode = useAction(api.sendEmail.sendPasswordResetCode);
@@ -733,10 +738,29 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
     try {
       const result = await login(formData.email, formData.password, "user");
 
-      // ── Deactivated account → show reactivation flow ──
+      // ── Deactivated / soft-deleted (within 30 days) → reactivation flow ──
       if (!result.success && result.deactivated) {
         setReactivateEmail(result.userEmail || formData.email);
         setReactivateUserName(result.userName || "");
+        setReactivateKind("deactivated");
+        setRecoverUntil(null);
+        setReactivateStep(0);
+        setReactivateOtp("");
+        setReactivateSentOtp("");
+        setReactivateMsg("");
+        setView("reactivate");
+        setIsLoading(false);
+        return;
+      }
+      if (!result.success && result.deleted && result.recoverable) {
+        setReactivateEmail(result.userEmail || formData.email);
+        setReactivateUserName(result.userName || "");
+        setReactivateKind("deleted");
+        setRecoverUntil(result.recoverUntil || null);
+        setReactivateStep(0);
+        setReactivateOtp("");
+        setReactivateSentOtp("");
+        setReactivateMsg("");
         setView("reactivate");
         setIsLoading(false);
         return;
@@ -768,6 +792,17 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
       setLoginAttempts(0);
       setLoginCooldown(0);
 
+      // Waiting for Yes on the other logged-in device
+      if (result.pendingApproval) {
+        beginAwaitingApproval({
+          sessionId: result.sessionId,
+          user: result.user || result.pendingUser,
+          pendingApproval: true,
+          expiresAt: result.expiresAt,
+        });
+        return;
+      }
+
       // Customer + admin: password OK → Enter PIN / Create PIN (never skip — session starts after PIN)
       if (
         result.pendingUser
@@ -785,28 +820,19 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
         setPinConfirmValue("");
         setPinStep(0);
         setPinError("");
-        setSwitchAccountMode(false); // leave pink switch screen → normal PIN / create PIN
+        setSwitchAccountMode(false);
         setView(needsSetup ? "createPin" : "pin");
         return;
       }
 
-      // Admin (or any account) waiting for Yes on the other logged-in device
-      if (result.pendingApproval) {
-        beginAwaitingApproval({
-          sessionId: result.sessionId,
-          user: result.user || result.pendingUser,
-          pendingApproval: true,
-        });
+      // Rider (or any non-PIN success) — finish login
+      if (result.success && (result.role === "rider" || onLoginSuccess)) {
+        if (onLoginSuccess) onLoginSuccess(result.role);
+        else onClose();
         return;
       }
 
-      if (onLoginSuccess) {
-        onLoginSuccess(result.role);
-      } else if (result.role === "rider") {
-        onClose();
-      } else {
-        setError("Please enter your PIN to continue.");
-      }
+      setError(result.message || "Login failed. Please try again.");
     } catch (err) {
       setError("Login failed. Please try again.");
     } finally {
@@ -854,14 +880,17 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
   })();
 
   const beginAwaitingApproval = (done) => {
+    const at = Date.now();
     const payload = {
       userId: String(done.user?._id || pendingUser?._id),
       sessionId: String(done.sessionId),
       user: done.user || pendingUser,
+      expiresAt: Number(done.expiresAt) || at + 60_000,
     };
-    writePendingLogin({ ...payload, at: Date.now() });
+    writePendingLogin({ ...payload, at });
     setAwaitingApproval(payload);
     setLoginDenied(false);
+    setDenyReason(null);
     setMustAuthenticate(true);
     setPinValue("");
   };
@@ -1521,12 +1550,16 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
     try {
       const result = await reactivateAccount({ email: reactivateEmail, otp: reactivateOtp });
       if (result.success) {
-        // ── Don't auto-login — send back to login view so they log in manually ──
-        setReactivateMsg("✅ Account reactivated! Please log in to continue.");
+        const recovered = reactivateKind === "deleted";
+        setReactivateMsg(recovered
+          ? "✅ Account recovered! Please log in to continue."
+          : "✅ Account reactivated! Please log in to continue.");
         setTimeout(() => {
           setView("login");
           setFormData({ email: "", password: "" });
-          setError("✅ Account reactivated successfully! Please log in.");
+          setError(recovered
+            ? "✅ Account recovered successfully! Please log in."
+            : "✅ Account reactivated successfully! Please log in.");
         }, 1500);
       } else {
         setReactivateMsg(`❌ ${result.message}`);
@@ -1585,12 +1618,13 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
       finishLogin(userPayload?.role || "user");
       return;
     }
-    if (status === "denied") {
+    if (status === "denied" || status === "expired") {
       clearPendingLogin();
+      setDenyReason(status === "expired" ? "timeout" : "blocked");
       setLoginDenied(true);
       return;
     }
-    if (status === "expired" || status === "missing") {
+    if (status === "missing") {
       clearPendingLogin();
       setAwaitingApproval(null);
       setLoginDenied(false);
@@ -1609,6 +1643,20 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
   if (awaitingApproval && !loginDenied) {
     return (
       <WaitingApprovalModal
+        expiresAt={awaitingApproval.expiresAt || loginApprovalStatus?.expiresAt}
+        onTimeout={async () => {
+          try {
+            if (awaitingApproval.userId && awaitingApproval.sessionId) {
+              await cancelPendingLogin({
+                userId: String(awaitingApproval.userId),
+                sessionId: String(awaitingApproval.sessionId),
+              });
+            }
+          } catch { /* ignore */ }
+          clearPendingLogin();
+          setDenyReason("timeout");
+          setLoginDenied(true);
+        }}
         onClose={async () => {
           try {
             if (awaitingApproval.userId && awaitingApproval.sessionId) {
@@ -1621,6 +1669,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
           clearPendingLogin();
           setAwaitingApproval(null);
           setLoginDenied(false);
+          setDenyReason(null);
           setMustAuthenticate(false);
           setPinValue("");
           setPinLoading(false);
@@ -1634,8 +1683,10 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
   if (loginDenied) {
     return (
       <LoginDeniedModal
+        reason={denyReason}
         onClose={() => {
           setLoginDenied(false);
+          setDenyReason(null);
           setAwaitingApproval(null);
           clearPendingLogin();
           setMustAuthenticate(false);
@@ -2055,10 +2106,14 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
           <>
             <div className="login-modal-header">
               <h2 style={{ background: "linear-gradient(135deg, #22c55e, #16a34a)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
-                Reactivate Account
+                {reactivateKind === "deleted" ? "Recover Account" : "Reactivate Account"}
               </h2>
               <p className="login-subtitle">
-                {reactivateStep === 0 ? "Your account is deactivated" : `Verification code sent to ${reactivateEmail}`}
+                {reactivateStep === 0
+                  ? (reactivateKind === "deleted"
+                    ? "Your account was deleted — recover within 30 days"
+                    : "Your account is deactivated")
+                  : `Verification code sent to ${reactivateEmail}`}
               </p>
             </div>
 
@@ -2084,7 +2139,21 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
                       <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                     </svg>
                     <span>
-                      Are you sure you want to reactivate this account? We'll send a 6-digit verification code to <strong>{reactivateEmail}</strong> to confirm your identity.
+                      {reactivateKind === "deleted" ? (
+                        <>
+                          This account is scheduled for permanent deletion.
+                          {recoverUntil ? (
+                            <> You can recover it until <strong>{new Date(recoverUntil).toLocaleDateString("en-PH", { timeZone: "Asia/Manila", dateStyle: "medium" })}</strong>.</>
+                          ) : (
+                            <> You can recover it within <strong>30 days</strong> of deletion.</>
+                          )}
+                          {" "}We’ll send a 6-digit code to <strong>{reactivateEmail}</strong>.
+                        </>
+                      ) : (
+                        <>
+                          Are you sure you want to reactivate this account? We'll send a 6-digit verification code to <strong>{reactivateEmail}</strong> to confirm your identity.
+                        </>
+                      )}
                     </span>
                   </div>
 
@@ -2097,7 +2166,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
                     <svg viewBox="0 0 20 20" fill="currentColor" style={{ width: 20, height: 20 }}>
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                     </svg>
-                    Yes, Reactivate My Account
+                    {reactivateKind === "deleted" ? "Yes, Recover My Account" : "Yes, Reactivate My Account"}
                   </button>
                 </>
               )}
@@ -2188,9 +2257,9 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
                     disabled={reactivateOtp.length !== 6 || reactivateLoading}
                   >
                     {reactivateLoading ? (
-                      <><svg className="spinner" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>Reactivating...</>
+                      <><svg className="spinner" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>{reactivateKind === "deleted" ? "Recovering..." : "Reactivating..."}</>
                     ) : (
-                      <><svg viewBox="0 0 20 20" fill="currentColor" style={{ width: 20, height: 20 }}><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>Reactivate My Account</>
+                      <><svg viewBox="0 0 20 20" fill="currentColor" style={{ width: 20, height: 20 }}><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>{reactivateKind === "deleted" ? "Recover My Account" : "Reactivate My Account"}</>
                     )}
                   </button>
                 </>

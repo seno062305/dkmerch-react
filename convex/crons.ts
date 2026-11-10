@@ -31,6 +31,13 @@ crons.daily(
   internal.adminCleanup.purgeOldEphemeral
 );
 
+// Permanently archive customer accounts soft-deleted more than 30 days ago.
+crons.daily(
+  "dkmerch-purge-expired-deleted-accounts",
+  { hourUTC: 19, minuteUTC: 0 },
+  internal.users.purgeExpiredDeletedAccounts
+);
+
 // Release due pre-order products into Home/Collections, mark reservations
 // available, and email customers (every minute).
 crons.interval(

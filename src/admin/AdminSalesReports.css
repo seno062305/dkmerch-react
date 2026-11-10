@@ -88,23 +88,6 @@
   font-size: 14px;
 }
 
-.reset-date-btn {
-  padding: 8px 14px;
-  background: #f3f4f6;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  font-size: 13px;
-  color: #6b7280;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-family: inherit;
-}
-
-.reset-date-btn:hover {
-  background: #e5e7eb;
-  color: #374151;
-}
-
 .server-time-badge {
   font-size: 12px;
   color: #6b7280;
@@ -403,10 +386,7 @@
     width: 100%;
   }
 
-  .date-input-group,
-  .reset-date-btn { width: 100%; }
-
-  .reset-date-btn { text-align: center; }
+  .date-input-group { width: 100%; }
 
   .summary-cards  { grid-template-columns: 1fr 1fr; gap: 10px; }
   .summary-card   { padding: 14px; gap: 10px; }
@@ -1179,14 +1159,6 @@
 
   .sales-bento .bento-dates .date-separator {
     font-size: 12px;
-  }
-
-  .sales-bento .bento-dates .reset-date-btn {
-    grid-column: 1 / -1;
-    width: 100%;
-    text-align: center;
-    border-radius: 0;
-    padding: 8px 12px;
   }
 
   .sales-bento .bento-kpi-row {

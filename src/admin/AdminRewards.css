@@ -105,13 +105,19 @@
 }
 
 /* ── Redemption Cards ── */
-.ar-redemptions-list { display: flex; flex-direction: column; gap: 10px; }
+.ar-redemptions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
 
 .ar-redemption-card {
   background: #fff;
   border-radius: 0;
   padding: 14px;
   border: 1px solid #e2e8f0;
+  min-height: 132px;
+  box-sizing: border-box;
 }
 
 .ar-card-top {
@@ -214,8 +220,14 @@
 }
 
 .ar-points-table td { padding: 12px 14px; border-bottom: 1px solid #e2e8f0; vertical-align: middle; }
+.ar-points-table tbody tr { height: 57px; }
 .ar-points-table tbody tr:last-child td { border-bottom: none; }
 .ar-points-table tbody tr:hover { background: #f8fafc; }
+
+.ar-panel-body .dk-pager {
+  margin-top: 12px;
+  flex-shrink: 0;
+}
 
 .ar-user-cell  { display: flex; flex-direction: column; gap: 2px; }
 .ar-user-name  { font-weight: 600; color: #1f2937; }

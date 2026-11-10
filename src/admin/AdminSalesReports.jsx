@@ -191,6 +191,19 @@ export const SalesAnalyticsPanel = ({ recentOrders = [] }) => {
   const [startDate, setStartDate] = useState('');
   const [endDate,   setEndDate]   = useState('');
 
+  // No Reset button — refresh / leave+return / tab focus restores default range
+  useEffect(() => {
+    const restoreDefaults = () => {
+      setStartDate('');
+      setEndDate('');
+    };
+    const onVis = () => {
+      if (document.visibilityState === 'visible') restoreDefaults();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
+
   const effectiveStart = startDate || defaultStart;
   const effectiveEnd   = endDate   || defaultEnd;
   const maxDate        = toDateStr(nowMs);
@@ -534,7 +547,6 @@ export const SalesAnalyticsPanel = ({ recentOrders = [] }) => {
           <div className="date-input-group">
             <input type="date" value={effectiveEnd} min={effectiveStart} max={maxDate} onChange={e => setEndDate(e.target.value)} />
           </div>
-          <button type="button" className="reset-date-btn" onClick={() => { setStartDate(''); setEndDate(''); }}>Reset</button>
         </div>
       </div>
 

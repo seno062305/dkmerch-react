@@ -19,8 +19,8 @@ function formatWhen(at) {
 
 /**
  * Facebook-style prompt when this account signed in on another device.
- * Yes → confirm screen → activate other device & sign out here
- * No  → confirm screen → block other login & stay signed in
+ * Yes → allow other device; stay signed in here
+ * No  → block other login; stay signed in here
  */
 const NewLoginAlertModal = ({ alert, onConfirmYes, onConfirmNo }) => {
   const [busy, setBusy] = useState(null); // 'yes' | 'no' | null
@@ -65,15 +65,15 @@ const NewLoginAlertModal = ({ alert, onConfirmYes, onConfirmNo }) => {
             {location ? <> ({location})</> : null}.
           </p>
           <p className="nla-desc" style={{ marginTop: -8 }}>
-            This device will now be signed out.
+            You’re still signed in on this device.
           </p>
           <div className="nla-actions">
             <button
               type="button"
               className="nla-btn nla-btn-yes"
-              onClick={() => onConfirmYes?.({ finishLogout: true })}
+              onClick={() => onConfirmYes?.({ dismiss: true })}
             >
-              OK — Sign out here
+              OK
             </button>
           </div>
         </div>
@@ -173,7 +173,7 @@ const NewLoginAlertModal = ({ alert, onConfirmYes, onConfirmNo }) => {
           </button>
         </div>
         <p className="nla-hint">
-          Yes activates the other device and signs you out here. No blocks that login and keeps you signed in.
+          Yes lets the other device sign in while you stay logged in here. No blocks that login.
         </p>
       </div>
     </div>,

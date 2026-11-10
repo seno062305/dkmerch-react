@@ -34,8 +34,9 @@ export default defineSchema({
     reactivationOtpExpiresAt: v.optional(v.number()),
     // ── Soft delete ────────────────────────────
     deletedAt:                v.optional(v.number()),
-    // ── Single active session (login on another device kicks the old one) ──
+    // ── Active session(s). Yes on new-device login adds a session; does not kick the old one.
     activeSessionId:          v.optional(v.string()),
+    activeSessionIds:         v.optional(v.array(v.string())),
     activeDeviceAt:           v.optional(v.number()),
     activeDeviceName:         v.optional(v.string()),
     activeDeviceLocation:     v.optional(v.string()),
@@ -51,6 +52,8 @@ export default defineSchema({
       location: v.string(),
       platform: v.optional(v.string()),
       at: v.number(),
+      /** Auto-deny if still pending after this time. */
+      expiresAt: v.optional(v.number()),
       status: v.optional(v.union(
         v.literal("pending"),
         v.literal("approved"),
@@ -265,8 +268,27 @@ export default defineSchema({
     password: v.optional(v.string()),
     name: v.optional(v.string()),
     activeSessionId: v.optional(v.string()),
+    activeSessionIds: v.optional(v.array(v.string())),
     activeDeviceAt:  v.optional(v.number()),
+    activeDeviceName: v.optional(v.string()),
+    activeDeviceLocation: v.optional(v.string()),
+    activeDevicePlatform: v.optional(v.string()),
     kickedAt: v.optional(v.number()),
+    loginAlert: v.optional(v.object({
+      sessionId: v.string(),
+      previousSessionId: v.optional(v.string()),
+      deviceName: v.string(),
+      location: v.string(),
+      platform: v.optional(v.string()),
+      at: v.number(),
+      expiresAt: v.optional(v.number()),
+      status: v.optional(v.union(
+        v.literal("pending"),
+        v.literal("approved"),
+        v.literal("denied"),
+      )),
+      resolved: v.optional(v.boolean()),
+    })),
     riderPhoto: v.optional(v.union(v.string(), v.null())),
     validId1: v.optional(v.union(v.string(), v.null())),
     validId2: v.optional(v.union(v.string(), v.null())),

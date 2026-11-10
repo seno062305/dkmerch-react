@@ -32,10 +32,6 @@ const LbcTrackPanel = ({ compact = false }) => (
     <div className="lbc-track-panel-icon"><i className="fas fa-truck"></i></div>
     <div className="lbc-track-panel-body">
       <strong>LBC Express tracking</strong>
-      <p>
-        Outside NCR orders ship via LBC. Admin will send you the LBC tracking / order ID —
-        then open the tracker and enter that number to follow your package.
-      </p>
       <div className="lbc-track-panel-actions">
         <button type="button" className="lbc-track-btn" onClick={openLbcTracker}>
           <i className="fas fa-external-link-alt"></i> Open LBC Tracker

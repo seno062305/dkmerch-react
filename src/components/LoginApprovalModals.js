@@ -1,11 +1,57 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { getOverlayRoot } from "../utils/scrollLock";
 import "./NewLoginAlertModal.css";
 
+const DEFAULT_WAIT_SECS = 60;
+
 /** Full-screen overlay modal — waiting for Yes on the other device. */
-export function WaitingApprovalModal({ onClose }) {
+export function WaitingApprovalModal({ onClose, onTimeout, expiresAt, secondsTotal = DEFAULT_WAIT_SECS }) {
   const [closing, setClosing] = useState(false);
+  const timedOutRef = useRef(false);
+  const onTimeoutRef = useRef(onTimeout);
+  onTimeoutRef.current = onTimeout;
+  const [secondsLeft, setSecondsLeft] = useState(() => {
+    if (expiresAt) return Math.max(0, Math.ceil((Number(expiresAt) - Date.now()) / 1000));
+    return secondsTotal;
+  });
+
+  useEffect(() => {
+    timedOutRef.current = false;
+    const fireTimeout = () => {
+      if (timedOutRef.current) return;
+      timedOutRef.current = true;
+      onTimeoutRef.current?.();
+    };
+
+    if (expiresAt) {
+      setSecondsLeft(Math.max(0, Math.ceil((Number(expiresAt) - Date.now()) / 1000)));
+    } else {
+      setSecondsLeft(secondsTotal);
+    }
+
+    const id = setInterval(() => {
+      if (expiresAt) {
+        const left = Math.max(0, Math.ceil((Number(expiresAt) - Date.now()) / 1000));
+        setSecondsLeft(left);
+        if (left <= 0) {
+          clearInterval(id);
+          fireTimeout();
+        }
+        return;
+      }
+      setSecondsLeft((prev) => {
+        const next = Math.max(0, prev - 1);
+        if (next <= 0) {
+          clearInterval(id);
+          fireTimeout();
+        }
+        return next;
+      });
+    }, 250);
+
+    return () => clearInterval(id);
+  }, [expiresAt, secondsTotal]);
 
   const handleClose = async () => {
     if (closing) return;
@@ -35,6 +81,10 @@ export function WaitingApprovalModal({ onClose }) {
           Yes, it’s me.
         </p>
         <div className="nla-wait-spinner" aria-hidden="true" />
+        <div className="nla-timer" aria-live="polite">
+          <span className="nla-timer-secs">{secondsLeft}s</span>
+          <span className="nla-timer-label">Auto-declines if not confirmed</span>
+        </div>
         <p className="nla-hint">Keep this screen open — we’ll continue automatically.</p>
         <div className="nla-actions" style={{ marginTop: 14 }}>
           <button
@@ -53,10 +103,11 @@ export function WaitingApprovalModal({ onClose }) {
 }
 
 /**
- * Shown only on the device that tried to log in after the owner tapped No.
+ * Shown only on the device that tried to log in after the owner tapped No / timed out.
  * Close button only — popup modal, not page content.
  */
-export function LoginDeniedModal({ onClose }) {
+export function LoginDeniedModal({ onClose, reason }) {
+  const timedOut = reason === "timeout";
   return createPortal(
     <div className="nla-overlay" role="presentation">
       <div
@@ -69,9 +120,11 @@ export function LoginDeniedModal({ onClose }) {
         <div className="nla-icon" aria-hidden="true">
           <i className="fas fa-user-slash" />
         </div>
-        <h2 id="deny-title" className="nla-title">It’s not your account</h2>
+        <h2 id="deny-title" className="nla-title">Failed to login</h2>
         <p id="deny-desc" className="nla-desc">
-          The owner of this account blocked this login. You were not signed in.
+          {timedOut
+            ? "This login wasn’t confirmed in time (60 seconds). You were not logged in."
+            : "The owner of this account blocked this sign-in. You were not logged in."}
         </p>
         <div className="nla-actions">
           <button type="button" className="nla-btn nla-btn-yes" onClick={onClose}>

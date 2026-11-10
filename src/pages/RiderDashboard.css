@@ -1010,7 +1010,21 @@
   to   { transform: scale(1) translateY(0); opacity: 1; }
 }
 
-.rider-kicked-icon { font-size: 56px; margin-bottom: 16px; animation: kickedBounce 1.2s ease infinite; }
+.rider-kicked-icon {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: kickedBounce 1.2s ease infinite;
+}
+.rider-kicked-icon img {
+  width: 72px;
+  height: 72px;
+  display: block;
+  object-fit: contain;
+}
 @keyframes kickedBounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
 
 .rider-kicked-card h2 { font-size: 22px; font-weight: 700; color: #1a1a2e; margin-bottom: 12px; }

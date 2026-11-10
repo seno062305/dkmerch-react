@@ -67,7 +67,10 @@
   transition: all 0.2s ease;
   border: 1px solid #eef2f7;
   overflow: hidden;
-  min-height: 0;
+  /* Keep card footprint compact — grow content inside, not the shell */
+  height: 88px;
+  min-height: 88px;
+  max-height: 88px;
 }
 
 .stat-card.wave-card {
@@ -83,29 +86,37 @@
 .stat-card-top {
   position: relative;
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
-  gap: 10px;
-  padding: 12px;
+  gap: 12px;
+  padding: 10px 12px;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
 }
 
 .stat-card-copy {
   min-width: 0;
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
 }
 
 .stat-card-copy h3 {
-  font-size: 10px;
-  color: #94a3b8;
+  font-size: 12px;
+  color: #64748b;
   font-weight: 700;
   letter-spacing: 0.2px;
-  margin: 0 0 4px;
+  margin: 0;
+  line-height: 1.15;
 }
 
 .stat-icon-chip {
-  width: 42px;
-  height: 42px;
-  border-radius: 11px;
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -137,13 +148,13 @@
 }
 
 .stat-value {
-  font-size: 20px;
+  font-size: 24px;
   font-weight: 800;
   color: #0f172a;
-  margin: 0 0 3px 0;
+  margin: 0;
   line-height: 1;
-  letter-spacing: -0.02em;
-  min-height: 1em;
+  letter-spacing: -0.03em;
+  min-height: 0;
 }
 .stat-value.is-loading {
   color: #cbd5e1;
@@ -154,7 +165,11 @@
   font-size: 11px;
   color: #94a3b8;
   display: block;
-  margin-top: 4px;
+  margin: 0;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .stat-label.warn { color: #d97706; font-weight: 600; }
@@ -422,32 +437,33 @@
   }
   .stat-card {
     border-radius: 0;
+    height: 80px;
+    min-height: 80px;
+    max-height: 80px;
   }
   .stat-card.wave-card { padding: 0; }
   .stat-card-top {
-    padding: 10px;
-    gap: 8px;
-    align-items: flex-start;
+    padding: 8px 10px;
+    gap: 10px;
+    align-items: center;
   }
   .stat-card-copy h3 {
-    font-size: 10px;
-    margin-bottom: 4px;
+    font-size: 11px;
+    margin: 0;
   }
   .stat-icon-chip {
-    width: 34px;
-    height: 34px;
-    border-radius: 8px;
+    width: 44px;
+    height: 44px;
+    border-radius: 11px;
   }
   .stat-icon { width: 34px; height: 34px; font-size: 18px; }
-  .stat-value { font-size: 16px; }
+  .stat-value { font-size: 20px; }
   .stat-label {
     font-size: 10px;
-    margin-top: 2px;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
+    margin: 0;
+    white-space: nowrap;
     overflow: hidden;
-    line-height: 1.3;
+    text-overflow: ellipsis;
   }
   .chart-card,
   .data-card {
@@ -503,11 +519,18 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
   }
+  .stat-card {
+    height: 76px;
+    min-height: 76px;
+    max-height: 76px;
+  }
   .stat-card.wave-card { padding: 0; }
-  .stat-card-top { padding: 10px 8px; }
-  .stat-icon-chip { width: 32px; height: 32px; }
+  .stat-card-top { padding: 8px; gap: 8px; }
+  .stat-icon-chip { width: 40px; height: 40px; border-radius: 10px; }
   .stat-icon { width: 32px; height: 32px; font-size: 16px; }
-  .stat-value { font-size: 15px; }
+  .stat-value { font-size: 18px; }
+  .stat-card-copy h3 { font-size: 10px; margin: 0; }
+  .stat-label { font-size: 10px; margin: 0; }
   .chart-card,
   .data-card { padding: 12px; }
   .chart-title h3,

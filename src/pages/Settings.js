@@ -158,6 +158,8 @@ const DeleteModal = ({
   deleteStep,    setDeleteStep,
   deleteReason,  setDeleteReason,
   deleteNote,    setDeleteNote,
+  deletePassword, setDeletePassword,
+  deleteShowPw,  setDeleteShowPw,
   deleteLoading,
   deleteError,
   onConfirm,
@@ -174,7 +176,7 @@ const DeleteModal = ({
             <div className="settings-modal-icon"><i className="fas fa-trash-alt"></i></div>
             <div className="settings-modal-header-text">
               <h3>Delete Account</h3>
-              <p>This action is permanent and cannot be undone.</p>
+              <p>Scheduled for permanent removal after 30 days.</p>
             </div>
             <button className="settings-modal-close" onClick={onClose}><i className="fas fa-times"></i></button>
           </div>
@@ -235,17 +237,12 @@ const DeleteModal = ({
             <div className="settings-confirm-summary">
               <div className="settings-confirm-row"><span>Account</span><strong>{user?.name} ({user?.email})</strong></div>
               <div className="settings-confirm-row"><span>Reason</span><strong>{deleteReason}</strong></div>
-              <div className="settings-confirm-row"><span>Action</span><strong style={{ color: '#dc2626' }}>Permanent deletion</strong></div>
+              <div className="settings-confirm-row"><span>Action</span><strong style={{ color: '#dc2626' }}>Delete (30-day recovery)</strong></div>
             </div>
             <div className="settings-confirm-warning" style={{ borderColor: '#dc2626', background: '#fee2e212', color: '#991b1b' }}>
               <i className="fas fa-exclamation-circle"></i>
-              Your account and all associated data will be <strong>permanently deleted</strong>. This cannot be undone.
+              You’ll be signed out now. You can <strong>recover this account within 30 days</strong> by logging in again and verifying via email OTP. After 30 days it is permanently removed.
             </div>
-            {deleteError && (
-              <div className="settings-modal-error">
-                <i className="fas fa-exclamation-circle"></i> {deleteError}
-              </div>
-            )}
           </div>
 
           <div className="settings-modal-footer">
@@ -255,8 +252,73 @@ const DeleteModal = ({
             <button
               className="settings-modal-btn-primary"
               style={{ background: '#dc2626' }}
-              onClick={onConfirm}
+              onClick={() => setDeleteStep(3)}
               disabled={deleteLoading}
+            >
+              Yes, continue <i className="fas fa-arrow-right"></i>
+            </button>
+          </div>
+        </>
+      )}
+
+      {deleteStep === 3 && (
+        <>
+          <div className="settings-modal-header" style={{ background: '#dc2626' }}>
+            <div className="settings-modal-icon"><i className="fas fa-lock"></i></div>
+            <div className="settings-modal-header-text">
+              <h3>Enter Password</h3>
+              <p>Confirm with your password to schedule deletion.</p>
+            </div>
+            <button className="settings-modal-close" onClick={onClose} disabled={deleteLoading}>
+              <i className="fas fa-times"></i>
+            </button>
+          </div>
+
+          <div className="settings-modal-body">
+            <div className="settings-deact-info" style={{ borderColor: '#dc2626', background: '#fee2e212', color: '#991b1b' }}>
+              <i className="fas fa-exclamation-circle"></i>
+              <span>
+                You’ll be logged out. Recover within <strong>30 days</strong> by signing in again with{' '}
+                <strong>{user?.email}</strong> and completing email verification. After 30 days, deletion is permanent.
+              </span>
+            </div>
+
+            <div className="settings-note-group">
+              <label>Confirm with your password</label>
+              <div className="settings-pw-input-row">
+                <input
+                  type={deleteShowPw ? 'text' : 'password'}
+                  className="settings-pw-input"
+                  placeholder="Enter your current password"
+                  value={deletePassword}
+                  onChange={e => setDeletePassword(e.target.value)}
+                  autoFocus
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && deletePassword.trim() && !deleteLoading) onConfirm?.();
+                  }}
+                />
+                <button type="button" className="settings-pw-toggle" onClick={() => setDeleteShowPw(p => !p)}>
+                  <i className={`fas ${deleteShowPw ? 'fa-eye-slash' : 'fa-eye'}`}></i>
+                </button>
+              </div>
+            </div>
+
+            {deleteError && (
+              <div className="settings-modal-error">
+                <i className="fas fa-exclamation-circle"></i> {deleteError}
+              </div>
+            )}
+          </div>
+
+          <div className="settings-modal-footer">
+            <button className="settings-modal-btn-cancel" onClick={() => setDeleteStep(2)} disabled={deleteLoading}>
+              <i className="fas fa-arrow-left"></i> Go Back
+            </button>
+            <button
+              className="settings-modal-btn-primary"
+              style={{ background: '#dc2626' }}
+              onClick={onConfirm}
+              disabled={!deletePassword.trim() || deleteLoading}
             >
               {deleteLoading
                 ? <><i className="fas fa-spinner fa-spin"></i> Deleting...</>
@@ -299,11 +361,13 @@ const Settings = () => {
   const [deactError,    setDeactError]    = useState('');
 
   // ── Delete state ──
-  const [deleteStep,    setDeleteStep]    = useState(1);
-  const [deleteReason,  setDeleteReason]  = useState('');
-  const [deleteNote,    setDeleteNote]    = useState('');
-  const [deleteLoading, setDeleteLoading] = useState(false);
-  const [deleteError,   setDeleteError]   = useState('');
+  const [deleteStep,     setDeleteStep]     = useState(1);
+  const [deleteReason,   setDeleteReason]   = useState('');
+  const [deleteNote,     setDeleteNote]     = useState('');
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteShowPw,   setDeleteShowPw]   = useState(false);
+  const [deleteLoading,  setDeleteLoading]  = useState(false);
+  const [deleteError,    setDeleteError]    = useState('');
 
   // ── Account details form ──
   const [accountForm, setAccountForm] = useState({ name: '', username: '', email: '', phone: '' });
@@ -501,20 +565,49 @@ const Settings = () => {
 
   // ── Delete ────────────────────────────────────────────────────────────────
   const openDelete = () => {
-    setDeleteReason(''); setDeleteNote(''); setDeleteError(''); setDeleteStep(1);
+    setDeleteReason('');
+    setDeleteNote('');
+    setDeletePassword('');
+    setDeleteShowPw(false);
+    setDeleteError('');
+    setDeleteStep(1);
     setShowDeleteModal(true);
   };
   const closeDelete = () => {
-    setShowDeleteModal(false); setDeleteReason(''); setDeleteNote(''); setDeleteError(''); setDeleteStep(1);
+    setShowDeleteModal(false);
+    setDeleteReason('');
+    setDeleteNote('');
+    setDeletePassword('');
+    setDeleteShowPw(false);
+    setDeleteError('');
+    setDeleteStep(1);
   };
   const handleDelete = async () => {
-    setDeleteLoading(true); setDeleteError('');
+    if (!deletePassword.trim()) {
+      setDeleteError('Please enter your password.');
+      return;
+    }
+    setDeleteLoading(true);
+    setDeleteError('');
     try {
-      await softDeleteUser({ id: user._id || user.id });
+      const uid = user._id || user.id;
+      const verified = await verifyUserPassword({ id: uid, password: deletePassword });
+      if (!verified.success) {
+        setDeleteError('Incorrect password. Please try again.');
+        return;
+      }
+      await softDeleteUser({
+        id: uid,
+        reason: deleteReason || 'self_deleted',
+        note: deleteNote || undefined,
+      });
       logout();
       navigate('/', { replace: true });
-    } catch { setDeleteError('Failed to delete account. Please try again.'); }
-    finally { setDeleteLoading(false); }
+    } catch {
+      setDeleteError('Failed to delete account. Please try again.');
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
   return (
@@ -718,7 +811,7 @@ const Settings = () => {
                 <div className="settings-acct-card-icon"><i className="fas fa-trash-alt"></i></div>
                 <div className="settings-acct-card-info">
                   <h4>Delete Account</h4>
-                  <p>Permanently delete your account and all associated data. This cannot be undone.</p>
+                  <p>Schedule account deletion. You can recover it within 30 days by logging in again; after that it’s permanently removed.</p>
                 </div>
                 <button className="settings-acct-btn settings-acct-btn--danger" onClick={openDelete}>Delete</button>
               </div>
@@ -755,6 +848,10 @@ const Settings = () => {
           setDeleteReason={setDeleteReason}
           deleteNote={deleteNote}
           setDeleteNote={setDeleteNote}
+          deletePassword={deletePassword}
+          setDeletePassword={setDeletePassword}
+          deleteShowPw={deleteShowPw}
+          setDeleteShowPw={setDeleteShowPw}
           deleteLoading={deleteLoading}
           deleteError={deleteError}
           onConfirm={handleDelete}

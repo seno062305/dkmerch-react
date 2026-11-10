@@ -7,6 +7,9 @@ import { v } from "convex/values";
 const RATE_LIMIT_WINDOW_MS = 2 * 60 * 1000; // 2 minutes
 const RATE_LIMIT_MAX        = 5;             // max 5 attempts per fingerprint per 2 mins
 
+/** 30-day grace window after customer self-delete (recoverable via OTP). */
+const ACCOUNT_DELETE_GRACE_MS = 30 * 24 * 60 * 60 * 1000;
+
 function genSessionId() {
   const a = Math.random().toString(36).slice(2, 10);
   const b = Math.random().toString(36).slice(2, 10);
@@ -167,12 +170,29 @@ export const loginUser = mutation({
         };
       }
 
-      // ── Soft-deleted: block login ──
+      // ── Soft-deleted: recoverable within 30 days, then permanent ──
       if (user.status === "deleted") {
+        const deletedAt = Number((user as any).deletedAt) || 0;
+        const recoverUntil = deletedAt + ACCOUNT_DELETE_GRACE_MS;
+        if (deletedAt > 0 && Date.now() < recoverUntil) {
+          return {
+            success: false,
+            user: null,
+            message: "account_deleted_recoverable",
+            deleted: true,
+            recoverable: true,
+            userEmail: user.email,
+            userName: user.name,
+            deletedAt,
+            recoverUntil,
+          };
+        }
         return {
           success: false,
           user: null,
-          message: "This account has been deleted and is no longer accessible.",
+          message: "This account has been permanently deleted and is no longer accessible.",
+          deleted: true,
+          recoverable: false,
         };
       }
 
@@ -190,11 +210,7 @@ export const loginUser = mutation({
         usernameChangedAt: (user as any).usernameChangedAt ?? null,
       };
 
-      // Admins skip PIN — client starts session (same Yes/No gate as customers when another device is online)
-      if (user.role === "admin") {
-        return { success: true, user: safeUser, skipSecondFactor: true };
-      }
-
+      // Admin + customer: password OK → PIN (or Create PIN) before session start
       const hasPin = !!(user as any).pin && String((user as any).pin).length >= 4;
       if (hasPin) {
         return { success: true, user: safeUser, needsPin: true };
@@ -241,7 +257,7 @@ export const hasLoginPin = query({
     if (!id) return { hasPin: false, pinLength: 6 };
     try {
       const user = await db.get(id as any);
-      if (!user || (user as any).role === "admin") return { hasPin: false, pinLength: 6 };
+      if (!user) return { hasPin: false, pinLength: 6 };
       const pin = (user as any).pin;
       const hasPin = !!(pin && String(pin).length >= 4);
       const len = Number((user as any).pinLength);
@@ -255,6 +271,23 @@ export const hasLoginPin = query({
 
 /** Treat another device as "online" if it heartbeated within this window. */
 const SESSION_ACTIVE_MS = 10 * 60 * 1000;
+/** Pending Yes/No login request auto-denies after this. */
+const LOGIN_ALERT_TTL_MS = 60 * 1000;
+
+function isLoginAlertExpired(alert: any, now = Date.now()) {
+  if (!alert) return true;
+  const expiresAt = Number(alert.expiresAt) || (Number(alert.at) || 0) + LOGIN_ALERT_TTL_MS;
+  return expiresAt > 0 && now >= expiresAt;
+}
+
+function getActiveSessionIds(user: any): string[] {
+  const fromArr = Array.isArray(user?.activeSessionIds)
+    ? user.activeSessionIds.map((s: any) => String(s || "").trim()).filter(Boolean)
+    : [];
+  const primary = String(user?.activeSessionId || "").trim();
+  if (primary && !fromArr.includes(primary)) return [primary, ...fromArr];
+  return fromArr;
+}
 
 function activateSessionPatch(
   sessionId: string,
@@ -262,9 +295,14 @@ function activateSessionPatch(
   deviceName: string,
   location: string,
   platform: string,
+  sessionIds?: string[],
 ) {
+  const ids = [...new Set((sessionIds && sessionIds.length ? sessionIds : [sessionId])
+    .map((s) => String(s || "").trim())
+    .filter(Boolean))];
   return {
     activeSessionId: sessionId,
+    activeSessionIds: ids,
     activeDeviceAt: now,
     activeDeviceName: deviceName,
     activeDeviceLocation: location,
@@ -275,7 +313,7 @@ function activateSessionPatch(
 
 /**
  * Start a session. Pending Yes/No only when another device is RECENTLY active.
- * Stale / same-device / same-session / admin → activate immediately (no alert, no push).
+ * Stale / same-device / same-session → activate immediately (no alert, no push).
  */
 export const startUserSession = mutation({
   args: {
@@ -295,28 +333,34 @@ export const startUserSession = mutation({
     const deviceName = String(args.deviceName || "Unknown device").slice(0, 120);
     const location = String(args.location || "Unknown location").slice(0, 160);
     const platform = String(args.platform || "").slice(0, 80);
-    const previousSessionId = user.activeSessionId
-      ? String(user.activeSessionId)
-      : undefined;
+    const existingIds = getActiveSessionIds(user);
+    const previousSessionId = existingIds[0];
     const currentSessionId = String(args.currentSessionId || "").trim();
 
     // Same session already active (e.g. PIN unlock on this device) → refresh only
-    if (previousSessionId && currentSessionId && previousSessionId === currentSessionId) {
+    if (currentSessionId && existingIds.includes(currentSessionId)) {
       await db.patch(
         args.userId,
-        activateSessionPatch(previousSessionId, now, deviceName, location, platform) as any,
+        activateSessionPatch(
+          currentSessionId,
+          now,
+          deviceName,
+          location,
+          platform,
+          existingIds,
+        ) as any,
       );
-      return { success: true, sessionId: previousSessionId, pendingApproval: false };
+      return { success: true, sessionId: currentSessionId, pendingApproval: false };
     }
 
     const sessionId = genSessionId();
     const lastActive = Number(user.activeDeviceAt) || 0;
     const otherStillActive =
-      !!previousSessionId
+      existingIds.length > 0
       && lastActive > 0
       && (now - lastActive) <= SESSION_ACTIVE_MS;
     const sameDevice =
-      !!previousSessionId
+      existingIds.length > 0
       && String(user.activeDeviceName || "") === deviceName
       && String(user.activeDevicePlatform || "") === platform;
     // Stuck / abandoned Yes-No request — don't block login forever
@@ -326,7 +370,6 @@ export const startUserSession = mutation({
       && !user.loginAlert.resolved;
 
     // First login / stale / same device / stuck pending → take over now
-    // (Admin uses the same Yes/No gate when another admin session is recently active.)
     if (
       !previousSessionId
       || !otherStillActive
@@ -341,6 +384,7 @@ export const startUserSession = mutation({
     }
 
     // Another device is recently active → wait for Yes on that device
+    const expiresAt = now + LOGIN_ALERT_TTL_MS;
     const alert = {
       sessionId,
       previousSessionId,
@@ -348,17 +392,25 @@ export const startUserSession = mutation({
       location,
       platform: platform || undefined,
       at: now,
+      expiresAt,
       status: "pending" as const,
       resolved: false,
     };
     await db.patch(args.userId, { loginAlert: alert } as any);
+
+    try {
+      await scheduler.runAfter(LOGIN_ALERT_TTL_MS, internal.users.expireLoginAlert, {
+        userId: String(args.userId),
+        sessionId,
+      });
+    } catch { /* optional */ }
 
     if (user.email) {
       try {
         await scheduler.runAfter(0, internal.webPush.sendToEmail, {
           email: String(user.email).toLowerCase(),
           title: "New login to your DKMerch account",
-          body: `${deviceName} · ${location}. Confirm if this was you.`,
+          body: `${deviceName} · ${location}. Confirm within 60s if this was you.`,
           // Path-only so the installed PWA opens (not a fresh browser tab)
           url: "/?open=loginAlert",
         });
@@ -369,8 +421,35 @@ export const startUserSession = mutation({
       success: true,
       sessionId,
       pendingApproval: true,
-      replacedSession: true,
+      replacedSession: false,
+      expiresAt,
     };
+  },
+});
+
+/** Auto-deny a pending login request after the 60s window. */
+export const expireLoginAlert = internalMutation({
+  args: {
+    userId: v.string(),
+    sessionId: v.string(),
+  },
+  handler: async ({ db }, { userId, sessionId }) => {
+    const id = String(userId || "").trim();
+    const sid = String(sessionId || "").trim();
+    if (!id || !sid) return { success: false };
+    try {
+      const user = await db.get(id as any) as any;
+      if (!user) return { success: false };
+      const alert = user.loginAlert;
+      if (!alert || String(alert.sessionId) !== sid) return { success: true, skipped: true };
+      if (alert.resolved || alert.status !== "pending") return { success: true, skipped: true };
+      await db.patch(user._id, {
+        loginAlert: { ...alert, status: "denied", resolved: true },
+      } as any);
+      return { success: true, denied: true };
+    } catch {
+      return { success: false };
+    }
   },
 });
 
@@ -387,7 +466,8 @@ export const touchUserSession = mutation({
     try {
       const user = await db.get(id as any) as any;
       if (!user) return { success: false };
-      if (String(user.activeSessionId || "") !== sid) return { success: false };
+      const ids = getActiveSessionIds(user);
+      if (!ids.includes(sid)) return { success: false };
       await db.patch(user._id, { activeDeviceAt: Date.now() } as any);
       return { success: true };
     } catch {
@@ -396,7 +476,7 @@ export const touchUserSession = mutation({
   },
 });
 
-/** Clear server session on logout so the next login is not blocked by a ghost session. */
+/** Clear this device's session on logout (other devices stay signed in). */
 export const endUserSession = mutation({
   args: {
     userId: v.string(),
@@ -409,12 +489,28 @@ export const endUserSession = mutation({
       const user = await db.get(id as any) as any;
       if (!user) return { success: false };
       const sid = String(sessionId || "").trim();
-      // Only clear if this device owns the active session (or no sid provided for cleanup)
-      if (sid && String(user.activeSessionId || "") !== sid) {
-        return { success: true, cleared: false };
+      const ids = getActiveSessionIds(user);
+      if (sid) {
+        if (!ids.includes(sid)) return { success: true, cleared: false };
+        const remaining = ids.filter((s) => s !== sid);
+        if (remaining.length === 0) {
+          await db.patch(user._id, {
+            activeSessionId: undefined,
+            activeSessionIds: undefined,
+            activeDeviceAt: undefined,
+            loginAlert: undefined,
+          } as any);
+        } else {
+          await db.patch(user._id, {
+            activeSessionId: remaining[0],
+            activeSessionIds: remaining,
+          } as any);
+        }
+        return { success: true, cleared: true };
       }
       await db.patch(user._id, {
         activeSessionId: undefined,
+        activeSessionIds: undefined,
         activeDeviceAt: undefined,
         loginAlert: undefined,
       } as any);
@@ -461,7 +557,7 @@ export const cancelPendingLogin = mutation({
   },
 });
 
-/** Other devices poll this — invalid means a newer login was approved. */
+/** Other devices poll this — invalid when this session was removed (e.g. stale takeover). */
 export const checkUserSession = query({
   args: {
     userId: v.string(),
@@ -474,8 +570,9 @@ export const checkUserSession = query({
     try {
       const user = await db.get(id as any) as any;
       if (!user) return { valid: false, reason: "not_found" };
-      if (!user.activeSessionId) return { valid: true, reason: "legacy" };
-      const ok = user.activeSessionId === sid;
+      const ids = getActiveSessionIds(user);
+      if (ids.length === 0) return { valid: true, reason: "legacy" };
+      const ok = ids.includes(sid);
       return {
         valid: ok,
         reason: ok ? "ok" : "new_device_logged_in",
@@ -502,6 +599,7 @@ export const getPendingLoginAlert = query({
       // Only brand-new pending requests (ignore legacy alerts without status)
       if (alert.resolved) return null;
       if (alert.status !== "pending") return null;
+      if (isLoginAlertExpired(alert)) return null;
       return alert;
     } catch {
       return null;
@@ -524,26 +622,28 @@ export const getLoginApprovalStatus = query({
       if (!user) return { status: "missing" as const };
       const alert = user.loginAlert;
       if (alert && String(alert.sessionId) === sid) {
-        const st = alert.status || (alert.resolved ? "approved" : "pending");
+        let st = alert.status || (alert.resolved ? "approved" : "pending");
+        if (st === "pending" && isLoginAlertExpired(alert)) st = "denied";
         return {
           status: st,
           deviceName: alert.deviceName,
           location: alert.location,
           at: alert.at,
+          expiresAt: alert.expiresAt ?? ((Number(alert.at) || 0) + LOGIN_ALERT_TTL_MS),
         };
       }
       // Approved + activated (alert may already be cleared/resolved)
-      if (String(user.activeSessionId || "") === sid) {
+      if (getActiveSessionIds(user).includes(sid)) {
         return { status: "approved" as const };
       }
-      return { status: "expired" as const };
+      return { status: "denied" as const };
     } catch {
       return { status: "missing" as const };
     }
   },
 });
 
-/** Old device: Yes — activate the pending new-device session. */
+/** Old device: Yes — allow the new device AND keep this device signed in. */
 export const confirmLoginAlert = mutation({
   args: {
     userId: v.string(),
@@ -556,9 +656,24 @@ export const confirmLoginAlert = mutation({
     if (!alert || String(alert.sessionId) !== String(sessionId)) {
       return { success: false, message: "No pending login found." };
     }
+    if (alert.status !== "pending" || alert.resolved) {
+      return { success: false, message: "This login request already ended." };
+    }
+    if (isLoginAlertExpired(alert)) {
+      await db.patch(user._id, {
+        loginAlert: { ...alert, status: "denied", resolved: true },
+      } as any);
+      return { success: false, message: "Login request timed out." };
+    }
+    const newId = String(alert.sessionId);
+    const prevId = alert.previousSessionId ? String(alert.previousSessionId) : "";
+    const ids = getActiveSessionIds(user);
+    if (prevId && !ids.includes(prevId)) ids.push(prevId);
+    if (!ids.includes(newId)) ids.push(newId);
     await db.patch(user._id, {
-      activeSessionId: String(alert.sessionId),
-      activeDeviceAt: alert.at || Date.now(),
+      activeSessionId: newId,
+      activeSessionIds: ids,
+      activeDeviceAt: Date.now(),
       activeDeviceName: alert.deviceName,
       activeDeviceLocation: alert.location,
       activeDevicePlatform: alert.platform,
@@ -1237,15 +1352,34 @@ export const updateUserProfile = mutation({
   },
 });
 
-// ── Soft delete — used by customer self-deletion (keeps record in DB) ────────
+// ── Soft delete — 30-day recovery window, then permanent purge by cron ─────
 export const softDeleteUser = mutation({
-  args: { id: v.id("users") },
-  handler: async ({ db }, { id }) => {
+  args: {
+    id: v.id("users"),
+    reason: v.optional(v.string()),
+    note: v.optional(v.string()),
+  },
+  handler: async ({ db }, { id, reason, note }) => {
+    const user = await db.get(id) as any;
+    if (!user) return { success: false, message: "Account not found." };
+    if (user.role === "admin" || user.email === "admin") {
+      return { success: false, message: "Admin accounts cannot be deleted." };
+    }
+    const now = Date.now();
     await db.patch(id, {
       status: "deleted",
-      deletedAt: Date.now(),
+      deletedAt: now,
+      suspendReason: reason || "self_deleted",
+      suspendNote: note || undefined,
+      // Clear any leftover reactivation OTP from prior deactivate
+      reactivationOtp: undefined,
+      reactivationOtpExpiresAt: undefined,
     } as any);
-    return { success: true };
+    return {
+      success: true,
+      deletedAt: now,
+      recoverUntil: now + ACCOUNT_DELETE_GRACE_MS,
+    };
   },
 });
 
@@ -1431,18 +1565,39 @@ export const deactivateOwnAccount = mutation({
   },
 });
 
-// ── Generate + store a reactivation OTP on the user record ───────────────────
+function canRecoverAccount(user: any, now = Date.now()) {
+  if (!user) return { ok: false, reason: "not_found" as const };
+  if (user.status === "self_deactivated") return { ok: true, kind: "deactivated" as const };
+  if (user.status === "deleted") {
+    const deletedAt = Number(user.deletedAt) || 0;
+    const recoverUntil = deletedAt + ACCOUNT_DELETE_GRACE_MS;
+    if (deletedAt > 0 && now < recoverUntil) {
+      return { ok: true, kind: "deleted" as const, deletedAt, recoverUntil };
+    }
+    return { ok: false, reason: "expired" as const };
+  }
+  return { ok: false, reason: "not_recoverable" as const };
+}
+
+// ── Generate + store a reactivation OTP (deactivate OR deleted-within-30d) ───
 export const generateReactivationOtp = mutation({
   args: { email: v.string() },
   handler: async ({ db }, { email }) => {
     const user = await db
       .query("users")
       .withIndex("by_email", q => q.eq("email", email))
-      .first();
+      .first() as any;
 
     if (!user) return { success: false, message: "Account not found." };
-    if (user.status !== "self_deactivated") {
-      return { success: false, message: "Account is not deactivated." };
+    const gate = canRecoverAccount(user);
+    if (!gate.ok) {
+      if (gate.reason === "expired") {
+        return {
+          success: false,
+          message: "The 30-day recovery window has ended. This account can no longer be restored.",
+        };
+      }
+      return { success: false, message: "This account cannot be reactivated." };
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -1453,7 +1608,14 @@ export const generateReactivationOtp = mutation({
       reactivationOtpExpiresAt: otpExpiresAt,
     } as any);
 
-    return { success: true, otp, userName: user.name, userId: user._id };
+    return {
+      success: true,
+      otp,
+      userName: user.name,
+      userId: user._id,
+      kind: gate.kind,
+      recoverUntil: gate.recoverUntil,
+    };
   },
 });
 
@@ -1470,8 +1632,15 @@ export const reactivateAccount = mutation({
       .first() as any;
 
     if (!user) return { success: false, message: "Account not found." };
-    if (user.status !== "self_deactivated") {
-      return { success: false, message: "Account is not deactivated." };
+    const gate = canRecoverAccount(user);
+    if (!gate.ok) {
+      if (gate.reason === "expired") {
+        return {
+          success: false,
+          message: "The 30-day recovery window has ended. This account can no longer be restored.",
+        };
+      }
+      return { success: false, message: "This account cannot be reactivated." };
     }
     if (!user.reactivationOtp) {
       return { success: false, message: "No OTP found. Please request a new one." };
@@ -1488,11 +1657,53 @@ export const reactivateAccount = mutation({
       suspendReason: undefined,
       suspendNote: undefined,
       suspendedAt: undefined,
+      deletedAt: undefined,
       reactivationOtp: undefined,
       reactivationOtpExpiresAt: undefined,
     } as any);
 
-    return { success: true, user: { ...user, status: "active" } };
+    return { success: true, user: { ...user, status: "active", deletedAt: undefined }, kind: gate.kind };
+  },
+});
+
+async function permanentlyPurgeDeletedUser(db: any, user: any) {
+  if (!user || user.role === "admin" || user.email === "admin") return false;
+  const { _id, _creationTime, password, pin, loginOtp, loginOtpExpiresAt, reactivationOtp, reactivationOtpExpiresAt, ...rest } = user;
+  await db.insert("userArchives", {
+    originalUserId: String(_id),
+    name: user.name,
+    username: user.username,
+    email: user.email,
+    role: user.role,
+    status: user.status,
+    phone: user.phone,
+    registeredAt: user.registeredAt,
+    snapshot: { ...rest, hadPassword: !!password, hadPin: !!pin },
+    archivedAt: Date.now(),
+    archivedBy: "system",
+    reason: "self_delete_grace_expired",
+  } as any);
+  await clearUserCartWishlist(db, String(_id), user.email);
+  await db.delete(_id);
+  return true;
+}
+
+/** Daily: permanently remove soft-deleted accounts past the 30-day window. */
+export const purgeExpiredDeletedAccounts = internalMutation({
+  args: {},
+  handler: async ({ db }) => {
+    const now = Date.now();
+    const cutoff = now - ACCOUNT_DELETE_GRACE_MS;
+    const users = await db.query("users").collect();
+    let purged = 0;
+    for (const user of users as any[]) {
+      if (user.status !== "deleted") continue;
+      const deletedAt = Number(user.deletedAt) || 0;
+      if (!deletedAt || deletedAt > cutoff) continue;
+      const ok = await permanentlyPurgeDeletedUser(db, user);
+      if (ok) purged += 1;
+    }
+    return { success: true, purged };
   },
 });
 

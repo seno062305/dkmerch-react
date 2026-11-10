@@ -1,10 +1,18 @@
 // convex/riders.ts
-import { query, mutation, internalQuery } from "./_generated/server";
+import { query, mutation, internalQuery, internalMutation } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 
 const genSessionId = () =>
   `${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${Math.random().toString(36).slice(2, 10)}`;
+
+const RIDER_LOGIN_ALERT_TTL_MS = 60 * 1000;
+
+function isRiderLoginAlertExpired(alert: any, now = Date.now()) {
+  if (!alert) return true;
+  const expiresAt = Number(alert.expiresAt) || (Number(alert.at) || 0) + RIDER_LOGIN_ALERT_TTL_MS;
+  return expiresAt > 0 && now >= expiresAt;
+}
 
 // ── Generate DKMerch Rider ID: DKR-YYYY-XXXX ──
 const generateDkRiderId = (sequence: number): string => {
@@ -240,9 +248,51 @@ export const rejectRiderApplication = mutation({
   },
 });
 
+const RIDER_SESSION_ACTIVE_MS = 90 * 1000;
+
+function getRiderSessionIds(rider: any): string[] {
+  const fromArr = Array.isArray(rider?.activeSessionIds)
+    ? rider.activeSessionIds.map((s: any) => String(s || "").trim()).filter(Boolean)
+    : [];
+  const primary = String(rider?.activeSessionId || "").trim();
+  if (primary && !fromArr.includes(primary)) return [primary, ...fromArr];
+  return fromArr;
+}
+
+function activateRiderSessionPatch(
+  sessionId: string,
+  now: number,
+  deviceName: string,
+  location: string,
+  platform: string,
+  sessionIds?: string[],
+) {
+  const ids = [...new Set((sessionIds && sessionIds.length ? sessionIds : [sessionId])
+    .map((s) => String(s || "").trim())
+    .filter(Boolean))];
+  return {
+    activeSessionId: sessionId,
+    activeSessionIds: ids,
+    activeDeviceAt: now,
+    activeDeviceName: deviceName,
+    activeDeviceLocation: location,
+    activeDevicePlatform: platform || undefined,
+    kickedAt: undefined,
+    loginAlert: undefined,
+  };
+}
+
 export const loginRider = mutation({
-  args: { email: v.string(), password: v.string() },
-  handler: async ({ db }, { email, password }) => {
+  args: {
+    email: v.string(),
+    password: v.string(),
+    deviceName: v.optional(v.string()),
+    location: v.optional(v.string()),
+    platform: v.optional(v.string()),
+    currentSessionId: v.optional(v.string()),
+  },
+  handler: async ({ db, scheduler }, args) => {
+    const { email, password } = args;
     const rider = await db
       .query("riderApplications")
       .withIndex("by_email", q => q.eq("email", email))
@@ -279,26 +329,128 @@ export const loginRider = mutation({
       };
     }
 
-    const newSessionId = genSessionId();
-    await db.patch(rider._id, {
-      activeSessionId: newSessionId,
-      activeDeviceAt: Date.now(),
-      kickedAt: undefined,
-    });
+    const now = Date.now();
+    const deviceName = String(args.deviceName || "Unknown device").slice(0, 120);
+    const location = String(args.location || "Unknown location").slice(0, 160);
+    const platform = String(args.platform || "").slice(0, 80);
+    const existingIds = getRiderSessionIds(rider);
+    const previousSessionId = existingIds[0];
+    const currentSessionId = String(args.currentSessionId || "").trim();
+
+    const safeRider = {
+      _id: rider._id,
+      name: rider.fullName,
+      email: rider.email,
+      role: "rider" as const,
+      status: rider.status,
+      dkRiderId: rider.dkRiderId,
+    };
+
+    if (currentSessionId && existingIds.includes(currentSessionId)) {
+      await db.patch(
+        rider._id,
+        activateRiderSessionPatch(currentSessionId, now, deviceName, location, platform, existingIds) as any,
+      );
+      return {
+        success: true,
+        riderExists: true,
+        rider: safeRider,
+        sessionId: currentSessionId,
+        pendingApproval: false,
+      };
+    }
+
+    const sessionId = genSessionId();
+    const lastActive = Number(rider.activeDeviceAt) || 0;
+    const otherStillActive =
+      existingIds.length > 0
+      && lastActive > 0
+      && (now - lastActive) <= RIDER_SESSION_ACTIVE_MS;
+    const sameDevice =
+      existingIds.length > 0
+      && String((rider as any).activeDeviceName || "") === deviceName
+      && String((rider as any).activeDevicePlatform || "") === platform;
+    const stuckPending =
+      (rider as any).loginAlert
+      && (rider as any).loginAlert.status === "pending"
+      && !(rider as any).loginAlert.resolved;
+
+    if (!previousSessionId || !otherStillActive || sameDevice || stuckPending) {
+      await db.patch(
+        rider._id,
+        activateRiderSessionPatch(sessionId, now, deviceName, location, platform) as any,
+      );
+      return {
+        success: true,
+        riderExists: true,
+        rider: safeRider,
+        sessionId,
+        pendingApproval: false,
+      };
+    }
+
+    const expiresAt = now + RIDER_LOGIN_ALERT_TTL_MS;
+    const alert = {
+      sessionId,
+      previousSessionId,
+      deviceName,
+      location,
+      platform: platform || undefined,
+      at: now,
+      expiresAt,
+      status: "pending" as const,
+      resolved: false,
+    };
+    await db.patch(rider._id, { loginAlert: alert } as any);
+
+    try {
+      await scheduler.runAfter(RIDER_LOGIN_ALERT_TTL_MS, internal.riders.expireRiderLoginAlert, {
+        email: String(rider.email),
+        sessionId,
+      });
+    } catch { /* optional */ }
+
+    if (rider.email) {
+      try {
+        await scheduler.runAfter(0, internal.webPush.sendToEmail, {
+          email: String(rider.email).toLowerCase(),
+          title: "New login to your DKMerch rider account",
+          body: `${deviceName} · ${location}. Confirm within 60s if this was you.`,
+          url: "/rider?open=loginAlert",
+        });
+      } catch { /* push optional */ }
+    }
 
     return {
       success: true,
       riderExists: true,
-      rider: {
-        _id: rider._id,
-        name: rider.fullName,
-        email: rider.email,
-        role: "rider",
-        status: rider.status,
-        dkRiderId: rider.dkRiderId,
-      },
-      sessionId: newSessionId,
+      rider: safeRider,
+      sessionId,
+      pendingApproval: true,
+      expiresAt,
     };
+  },
+});
+
+export const expireRiderLoginAlert = internalMutation({
+  args: {
+    email: v.string(),
+    sessionId: v.string(),
+  },
+  handler: async ({ db }, { email, sessionId }) => {
+    const rider = await db
+      .query("riderApplications")
+      .withIndex("by_email", q => q.eq("email", email))
+      .first();
+    if (!rider) return { success: false };
+    const sid = String(sessionId || "").trim();
+    const alert = (rider as any).loginAlert;
+    if (!alert || String(alert.sessionId) !== sid) return { success: true, skipped: true };
+    if (alert.resolved || alert.status !== "pending") return { success: true, skipped: true };
+    await db.patch(rider._id, {
+      loginAlert: { ...alert, status: "denied", resolved: true },
+    } as any);
+    return { success: true, denied: true };
   },
 });
 
@@ -314,15 +466,227 @@ export const checkRiderSession = query({
       .first();
 
     if (!rider) return { valid: false, reason: "rider_not_found" };
-    if (!rider.activeSessionId) return { valid: true };
+    const ids = getRiderSessionIds(rider);
+    if (ids.length === 0) return { valid: true, reason: "legacy" };
 
-    const isValid = rider.activeSessionId === sessionId;
+    const sid = String(sessionId || "").trim();
+    const isValid = ids.includes(sid);
     return {
       valid: isValid,
       reason: isValid ? "ok" : "new_device_logged_in",
       activeDeviceAt: rider.activeDeviceAt,
       kickedAt: rider.kickedAt ?? null,
     };
+  },
+});
+
+export const getPendingRiderLoginAlert = query({
+  args: { email: v.string() },
+  handler: async ({ db }, { email }) => {
+    const rider = await db
+      .query("riderApplications")
+      .withIndex("by_email", q => q.eq("email", email))
+      .first();
+    if (!rider) return null;
+    const alert = (rider as any).loginAlert;
+    if (!alert || alert.resolved || alert.status !== "pending") return null;
+    if (isRiderLoginAlertExpired(alert)) return null;
+    return alert;
+  },
+});
+
+export const getRiderLoginApprovalStatus = query({
+  args: {
+    email: v.string(),
+    sessionId: v.string(),
+  },
+  handler: async ({ db }, { email, sessionId }) => {
+    const sid = String(sessionId || "").trim();
+    if (!sid) return { status: "missing" as const };
+    const rider = await db
+      .query("riderApplications")
+      .withIndex("by_email", q => q.eq("email", email))
+      .first();
+    if (!rider) return { status: "missing" as const };
+    const alert = (rider as any).loginAlert;
+    if (alert && String(alert.sessionId) === sid) {
+      let st = alert.status || (alert.resolved ? "approved" : "pending");
+      if (st === "pending" && isRiderLoginAlertExpired(alert)) st = "denied";
+      return {
+        status: st,
+        deviceName: alert.deviceName,
+        location: alert.location,
+        at: alert.at,
+        expiresAt: alert.expiresAt ?? ((Number(alert.at) || 0) + RIDER_LOGIN_ALERT_TTL_MS),
+      };
+    }
+    if (getRiderSessionIds(rider).includes(sid)) {
+      return { status: "approved" as const };
+    }
+    return { status: "denied" as const };
+  },
+});
+
+export const confirmRiderLoginAlert = mutation({
+  args: {
+    email: v.string(),
+    sessionId: v.string(),
+  },
+  handler: async ({ db }, { email, sessionId }) => {
+    const rider = await db
+      .query("riderApplications")
+      .withIndex("by_email", q => q.eq("email", email))
+      .first();
+    if (!rider) return { success: false, message: "Account not found." };
+    const alert = (rider as any).loginAlert;
+    if (!alert || String(alert.sessionId) !== String(sessionId)) {
+      return { success: false, message: "No pending login found." };
+    }
+    if (alert.status !== "pending" || alert.resolved) {
+      return { success: false, message: "This login request already ended." };
+    }
+    if (isRiderLoginAlertExpired(alert)) {
+      await db.patch(rider._id, {
+        loginAlert: { ...alert, status: "denied", resolved: true },
+      } as any);
+      return { success: false, message: "Login request timed out." };
+    }
+    const newId = String(alert.sessionId);
+    const prevId = alert.previousSessionId ? String(alert.previousSessionId) : "";
+    const ids = getRiderSessionIds(rider);
+    if (prevId && !ids.includes(prevId)) ids.push(prevId);
+    if (!ids.includes(newId)) ids.push(newId);
+    await db.patch(rider._id, {
+      activeSessionId: newId,
+      activeSessionIds: ids,
+      activeDeviceAt: Date.now(),
+      activeDeviceName: alert.deviceName,
+      activeDeviceLocation: alert.location,
+      activeDevicePlatform: alert.platform,
+      kickedAt: undefined,
+      loginAlert: { ...alert, status: "approved", resolved: true },
+    } as any);
+    return { success: true };
+  },
+});
+
+export const denyRiderLoginAlert = mutation({
+  args: {
+    email: v.string(),
+    newSessionId: v.string(),
+  },
+  handler: async ({ db, scheduler }, { email, newSessionId }) => {
+    const rider = await db
+      .query("riderApplications")
+      .withIndex("by_email", q => q.eq("email", email))
+      .first();
+    if (!rider) return { success: false, message: "Account not found." };
+    const alert = (rider as any).loginAlert;
+    const neu = String(newSessionId || "").trim();
+    if (!neu) return { success: false, message: "Invalid session." };
+    if (alert && String(alert.sessionId) === neu) {
+      await db.patch(rider._id, {
+        loginAlert: { ...alert, status: "denied", resolved: true },
+      } as any);
+    }
+    if (rider.email) {
+      try {
+        await scheduler.runAfter(0, internal.webPush.sendToEmail, {
+          email: String(rider.email).toLowerCase(),
+          title: "Login blocked",
+          body: "A rider login attempt was denied. If this wasn't you, change your password.",
+          url: "/rider",
+        });
+      } catch { /* optional */ }
+    }
+    return { success: true, revoked: true };
+  },
+});
+
+export const cancelPendingRiderLogin = mutation({
+  args: {
+    email: v.string(),
+    sessionId: v.string(),
+  },
+  handler: async ({ db }, { email, sessionId }) => {
+    const rider = await db
+      .query("riderApplications")
+      .withIndex("by_email", q => q.eq("email", email))
+      .first();
+    if (!rider) return { success: false };
+    const sid = String(sessionId || "").trim();
+    const alert = (rider as any).loginAlert;
+    if (alert && String(alert.sessionId) === sid) {
+      await db.patch(rider._id, {
+        loginAlert: undefined,
+        activeDeviceAt: 0,
+      } as any);
+    } else {
+      await db.patch(rider._id, {
+        loginAlert: undefined,
+        activeDeviceAt: 0,
+      } as any);
+    }
+    return { success: true };
+  },
+});
+
+export const touchRiderSession = mutation({
+  args: {
+    email: v.string(),
+    sessionId: v.string(),
+  },
+  handler: async ({ db }, { email, sessionId }) => {
+    const rider = await db
+      .query("riderApplications")
+      .withIndex("by_email", q => q.eq("email", email))
+      .first();
+    if (!rider) return { success: false };
+    const sid = String(sessionId || "").trim();
+    if (!getRiderSessionIds(rider).includes(sid)) return { success: false };
+    await db.patch(rider._id, { activeDeviceAt: Date.now() } as any);
+    return { success: true };
+  },
+});
+
+export const endRiderSession = mutation({
+  args: {
+    email: v.string(),
+    sessionId: v.optional(v.string()),
+  },
+  handler: async ({ db }, { email, sessionId }) => {
+    const rider = await db
+      .query("riderApplications")
+      .withIndex("by_email", q => q.eq("email", email))
+      .first();
+    if (!rider) return { success: false };
+    const sid = String(sessionId || "").trim();
+    const ids = getRiderSessionIds(rider);
+    if (sid) {
+      if (!ids.includes(sid)) return { success: true, cleared: false };
+      const remaining = ids.filter((s) => s !== sid);
+      if (remaining.length === 0) {
+        await db.patch(rider._id, {
+          activeSessionId: undefined,
+          activeSessionIds: undefined,
+          activeDeviceAt: undefined,
+          loginAlert: undefined,
+        } as any);
+      } else {
+        await db.patch(rider._id, {
+          activeSessionId: remaining[0],
+          activeSessionIds: remaining,
+        } as any);
+      }
+      return { success: true, cleared: true };
+    }
+    await db.patch(rider._id, {
+      activeSessionId: undefined,
+      activeSessionIds: undefined,
+      activeDeviceAt: undefined,
+      loginAlert: undefined,
+    } as any);
+    return { success: true, cleared: true };
   },
 });
 

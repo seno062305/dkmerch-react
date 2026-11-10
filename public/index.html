@@ -48,8 +48,13 @@
     /* First paint = pink under splash only; app-ready restores white page bg */
     html, body {
       margin: 0;
-      background: #fc1268;
       min-height: 100%;
+      background: #fc1268;
+    }
+    html.app-ready,
+    html.app-ready body,
+    body.app-ready {
+      background: #ffffff !important;
     }
     html.app-ready,
     body.app-ready {
