@@ -22,20 +22,28 @@ function toUtcMs(dateStr, timeStr) {
 
 function pickActivePromo(promos, nowMs) {
   if (!promos || promos.length === 0) return null;
-  const valid = promos.filter(p => {
-    if (!p.isActive) return false;
-    const startMs = toUtcMs(p.startDate, p.startTime || '00:00');
-    const endMs   = toUtcMs(p.endDate,   p.endTime   || '23:59');
-    if (startMs && nowMs < startMs) return false;
-    if (endMs   && nowMs > endMs)   return false;
-    return true;
-  });
-  if (valid.length === 0) return null;
-  return valid.sort((a, b) => {
-    const aEnd = toUtcMs(a.endDate, a.endTime || '23:59') ?? Infinity;
-    const bEnd = toUtcMs(b.endDate, b.endTime || '23:59') ?? Infinity;
-    return aEnd - bEnd;
-  })[0];
+
+  const withWindow = promos
+    .filter(p => p?.isActive)
+    .map(p => {
+      const startMs = toUtcMs(p.startDate, p.startTime || '00:00');
+      const endMs   = toUtcMs(p.endDate,   p.endTime   || '23:59');
+      const live     = (!startMs || nowMs >= startMs) && (!endMs || nowMs <= endMs);
+      const upcoming = startMs != null && nowMs < startMs && (!endMs || endMs > nowMs);
+      return { promo: p, startMs, endMs, live, upcoming };
+    })
+    .filter(x => x.live || x.upcoming);
+
+  if (withWindow.length === 0) return null;
+
+  // Prefer a live promo (soonest end); else soonest upcoming start
+  const live = withWindow.filter(x => x.live).sort((a, b) => (a.endMs ?? Infinity) - (b.endMs ?? Infinity));
+  if (live.length) return { ...live[0].promo, _carouselPhase: 'live' };
+
+  const upcoming = withWindow
+    .filter(x => x.upcoming)
+    .sort((a, b) => (a.startMs ?? Infinity) - (b.startMs ?? Infinity));
+  return upcoming.length ? { ...upcoming[0].promo, _carouselPhase: 'upcoming' } : null;
 }
 
 function isPromoExpired(promo, nowMs) {
@@ -147,7 +155,7 @@ const Home = () => {
   const allOrders = useQuery(api.orders.getAllOrders) ?? [];
 
   useEffect(() => {
-    const id = setInterval(() => setNowMs(Date.now()), 10000);
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
 
@@ -228,10 +236,13 @@ const Home = () => {
     ? {
         image: 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80',
         title: `🎉 ${activePromo.name} Promo`,
-        description: `Use code: ${activePromo.code} · ${activePromo.discount}% off · Max ₱${activePromo.maxDiscount.toLocaleString()} discount`,
-        buttonText: 'Shop Now',
+        description: activePromo._carouselPhase === 'upcoming'
+          ? `Coming soon · Use code: ${activePromo.code} · ${activePromo.discount}% off${activePromo.maxDiscount != null ? ` · Max ₱${Number(activePromo.maxDiscount).toLocaleString()}` : ''}`
+          : `Use code: ${activePromo.code} · ${activePromo.discount}% off${activePromo.maxDiscount != null ? ` · Max ₱${Number(activePromo.maxDiscount).toLocaleString()}` : ''}`,
+        buttonText: activePromo._carouselPhase === 'upcoming' ? 'View Group' : 'Shop Now',
         buttonIcon: 'tag',
         isPromo: true,
+        promoPhase:     activePromo._carouselPhase || 'live',
         promoCode:      activePromo.code,
         promoGroup:     activePromo.name,
         promoStartDate: activePromo.startDate,
@@ -247,13 +258,14 @@ const Home = () => {
   // ── Add to Cart ──
   // NOTE: No window.confirm here — ProductModal already handles confirmation.
   // This is only called via ProductModal's onAddToCart prop.
-  const handleAddToCart = (product) => {
+  const handleAddToCart = async (product) => {
     if (product.stock === 0 && !product.isPreOrder) {
       showNotification('Product is out of stock', 'error');
       return;
     }
-    addToCartMutation(product);
+    const result = await addToCartMutation(product);
     showNotification(`${product.name} added to cart!`, 'success');
+    return result;
   };
 
   // ── Add to Wishlist — with confirmation ──

@@ -3,7 +3,16 @@ import { action, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 
-const SITE_URL = process.env.SITE_URL || "https://dkmerchwebsite.vercel.app";
+const PUBLIC_SITE_URL = "https://dkmerchwebsite.vercel.app";
+
+/** Always prefer the live Vercel site for customer-facing email links (never localhost). */
+function resolveSiteUrl(): string {
+  const raw = String(process.env.SITE_URL || PUBLIC_SITE_URL).trim().replace(/\/$/, "");
+  if (!raw || /localhost|127\.0\.0\.1/i.test(raw)) return PUBLIC_SITE_URL;
+  return raw;
+}
+
+const SITE_URL = resolveSiteUrl();
 
 const TEST_EMAIL = "dkmerchtest@gmail.com";
 const IS_TEST_MODE = false;

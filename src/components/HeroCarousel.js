@@ -34,18 +34,18 @@ function fmtDate(dateStr) {
 }
 
 // ── Countdown hook — anchored to Convex server time ──
-const useCountdown = (endDateStr, endTimeStr, serverNowMs, fetchedAtMs) => {
+const useCountdown = (targetDateStr, targetTimeStr, serverNowMs, fetchedAtMs) => {
   const [timeLeft, setTimeLeft] = useState(null);
 
   useEffect(() => {
-    if (!endDateStr || serverNowMs == null) return;
+    if (!targetDateStr || serverNowMs == null) return;
 
-    const endMs = toUtcMs(endDateStr, endTimeStr || '23:59');
+    const targetMs = toUtcMs(targetDateStr, targetTimeStr || '23:59');
 
     const calcTime = () => {
       // Estimate current server time: server anchor + elapsed wall clock time
       const nowMs = serverNowMs + (Date.now() - fetchedAtMs);
-      const diff = endMs - nowMs;
+      const diff = targetMs - nowMs;
       if (diff <= 0) return { expired: true };
       return {
         expired: false,
@@ -59,19 +59,30 @@ const useCountdown = (endDateStr, endTimeStr, serverNowMs, fetchedAtMs) => {
     setTimeLeft(calcTime());
     const id = setInterval(() => setTimeLeft(calcTime()), 1000);
     return () => clearInterval(id);
-  }, [endDateStr, endTimeStr, serverNowMs, fetchedAtMs]);
+  }, [targetDateStr, targetTimeStr, serverNowMs, fetchedAtMs]);
 
   return timeLeft;
 };
 
 // ── Countdown display ──
-const CountdownTimer = ({ endDate, endTime, serverNowMs, fetchedAtMs }) => {
-  const t = useCountdown(endDate, endTime, serverNowMs, fetchedAtMs);
+const CountdownTimer = ({
+  endDate, endTime, startDate, startTime, phase = 'live', serverNowMs, fetchedAtMs,
+}) => {
+  const upcoming = phase === 'upcoming';
+  const targetDate = upcoming ? startDate : endDate;
+  const targetTime = upcoming ? (startTime || '00:00') : (endTime || '23:59');
+  const t = useCountdown(targetDate, targetTime, serverNowMs, fetchedAtMs);
   if (!t) return null;
-  if (t.expired) return <div className="promo-countdown expired">⏰ Promo has ended</div>;
+  if (t.expired) {
+    return (
+      <div className="promo-countdown expired">
+        {upcoming ? '🎉 Promo is live — refresh to redeem' : '⏰ Promo has ended'}
+      </div>
+    );
+  }
   return (
-    <div className="promo-countdown">
-      <span className="countdown-label">Ends in:</span>
+    <div className={`promo-countdown${upcoming ? ' promo-countdown-upcoming' : ''}`}>
+      <span className="countdown-label">{upcoming ? 'Starts in:' : 'Ends in:'}</span>
       <div className="countdown-blocks">
         {t.days > 0 && (
           <div className="countdown-block">
@@ -84,11 +95,11 @@ const CountdownTimer = ({ endDate, endTime, serverNowMs, fetchedAtMs }) => {
           <span className="countdown-unit">h</span>
         </div>
         <div className="countdown-block">
-          <span className="countdown-num">{String(t.minutes).padStart(2, '00')}</span>
+          <span className="countdown-num">{String(t.minutes).padStart(2, '0')}</span>
           <span className="countdown-unit">m</span>
         </div>
         <div className="countdown-block">
-          <span className="countdown-num">{String(t.seconds).padStart(2, '00')}</span>
+          <span className="countdown-num">{String(t.seconds).padStart(2, '0')}</span>
           <span className="countdown-unit">s</span>
         </div>
       </div>
@@ -180,7 +191,10 @@ const HeroCarousel = ({ slides }) => {
   const serverTimeData = useQuery(api.promos.getServerTime);
   const serverNowMs  = serverTimeData?.now ?? null;
   // Record wall-clock time when we received server time
-  const [fetchedAtMs] = useState(() => Date.now());
+  const [fetchedAtMs, setFetchedAtMs] = useState(() => Date.now());
+  useEffect(() => {
+    if (serverTimeData?.now != null) setFetchedAtMs(Date.now());
+  }, [serverTimeData?.now]);
 
   const [currentSlide, setCurrentSlide]   = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
@@ -276,7 +290,9 @@ const HeroCarousel = ({ slides }) => {
 
               <div className="carousel-content">
                 {slide.isPromo && (
-                  <div className="promo-badge">🔥 LIMITED TIME PROMO</div>
+                  <div className="promo-badge">
+                    {slide.promoPhase === 'upcoming' ? '⏳ COMING SOON' : '🔥 LIMITED TIME PROMO'}
+                  </div>
                 )}
 
                 {slide.isPromo && slide.promoGroup && (
@@ -300,14 +316,20 @@ const HeroCarousel = ({ slides }) => {
                 )}
 
                 {/* ── Accurate countdown (server-time anchored) ── */}
-                {slide.isPromo && slide.promoEndDate && serverNowMs != null && (
+                {slide.isPromo && serverNowMs != null && (
+                  (slide.promoPhase === 'upcoming' && slide.promoStartDate) ||
+                  (slide.promoPhase !== 'upcoming' && slide.promoEndDate)
+                ) ? (
                   <CountdownTimer
+                    phase={slide.promoPhase || 'live'}
+                    startDate={slide.promoStartDate}
+                    startTime={slide.promoStartTime}
                     endDate={slide.promoEndDate}
                     endTime={slide.promoEndTime}
                     serverNowMs={serverNowMs}
                     fetchedAtMs={fetchedAtMs}
                   />
-                )}
+                ) : null}
 
                 {slide.isPromo && slide.promoCode && (
                   <div className="promo-code-pill">

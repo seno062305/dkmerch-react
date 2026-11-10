@@ -44,7 +44,10 @@ export const createPaymentLink = action({
     if (!secretKey) throw new Error("PayMongo secret key not configured");
 
     const encoded = toBase64(`${secretKey}:`);
-    const baseUrl = process.env.SITE_URL || "https://dkmerchwebsite.vercel.app";
+    const rawSite = String(process.env.SITE_URL || "https://dkmerchwebsite.vercel.app").trim().replace(/\/$/, "");
+    const baseUrl = (!rawSite || /localhost|127\.0\.0\.1/i.test(rawSite))
+      ? "https://dkmerchwebsite.vercel.app"
+      : rawSite;
     const methodTypes = paymentMethodType
       ? [paymentMethodType]
       : ["gcash", "paymaya"];

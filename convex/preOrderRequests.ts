@@ -10,7 +10,11 @@ import {
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 
-const SITE_URL = process.env.SITE_URL || "https://dkmerchwebsite.vercel.app";
+const PUBLIC_SITE_URL = "https://dkmerchwebsite.vercel.app";
+const _rawSite = String(process.env.SITE_URL || PUBLIC_SITE_URL).trim().replace(/\/$/, "");
+const SITE_URL = (!_rawSite || /localhost|127\.0\.0\.1/i.test(_rawSite))
+  ? PUBLIC_SITE_URL
+  : _rawSite;
 
 // ── Helper: convert relative image path to absolute URL ──
 function resolveImageUrl(image: string): string {
