@@ -436,6 +436,23 @@ header {
 }
 
 @media (max-width: 768px) {
+  /*
+   * body { overflow-x: hidden } breaks position:sticky on mobile Safari.
+   * Use fixed so the top bar stays pinned while scrolling.
+   */
+  header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+  }
+
+  /* Reserve space so page content starts below the fixed header */
+  .App:has(> header) {
+    padding-top: calc(74px + env(safe-area-inset-top, 0px));
+  }
+
   /* Switch back to flexbox on mobile */
   .header-inner {
     display: flex;
@@ -580,6 +597,9 @@ header {
 }
 
 @media (max-width: 480px) {
+  .App:has(> header) {
+    padding-top: calc(66px + env(safe-area-inset-top, 0px));
+  }
   .header-inner { padding: 0 0.5rem; gap: 0.35rem; }
   .header-actions { gap: 0.2rem; }
   .header-action-item { padding: 0.25rem; }
