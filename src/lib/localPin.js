@@ -2,12 +2,14 @@
 import { hashPin, isPlainPin } from "./pinHash";
 
 const keyFor = (userId) => `dkmerch_pin_${userId}`;
+const lenKeyFor = (userId) => `dkmerch_pin_len_${userId}`;
 
 export async function saveLocalPin(userId, pin) {
   if (!userId || !/^\d{4,6}$/.test(pin)) return false;
   try {
     const hashed = await hashPin(pin);
     localStorage.setItem(keyFor(userId), hashed);
+    localStorage.setItem(lenKeyFor(userId), String(pin.length));
     return true;
   } catch {
     return false;
@@ -23,6 +25,16 @@ export function getLocalPin(userId) {
   }
 }
 
+/** How many digits the user set (4–6). Defaults to 4 when unknown. */
+export function getLocalPinLength(userId) {
+  if (!userId) return 4;
+  try {
+    const n = parseInt(localStorage.getItem(lenKeyFor(userId)) || "", 10);
+    if (n >= 4 && n <= 6) return n;
+  } catch { /* ignore */ }
+  return 4;
+}
+
 export function hasLocalPin(userId) {
   const p = getLocalPin(userId);
   if (!p) return false;
@@ -32,11 +44,14 @@ export function hasLocalPin(userId) {
 export async function verifyLocalPin(userId, pin) {
   const stored = getLocalPin(userId);
   if (!stored || !/^\d{4,6}$/.test(pin)) return false;
+  const expectedLen = getLocalPinLength(userId);
+  // If we know the length, require an exact match (stops “any shorter PIN” auto-accept)
+  if (localStorage.getItem(lenKeyFor(userId)) && pin.length !== expectedLen) return false;
   if (isPlainPin(stored)) {
     if (stored !== pin) return false;
-    // upgrade to hash
     try {
       localStorage.setItem(keyFor(userId), await hashPin(pin));
+      localStorage.setItem(lenKeyFor(userId), String(pin.length));
     } catch {}
     return true;
   }
@@ -48,6 +63,7 @@ export function clearLocalPin(userId) {
   if (!userId) return;
   try {
     localStorage.removeItem(keyFor(userId));
+    localStorage.removeItem(lenKeyFor(userId));
   } catch {}
 }
 
@@ -56,7 +72,7 @@ export async function savePinWithFallback(setUserPinMutation, userId, pin) {
   try {
     const result = await setUserPinMutation({ userId, pin });
     if (result?.success) {
-      await saveLocalPin(userId, pin); // keep local mirror (hashed)
+      await saveLocalPin(userId, pin);
       return { success: true, source: "convex", result };
     }
     if (await saveLocalPin(userId, pin)) {
@@ -82,20 +98,29 @@ export async function savePinWithFallback(setUserPinMutation, userId, pin) {
   }
 }
 
-/** Try Convex verifyLoginPin; fall back to localStorage. */
+/** Try Convex verifyLoginPin; only fall back to local when Convex is unreachable. */
 export async function verifyPinWithFallback(verifyLoginPinMutation, userId, pin) {
   try {
     const result = await verifyLoginPinMutation({ userId, pin });
+    // Trust the server when it responds — never override an Incorrect PIN with local
     if (result?.success) return { success: true, source: "convex", result };
-    if (await verifyLocalPin(userId, pin)) {
-      return { success: true, source: "local", result: { success: true } };
-    }
     return {
       success: false,
-      message: result?.needsPinSetup ? "No PIN yet — tap Reset PIN to create one." : (result?.message || "Incorrect PIN."),
+      message: result?.needsPinSetup
+        ? "No PIN yet — tap Forgot PIN to create one."
+        : (result?.message || "Incorrect PIN."),
       needsPinSetup: result?.needsPinSetup,
     };
-  } catch {
+  } catch (err) {
+    const msg = String(err?.message || err || "");
+    const missingApi =
+      msg.includes("Could not find") ||
+      msg.includes("verifyLoginPin") ||
+      msg.includes("Failed to fetch") ||
+      msg.includes("NetworkError");
+    if (!missingApi) {
+      return { success: false, message: "Incorrect PIN." };
+    }
     if (await verifyLocalPin(userId, pin)) {
       return { success: true, source: "local", result: { success: true } };
     }
@@ -104,7 +129,7 @@ export async function verifyPinWithFallback(verifyLoginPinMutation, userId, pin)
     }
     return {
       success: false,
-      message: "No PIN yet — tap Reset PIN to create one.",
+      message: "No PIN yet — tap Forgot PIN to create one.",
       needsPinSetup: true,
     };
   }

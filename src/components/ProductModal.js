@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useAuth } from '../context/AuthContext';
@@ -398,13 +399,24 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
 
   useEffect(() => {
     document.body.classList.add('product-modal-open');
-    return () => document.body.classList.remove('product-modal-open');
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.classList.remove('product-modal-open');
+      document.body.style.overflow = prevOverflow;
+    };
   }, []);
 
-  return (
+  return createPortal(
     <>
-      <div className="product-modal-overlay" onClick={handleRequestClose}>
-        <div className="product-modal-content" onClick={(e) => e.stopPropagation()}>
+      <div className="product-modal-overlay" onClick={handleRequestClose} role="presentation">
+        <div
+          className="product-modal-content"
+          onClick={(e) => e.stopPropagation()}
+          role="dialog"
+          aria-modal="true"
+          aria-label={product?.name || 'Product details'}
+        >
 
           {cartToast && (
             <div className="modal-cart-toast">
@@ -741,7 +753,8 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
         </div>
       )}
 
-    </>
+    </>,
+    document.body
   );
 };
 

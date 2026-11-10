@@ -2,6 +2,12 @@
    PRODUCT MODAL
    ══════════════════════════════════════ */
 
+/* Hide chrome under the portaled product modal */
+body.product-modal-open .customer-bottom-nav {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
 .product-modal-overlay {
   position: fixed;
   inset: 0;
@@ -9,11 +15,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  /* above Header (z-index 25000–27000) so close button isn't clipped */
-  z-index: 28000;
+  /* Portaled to body — above sticky header (25k–27k) + bottom nav */
+  z-index: 100040;
   padding: 20px;
   box-sizing: border-box;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 .product-modal-content {
@@ -21,14 +27,16 @@
   border-radius: 16px;
   width: 100%;
   max-width: 860px;
-  max-height: 90vh;
+  max-height: min(90vh, 90dvh);
   position: relative;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
   animation: modalSlideIn 0.3s ease;
   margin: auto;
+  /* Shell stays fixed; inner grid scrolls */
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 /* Keep close button fully visible inside the modal */
@@ -594,8 +602,8 @@ body.product-modal-open .dk-chat-fab-stack {
 .modal-lightbox {
   position: fixed; inset: 0;
   background: rgba(0, 0, 0, 0.92);
-  /* Must sit above .product-modal-overlay (20000) or image "sticks" on the page after close */
-  z-index: 21000;
+  /* Above portaled product modal (100040) */
+  z-index: 100060;
   display: flex; align-items: center; justify-content: center;
   padding: 20px; cursor: pointer;
   animation: fadeIn 0.2s ease;
@@ -632,28 +640,30 @@ body.product-modal-open .dk-chat-fab-stack {
    ══════════════════════════════════════ */
 @media (max-width: 768px) {
   .product-modal-overlay {
-    padding: 0;
-    align-items: flex-end;
-    background: rgba(15, 23, 42, 0.45);
-    /* cover full viewport including under sticky header */
-    z-index: 28000;
+    /* Centered fixed popup — same for in-stock and out-of-stock */
+    padding: max(12px, env(safe-area-inset-top, 0px)) 12px max(12px, env(safe-area-inset-bottom, 0px));
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 23, 42, 0.55);
+    z-index: 100040;
+    overflow: hidden;
   }
 
   .product-modal-content {
-    border-radius: 18px 18px 0 0;
-    max-width: 100%;
+    border-radius: 16px;
+    max-width: 520px;
     width: 100%;
-    max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 12px);
+    max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 24px);
     min-height: 0;
-    overflow-x: hidden;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    box-shadow: 0 -12px 40px rgba(15, 23, 42, 0.2);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 50px rgba(15, 23, 42, 0.35);
   }
 
   .product-modal-content .modal-close {
     position: absolute;
-    top: max(12px, env(safe-area-inset-top, 0px));
+    top: 12px;
     right: 12px;
     left: auto;
     float: none;
@@ -665,20 +675,23 @@ body.product-modal-open .dk-chat-fab-stack {
 
   .modal-cart-toast { top: 52px; }
 
-  /* One scroll parent only — nested overflow was clipping the product image */
+  /* Scroll only the inner content — modal shell stays fixed */
   .modal-grid {
     display: flex;
     flex-direction: column;
     grid-template-columns: none;
+    flex: 1 1 auto;
     min-height: 0;
     max-height: none !important;
-    overflow: visible !important;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     border-radius: 0;
   }
 
   .modal-image-section {
     border-radius: 0;
-    /* Extra top padding so image clears sheet radius + close button */
+    /* Extra top padding so image clears close button */
     padding: 52px 16px 14px;
     min-height: 0;
     width: 100%;
@@ -731,10 +744,19 @@ body.product-modal-open .dk-chat-fab-stack {
   .modal-left-rating-count { font-size: 11px; }
 
   .modal-details-section {
-    padding: 14px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+    padding: 14px 16px 24px;
     max-height: none !important;
     overflow: visible !important;
     flex: 1 0 auto;
+  }
+
+  .modal-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    background: linear-gradient(180deg, rgba(255,255,255,0) 0%, #fff 28%);
+    padding-top: 12px;
+    padding-bottom: 4px;
   }
 
   .modal-details-section h2 { font-size: 15px; }
@@ -759,7 +781,7 @@ body.product-modal-open .dk-chat-fab-stack {
 .buynow-qty-overlay {
   position: fixed;
   inset: 0;
-  z-index: 100050;
+  z-index: 100055;
   background: rgba(15, 10, 20, 0.55);
   backdrop-filter: blur(4px);
   display: flex;
@@ -862,7 +884,9 @@ body.product-modal-open .dk-chat-fab-stack {
 }
 
 @media (max-width: 480px) {
-  .product-modal-content { max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 8px); }
+  .product-modal-content {
+    max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 16px);
+  }
   .modal-image-section { padding: 50px 14px 12px; }
   .modal-product-img {
     width: min(170px, 56vw) !important;

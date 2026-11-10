@@ -7,8 +7,8 @@ import { useNavigate } from "react-router-dom";
 import { useMutation, useAction, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { QRCodeSVG } from "qrcode.react";
-import { hasLocalPin, savePinWithFallback, verifyPinWithFallback, clearLocalPin } from "../lib/localPin";
-import { getDeviceUnlock, clearDeviceUnlock } from "../lib/deviceUnlock";
+import { hasLocalPin, getLocalPinLength, savePinWithFallback, verifyPinWithFallback, clearLocalPin } from "../lib/localPin";
+import { getDeviceUnlock, clearDeviceUnlock, markExplicitLogout } from "../lib/deviceUnlock";
 import { PRODUCTION_SITE_URL } from "./InstallAppModal";
 import { useNotification } from "../context/NotificationContext";
 import { useCloseOnHistoryBack } from "../hooks/useCloseOnHistoryBack";
@@ -131,7 +131,7 @@ function clearPinResetOtpCode(userId) {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
-const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
+const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearUnlockPrompt }) => {
   const { login, completeLogin } = useAuth();
   const { showNotification } = useNotification();
   const navigate = useNavigate();
@@ -144,6 +144,8 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
   const rememberedLocalPin = !!(remembered?._id && hasLocalPin(remembered._id));
   // Only jump straight to Enter PIN when this device already has a saved PIN
   const startWithPin = !!(preferPinUnlock && remembered?._id && rememberedLocalPin);
+  /** Block closing / browsing until login succeeds (PIN gate or Use another account). */
+  const [mustAuthenticate, setMustAuthenticate] = useState(!!preferPinUnlock);
   const [view, setView] = useState(startWithPin ? "pin" : "login");
   const [qsiToken, setQsiToken] = useState("");
   const [qsiExpiresAt, setQsiExpiresAt] = useState(0);
@@ -311,7 +313,14 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
     };
   }, []);
 
-  useCloseOnHistoryBack(true, onClose, "loginModal");
+  useCloseOnHistoryBack(
+    true,
+    () => {
+      if (mustAuthenticate || preferPinUnlock) return;
+      onClose?.();
+    },
+    "loginModal"
+  );
 
   useEffect(() => {
     const p = newPassword;
@@ -587,6 +596,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
   };
 
   const finishLogin = (role) => {
+    setMustAuthenticate(false);
     if (onLoginSuccess) onLoginSuccess(role);
     else onClose();
   };
@@ -612,16 +622,29 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
     setView("createPin");
   };
 
+  const pinDigitCount = (() => {
+    if (pendingUser?._id && hasLocalPin(pendingUser._id)) {
+      return getLocalPinLength(pendingUser._id);
+    }
+    const fromServer = Number(unlockPinStatus?.pinLength);
+    if (Number.isFinite(fromServer) && fromServer >= 4 && fromServer <= 6) return fromServer;
+    return 4;
+  })();
+
   const handleVerifyPin = async () => {
     const pin = pinValue;
     if (!pendingUser?._id) return;
     if (!accountHasPin && !hasLocalPin(pendingUser._id)) {
-      setPinError("No PIN yet — tap Reset PIN below to create one.");
+      setPinError("No PIN yet — tap Forgot PIN below to create one.");
       return;
     }
     if (pin.length < 4) {
       setPinError("Enter your PIN to continue.");
       return;
+    }
+    if (pin.length !== pinDigitCount && pinDigitCount >= 4) {
+      // Wait until full length is entered (auto-submit handles this)
+      if (pin.length < pinDigitCount) return;
     }
     setPinLoading(true);
     setPinError("");
@@ -637,16 +660,39 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
         return;
       }
       setAccountHasPin(true);
+      setMustAuthenticate(false);
       const done = await completeLogin(
         checked.result?.user || pendingUser,
         checked.source === "local" ? "Login with local PIN" : "Login with PIN"
       );
       finishLogin(done.role);
     } catch {
-      setPinError("Incorrect PIN. Try again, or tap Reset PIN.");
+      setPinError("Incorrect PIN. Try again, or tap Forgot PIN.");
+      setPinValue("");
     } finally {
       setPinLoading(false);
     }
+  };
+
+  const switchToAnotherAccount = () => {
+    markExplicitLogout();
+    clearDeviceUnlock();
+    // Keep local PIN hashes for accounts on this device — only clear unlock profile
+    setDeviceUnlockMode(false);
+    setAccountHasPin(false);
+    setPendingUser(null);
+    setPinValue("");
+    setPinError("");
+    setFormData({ email: "", password: "" });
+    setMustAuthenticate(true);
+    setView("login");
+    // Drop cold-start unlock flag but KEEP this modal open (do not browse without login)
+    try { onClearUnlockPrompt?.(); } catch { /* ignore */ }
+  };
+
+  const requestClose = () => {
+    if (mustAuthenticate || preferPinUnlock) return;
+    onClose?.();
   };
 
   const emailPinResetOtp = async (to, name, code) => {
@@ -983,22 +1029,21 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
     }
   };
 
-  if (showRegister) {
-    return <RegisterModal onClose={handleRegisterSuccess} />;
-  }
-
   const isLockedOut = loginCooldown > 0;
 
-  // Unlock pad: debounce verify so 5–6 digit PINs can keep typing past 4
+  // Unlock pad: submit only when the exact PIN length is entered
   useEffect(() => {
     if (!(view === "pin" && deviceUnlockMode)) return;
     if (pinLoading) return;
-    if (pinValue.length < 4 || pinValue.length > 6) return;
-    const delay = pinValue.length >= 6 ? 80 : 650;
-    const t = setTimeout(() => { handleVerifyPin(); }, delay);
+    if (pinValue.length !== pinDigitCount) return;
+    const t = setTimeout(() => { handleVerifyPin(); }, 120);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pinValue, view, deviceUnlockMode, pinLoading]);
+  }, [pinValue, view, deviceUnlockMode, pinLoading, pinDigitCount]);
+
+  if (showRegister) {
+    return <RegisterModal onClose={handleRegisterSuccess} />;
+  }
 
   // ════════════════════════════════════════════════════════════════════
   //  DEVICE UNLOCK — full-screen pink PIN (GCash-style), only after app close
@@ -1011,7 +1056,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
       .join("")
       .slice(0, 2)
       .toUpperCase() || "U";
-    const dots = 6;
+    const dots = pinDigitCount;
     return createPortal(
       <div className="pin-unlock-screen" role="dialog" aria-modal="true" aria-label="Enter PIN">
         <div className="pin-unlock-top">
@@ -1042,7 +1087,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
               key={n}
               type="button"
               className="pin-unlock-key"
-              disabled={pinLoading || pinValue.length >= 6}
+              disabled={pinLoading || pinValue.length >= dots}
               onClick={() => appendPinDigit(String(n))}
             >
               {n}
@@ -1052,7 +1097,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
           <button
             type="button"
             className="pin-unlock-key"
-            disabled={pinLoading || pinValue.length >= 6}
+            disabled={pinLoading || pinValue.length >= dots}
             onClick={() => appendPinDigit("0")}
           >
             0
@@ -1076,15 +1121,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
             type="button"
             className="pin-unlock-switch"
             disabled={pinLoading}
-            onClick={() => {
-              clearDeviceUnlock();
-              setDeviceUnlockMode(false);
-              setAccountHasPin(false);
-              setPendingUser(null);
-              setPinValue("");
-              setPinError("");
-              setView("login");
-            }}
+            onClick={switchToAnotherAccount}
           >
             Use another account
           </button>
@@ -1098,13 +1135,19 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
   //  RENDER — portal to body so product/header stacking never hides login
   // ════════════════════════════════════════════════════════════════════
   return createPortal(
-    <div className="modal-overlay login-modal-overlay" onClick={onClose} role="presentation">
+    <div
+      className={`modal-overlay login-modal-overlay${mustAuthenticate ? " login-modal-overlay--locked" : ""}`}
+      onClick={requestClose}
+      role="presentation"
+    >
       <div className="login-modal-content" onClick={(e) => e.stopPropagation()}>
-        <button className="modal-close-btn" onClick={onClose} aria-label="Close">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
+        {!mustAuthenticate && (
+          <button className="modal-close-btn" onClick={requestClose} aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        )}
 
         {/* ── REACTIVATION VIEW ─────────────────────────────────────── */}
         {view === "reactivate" && (
@@ -1496,7 +1539,10 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
                     className="signup-link"
                     style={{ color: "#9ca3af" }}
                     onClick={() => {
-                      if (deviceUnlockMode) clearDeviceUnlock();
+                      if (deviceUnlockMode || mustAuthenticate) {
+                        switchToAnotherAccount();
+                        return;
+                      }
                       setDeviceUnlockMode(false);
                       setAccountHasPin(false);
                       setPendingUser(null);

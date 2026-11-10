@@ -343,7 +343,10 @@ function AppContent() {
           {showLoginModal && (
             <LoginModal
               preferPinUnlock={!!needsDeviceUnlock}
+              onClearUnlockPrompt={() => clearDeviceUnlockPrompt?.()}
               onClose={() => {
+                // PIN / auth gate — cannot dismiss to browse without signing in
+                if (needsDeviceUnlock) return;
                 try { sessionStorage.removeItem('dk_login_customers_only'); } catch { /* ignore */ }
                 clearDeviceUnlockPrompt?.();
                 setShowLoginModal(false);

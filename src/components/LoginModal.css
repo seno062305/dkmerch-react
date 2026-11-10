@@ -30,6 +30,11 @@ body.login-modal-open {
   pointer-events: auto !important;
 }
 
+/* Cannot dismiss while PIN gate / switch-account requires login */
+.login-modal-overlay--locked {
+  cursor: default;
+}
+
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }

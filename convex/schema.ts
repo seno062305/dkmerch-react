@@ -25,6 +25,8 @@ export default defineSchema({
     addressLng: v.optional(v.number()),
     // ── Login PIN (set after OTP; used instead of OTP on later logins) ──
     pin:                      v.optional(v.string()),
+    /** Digit count of the PIN the customer set (4–6) — for unlock pad dots */
+    pinLength:                v.optional(v.number()),
     loginOtp:                 v.optional(v.string()),
     loginOtpExpiresAt:        v.optional(v.number()),
     // ── Self-reactivation OTP ─────────────────

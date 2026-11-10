@@ -219,14 +219,17 @@ export const hasLoginPin = query({
   args: { userId: v.string() },
   handler: async ({ db }, { userId }) => {
     const id = String(userId || "").trim();
-    if (!id) return { hasPin: false };
+    if (!id) return { hasPin: false, pinLength: 4 };
     try {
       const user = await db.get(id as any);
-      if (!user || (user as any).role === "admin") return { hasPin: false };
+      if (!user || (user as any).role === "admin") return { hasPin: false, pinLength: 4 };
       const pin = (user as any).pin;
-      return { hasPin: !!(pin && String(pin).length >= 4) };
+      const hasPin = !!(pin && String(pin).length >= 4);
+      const len = Number((user as any).pinLength);
+      const pinLength = Number.isFinite(len) && len >= 4 && len <= 6 ? len : 4;
+      return { hasPin, pinLength };
     } catch {
-      return { hasPin: false };
+      return { hasPin: false, pinLength: 4 };
     }
   },
 });
@@ -291,10 +294,11 @@ export const setUserPin = mutation({
     const pinHash = await hashPin(pin);
     await db.patch(userId, {
       pin: pinHash,
+      pinLength: pin.length,
       loginOtp: undefined,
       loginOtpExpiresAt: undefined,
     } as any);
-    return { success: true, user: toSafeUser(user) };
+    return { success: true, user: toSafeUser(user), pinLength: pin.length };
   },
 });
 
@@ -316,6 +320,11 @@ export const verifyLoginPin = mutation({
     if (!PIN_RE.test(pin)) {
       return { success: false, message: "Incorrect PIN." };
     }
+    // If we know the saved length, require exact digit count
+    const savedLen = Number(user.pinLength);
+    if (Number.isFinite(savedLen) && savedLen >= 4 && savedLen <= 6 && pin.length !== savedLen) {
+      return { success: false, message: "Incorrect PIN." };
+    }
     const pinHash = await hashPin(pin);
     const match =
       user.pin === pinHash ||
@@ -325,9 +334,11 @@ export const verifyLoginPin = mutation({
       return { success: false, message: "Incorrect PIN." };
     }
     if (isPlainPin(user.pin)) {
-      await db.patch(userId, { pin: pinHash } as any);
+      await db.patch(userId, { pin: pinHash, pinLength: pin.length } as any);
+    } else if (!user.pinLength) {
+      await db.patch(userId, { pinLength: pin.length } as any);
     }
-    return { success: true, user: toSafeUser(user) };
+    return { success: true, user: toSafeUser(user), pinLength: user.pinLength || pin.length };
   },
 });
 
