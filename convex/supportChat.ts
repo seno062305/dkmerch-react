@@ -40,6 +40,7 @@ export const getOrCreateMyThread = mutation({
         customerName: args.customerName || existing.customerName,
         customerUserId: args.customerUserId || existing.customerUserId,
         status: "open",
+        archivedAt: 0,
         updatedAt: Date.now(),
       });
       return { threadId: existing._id };
@@ -146,6 +147,7 @@ export const sendCustomerMessage = mutation({
       lastMessagePreview: body || "📷 Image",
       unreadByAdmin: (thread.unreadByAdmin || 0) + 1,
       status: "open",
+      archivedAt: 0, // new customer message restores from archive
       updatedAt: now,
     });
     return { success: true, threadId: thread._id };
@@ -190,8 +192,47 @@ export const listThreadsForAdmin = query({
   args: {},
   handler: async ({ db }) => {
     const threads = await db.query("supportThreads").collect();
-    threads.sort((a: any, b: any) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0));
-    return threads;
+    const active = threads.filter((t: any) => !(t.archivedAt > 0));
+    active.sort((a: any, b: any) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0));
+    return active;
+  },
+});
+
+export const listArchivedThreadsForAdmin = query({
+  args: {},
+  handler: async ({ db }) => {
+    const threads = await db.query("supportThreads").collect();
+    const archived = threads.filter((t: any) => t.archivedAt > 0);
+    archived.sort((a: any, b: any) => (b.archivedAt || 0) - (a.archivedAt || 0));
+    return archived;
+  },
+});
+
+export const archiveThread = mutation({
+  args: { threadId: v.id("supportThreads") },
+  handler: async ({ db }, { threadId }) => {
+    const thread = await db.get(threadId);
+    if (!thread) throw new Error("Thread not found");
+    await db.patch(threadId, {
+      archivedAt: Date.now(),
+      status: "closed",
+      updatedAt: Date.now(),
+    });
+    return { success: true };
+  },
+});
+
+export const unarchiveThread = mutation({
+  args: { threadId: v.id("supportThreads") },
+  handler: async ({ db }, { threadId }) => {
+    const thread = await db.get(threadId);
+    if (!thread) throw new Error("Thread not found");
+    await db.patch(threadId, {
+      archivedAt: 0,
+      status: "open",
+      updatedAt: Date.now(),
+    });
+    return { success: true };
   },
 });
 
@@ -199,7 +240,9 @@ export const getAdminUnreadCount = query({
   args: {},
   handler: async ({ db }) => {
     const threads = await db.query("supportThreads").collect();
-    return threads.reduce((sum: number, t: any) => sum + (t.unreadByAdmin || 0), 0);
+    return threads
+      .filter((t: any) => !(t.archivedAt > 0))
+      .reduce((sum: number, t: any) => sum + (t.unreadByAdmin || 0), 0);
   },
 });
 

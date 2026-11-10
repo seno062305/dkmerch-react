@@ -394,11 +394,13 @@ export default defineSchema({
     unreadByAdmin: v.number(),
     unreadByCustomer: v.number(),
     status: v.string(), // open | closed
+    archivedAt: v.optional(v.number()),
     updatedAt: v.number(),
     createdAt: v.number(),
   })
     .index("by_customerEmail", ["customerEmail"])
-    .index("by_lastMessageAt", ["lastMessageAt"]),
+    .index("by_lastMessageAt", ["lastMessageAt"])
+    .index("by_archivedAt", ["archivedAt"]),
 
   supportMessages: defineTable({
     threadId: v.id("supportThreads"),
