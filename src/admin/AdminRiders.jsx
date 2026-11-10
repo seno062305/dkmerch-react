@@ -287,6 +287,7 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
   const routeTimerRef       = useRef(null);
   const lastPlottedRef      = useRef({ lat: null, lng: null });
   const lastRoutePlottedRef = useRef({ lat: null, lng: null });
+  const hasFittedRef        = useRef(false);
   const mapReadyRef         = useRef(false);
   const pollIntervalRef     = useRef(null);
 
@@ -453,8 +454,12 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
     const destLat = order?.addressLat;
     const destLng = order?.addressLng;
     if (destLat && destLng) drawRoute(lastKnownLat, lastKnownLng, destLat, destLng, true);
-
-    try { map.setView([lastKnownLat, lastKnownLng], 15, { animate: true }); } catch {}
+    else if (!hasFittedRef.current) {
+      try {
+        map.setView([lastKnownLat, lastKnownLng], 15, { animate: false });
+        hasFittedRef.current = true;
+      } catch {}
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location, isLive, hasLastKnown, mapReadyRef.current]);
 
@@ -476,12 +481,20 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
       const L = window.L; const map = mapObjRef.current;
       clearRoute();
 
+      const fitOnce = (points) => {
+        if (hasFittedRef.current) return;
+        try {
+          map.fitBounds(L.latLngBounds(points), { padding: [48, 48], maxZoom: 17, animate: false });
+          hasFittedRef.current = true;
+        } catch {}
+      };
+
       if (dashed) {
         try {
           routeLineRef.current = L.polyline([[lat, lng], [destLat, destLng]], {
             color: '#9ca3af', weight: 3, opacity: 0.75, dashArray: '8, 8'
           }).addTo(map);
-          map.fitBounds(L.latLngBounds([lat, lng], [destLat, destLng]), { padding: [48, 48], maxZoom: 17 });
+          fitOnce([[lat, lng], [destLat, destLng]]);
         } catch {}
         return;
       }
@@ -497,7 +510,7 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
           const line    = L.polyline(coords, { color: '#e53e3e', weight: 4.5, opacity: 0.92 }).addTo(map);
           routeLineRef.current = [outline, line];
           lastRoutePlottedRef.current = { lat, lng };
-          map.fitBounds(L.latLngBounds(coords), { padding: [48, 48], maxZoom: 17 });
+          fitOnce(coords);
         } else { throw new Error('no route'); }
       } catch (err) {
         if (err?.name === 'AbortError') return;
@@ -506,7 +519,7 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
             routeLineRef.current = window.L.polyline([[lat, lng], [destLat, destLng]], {
               color: '#e53e3e', weight: 4, opacity: 0.8, dashArray: '10, 8'
             }).addTo(mapObjRef.current);
-            mapObjRef.current.fitBounds(window.L.latLngBounds([lat, lng], [destLat, destLng]), { padding: [48, 48], maxZoom: 17 });
+            fitOnce([[lat, lng], [destLat, destLng]]);
           }
         } catch {}
       } finally {
@@ -548,14 +561,28 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
 
     const lastR = lastRoutePlottedRef.current;
     const movedFarFromRoute = !lastR.lat ||
-      Math.abs(lat - lastR.lat) > 0.00008 ||
-      Math.abs(lng - lastR.lng) > 0.00008;
+      Math.abs(lat - lastR.lat) > 0.0008 ||
+      Math.abs(lng - lastR.lng) > 0.0008;
     const noRoute = !routeLineRef.current;
+
+    // Camera fits once when rider first appears; later GPS ticks only move the pin
+    if (destLat && destLng && !hasFittedRef.current) {
+      try {
+        map.fitBounds(L.latLngBounds([lat, lng], [destLat, destLng]), {
+          padding: [48, 48], maxZoom: 17, animate: false,
+        });
+        hasFittedRef.current = true;
+      } catch {}
+    } else if (!destLat && !hasFittedRef.current) {
+      try {
+        map.setView([lat, lng], 16, { animate: false });
+        hasFittedRef.current = true;
+      } catch {}
+    }
 
     if (destLat && destLng && (noRoute || movedFarFromRoute)) {
       drawRoute(lat, lng, destLat, destLng, false);
     }
-    try { map.setView([lat, lng], Math.max(map.getZoom(), 17), { animate: true }); } catch {}
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location, isLive, hasLoc, drawRoute]);
 

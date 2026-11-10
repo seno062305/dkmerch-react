@@ -671,12 +671,6 @@ const CustomerMap = ({ orderId, allOrders, riderCoords, riderHeading }) => {
         prevRiderRef.current  = { lat: riderCoords.lat, lng: riderCoords.lng };
         prevHeadingRef.current = riderHeading;
 
-        if (routeDrawnRef.current && lastRouteRiderRef.current) {
-          const dLat = Math.abs(lastRouteRiderRef.current.lat - riderCoords.lat);
-          const dLng = Math.abs(lastRouteRiderRef.current.lng - riderCoords.lng);
-          if (dLat > 0.0005 || dLng > 0.0005) routeDrawnRef.current = false;
-        }
-
         if (!riderMarkerRef.current) {
           const riderIcon = L.divIcon({
             className: '',
@@ -701,10 +695,16 @@ const CustomerMap = ({ orderId, allOrders, riderCoords, riderHeading }) => {
           }
         }
 
+        // Fit camera only once; later GPS ticks move the pin only
         if (!routeDrawnRef.current) {
           routeDrawnRef.current = true;
           lastRouteRiderRef.current = { lat: riderCoords.lat, lng: riderCoords.lng };
-          try { mapInstanceRef.current.fitBounds([[riderCoords.lat, riderCoords.lng], [custLat, custLng]], { padding: [30, 30] }); } catch {}
+          try {
+            mapInstanceRef.current.fitBounds(
+              [[riderCoords.lat, riderCoords.lng], [custLat, custLng]],
+              { padding: [30, 30], animate: false, maxZoom: 17 }
+            );
+          } catch {}
           fetchRoute(riderCoords.lat, riderCoords.lng, custLat, custLng).then(latlngs => {
             if (unmountedRef.current || !latlngs || !mapInstanceRef.current) return;
             try {
@@ -714,10 +714,26 @@ const CustomerMap = ({ orderId, allOrders, riderCoords, riderHeading }) => {
               }).addTo(mapInstanceRef.current);
             } catch {}
           });
+        } else if (lastRouteRiderRef.current) {
+          const dLat = Math.abs(lastRouteRiderRef.current.lat - riderCoords.lat);
+          const dLng = Math.abs(lastRouteRiderRef.current.lng - riderCoords.lng);
+          // Redraw route quietly when rider moves ~90m+; do not re-fit the map
+          if (dLat > 0.0008 || dLng > 0.0008) {
+            lastRouteRiderRef.current = { lat: riderCoords.lat, lng: riderCoords.lng };
+            fetchRoute(riderCoords.lat, riderCoords.lng, custLat, custLng).then(latlngs => {
+              if (unmountedRef.current || !latlngs || !mapInstanceRef.current) return;
+              try {
+                if (routeLayerRef.current) mapInstanceRef.current.removeLayer(routeLayerRef.current);
+                routeLayerRef.current = L.polyline(latlngs, {
+                  color: '#fc1268', weight: 5, opacity: 0.8, lineJoin: 'round', lineCap: 'round',
+                }).addTo(mapInstanceRef.current);
+              } catch {}
+            });
+          }
         }
       } else if (!routeDrawnRef.current) {
         routeDrawnRef.current = true;
-        try { mapInstanceRef.current.setView([custLat, custLng], 16); } catch {}
+        try { mapInstanceRef.current.setView([custLat, custLng], 16, { animate: false }); } catch {}
       }
     };
 

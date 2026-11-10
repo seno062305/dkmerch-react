@@ -114,12 +114,13 @@ function FullscreenMapModal({ order, gpsCoords, onClose }) {
   const modalRiderRef   = useRef(null);
   const modalLastRouteRef = useRef({ rLat: null, rLng: null });
 
+  const modalFittedRef = useRef(false);
   const drawModalRoute = useCallback(async (map, rLat, rLng, dLat, dLng) => {
     if (!map || !window.L) return;
     const prev = modalLastRouteRef.current;
     const movedEnough = !prev.rLat ||
-      Math.abs(rLat - prev.rLat) > 0.00015 ||
-      Math.abs(rLng - prev.rLng) > 0.00015;
+      Math.abs(rLat - prev.rLat) > 0.0008 ||
+      Math.abs(rLng - prev.rLng) > 0.0008;
     if (!movedEnough && modalRouteRef.current) return;
     if (modalRouteRef.current) {
       (Array.isArray(modalRouteRef.current) ? modalRouteRef.current : [modalRouteRef.current])
@@ -133,7 +134,10 @@ function FullscreenMapModal({ order, gpsCoords, onClose }) {
         window.L.polyline(coords, { color: 'white',   weight: 7,   opacity: 0.6  }).addTo(map),
         window.L.polyline(coords, { color: '#e53e3e', weight: 4.5, opacity: 0.92 }).addTo(map),
       ];
-      map.fitBounds(window.L.latLngBounds(coords), { padding: [60, 60], maxZoom: 17 });
+      if (!modalFittedRef.current) {
+        map.fitBounds(window.L.latLngBounds(coords), { padding: [60, 60], maxZoom: 17, animate: false });
+        modalFittedRef.current = true;
+      }
     } else {
       modalRouteRef.current = window.L.polyline(
         [[rLat, rLng], [dLat, dLng]],
@@ -393,11 +397,13 @@ export default function RiderTrack() {
     }
   }, []);
 
+  const hasFittedRef = useRef(false);
+
   const drawRoute = useCallback(async (map, rLat, rLng, dLat, dLng) => {
     if (!map || !window.L) return;
     const now  = Date.now();
     const prev = lastRouteDrawRef.current;
-    const movedEnough   = !prev.rLat || Math.abs(rLat - prev.rLat) > 0.00015 || Math.abs(rLng - prev.rLng) > 0.00015;
+    const movedEnough   = !prev.rLat || Math.abs(rLat - prev.rLat) > 0.0008 || Math.abs(rLng - prev.rLng) > 0.0008;
     const enoughTime    = now - prev.time > 10_000;
     const noRouteExists = !routeLineRef.current;
     if (!noRouteExists && (!movedEnough || !enoughTime)) return;
@@ -409,7 +415,7 @@ export default function RiderTrack() {
         window.L.polyline(coords, { color: 'white',   weight: 7,   opacity: 0.6,  lineJoin: 'round', lineCap: 'round' }).addTo(map),
         window.L.polyline(coords, { color: '#e53e3e', weight: 4.5, opacity: 0.92, lineJoin: 'round', lineCap: 'round' }).addTo(map),
       ];
-      map.fitBounds(window.L.latLngBounds(coords), { padding: [48,48], maxZoom: 17 });
+      // Route updates quietly — camera stays steady after first fit
     } else if (!routeLineRef.current) {
       routeLineRef.current = window.L.polyline(
         [[rLat,rLng],[dLat,dLng]],
@@ -418,7 +424,7 @@ export default function RiderTrack() {
     }
   }, [clearRouteLines]);
 
-  const drawRouteForce = useCallback(async (map, rLat, rLng, dLat, dLng) => {
+  const drawRouteForce = useCallback(async (map, rLat, rLng, dLat, dLng, fitCamera = true) => {
     if (!map || !window.L) return;
     clearRouteLines();
     const coords = await fetchOsrmRoute(rLat, rLng, dLat, dLng);
@@ -428,7 +434,10 @@ export default function RiderTrack() {
         window.L.polyline(coords, { color: 'white',   weight: 7,   opacity: 0.6,  lineJoin: 'round', lineCap: 'round' }).addTo(map),
         window.L.polyline(coords, { color: '#e53e3e', weight: 4.5, opacity: 0.92, lineJoin: 'round', lineCap: 'round' }).addTo(map),
       ];
-      map.fitBounds(window.L.latLngBounds(coords), { padding: [48,48], maxZoom: 17 });
+      if (fitCamera && !hasFittedRef.current) {
+        map.fitBounds(window.L.latLngBounds(coords), { padding: [48,48], maxZoom: 17, animate: false });
+        hasFittedRef.current = true;
+      }
     } else {
       routeLineRef.current = window.L.polyline(
         [[rLat,rLng],[dLat,dLng]],
@@ -443,6 +452,7 @@ export default function RiderTrack() {
     destMarkerRef.current     = null;
     riderMarkerRef.current    = null;
     mapInitializedRef.current = false;
+    hasFittedRef.current      = false;
     lastRouteDrawRef.current  = { time: 0, rLat: null, rLng: null };
   }, [clearRouteLines]);
 
@@ -454,16 +464,13 @@ export default function RiderTrack() {
 
     if (mapObjRef.current && mapInitializedRef.current) {
       try {
-        mapObjRef.current.invalidateSize();
+        mapObjRef.current.invalidateSize({ animate: false });
         const coords = gpsCoordsRef.current;
         const dLat = order?.addressLat || 14.5995, dLng = order?.addressLng || 120.9842;
         if (coords) {
           if (riderMarkerRef.current) riderMarkerRef.current.setLatLng([coords.lat, coords.lng]);
-          drawRouteForce(mapObjRef.current, coords.lat, coords.lng, dLat, dLng);
-          mapObjRef.current.fitBounds(
-            window.L.latLngBounds([coords.lat, coords.lng], [dLat, dLng]),
-            { padding: [48,48], maxZoom: 17 }
-          );
+          // Refresh route without jerking the camera
+          drawRouteForce(mapObjRef.current, coords.lat, coords.lng, dLat, dLng, false);
         }
         return;
       } catch {
@@ -493,6 +500,7 @@ export default function RiderTrack() {
     mapObjRef.current     = map;
     destMarkerRef.current = marker;
     mapInitializedRef.current = true;
+    hasFittedRef.current = false;
 
     const coords = gpsCoordsRef.current;
     if (coords) {
@@ -502,10 +510,11 @@ export default function RiderTrack() {
       });
       riderMarkerRef.current = L.marker([coords.lat, coords.lng], { icon: riderIcon }).addTo(map);
       riderMarkerRef.current.bindPopup('🛵 You are here');
-      map.fitBounds(L.latLngBounds([coords.lat, coords.lng], [dLat, dLng]), { padding: [48,48] });
-      drawRouteForce(map, coords.lat, coords.lng, dLat, dLng);
+      map.fitBounds(L.latLngBounds([coords.lat, coords.lng], [dLat, dLng]), { padding: [48,48], animate: false, maxZoom: 17 });
+      hasFittedRef.current = true;
+      drawRouteForce(map, coords.lat, coords.lng, dLat, dLng, false);
     }
-    setTimeout(() => { try { map.invalidateSize(); } catch {} }, 150);
+    setTimeout(() => { try { map.invalidateSize({ animate: false }); } catch {} }, 150);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leafletReady, order, destroyMap, drawRouteForce]);
 
@@ -616,15 +625,18 @@ export default function RiderTrack() {
           if (!riderMarkerRef.current) {
             riderMarkerRef.current = L.marker([lat, lng], { icon: riderIcon }).addTo(mapObjRef.current);
             riderMarkerRef.current.bindPopup('🛵 You are here');
-            drawRouteForce(mapObjRef.current, lat, lng, dLat, dLng);
+            if (!hasFittedRef.current) {
+              mapObjRef.current.fitBounds(
+                L.latLngBounds([lat, lng], [dLat, dLng]),
+                { padding: [48,48], maxZoom: 17, animate: false }
+              );
+              hasFittedRef.current = true;
+            }
+            drawRouteForce(mapObjRef.current, lat, lng, dLat, dLng, false);
           } else {
             riderMarkerRef.current.setLatLng([lat, lng]);
             drawRoute(mapObjRef.current, lat, lng, dLat, dLng);
           }
-          mapObjRef.current.fitBounds(
-            L.latLngBounds([lat, lng], [dLat, dLng]),
-            { padding: [48,48], maxZoom: 17 }
-          );
         }
       },
       (err) => {

@@ -182,6 +182,8 @@ const RiderMap = ({ orderId, riderName, orderData }) => {
   const destMarkerRef      = useRef(null);
   const accuracyCircleRef  = useRef(null);
   const routeLineRef       = useRef(null);
+  const hasFittedRef       = useRef(false);
+  const lastRouteRiderRef  = useRef({ lat: null, lng: null });
   const [mapReady,      setMapReady]      = useState(false);
   const [mapError,      setMapError]      = useState(null);
   const [leafletLoaded, setLeafletLoaded] = useState(!!window.L);
@@ -270,15 +272,32 @@ const RiderMap = ({ orderId, riderName, orderData }) => {
     }
   }, []);
 
+  const fitOnce = useCallback((points) => {
+    if (hasFittedRef.current || !mapInstanceRef.current || !window.L) return;
+    try {
+      mapInstanceRef.current.fitBounds(window.L.latLngBounds(points), {
+        padding: [48, 48], maxZoom: 17, animate: false,
+      });
+      hasFittedRef.current = true;
+    } catch { /* ignore */ }
+  }, []);
+
   const drawRoute = useCallback((lat, lng, destLat, destLng, dashed = false) => {
     if (!mapInstanceRef.current || !window.L) return;
     const L   = window.L;
     const map = mapInstanceRef.current;
+    const prev = lastRouteRiderRef.current;
+    const movedFar = !prev.lat
+      || Math.abs(lat - prev.lat) > 0.0008
+      || Math.abs(lng - prev.lng) > 0.0008;
+    if (routeLineRef.current && !movedFar && !dashed) return;
+
     clearRoute();
+    lastRouteRiderRef.current = { lat, lng };
     if (dashed) {
       try {
         routeLineRef.current = L.polyline([[lat, lng], [destLat, destLng]], { color: '#9ca3af', weight: 3, opacity: 0.75, dashArray: '8, 8' }).addTo(map);
-        map.fitBounds(L.latLngBounds([lat, lng], [destLat, destLng]), { padding: [48, 48], maxZoom: 17 });
+        fitOnce([[lat, lng], [destLat, destLng]]);
       } catch {}
       return;
     }
@@ -291,20 +310,20 @@ const RiderMap = ({ orderId, riderName, orderData }) => {
           const outline = L.polyline(coords, { color: 'white',   weight: 7, opacity: 0.5, lineJoin: 'round', lineCap: 'round' }).addTo(map);
           const line    = L.polyline(coords, { color: '#e53e3e', weight: 4, opacity: 0.9, lineJoin: 'round', lineCap: 'round' }).addTo(map);
           routeLineRef.current = [outline, line];
-          map.fitBounds(L.latLngBounds(coords), { padding: [48, 48], maxZoom: 17 });
+          fitOnce(coords);
         } else {
           routeLineRef.current = L.polyline([[lat, lng], [destLat, destLng]], { color: '#e53e3e', weight: 4, opacity: 0.8, dashArray: '10, 8' }).addTo(map);
-          map.fitBounds(L.latLngBounds([lat, lng], [destLat, destLng]), { padding: [48, 48], maxZoom: 17 });
+          fitOnce([[lat, lng], [destLat, destLng]]);
         }
       })
       .catch(() => {
         if (!mapInstanceRef.current) return;
         try {
           routeLineRef.current = L.polyline([[lat, lng], [destLat, destLng]], { color: '#e53e3e', weight: 4, opacity: 0.8, dashArray: '10, 8' }).addTo(map);
-          map.fitBounds(L.latLngBounds([lat, lng], [destLat, destLng]), { padding: [48, 48], maxZoom: 17 });
+          fitOnce([[lat, lng], [destLat, destLng]]);
         } catch {}
       });
-  }, [clearRoute]);
+  }, [clearRoute, fitOnce]);
 
   useEffect(() => {
     if (!mapReady || !mapInstanceRef.current || !markerRef.current || !window.L) return;
@@ -333,14 +352,15 @@ const RiderMap = ({ orderId, riderName, orderData }) => {
       if (accuracy && accuracy < 120) {
         try { accuracyCircleRef.current = L.circle([lat, lng], { radius: Math.max(accuracy, 8), color: '#16a34a', fillColor: '#22c55e', fillOpacity: 0.12, weight: 2 }).addTo(map); } catch {}
       }
+      // Marker moves with GPS; camera stays put after the first fit
       if (destLat && destLng) {
+        if (!hasFittedRef.current) fitOnce([[lat, lng], [destLat, destLng]]);
         drawRoute(lat, lng, destLat, destLng, false);
+      } else if (!hasFittedRef.current) {
         try {
-          const z = Math.max(map.getZoom(), 17);
-          map.setView([lat, lng], z, { animate: true });
+          map.setView([lat, lng], 16, { animate: false });
+          hasFittedRef.current = true;
         } catch {}
-      } else {
-        try { map.flyTo([lat, lng], Math.max(map.getZoom(), 18), { animate: true, duration: 0.6 }); } catch {}
       }
       setLastUpdateTime(new Date(updatedAt));
       return;
@@ -368,18 +388,32 @@ const RiderMap = ({ orderId, riderName, orderData }) => {
       } else {
         try { lastKnownMarkerRef.current.setLatLng([lastKnownLat, lastKnownLng]); } catch {}
       }
-      if (destLat && destLng) { drawRoute(lastKnownLat, lastKnownLng, destLat, destLng, true); }
-      else { try { map.panTo([lastKnownLat, lastKnownLng], { animate: true, duration: 0.8 }); } catch {} }
+      if (destLat && destLng) {
+        if (!hasFittedRef.current) fitOnce([[lastKnownLat, lastKnownLng], [destLat, destLng]]);
+        drawRoute(lastKnownLat, lastKnownLng, destLat, destLng, true);
+      } else if (!hasFittedRef.current) {
+        try {
+          map.setView([lastKnownLat, lastKnownLng], 15, { animate: false });
+          hasFittedRef.current = true;
+        } catch {}
+      }
       if (lastKnownAt) setLastUpdateTime(new Date(lastKnownAt));
       return;
     }
 
-    if (destLat && destLng) { try { map.setView([destLat, destLng], 15); } catch {} }
+    if (destLat && destLng && !hasFittedRef.current) {
+      try {
+        map.setView([destLat, destLng], 15, { animate: false });
+        hasFittedRef.current = true;
+      } catch {}
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [locationData, mapReady]);
 
   useEffect(() => () => {
     clearRoute();
+    hasFittedRef.current = false;
+    lastRouteRiderRef.current = { lat: null, lng: null };
     if (lastKnownMarkerRef.current) { try { lastKnownMarkerRef.current.remove(); } catch {} lastKnownMarkerRef.current = null; }
     if (mapInstanceRef.current) {
       try { mapInstanceRef.current.remove(); } catch {}
