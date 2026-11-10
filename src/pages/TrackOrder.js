@@ -8,8 +8,19 @@ import { useProducts, usePreOrderProducts } from '../utils/productStorage';
 import { isLbcOrder, openLbcTracker, LBC_TRACK_URL } from '../utils/deliveryUtils';
 import DkIcon, { DK_ICONS } from '../components/DkIcon';
 import { useNotification } from '../context/NotificationContext';
+import { useConfirm } from '../context/ConfirmContext';
 import DeliveryChatPanel from '../components/DeliveryChatPanel';
 import './TrackOrder.css';
+
+/** Cancel allowed until a rider accepts (no riderId/riderInfo; not shipped+). */
+const canCustomerCancelOrder = (order) => {
+  if (!order) return false;
+  const status = String(order.orderStatus || order.status || '').toLowerCase();
+  if (status === 'cancelled') return false;
+  if (['shipped', 'out_for_delivery', 'delivered', 'completed'].includes(status)) return false;
+  if (order.riderId || order.riderInfo) return false;
+  return true;
+};
 
 const LbcTrackPanel = ({ compact = false }) => (
   <div className={`lbc-track-panel${compact ? ' lbc-track-panel--compact' : ''}`}>
@@ -509,7 +520,9 @@ const RiderMap = ({ orderId, riderName, orderData }) => {
 const TrackOrder = ({ onProductClick }) => {
   const navigate = useNavigate();
   const { showNotification } = useNotification();
+  const { confirm } = useConfirm();
   const { user, isAuthenticated } = useAuth();
+  const customerCancelOrder = useAction(api.payments.customerCancelOrder);
   const [searchParams, setSearchParams] = useSearchParams();
   const orderIdParam = searchParams.get('order') || searchParams.get('orderId') || searchParams.get('id');
 
@@ -523,6 +536,7 @@ const TrackOrder = ({ onProductClick }) => {
   const [removeConfirm,      setRemoveConfirm]      = useState(null);
   const [refundOrder,        setRefundOrder]        = useState(null);
   const [refundSuccess,      setRefundSuccess]      = useState(false);
+  const [cancellingId,       setCancellingId]       = useState(null);
   const openedFromUrlRef = useRef(null);
   const [hiddenOrders,       setHiddenOrders]       = useState(() => {
     try { return JSON.parse(localStorage.getItem('hiddenDeliveredOrders') || '[]'); } catch { return []; }
@@ -685,6 +699,51 @@ const TrackOrder = ({ onProductClick }) => {
 
   const handleRefundSuccess = () => { setRefundOrder(null); setRefundSuccess(true); setTimeout(() => setRefundSuccess(false), 4000); };
 
+  const handleCustomerCancel = async (order) => {
+    if (!order?.orderId || !user?.email) return;
+    const paid = String(order.paymentStatus || '').toLowerCase() === 'paid';
+    const amount = Number(order.finalTotal ?? order.total ?? 0);
+    const ok = await confirm({
+      title: 'Cancel this order?',
+      message: paid
+        ? `Cancel order #${String(order.orderId).slice(-8).toUpperCase()}?\n\nYour payment of ₱${amount.toLocaleString('en-PH')} will be refunded automatically to your GCash/Maya. Admin will be notified — no approval needed.`
+        : `Cancel order #${String(order.orderId).slice(-8).toUpperCase()}?\n\nThis order has no completed payment.`,
+      confirmLabel: paid ? 'Cancel & Refund' : 'Cancel Order',
+      cancelLabel: 'Keep Order',
+      variant: 'danger',
+      icon: 'fa-ban',
+    });
+    if (!ok) return;
+
+    setCancellingId(order.orderId);
+    try {
+      const result = await customerCancelOrder({
+        orderId: order.orderId,
+        email: user.email,
+        reason: 'Cancelled by customer before rider accepted',
+      });
+      if (!result?.success) {
+        showNotification(result?.error || 'Could not cancel order.', 'error');
+        return;
+      }
+      if (selectedOrderId && (selectedOrder?._id === order._id || selectedOrder?.orderId === order.orderId)) {
+        setSelectedOrderId(null);
+      }
+      showNotification(
+        result.refunded
+          ? `Order cancelled. ₱${Number(result.refundAmount || 0).toLocaleString('en-PH')} refund is on the way to your wallet.`
+          : 'Order cancelled.',
+        'success'
+      );
+      setFilter('cancelled');
+    } catch (err) {
+      console.error(err);
+      showNotification(err?.message || 'Cancel failed. Please try again.', 'error');
+    } finally {
+      setCancellingId(null);
+    }
+  };
+
   // ─── ORDER CARD ────────────────────────────────────────────────────────────
   const OrderCard = ({ order, onViewDetails, isGuest = false }) => {
     const scrollRef = useRef(null);
@@ -772,6 +831,18 @@ const TrackOrder = ({ onProductClick }) => {
             </>
           ) : (
             <button className="btn btn-primary btn-small order-view-btn" onClick={() => onViewDetails(order)}><i className="fas fa-search"></i> View Details</button>
+          )}
+          {!isGuest && canCustomerCancelOrder(order) && (
+            <button
+              type="button"
+              className="btn order-cancel-btn"
+              disabled={cancellingId === order.orderId}
+              onClick={() => handleCustomerCancel(order)}
+            >
+              {cancellingId === order.orderId
+                ? <><i className="fas fa-spinner fa-spin"></i> Cancelling…</>
+                : <><i className="fas fa-ban"></i> Cancel Order</>}
+            </button>
           )}
           {!isGuest && delivered && (
             <div className="order-card-actions">
@@ -907,7 +978,22 @@ const TrackOrder = ({ onProductClick }) => {
             )}
           </section>
         </div>
-        {selectedOrder && <TrackingModal key={selectedOrderId} order={selectedOrder} products={products} onClose={handleCloseModal} getTimelineSteps={getTimelineSteps} getStatusClass={getStatusClass} getDisplayStatus={getDisplayStatus} isOutForDeliveryStatus={isOutForDeliveryStatus} onRequestRefund={(order) => { handleCloseModal(); setRefundOrder(order); }} isGuest={false} />}
+        {selectedOrder && (
+          <TrackingModal
+            key={selectedOrderId}
+            order={selectedOrder}
+            products={products}
+            onClose={handleCloseModal}
+            getTimelineSteps={getTimelineSteps}
+            getStatusClass={getStatusClass}
+            getDisplayStatus={getDisplayStatus}
+            isOutForDeliveryStatus={isOutForDeliveryStatus}
+            onRequestRefund={(order) => { handleCloseModal(); setRefundOrder(order); }}
+            onCustomerCancel={handleCustomerCancel}
+            cancelling={cancellingId === selectedOrder.orderId}
+            isGuest={false}
+          />
+        )}
         {refundOrder && <RefundModal order={refundOrder} onClose={() => setRefundOrder(null)} onSuccess={handleRefundSuccess} />}
         <Lightbox />
         {removeConfirm && (
@@ -961,7 +1047,8 @@ const TrackOrder = ({ onProductClick }) => {
 };
 
 // ─── TRACKING MODAL ──────────────────────────────────────────────────────────
-const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusClass, getDisplayStatus, isOutForDeliveryStatus, onRequestRefund, isGuest = false }) => {
+const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusClass, getDisplayStatus, isOutForDeliveryStatus, onRequestRefund, onCustomerCancel, cancelling = false, isGuest = false }) => {
+  const { showNotification } = useNotification();
   const createPaymentLink = useAction(api.payments.createPaymentLink);
   const [localOtp,          setLocalOtp]          = useState(order.deliveryOtp || null);
   const [continuingPayment, setContinuingPayment] = useState(false);
@@ -971,6 +1058,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
   const isOutForDelivery = isOutForDeliveryStatus(order);
   const needsPayment     = order.status === 'Pending Payment' && order.paymentStatus !== 'paid';
   const delivered        = ['delivered','completed'].includes((order.orderStatus || order.status || '').toLowerCase());
+  const canCancel        = !isGuest && canCustomerCancelOrder(order);
   const timelineSteps    = getTimelineSteps(order);
   const refundAmount     = (order.finalTotal ?? order.total ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2 });
   const { canRefund, hoursLeft, minsLeft, expired } = getRefundWindow(order);
@@ -1063,8 +1151,29 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
           {isCancelled && (
             <div className="cancelled-banner">
               <div className="cancelled-banner-icon"><i className="fas fa-ban"></i></div>
-              <div className="cancelled-banner-text"><strong>Order Cancelled</strong><p>{order.cancelReason || 'This order has been cancelled.'}</p></div>
+              <div className="cancelled-banner-text">
+                <strong>Order Cancelled</strong>
+                <p>{order.cancelReason || 'This order has been cancelled.'}</p>
+                {order.cancelledBy === 'customer' && order.refundStatus === 'approved' && (
+                  <p style={{ marginTop: 6, fontWeight: 700 }}>
+                    Refund ₱{(order.refundAmount ?? order.finalTotal ?? order.total ?? 0).toLocaleString('en-PH')} sent to your payment method.
+                  </p>
+                )}
+              </div>
             </div>
+          )}
+
+          {canCancel && (
+            <button
+              type="button"
+              className="btn order-cancel-btn modal-cancel-order-btn"
+              disabled={cancelling}
+              onClick={() => onCustomerCancel?.(order)}
+            >
+              {cancelling
+                ? <><i className="fas fa-spinner fa-spin"></i> Cancelling…</>
+                : <><i className="fas fa-ban"></i> Cancel Order{String(order.paymentStatus || '').toLowerCase() === 'paid' ? ' & Auto-Refund' : ''}</>}
+            </button>
           )}
 
           {delivered && order.refundStatus && (

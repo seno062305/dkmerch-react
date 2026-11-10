@@ -163,6 +163,9 @@ export default defineSchema({
     outForDeliveryAt: v.optional(v.string()),
     deliveryConfirmedAt: v.optional(v.string()),
     cancelledAt: v.optional(v.string()),
+    /** 'customer' | 'admin' */
+    cancelledBy: v.optional(v.string()),
+    paymongoRefundId: v.optional(v.string()),
     refundStatus:          v.optional(v.string()),
     refundReason:          v.optional(v.string()),
     refundComment:         v.optional(v.string()),
