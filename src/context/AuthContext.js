@@ -376,10 +376,12 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const pending = pendingLoginAlert || pendingRiderLoginAlert || null;
     if (!pending) {
+      // Don't wipe a held confirmation; only clear live pending UI
       setSecurityAlert((prev) => (prev?.mode === "pending" ? null : prev));
       return;
     }
     if (holdLogoutConfirmRef.current) return;
+    // Wait until PIN gate is closed (push → PIN → then Yes/No)
     if (needsDeviceUnlock) return;
     const current = userRef.current;
     if (!current) return;
@@ -390,9 +392,9 @@ export const AuthProvider = ({ children }) => {
       mode: "pending",
     });
     clearLoginAlertDeepLink();
-  }, [pendingLoginAlert, pendingRiderLoginAlert, needsDeviceUnlock]);
+  }, [pendingLoginAlert, pendingRiderLoginAlert, needsDeviceUnlock, isAuthenticated]);
 
-  // Push tap — mark intent; show after unlock
+  // Push tap — mark intent; show after unlock (re-fires when PIN closes)
   useEffect(() => {
     const bump = () => {
       try { sessionStorage.setItem("dkmerch_open_login_alert", "1"); } catch { /* ignore */ }
@@ -407,8 +409,15 @@ export const AuthProvider = ({ children }) => {
         previousUser: current,
         mode: "pending",
       });
+      clearLoginAlertDeepLink();
     };
     window.addEventListener("dkOpenLoginAlert", bump);
+    // If we landed from a notif while PIN was up, retry once unlock clears
+    if (!needsDeviceUnlock) {
+      try {
+        if (sessionStorage.getItem("dkmerch_open_login_alert") === "1") bump();
+      } catch { /* ignore */ }
+    }
     return () => window.removeEventListener("dkOpenLoginAlert", bump);
   }, [pendingLoginAlert, pendingRiderLoginAlert, needsDeviceUnlock]);
 

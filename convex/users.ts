@@ -340,17 +340,25 @@ export const startUserSession = mutation({
 
     // Same session already active (e.g. PIN unlock on this device) → refresh only
     if (currentSessionId && existingIds.includes(currentSessionId)) {
-      await db.patch(
-        args.userId,
-        activateSessionPatch(
-          currentSessionId,
-          now,
-          deviceName,
-          location,
-          platform,
-          existingIds,
-        ) as any,
-      );
+      const patch = activateSessionPatch(
+        currentSessionId,
+        now,
+        deviceName,
+        location,
+        platform,
+        existingIds,
+      ) as any;
+      // Keep pending Yes/No so after PIN (from push tap) the old device still sees the modal
+      const pending = user.loginAlert;
+      if (
+        pending
+        && pending.status === "pending"
+        && !pending.resolved
+        && !isLoginAlertExpired(pending, now)
+      ) {
+        delete patch.loginAlert;
+      }
+      await db.patch(args.userId, patch);
       return { success: true, sessionId: currentSessionId, pendingApproval: false };
     }
 

@@ -348,10 +348,25 @@ export const loginRider = mutation({
     };
 
     if (currentSessionId && existingIds.includes(currentSessionId)) {
-      await db.patch(
-        rider._id,
-        activateRiderSessionPatch(currentSessionId, now, deviceName, location, platform, existingIds) as any,
-      );
+      const patch = activateRiderSessionPatch(
+        currentSessionId,
+        now,
+        deviceName,
+        location,
+        platform,
+        existingIds,
+      ) as any;
+      // Keep pending Yes/No so after PIN (from push tap) the modal still appears
+      const pending = (rider as any).loginAlert;
+      if (
+        pending
+        && pending.status === "pending"
+        && !pending.resolved
+        && !isRiderLoginAlertExpired(pending, now)
+      ) {
+        delete patch.loginAlert;
+      }
+      await db.patch(rider._id, patch);
       return {
         success: true,
         riderExists: true,

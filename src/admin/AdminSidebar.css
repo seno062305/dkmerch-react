@@ -315,10 +315,15 @@
 
   .mobile-overlay { display: block; }
 
+  /* Legacy hamburger offset — AdminLayout--bnav overrides with safe-area padding */
   .admin-content {
     margin-left: 0;
     padding: 72px 20px 20px 20px;
     z-index: 1;
+  }
+  .admin-layout--bnav .admin-content {
+    padding-top: max(12px, env(safe-area-inset-top, 0px));
+    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px) + 12px);
   }
 
   .admin-content button,
@@ -360,6 +365,10 @@
 @media (max-width: 576px) {
   .admin-sidebar { width: 240px; }
   .admin-content { padding: 68px 14px 14px 14px; }
+  .admin-layout--bnav .admin-content {
+    padding-top: max(12px, env(safe-area-inset-top, 0px));
+    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px) + 12px);
+  }
 }
 
 /* ══════════════════════════════════════════

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { isAuthGateLocked } from '../lib/authGate';
+import { scrollPageToTop } from '../utils/navScroll';
 import AdminSidebar from './AdminSidebar';
 import AdminBottomNav from './AdminBottomNav';
 import './AdminLayout.css';
@@ -12,6 +13,7 @@ const SIDEBAR_KEY = 'dkmerch_admin_sidebar_collapsed';
 const AdminLayout = () => {
   const { user, role, isAuthenticated, isReady } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [mapOpen, setMapOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try {
@@ -29,6 +31,18 @@ const AdminLayout = () => {
       navigate('/', { replace: true });
     }
   }, [isReady, isAuthenticated, role, navigate]);
+
+  /* iOS: keep admin bottom nav pinned + stop leftover locks from nudging scroll */
+  useEffect(() => {
+    document.body.classList.add('has-admin-bottom-nav');
+    scrollPageToTop({ smooth: false });
+    return () => document.body.classList.remove('has-admin-bottom-nav');
+  }, []);
+
+  /* Route changes: land at top so Dashboard header isn't scrolled under the status bar */
+  useEffect(() => {
+    scrollPageToTop({ smooth: false });
+  }, [location.pathname]);
 
   useEffect(() => {
     const observer = new MutationObserver(() => {
