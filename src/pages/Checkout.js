@@ -9,6 +9,8 @@ import { useCreateOrder } from '../utils/orderStorage';
 import { useCart, useClearCart, useRemoveFromCartById } from '../context/cartUtils';
 import { useMutation, useQuery, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
+import { runWithFailover } from '../lib/failoverWrite';
+import { failoverCheckoutAssist, isFailoverPayConfigured } from '../lib/failoverPayEmail';
 import './Checkout.css';
 
 // ─── NCR BOUNDS ───────────────────────────────────────────────────────────────
@@ -569,10 +571,24 @@ const Checkout = () => {
     api.users.getProfile,
     user?._id || user?.id ? { userId: user?._id || user?.id } : 'skip'
   );
-  const saveProfile              = useMutation(api.users.saveProfile);
+  const saveProfileMut           = useMutation(api.users.saveProfile);
   const sendPaymentReceivedEmail = useAction(api.sendEmail.sendPaymentReceivedEmail);
   const createPaymentLink        = useAction(api.payments.createPaymentLink);
-  const markTicketCheckedOut     = useMutation(api.rewards.markTicketCheckedOut);
+  const markTicketCheckedOutMut  = useMutation(api.rewards.markTicketCheckedOut);
+  const saveProfile = (args) =>
+    runWithFailover(saveProfileMut, args, {
+      table: "users",
+      mutation: "users:saveProfile",
+      docKey: String(args?.userId || args?.id || ""),
+      payload: args,
+    });
+  const markTicketCheckedOut = (args) =>
+    runWithFailover(markTicketCheckedOutMut, args, {
+      table: "rewardRedemptions",
+      mutation: "rewards:markTicketCheckedOut",
+      docKey: String(args?.ticketCode || ""),
+      payload: args,
+    });
 
   // ── Reward order state ────────────────────────────────────────────────────
   const [rewardOrder, setRewardOrder] = useState(location.state?.rewardOrder || null);
@@ -841,7 +857,7 @@ const Checkout = () => {
       if (savedAddress.zipCode) addressParts.push(savedAddress.zipCode);
       const shippingAddressStr = addressParts.join(', ');
 
-      await createOrder({
+      const createResult = await createOrder({
         orderId,
         email:           savedContact.email,
         customerName:    savedContact.fullName,
@@ -869,6 +885,7 @@ const Checkout = () => {
           rewardTicketCode: rewardOrder.ticketCode,
         }),
       });
+      const usedFailover = !!createResult?.failover;
 
       // ── Mark ticket as checked out ─────────────────────────────────────
       if (rewardOrder) {
@@ -882,23 +899,61 @@ const Checkout = () => {
 
       // ── Payment link — PayMongo hosted checkout (GCash / Maya picker) ───
       let paymentLinkUrl;
+      const payDescription = rewardOrder
+        ? `DKMerch Reward Order ${orderId} (Ticket: ${rewardOrder.ticketCode})`
+        : `DKMerch Order ${orderId}${promoItem ? ` (Promo: ${promoItem.promoCode})` : ''}`;
+      const payArgs = {
+        orderId,
+        amount:        finalTotal,
+        description:   payDescription,
+        customerName:  savedContact.fullName,
+        customerEmail: savedContact.email,
+        customerPhone: savedContact.phone,
+      };
+
       try {
-        const result = await createPaymentLink({
-          orderId,
-          amount:        finalTotal,
-          description:   rewardOrder
-            ? `DKMerch Reward Order ${orderId} (Ticket: ${rewardOrder.ticketCode})`
-            : `DKMerch Order ${orderId}${promoItem ? ` (Promo: ${promoItem.promoCode})` : ''}`,
-          customerName:  savedContact.fullName,
-          customerEmail: savedContact.email,
-          customerPhone: savedContact.phone,
-        });
-        paymentLinkUrl = result.paymentLinkUrl;
+        if (usedFailover && isFailoverPayConfigured()) {
+          // Convex already down — go straight to Firebase Cloud Function
+          const result = await failoverCheckoutAssist({ ...payArgs, sendEmail: true });
+          paymentLinkUrl = result.paymentLinkUrl;
+        } else {
+          const result = await createPaymentLink(payArgs);
+          paymentLinkUrl = result.paymentLinkUrl;
+        }
       } catch (payError) {
         console.error('PayMongo error:', payError);
-        setLoading(false);
-        showNotification('Payment setup failed. Please try again or contact support.', 'error');
-        return;
+        // Convex pay failed — try Cloud Function fallback if configured
+        if (isFailoverPayConfigured()) {
+          try {
+            const result = await failoverCheckoutAssist({ ...payArgs, sendEmail: true });
+            paymentLinkUrl = result.paymentLinkUrl;
+          } catch (fnErr) {
+            console.error('Failover pay/email error:', fnErr);
+            setLoading(false);
+            if (usedFailover) {
+              showNotification(
+                `Order ${orderId} was saved offline, but payment setup failed. Try again later or contact support.`,
+                'warning'
+              );
+              navigate(`/track-order?orderId=${encodeURIComponent(orderId)}`);
+              return;
+            }
+            showNotification('Payment setup failed. Please try again or contact support.', 'error');
+            return;
+          }
+        } else {
+          setLoading(false);
+          if (usedFailover) {
+            showNotification(
+              `Order ${orderId} was saved while offline. Configure failover Cloud Functions to enable live payment.`,
+              'warning'
+            );
+            navigate(`/track-order?orderId=${encodeURIComponent(orderId)}`);
+            return;
+          }
+          showNotification('Payment setup failed. Please try again or contact support.', 'error');
+          return;
+        }
       }
 
       // ── Stock update — skip for reward orders ──────────────────────────
@@ -932,21 +987,23 @@ const Checkout = () => {
         } catch { /* non-critical */ }
       }
 
-      // ── Send email ─────────────────────────────────────────────────────
-      try {
-        await sendPaymentReceivedEmail({
-          to:   savedContact.email,
-          name: savedContact.fullName,
-          orderId,
-          items: orderItems.map(i => ({ name: i.name, price: i.price, quantity: i.quantity })),
-          total:              originalSubtotal + shipping,
-          promoCode:          promoItem?.promoCode,
-          discountAmount:     totalDiscount > 0 ? totalDiscount : undefined,
-          finalTotal,
-          shippingFee:        shipping,
-          shippingDistanceKm: shippingInfo?.km,
-        });
-      } catch (emailErr) { console.warn('Email failed:', emailErr); }
+      // ── Send email (skip if failover FN already emailed pay-now link) ──
+      if (!usedFailover) {
+        try {
+          await sendPaymentReceivedEmail({
+            to:   savedContact.email,
+            name: savedContact.fullName,
+            orderId,
+            items: orderItems.map(i => ({ name: i.name, price: i.price, quantity: i.quantity })),
+            total:              originalSubtotal + shipping,
+            promoCode:          promoItem?.promoCode,
+            discountAmount:     totalDiscount > 0 ? totalDiscount : undefined,
+            finalTotal,
+            shippingFee:        shipping,
+            shippingDistanceKm: shippingInfo?.km,
+          });
+        } catch (emailErr) { console.warn('Email failed:', emailErr); }
+      }
 
       // ── Remove checked-out items only (keep unselected in cart) ────────
       if (!rewardOrder) {

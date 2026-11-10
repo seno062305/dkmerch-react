@@ -7,6 +7,7 @@ import { api } from '../../convex/_generated/api';
 import './Header.css';
 import RiderLoginModal from './RiderLoginModal';
 import RewardsModal from './RewardsModal';
+import DkIcon, { DK_ICONS } from './DkIcon';
 
 const Header = ({ cartCount, wishlistCount, onCartClick }) => {
   const { user, isAuthenticated, logout } = useAuth();
@@ -166,6 +167,16 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
         <div className="main-header">
           <div className="header-inner">
 
+            {!showMobileMenu && (
+              <button
+                className="mobile-menu-toggle"
+                onClick={() => setShowMobileMenu(true)}
+                aria-label="Open menu"
+              >
+                <span></span><span></span><span></span>
+              </button>
+            )}
+
             {/* LEFT: Logo */}
             <Link to="/" className="logo">
               <img src="/images/dklogo.jpg" alt="DKMerch Logo" className="logo-img-client" />
@@ -225,7 +236,7 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
 
               <Link to="/wishlist" className="header-action-item favorites-btn">
                 <span className="icon-wrapper">
-                  <i className="fas fa-star"></i>
+                  <DkIcon name={DK_ICONS.favorite} size={18} alt="Favorites" />
                   {isAuthenticated && wishlistCount > 0 && (
                     <span className="wishlist-count">{wishlistCount}</span>
                   )}

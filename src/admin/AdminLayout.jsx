@@ -3,6 +3,7 @@ import { Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import AdminSidebar from './AdminSidebar';
 import './AdminLayout.css';
+import './adminMobileTables.css';
 
 const SIDEBAR_KEY = 'dkmerch_admin_sidebar_collapsed';
 
@@ -54,6 +55,62 @@ const AdminLayout = () => {
     document.body.classList.toggle('admin-sidebar-collapsed', sidebarCollapsed);
     return () => document.body.classList.remove('admin-sidebar-collapsed');
   }, [sidebarCollapsed]);
+
+  /* Mobile list cards: inject Details/Hide toggle on admin table rows */
+  useEffect(() => {
+    const ROW_SEL = [
+      '.orders-table tbody tr',
+      '.users-table tbody tr',
+      '.riders-table tbody tr',
+      '.inventory-table tbody tr',
+      '.products-table tbody tr',
+      '.stock-table tbody tr',
+    ].join(', ');
+
+    const syncToggleLabel = (tr, btn) => {
+      const open = tr.classList.contains('is-expanded');
+      btn.innerHTML = open
+        ? '<i class="fas fa-chevron-up"></i> Hide details'
+        : '<i class="fas fa-chevron-down"></i> Show details';
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    };
+
+    const ensureToggles = () => {
+      if (window.matchMedia && !window.matchMedia('(max-width: 768px)').matches) return;
+      document.querySelectorAll(ROW_SEL).forEach((tr) => {
+        if (tr.querySelector('.mobile-card-toggle')) return;
+        // Skip empty / placeholder rows
+        if (!tr.querySelector('td[data-label]')) return;
+
+        const cell = document.createElement('td');
+        cell.className = 'mobile-card-toggle-cell';
+        cell.setAttribute('data-label', '');
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'mobile-card-toggle';
+        syncToggleLabel(tr, btn);
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          tr.classList.toggle('is-expanded');
+          syncToggleLabel(tr, btn);
+        });
+
+        cell.appendChild(btn);
+        tr.appendChild(cell);
+      });
+    };
+
+    ensureToggles();
+    const mo = new MutationObserver(() => ensureToggles());
+    mo.observe(document.body, { childList: true, subtree: true });
+    window.addEventListener('resize', ensureToggles);
+    return () => {
+      mo.disconnect();
+      window.removeEventListener('resize', ensureToggles);
+    };
+  }, []);
 
   if (!isReady) {
     return (

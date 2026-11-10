@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useConfirm } from '../context/ConfirmContext';
+import AdminPager from './AdminPager';
+import { runWithFailover } from '../lib/failoverWrite';
 import './AdminPromos.css';
 
 const KPOP_GROUPS = [
@@ -41,9 +43,32 @@ const toMs = (d, t) => {
 const AdminPromos = () => {
   const { confirm } = useConfirm();
   const promos      = useQuery(api.promos.getAllPromos) || [];
-  const createPromo = useMutation(api.promos.createPromo);
-  const updatePromo = useMutation(api.promos.updatePromo);
-  const deletePromo = useMutation(api.promos.deletePromo);
+  const createPromoMut = useMutation(api.promos.createPromo);
+  const updatePromoMut = useMutation(api.promos.updatePromo);
+  const deletePromoMut = useMutation(api.promos.deletePromo);
+  const createPromo = (args) =>
+    runWithFailover(createPromoMut, args, {
+      table: "promos",
+      mutation: "promos:createPromo",
+      docKey: args?.code,
+      payload: args,
+    });
+  const updatePromo = (args) =>
+    runWithFailover(updatePromoMut, args, {
+      table: "promos",
+      mutation: "promos:updatePromo",
+      docKey: String(args?.id || args?.code || ""),
+      payload: args,
+    });
+  const deletePromo = (args) => {
+    const normalized = typeof args === "object" ? args : { id: args };
+    return runWithFailover(deletePromoMut, normalized, {
+      table: "promos",
+      mutation: "promos:deletePromo",
+      docKey: String(normalized?.id || ""),
+      payload: normalized,
+    });
+  };
 
   const [nowMs,        setNowMs]        = useState(() => Date.now());
   const [showModal,    setShowModal]    = useState(false);
@@ -52,11 +77,15 @@ const AdminPromos = () => {
   const [errors,       setErrors]       = useState({});
   const [serverMsg,    setServerMsg]    = useState('');
   const [submitting,   setSubmitting]   = useState(false);
+  const [pageSize,     setPageSize]     = useState(5);
+  const [page,         setPage]         = useState(0);
 
   useEffect(() => {
     const id = setInterval(() => setNowMs(Date.now()), 10000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => { setPage(0); }, [pageSize, promos.length]);
 
   const today = new Date(nowMs).toISOString().split('T')[0];
 
@@ -193,7 +222,15 @@ const AdminPromos = () => {
   };
 
   // ✅ Sort promos — pinakabago (latest _creationTime) ay nasa unahan
-  const sortedPromos = [...promos].sort((a, b) => (b._creationTime || 0) - (a._creationTime || 0));
+  const sortedPromos = useMemo(
+    () => [...promos].sort((a, b) => (b._creationTime || 0) - (a._creationTime || 0)),
+    [promos]
+  );
+
+  const pagedPromos = useMemo(() => {
+    const start = page * pageSize;
+    return sortedPromos.slice(start, start + pageSize);
+  }, [sortedPromos, page, pageSize]);
 
   const TagIcon    = () => <svg className="tag-icon" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M17.707 9.293a1 1 0 010 1.414l-7 7a1 1 0 01-1.414 0l-7-7A.997.997 0 012 10V5a3 3 0 013-3h5c.256 0 .512.098.707.293l7 7zM5 6a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" /></svg>;
   const EditIcon   = () => <svg viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg>;
@@ -225,7 +262,7 @@ const AdminPromos = () => {
               </tr>
             </thead>
             <tbody>
-              {sortedPromos.map(promo => {
+              {pagedPromos.map(promo => {
                 const { label, cls } = getStatus(promo);
                 return (
                   <tr key={promo._id}>
@@ -246,6 +283,13 @@ const AdminPromos = () => {
             </tbody>
           </table>
         )}
+        <AdminPager
+          total={sortedPromos.length}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
       </div>
 
       {/* ── Mobile Card View ── */}
@@ -255,7 +299,7 @@ const AdminPromos = () => {
         </div>
         {sortedPromos.length === 0
           ? <div className="empty-cards-msg">No promos yet.</div>
-          : sortedPromos.map(promo => {
+          : pagedPromos.map(promo => {
               const { label, cls } = getStatus(promo);
               return (
                 <div className="promo-card" key={promo._id}>
@@ -276,6 +320,13 @@ const AdminPromos = () => {
               );
             })
         }
+        <AdminPager
+          total={sortedPromos.length}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
       </div>
 
       {/* ── Modal ── */}

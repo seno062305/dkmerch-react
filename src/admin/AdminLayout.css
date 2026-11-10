@@ -324,13 +324,29 @@
 
   .admin-content {
     margin-left: 0;
-    padding: 72px 20px 20px 20px;
+    /* top clears fixed menu button; avoid content sitting under it */
+    padding: 76px 12px 24px 12px;
     z-index: 1;
+    max-width: 100vw;
+    width: 100%;
+    overflow-x: hidden;
+    box-sizing: border-box;
+  }
+
+  /* Children never wider than viewport */
+  .admin-content > *,
+  .admin-content section,
+  .admin-content .admin-orders-page,
+  .admin-content .admin-products-page,
+  .admin-content .admin-users-page {
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
   }
 
   .admin-layout.sidebar-collapsed .admin-content {
     margin-left: 0;
-    padding-top: 72px;
+    padding-top: 76px;
   }
 
   .admin-content button,
@@ -372,5 +388,5 @@
 
 @media (max-width: 576px) {
   .admin-sidebar { width: 240px; }
-  .admin-content { padding: 68px 14px 14px 14px; }
+  .admin-content { padding: 72px 12px 20px 12px; }
 }

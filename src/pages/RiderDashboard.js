@@ -5,6 +5,7 @@ import { useConfirm } from '../context/ConfirmContext';
 import { useQuery, useMutation, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import WaybillScannerModal from '../components/WaybillScannerModal';
+import DkIcon, { DK_ICONS } from '../components/DkIcon';
 import './RiderDashboard.css';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -792,13 +793,13 @@ const RiderNotifBell = ({ onGoToAvailable }) => {
   return (
     <div className="rider-notif-wrapper">
       <button className="rider-notif-bell-btn" onClick={() => setOpen(o => !o)} type="button">
-        <i className="fas fa-bell"></i>
+        <DkIcon name={DK_ICONS.notification} size={18} alt="Notifications" />
         {unreadCount > 0 && <span className="rider-notif-count">{unreadCount}</span>}
       </button>
       {open && (
         <div className="rider-notif-dropdown">
           <div className="rider-notif-header">
-            <strong>🔔 New Orders Available</strong>
+            <strong><DkIcon name={DK_ICONS.notification} size={14} /> New Orders Available</strong>
             <button onClick={() => setOpen(false)} className="rider-notif-close">✕</button>
           </div>
           {notifications.length === 0 ? (
@@ -807,7 +808,7 @@ const RiderNotifBell = ({ onGoToAvailable }) => {
             <>
               {notifications.slice(0, 5).map((n, i) => (
                 <div key={i} className="rider-notif-item">
-                  <div className="rider-notif-icon">📦</div>
+                  <div className="rider-notif-icon"><DkIcon name={DK_ICONS.activeDelivery} size={20} /></div>
                   <div className="rider-notif-text">
                     <strong>New order confirmed!</strong>
                     <span>{n.customerName} · ₱{(n.total || 0).toLocaleString()}</span>
@@ -1175,7 +1176,13 @@ const RiderDashboard = () => {
 
   const toggleExpanded     = (id, setFn) => setFn(prev => ({ ...prev, [id]: !prev[id] }));
   const getPickupStatusStyle = (status) => ({ approved: { bg: '#d1fae5', color: '#0f5132' }, out_for_delivery: { bg: '#dbeafe', color: '#1e40af' }, completed: { bg: '#d1fae5', color: '#065f46' }, scanned: { bg: '#fce7f3', color: '#9d174d' } }[status] || { bg: '#e2e8f0', color: '#475569' });
-  const getStatusLabel     = (status) => ({ approved: '✅ Accepted', out_for_delivery: '🚚 Out for Delivery', completed: '🎉 Delivered', scanned: '📷 From Scan' }[status] || status);
+  const getStatusLabel = (status) => ({ approved: 'Accepted', out_for_delivery: 'Out for Delivery', completed: 'Delivered', scanned: 'From Scan' }[status] || status);
+  const getStatusIcon = (status) => ({
+    approved: DK_ICONS.completed,
+    out_for_delivery: DK_ICONS.outForDelivery,
+    completed: DK_ICONS.completed,
+    scanned: DK_ICONS.activeDelivery,
+  }[status] || null);
 
   const handleLogout  = async () => {
     const ok = await confirm({
@@ -1512,7 +1519,7 @@ const RiderDashboard = () => {
             <div className="rider-live-pill-row">
               <div className="rider-live-badge"><span className="sync-dot"></span>Live Updates</div>
               {newAvailableCount > 0 && (
-                <span className="rider-new-orders-chip"><i className="fas fa-bell"></i> {newAvailableCount} new</span>
+                <span className="rider-new-orders-chip"><DkIcon name={DK_ICONS.notification} size={13} /> {newAvailableCount} new</span>
               )}
             </div>
             {availableOrders.length === 0 ? (
@@ -1532,7 +1539,7 @@ const RiderDashboard = () => {
                       <div className="rider-compact-row">
                         <div className="rider-compact-left">
                           <span className="rider-order-id">#{order.orderId?.slice(-8)}</span>
-                          <span className="rider-compact-customer"><i className="fas fa-user"></i> {order.customerName || order.name || 'N/A'}</span>
+                          <span className="rider-compact-customer"><DkIcon name={DK_ICONS.customer} size={12} /> {order.customerName || order.name || 'N/A'}</span>
                           <span className="rider-compact-total">₱{(order.finalTotal ?? order.total ?? 0).toLocaleString()}</span>
                         </div>
                         <div className="rider-compact-right">
@@ -1633,11 +1640,14 @@ const RiderDashboard = () => {
                       <div className="rider-compact-row">
                         <div className="rider-compact-left">
                           <span className="rider-order-id">#{req.orderId?.slice(-8)}</span>
-                          <span className="rider-compact-customer"><i className="fas fa-user"></i> {req.customerName || order?.customerName || 'Customer'}</span>
+                                                    <span className="rider-compact-customer"><DkIcon name={DK_ICONS.customer} size={12} /> {req.customerName || order?.customerName || 'Customer'}</span>
                           <span className="rider-compact-total">₱{(req.total || order?.finalTotal || order?.total || 0).toLocaleString()}</span>
                         </div>
                         <div className="rider-compact-right">
-                          <span className="rider-status-pill" style={{ background: style.bg, color: style.color }}>{getStatusLabel(req.status)}</span>
+                          <span className="rider-status-pill" style={{ background: style.bg, color: style.color }}>
+                            {getStatusIcon(req.status) && <DkIcon name={getStatusIcon(req.status)} size={12} />}
+                            {getStatusLabel(req.status)}
+                          </span>
                           <button className="rider-view-btn" onClick={() => toggleExpanded(req._id, setExpandedPickups)}>
                             <i className={`fas fa-chevron-${isExpanded ? 'up' : 'down'}`}></i> {isExpanded ? 'Hide' : 'View'}
                           </button>
@@ -1686,7 +1696,7 @@ const RiderDashboard = () => {
               </div>
             )}
             {myDeliveries.length === 0 ? (
-              <div className="rider-empty"><i className="fas fa-shipping-fast"></i><p>No deliveries yet.</p><span>Accept an order from Available Orders to see it here with the map.</span></div>
+              <div className="rider-empty"><DkIcon name={DK_ICONS.outForDelivery} size={36} /><p>No deliveries yet.</p><span>Accept an order from Available Orders to see it here with the map.</span></div>
             ) : (
               <div className="rider-compact-list">
                 {myDeliveries.map(delivery => {
@@ -1706,7 +1716,7 @@ const RiderDashboard = () => {
                       <div className="rider-compact-row">
                         <div className="rider-compact-left">
                           <span className="rider-order-id">#{delivery.orderId?.slice(-8)}</span>
-                          <span className="rider-compact-customer"><i className="fas fa-user"></i> {customerName}</span>
+                          <span className="rider-compact-customer"><DkIcon name={DK_ICONS.customer} size={12} /> {customerName}</span>
                           <span className="rider-compact-total">₱{(delivery.total || 0).toLocaleString()}</span>
                         </div>
                         <div className="rider-compact-right">
@@ -1722,9 +1732,9 @@ const RiderDashboard = () => {
                       {isExpanded && (
                         <div className="rider-expanded-body">
                           <div className="rider-expanded-section">
-                            <div className="rider-expanded-section-title"><i className="fas fa-user"></i> Customer Info</div>
-                            <div className="rider-info-row"><i className="fas fa-user-circle"></i><span><strong>Name:</strong> {customerName}</span></div>
-                            <div className="rider-info-row"><i className="fas fa-map-marker-alt"></i><span><strong>Address:</strong> {addr || 'N/A'}</span></div>
+                            <div className="rider-expanded-section-title"><DkIcon name={DK_ICONS.customer} size={14} /> Customer Info</div>
+                            <div className="rider-info-row"><DkIcon name={DK_ICONS.customer} size={14} /><span><strong>Name:</strong> {customerName}</span></div>
+                            <div className="rider-info-row"><DkIcon name={DK_ICONS.livemap} size={14} /><span><strong>Address:</strong> {addr || 'N/A'}</span></div>
                             <div className="rider-info-row">
                               <i className="fas fa-phone"></i>
                               <span><strong>Phone:</strong> {phone || 'N/A'}</span>
@@ -1734,7 +1744,7 @@ const RiderDashboard = () => {
                                 <i className="fas fa-phone-alt"></i> Call Customer
                               </a>
                             )}
-                            <div className="customer-map-section-title"><i className="fas fa-map-marked-alt"></i> Customer Location</div>
+                            <div className="customer-map-section-title"><DkIcon name={DK_ICONS.livemap} size={15} /> Customer Location</div>
                             <CustomerMap orderId={delivery.orderId} allOrders={allOrders} riderCoords={currentPosition ? { lat: currentPosition.lat, lng: currentPosition.lng } : null} riderHeading={riderHeading} />
                           </div>
                           <div className="rider-expanded-section rider-info-preview">
@@ -1788,7 +1798,7 @@ const RiderDashboard = () => {
                           )}
                           {isApproved && (
                             <button className={`rider-notify-btn ${notifyingId === delivery._id ? 'notifying' : ''}`} onClick={() => notifyCustomer(delivery)} disabled={notifyingId === delivery._id}>
-                              {notifyingId === delivery._id ? <><i className="fas fa-spinner fa-spin"></i> Notifying...</> : <><i className="fas fa-bell"></i> Notify Customer — I'm On My Way!</>}
+                              {notifyingId === delivery._id ? <><i className="fas fa-spinner fa-spin"></i> Notifying...</> : <><DkIcon name={DK_ICONS.notification} size={14} /> Notify Customer — I'm On My Way!</>}
                             </button>
                           )}
                           {isOutForDelivery && (
@@ -1828,7 +1838,7 @@ const RiderDashboard = () => {
                               </div>
                               {errMsg && <div className="rider-confirm-error"><i className="fas fa-exclamation-circle"></i> {errMsg}</div>}
                               <button className={`rider-confirm-btn ${confirmingId === delivery._id ? 'confirming' : ''}`} onClick={() => confirmDelivery(delivery)} disabled={confirmingId === delivery._id}>
-                                {confirmingId === delivery._id ? <><i className="fas fa-spinner fa-spin"></i> Confirming...</> : <><i className="fas fa-check-circle"></i> Confirm Delivery</>}
+                                {confirmingId === delivery._id ? <><i className="fas fa-spinner fa-spin"></i> Confirming...</> : <><DkIcon name={DK_ICONS.completed} size={14} /> Confirm Delivery</>}
                               </button>
                             </div>
                           )}
@@ -1933,20 +1943,20 @@ const RiderDashboard = () => {
         </button>
         <button type="button" className={`rider-bnav-item ${tab === 'deliver' ? 'active' : ''}`} onClick={() => handleNavClick('deliver')}>
           <span className="rider-bnav-icon-wrap">
-            <i className="fas fa-shipping-fast"></i>
+            <DkIcon name={DK_ICONS.outForDelivery} size={18} />
             {activeDeliveriesCount > 0 && <em className={`rider-bnav-badge green ${newDeliveriesCount > 0 ? 'new' : ''}`}>{activeDeliveriesCount}</em>}
           </span>
           <span>Deliver</span>
         </button>
         <button type="button" className={`rider-bnav-item ${tab === 'my-pickups' ? 'active' : ''}`} onClick={() => handleNavClick('my-pickups')}>
           <span className="rider-bnav-icon-wrap">
-            <i className="fas fa-box"></i>
+            <DkIcon name={DK_ICONS.activeDelivery} size={18} />
             {historyPickupsCount > 0 && <em className={`rider-bnav-badge ${newPickupsCount > 0 ? 'new' : ''}`}>{historyPickupsCount}</em>}
           </span>
           <span>My Orders</span>
         </button>
         <button type="button" className={`rider-bnav-item ${tab === 'profile' ? 'active' : ''}`} onClick={() => handleNavClick('profile')}>
-          <i className="fas fa-user-circle"></i>
+          <DkIcon name={DK_ICONS.customer} size={18} />
           <span>Profile</span>
         </button>
       </nav>

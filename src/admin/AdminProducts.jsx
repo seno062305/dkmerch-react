@@ -4,6 +4,7 @@ import { useQuery, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useAddProduct, useUpdateProduct, useDeleteProduct } from '../utils/productStorage';
 import { useConfirm } from '../context/ConfirmContext';
+import DkIcon, { DK_ICONS } from '../components/DkIcon';
 
 const ALLOWED_IMAGE_TYPES = [
   'image/jpeg', 'image/jpg', 'image/png',
@@ -335,7 +336,7 @@ const StockManagement = ({ products, updateProduct, onAddProduct }) => {
     <div className="stock-section">
       <div className="stock-stats">
         <div className="stat-card">
-          <div className="stat-icon blue"><i className="fas fa-boxes"></i></div>
+          <div className="stat-icon blue"><DkIcon name={DK_ICONS.totalProducts} size={24} /></div>
           <div className="stat-info"><h3>{products.length}</h3><p>Total Products</p></div>
         </div>
         <div className="stat-card">
@@ -409,16 +410,16 @@ const StockManagement = ({ products, updateProduct, onAddProduct }) => {
                     const status = getStockStatus(product.stock);
                     return (
                       <tr key={product._id} className={activeTab === 'low' ? 'low-stock-row' : ''}>
-                        <td>
+                        <td data-label="Product">
                           <div className="product-cell">
                             <img src={product.image} alt={product.name} />
                             <div className="product-info"><strong>{product.name}</strong></div>
                           </div>
                         </td>
-                        <td><span className="category-badge">{product.category}</span></td>
-                        <td>{product.kpopGroup}</td>
-                        {activeTab === 'all' && <td className="price-cell">₱{product.price.toLocaleString()}</td>}
-                        <td>
+                        <td data-label="Category"><span className="category-badge">{product.category}</span></td>
+                        <td data-label="Group">{product.kpopGroup}</td>
+                        {activeTab === 'all' && <td className="price-cell" data-label="Price">₱{product.price.toLocaleString()}</td>}
+                        <td data-label="Stock">
                           {editingStock === product._id ? (
                             <div className="stock-edit-wrap">
                               <div className="stock-edit">
@@ -438,8 +439,8 @@ const StockManagement = ({ products, updateProduct, onAddProduct }) => {
                             </strong>
                           )}
                         </td>
-                        <td><span className={`status-badge ${status.cls}`}>{status.label}</span></td>
-                        <td>
+                        <td data-label="Status"><span className={`status-badge ${status.cls}`}>{status.label}</span></td>
+                        <td data-label="Actions">
                           <div className="action-buttons">
                             <button className="edit-stock-btn" onClick={() => startEdit(product._id, product.stock)}>
                               <i className="fas fa-edit"></i> Edit
@@ -565,10 +566,10 @@ const AdminProducts = () => {
       <div className="view-toggle-row">
         <div className="view-toggle">
           <button className={`view-btn${activeView === 'products' ? ' active' : ''}`} onClick={() => setActiveView('products')}>
-            <i className=""></i> Product Catalog
+            Product Catalog
           </button>
           <button className={`view-btn${activeView === 'stock' ? ' active' : ''}`} onClick={() => setActiveView('stock')}>
-            <i className=""></i> Stock Management
+            Stock Management
             {lowStockCount > 0 && <span className="low-pill">{lowStockCount}</span>}
           </button>
         </div>

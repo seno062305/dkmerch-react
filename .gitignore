@@ -2,6 +2,7 @@ node_modules/
 build/
 .env.local
 .env
+firebase-service-account.json
 src/convex_generated
 
 .vercel

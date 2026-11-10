@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
+import DkIcon, { DK_ICONS } from '../components/DkIcon';
+import AdminPager from './AdminPager';
 import './AdminDashboard.css';
 
 const isSaleOrder = (o) => {
@@ -29,8 +31,10 @@ const StatModal = ({ data, onClose }) => {
     <div className="stat-modal-overlay" onClick={onClose}>
       <div className="stat-modal-card" onClick={e => e.stopPropagation()}>
         <div className="stat-modal-header">
-          <div className="stat-modal-icon" style={{ background: data.iconBg }}>
-            <i className={data.icon} style={{ color: data.iconColor }}></i>
+          <div className="stat-modal-icon">
+            {data.dkIcon
+              ? <DkIcon name={data.dkIcon} size={28} />
+              : <i className={data.icon} style={{ color: data.iconColor }}></i>}
           </div>
           <div>
             <h3>{data.title}</h3>
@@ -60,6 +64,8 @@ const StatModal = ({ data, onClose }) => {
 
 const AdminDashboard = () => {
   const [statModal, setStatModal] = useState(null);
+  const [ordersPageSize, setOrdersPageSize] = useState(5);
+  const [ordersPage, setOrdersPage]         = useState(0);
 
   const storeSettings  = useQuery(api.settings.getSettings);
   const updateSettings = useMutation(api.settings.updateSettings);
@@ -180,7 +186,7 @@ const AdminDashboard = () => {
       setStatModal({
         title: 'Inventory Costing',
         value: `₱${stats.inventoryCosting.toLocaleString()}`,
-        icon: 'fas fa-boxes',
+        dkIcon: DK_ICONS.inventoryCosting,
         iconBg: '#fff0eb',
         iconColor: '#ee4d2d',
         explanation: 'Total estimated value of all current stock (stock × price).',
@@ -195,7 +201,7 @@ const AdminDashboard = () => {
       setStatModal({
         title: 'Total Orders',
         value: stats.totalOrders,
-        icon: 'fas fa-shopping-cart',
+        dkIcon: DK_ICONS.totalOrders,
         iconBg: '#eff6ff',
         iconColor: '#3b82f6',
         explanation: 'All orders in the system, regardless of status.',
@@ -211,7 +217,7 @@ const AdminDashboard = () => {
       setStatModal({
         title: 'Registered Users',
         value: stats.totalUsers,
-        icon: 'fas fa-users',
+        dkIcon: DK_ICONS.registeredUsers,
         iconBg: '#f5f3ff',
         iconColor: '#7c3aed',
         explanation: 'Non-admin customer accounts registered in the store.',
@@ -224,7 +230,7 @@ const AdminDashboard = () => {
       setStatModal({
         title: 'Total Products',
         value: stats.totalProducts,
-        icon: 'fas fa-box',
+        dkIcon: DK_ICONS.totalProducts,
         iconBg: '#fdf4ff',
         iconColor: '#a855f7',
         explanation: 'Active catalog products. Low stock = fewer than 10 units.',
@@ -239,11 +245,16 @@ const AdminDashboard = () => {
   };
 
   const recentOrders = useMemo(() =>
-    [...validOrders]
-      .sort((a, b) => b._creationTime - a._creationTime)
-      .slice(0, 8),
+    [...validOrders].sort((a, b) => b._creationTime - a._creationTime),
     [validOrders]
   );
+
+  useEffect(() => { setOrdersPage(0); }, [ordersPageSize, recentOrders.length]);
+
+  const pagedRecentOrders = useMemo(() => {
+    const start = ordersPage * ordersPageSize;
+    return recentOrders.slice(start, start + ordersPageSize);
+  }, [recentOrders, ordersPage, ordersPageSize]);
 
   const getStatusBadgeClass = (status) => {
     const s = (status || '').toLowerCase();
@@ -259,7 +270,6 @@ const AdminDashboard = () => {
       <div className="dash-page-intro">
         <div>
           <h2>Operations Dashboard</h2>
-          <p>Store health overview — inventory, orders, users, and pickup location. Sales graphs live in Sales Reports.</p>
         </div>
         <Link to="/admin/sales-reports" className="dash-sales-link">
           <i className="fas fa-chart-bar"></i> Open Sales Reports
@@ -268,7 +278,7 @@ const AdminDashboard = () => {
 
       <div className="stats-grid">
         <div className="stat-card sales clickable-card" onClick={() => openStatModal('inventory')}>
-          <div className="stat-icon"><i className="fas fa-boxes"></i></div>
+          <div className="stat-icon"><DkIcon name={DK_ICONS.inventoryCosting} size={28} /></div>
           <div className="stat-details">
             <h3>Inventory Costing</h3>
             <p className="stat-value">₱{stats.inventoryCosting.toLocaleString()}</p>
@@ -278,7 +288,7 @@ const AdminDashboard = () => {
         </div>
 
         <div className="stat-card orders clickable-card" onClick={() => openStatModal('orders')}>
-          <div className="stat-icon"><i className="fas fa-shopping-cart"></i></div>
+          <div className="stat-icon"><DkIcon name={DK_ICONS.totalOrders} size={28} /></div>
           <div className="stat-details">
             <h3>Total Orders</h3>
             <p className="stat-value">{stats.totalOrders}</p>
@@ -288,7 +298,7 @@ const AdminDashboard = () => {
         </div>
 
         <div className="stat-card users clickable-card" onClick={() => openStatModal('users')}>
-          <div className="stat-icon"><i className="fas fa-users"></i></div>
+          <div className="stat-icon"><DkIcon name={DK_ICONS.registeredUsers} size={28} /></div>
           <div className="stat-details">
             <h3>Registered Users</h3>
             <p className="stat-value">{stats.totalUsers}</p>
@@ -298,7 +308,7 @@ const AdminDashboard = () => {
         </div>
 
         <div className="stat-card products clickable-card" onClick={() => openStatModal('products')}>
-          <div className="stat-icon"><i className="fas fa-box"></i></div>
+          <div className="stat-icon"><DkIcon name={DK_ICONS.totalProducts} size={28} /></div>
           <div className="stat-details">
             <h3>Total Products</h3>
             <p className="stat-value">{stats.totalProducts}</p>
@@ -317,22 +327,31 @@ const AdminDashboard = () => {
           </div>
           <div className="card-body">
             {recentOrders.length > 0 ? (
-              <div className="orders-list">
-                {recentOrders.map(order => (
-                  <div key={order.orderId} className="order-item">
-                    <div className="order-info">
-                      <div className="order-id"><i className="fas fa-receipt"></i> #{order.orderId?.slice(-8)}</div>
-                      <div className="order-customer">{order.customerName || order.email || 'Customer'}</div>
+              <>
+                <div className="orders-list">
+                  {pagedRecentOrders.map(order => (
+                    <div key={order.orderId} className="order-item">
+                      <div className="order-info">
+                        <div className="order-id"><i className="fas fa-receipt"></i> #{order.orderId?.slice(-8)}</div>
+                        <div className="order-customer">{order.customerName || order.email || 'Customer'}</div>
+                      </div>
+                      <div className="order-details">
+                        <div className="order-total">₱{(order.finalTotal ?? order.total ?? 0).toLocaleString()}</div>
+                        <span className={`order-status ${getStatusBadgeClass(order.paymentStatus || order.orderStatus || order.status)}`}>
+                          {(order.orderStatus || order.paymentStatus || order.status || 'pending').toUpperCase()}
+                        </span>
+                      </div>
                     </div>
-                    <div className="order-details">
-                      <div className="order-total">₱{(order.finalTotal ?? order.total ?? 0).toLocaleString()}</div>
-                      <span className={`order-status ${getStatusBadgeClass(order.paymentStatus || order.orderStatus || order.status)}`}>
-                        {(order.orderStatus || order.paymentStatus || order.status || 'pending').toUpperCase()}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+                <AdminPager
+                  total={recentOrders.length}
+                  page={ordersPage}
+                  pageSize={ordersPageSize}
+                  onPageChange={setOrdersPage}
+                  onPageSizeChange={setOrdersPageSize}
+                />
+              </>
             ) : (
               <div className="no-data"><i className="fas fa-shopping-cart"></i><p>No orders yet</p></div>
             )}

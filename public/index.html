@@ -215,14 +215,22 @@
       }
 
       // Hide after React root has content
-      var observer = new MutationObserver(function () {
-        var root = document.getElementById('root');
-        if (root && root.children.length > 0) {
-          observer.disconnect();
+      var rootEl = document.getElementById('root');
+      if (rootEl) {
+        if (rootEl.children.length > 0) {
           hideSplash();
+        } else {
+          var observer = new MutationObserver(function () {
+            if (rootEl.children.length > 0) {
+              observer.disconnect();
+              hideSplash();
+            }
+          });
+          observer.observe(rootEl, { childList: true });
         }
-      });
-      observer.observe(document.getElementById('root'), { childList: true });
+      } else {
+        hideSplash();
+      }
 
       // Fallback: hide after 4s regardless
       setTimeout(hideSplash, 4000);

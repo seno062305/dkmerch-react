@@ -19,10 +19,10 @@
 
 .dk-confirm-modal {
   width: 100%;
-  max-width: 400px;
+  max-width: 360px;
   background: #fff;
-  border-radius: 18px;
-  padding: 28px 24px 22px;
+  border-radius: 16px;
+  padding: 22px 20px 18px;
   text-align: center;
   box-shadow: 0 24px 60px rgba(252, 18, 104, 0.18), 0 8px 24px rgba(0, 0, 0, 0.18);
   animation: dkConfirmPop 0.22s cubic-bezier(0.22, 1, 0.36, 1);
@@ -33,49 +33,21 @@
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-.dk-confirm-icon {
-  width: 58px;
-  height: 58px;
-  margin: 0 auto 14px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 22px;
-}
-
-.dk-confirm-primary .dk-confirm-icon {
-  background: linear-gradient(135deg, #ffe4ef, #fce7f3);
-  color: #fc1268;
-}
-
-.dk-confirm-danger .dk-confirm-icon {
-  background: linear-gradient(135deg, #fee2e2, #fecaca);
-  color: #dc2626;
-}
-
-.dk-confirm-warning .dk-confirm-icon {
-  background: linear-gradient(135deg, #fef3c7, #fde68a);
-  color: #d97706;
-}
-
-.dk-confirm-info .dk-confirm-icon {
-  background: linear-gradient(135deg, #e0e7ff, #c7d2fe);
-  color: #4f46e5;
-}
+/* Icon badge removed — keep class for backward compat but hide */
+.dk-confirm-icon { display: none !important; }
 
 .dk-confirm-title {
   margin: 0 0 8px;
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 800;
   color: #1a1a2e;
   line-height: 1.3;
 }
 
 .dk-confirm-message {
-  margin: 0 0 22px;
-  font-size: 14px;
-  line-height: 1.55;
+  margin: 0 0 16px;
+  font-size: 13px;
+  line-height: 1.5;
   color: #6b7280;
   white-space: pre-line;
   word-break: break-word;
@@ -83,7 +55,8 @@
 
 .dk-confirm-actions {
   display: flex;
-  gap: 10px;
+  flex-direction: row;
+  gap: 8px;
 }
 
 .dk-confirm-cancel,
@@ -91,8 +64,8 @@
   flex: 1;
   border: none;
   border-radius: 10px;
-  padding: 12px 14px;
-  font-size: 14px;
+  padding: 10px 12px;
+  font-size: 13px;
   font-weight: 700;
   cursor: pointer;
   transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
@@ -142,13 +115,26 @@
 }
 
 @media (max-width: 480px) {
+  .dk-confirm-overlay {
+    padding: 14px;
+    align-items: center;
+    justify-content: center;
+  }
+
   .dk-confirm-modal {
-    max-width: 100%;
-    border-radius: 16px;
-    padding: 24px 18px 18px;
+    max-width: min(340px, calc(100vw - 28px));
+    border-radius: 14px;
+    padding: 20px 16px 16px;
   }
 
   .dk-confirm-actions {
-    flex-direction: column-reverse;
+    flex-direction: row;
+    gap: 8px;
+  }
+
+  .dk-confirm-cancel,
+  .dk-confirm-proceed {
+    padding: 9px 10px;
+    font-size: 12px;
   }
 }

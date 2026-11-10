@@ -141,24 +141,30 @@
   align-items: stretch;
 }
 
-/* ✅ Input takes most of the space, never shrinks below 120px */
+/* Input takes most of the space; match compact Send Code height */
 .input-with-badge .form-control {
   flex: 1 1 auto;
   min-width: 120px;
-  width: 0; /* ✅ forces flex to control width, not content */
+  width: 0;
+  height: 42px;
+  min-height: 42px;
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
-/* ✅ Button is fixed width — never expands, never shrinks */
+/* Compact side button — never full-bleed */
 .verify-btn {
-  flex: 0 0 130px;
-  width: 130px;
-  padding: 0 16px;
-  min-height: 48px;
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 96px;
+  padding: 0 14px;
+  min-height: 42px;
+  height: 42px;
   background: var(--primary-color);
   color: white;
   border: none;
   border-radius: 8px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
@@ -344,7 +350,7 @@
   .settings-content { padding: 25px 20px; border-radius: 0 0 8px 8px; }
   .settings-form h2 { font-size: 20px; }
   .input-with-badge { flex-direction: row; align-items: stretch; }
-  .verify-btn { width: auto; padding: 0 16px; }
+  .verify-btn { width: auto; min-width: 92px; height: 40px; min-height: 40px; padding: 0 12px; font-size: 12px; }
   .btn-save { width: 100%; justify-content: center; }
 }
 
@@ -355,8 +361,16 @@
   .settings-content { padding: 20px 15px; }
   .settings-tab { padding: 12px 8px; font-size: 12px; }
   .form-control { padding: 10px 14px; font-size: 14px; }
-  .input-with-badge { flex-direction: column; align-items: stretch; }
-  .verify-btn { width: 100%; min-height: 44px; padding: 12px 16px; font-size: 14px; }
+  /* Keep Send Code beside the input — not a huge full-width block */
+  .input-with-badge { flex-direction: row; align-items: stretch; gap: 8px; }
+  .verify-btn {
+    width: auto;
+    min-width: 88px;
+    height: 40px;
+    min-height: 40px;
+    padding: 0 12px;
+    font-size: 12px;
+  }
   .btn-save { padding: 12px 24px; font-size: 14px; }
 }
 

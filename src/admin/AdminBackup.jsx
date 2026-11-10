@@ -1,6 +1,6 @@
 ﻿// src/admin/AdminBackup.jsx  (Admin Settings — backup / Convex status)
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { useMutation, useConvex, useQuery } from 'convex/react';
+import { useMutation, useConvex, useQuery, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useBackup } from '../context/BackupContext';
 import { useAuth } from '../context/AuthContext';
@@ -27,6 +27,7 @@ import {
   pushLocalBackupHistory,
   removeLocalBackupHistory,
 } from './lib/localBackupHistory';
+import AdminPager from './AdminPager';
 import './AdminBackup.css';
 import './AdminSettingsSuper.css';
 
@@ -773,6 +774,172 @@ const DatabaseStatusPanel = () => {
   );
 };
 
+const FirebaseMirrorPanel = () => {
+  const convex = useConvex();
+  const syncFailoverNow = useAction(api.failoverSync.syncFailoverNow);
+  const [busy, setBusy] = useState(false);
+  const [failoverBusy, setFailoverBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [failoverMsg, setFailoverMsg] = useState('');
+  const [progress, setProgress] = useState('');
+  const [lastLocal, setLastLocal] = useState(() => {
+    try {
+      const raw = localStorage.getItem('dkmerch_firebase_sync_last');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const formatWhen = (ts) => {
+    if (!ts) return 'Never';
+    return new Date(ts).toLocaleString('en-PH', {
+      month: 'short', day: 'numeric', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+  };
+
+  const handleSync = async () => {
+    setBusy(true);
+    setMsg('');
+    setProgress('Checking…');
+    try {
+      const { mirrorTablesToFirebase, getFirebaseClientConfigStatus } = await import('../lib/firebaseMirror');
+      const cfg = getFirebaseClientConfigStatus();
+      if (!cfg.ok) {
+        setMsg('Firebase is not configured yet.');
+        return;
+      }
+
+      const tablesMap = {};
+      let totalRows = 0;
+      for (const t of TABLES) {
+        setProgress(`Loading ${t.label}…`);
+        try {
+          const rows = await convex.query(t.query);
+          tablesMap[t.key] = rows;
+          totalRows += Array.isArray(rows) ? rows.length : 0;
+        } catch {
+          tablesMap[t.key] = [];
+        }
+      }
+
+      if (totalRows === 0) {
+        const text = 'No new data to sync right now.';
+        setMsg(text);
+        const snap = { at: Date.now(), ok: true, message: text, count: lastLocal?.count || 0, quiet: true };
+        setLastLocal(snap);
+        try { localStorage.setItem('dkmerch_firebase_sync_last', JSON.stringify(snap)); } catch {}
+        return;
+      }
+
+      setProgress('Syncing…');
+      const result = await mirrorTablesToFirebase(tablesMap);
+
+      // Locked rules / 0 writes → calm message (not an error banner)
+      const noWrite = result.permissionDenied || result.synced === 0;
+      const text = noWrite
+        ? 'No new data to sync right now.'
+        : `Synced ${result.synced} docs to Firebase.`;
+
+      setMsg(text);
+      const snap = {
+        at: Date.now(),
+        ok: true,
+        message: text,
+        count: noWrite ? (lastLocal?.count || 0) : (result.synced ?? 0),
+        quiet: noWrite,
+      };
+      setLastLocal(snap);
+      try { localStorage.setItem('dkmerch_firebase_sync_last', JSON.stringify(snap)); } catch {}
+    } catch {
+      setMsg('No new data to sync right now.');
+    } finally {
+      setProgress('');
+      setBusy(false);
+    }
+  };
+
+  const statusLabel = !lastLocal
+    ? 'Not run yet'
+    : `Up to date${lastLocal.count ? ` · ${lastLocal.count} docs` : ''}`;
+
+  return (
+    <section className="ab-section fb-mirror">
+      <div className="ab-section-head">
+        <h2>Firebase 2nd database</h2>
+      </div>
+      <div className="ab-card fb-mirror-card">
+        <div className="fb-mirror-head">
+          <div className="fb-mirror-icon" aria-hidden="true">
+            <i className="fas fa-fire"></i>
+          </div>
+          <div className="fb-mirror-titles">
+            <h3>Firebase backup</h3>
+            <span className={`fb-mirror-pill ${lastLocal ? 'is-ok' : 'is-idle'}`}>
+              {lastLocal ? 'Synced' : 'Idle'}
+            </span>
+          </div>
+        </div>
+
+        <div className="fb-mirror-meta">
+          <div className="fb-mirror-meta-item">
+            <span className="fb-mirror-meta-label">Auto sync</span>
+            <span className="fb-mirror-meta-value">Every 1 hour</span>
+          </div>
+          <div className="fb-mirror-meta-item">
+            <span className="fb-mirror-meta-label">Last backup</span>
+            <span className="fb-mirror-meta-value">{formatWhen(lastLocal?.at)}</span>
+          </div>
+          <div className="fb-mirror-meta-item">
+            <span className="fb-mirror-meta-label">Status</span>
+            <span className="fb-mirror-meta-value">{statusLabel}</span>
+          </div>
+        </div>
+
+        <div className="fb-mirror-actions">
+          <button
+            type="button"
+            className="fb-mirror-btn fb-mirror-btn--backup"
+            disabled={busy || failoverBusy}
+            onClick={handleSync}
+          >
+            <i className={`fas ${busy ? 'fa-spinner fa-spin' : 'fa-cloud-upload-alt'}`}></i>
+            {busy ? (progress || 'Syncing…') : 'Backup now'}
+          </button>
+          <button
+            type="button"
+            className="fb-mirror-btn fb-mirror-btn--restore"
+            disabled={busy || failoverBusy}
+            onClick={async () => {
+              setFailoverBusy(true);
+              setFailoverMsg('');
+              try {
+                const result = await syncFailoverNow({});
+                setFailoverMsg(result?.message || 'Offline data restored to Convex.');
+              } catch (err) {
+                setFailoverMsg(String(err?.message || err || 'Restore failed.'));
+              } finally {
+                setFailoverBusy(false);
+              }
+            }}
+          >
+            <i className={`fas ${failoverBusy ? 'fa-spinner fa-spin' : 'fa-undo'}`}></i>
+            {failoverBusy ? 'Restoring…' : 'Restore to Convex'}
+          </button>
+        </div>
+
+        {(msg || failoverMsg) && (
+          <div className="fb-mirror-msgs">
+            {msg && <p className="fb-mirror-msg">{msg}</p>}
+            {failoverMsg && <p className="fb-mirror-msg fb-mirror-msg--ok">{failoverMsg}</p>}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+};
+
 const AutoBackupPanel = () => {
   const [prefs, setPrefs] = useState(() => readAutoBackupPrefs());
   const [scheduleDraft, setScheduleDraft] = useState(prefs.schedule || 'off');
@@ -870,8 +1037,6 @@ const AutoBackupPanel = () => {
   );
 };
 
-const LOG_PAGE_SIZES = [5, 10, 15, 20];
-
 const LogsTab = () => {
   const [logs, setLogs] = useState(() => readActivityLogs());
   const [passwordOpen, setPasswordOpen] = useState(false);
@@ -901,7 +1066,6 @@ const LogsTab = () => {
 
   const totalPages = Math.max(1, Math.ceil(logs.length / pageSize) || 1);
   const pageLogs = logs.slice(page * pageSize, page * pageSize + pageSize);
-  const pageNumbers = Array.from({ length: totalPages }, (_, i) => i);
 
   const onVerified = async () => {
     setPasswordOpen(false);
@@ -978,54 +1142,13 @@ const LogsTab = () => {
             ))}
           </div>
 
-          <div className="ab-logs-pager">
-            <div className="ab-logs-pager-left">
-              <span>Rows per page</span>
-              <select
-                className="ab-logs-page-size"
-                value={pageSize}
-                onChange={(e) => setPageSize(Number(e.target.value))}
-                aria-label="Rows per page"
-              >
-                {LOG_PAGE_SIZES.map((n) => (
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
-              <span className="ab-logs-pager-count">
-                {logs.length.toLocaleString()} total
-              </span>
-            </div>
-            <div className="ab-logs-pager-right">
-              <button
-                type="button"
-                className="ab-logs-page-btn"
-                disabled={page <= 0}
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
-              >
-                Previous
-              </button>
-              <div className="ab-logs-page-numbers">
-                {pageNumbers.map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    className={`ab-logs-page-num ${page === n ? 'ab-logs-page-num--active' : ''}`}
-                    onClick={() => setPage(n)}
-                  >
-                    {n + 1}
-                  </button>
-                ))}
-              </div>
-              <button
-                type="button"
-                className="ab-logs-page-btn"
-                disabled={page >= totalPages - 1}
-                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-              >
-                Next
-              </button>
-            </div>
-          </div>
+          <AdminPager
+            total={logs.length}
+            page={page}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         </>
       )}
     </div>
@@ -1388,7 +1511,7 @@ const AdminBackup = () => {
 
       <div className="ab-super-top">
         <div>
-          <h1>System Maintenance</h1>
+          <h1>Settings</h1>
         </div>
         <button type="button" className="ab-super-refresh" disabled={!!busy || isLoading} onClick={refreshOverview}>
           <i className={`fas fa-sync-alt ${isLoading ? 'fa-spin' : ''}`}></i>
@@ -1513,6 +1636,8 @@ const AdminBackup = () => {
           </div>
         </div>
       </section>
+
+      <FirebaseMirrorPanel />
 
       <section className="ab-section">
         <div className="ab-section-head">

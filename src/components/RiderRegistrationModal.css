@@ -6,7 +6,7 @@
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.65);
-  z-index: 9999;
+  z-index: 11000;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -41,13 +41,21 @@
   font-size: 16px;
   cursor: pointer;
   color: #555;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s;
   z-index: 2;
   flex-shrink: 0;
+  padding: 0;
+  line-height: 0;
   -webkit-tap-highlight-color: transparent;
+}
+.rider-modal-close svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+  pointer-events: none;
 }
 .rider-modal-close:hover { background: #fee2e2; color: #dc2626; }
 
@@ -558,30 +566,24 @@
 ══════════════════════════════════════════ */
 @media (max-width: 700px) {
   .rider-modal-overlay {
-    padding: 0;
-    align-items: flex-end;
+    padding: 14px;
+    align-items: center;
+    justify-content: center;
   }
 
   .rider-modal-container {
-    max-width: 100%;
-    max-height: 96vh;
-    border-radius: 20px 20px 0 0;
+    max-width: min(440px, calc(100vw - 28px));
+    max-height: min(82dvh, 720px);
+    border-radius: 16px;
   }
 
   .rider-modal-container::before {
-    content: '';
-    display: block;
-    width: 40px;
-    height: 4px;
-    background: #e2e8f0;
-    border-radius: 2px;
-    margin: 12px auto 0;
-    flex-shrink: 0;
+    display: none;
   }
 
   .rider-modal-header {
     padding: 16px 20px 14px;
-    border-radius: 20px 20px 0 0;
+    border-radius: 16px 16px 0 0;
   }
 
   .rider-modal-title { font-size: 19px; }

@@ -6,6 +6,7 @@ import { useMutation, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { appendActivityLog } from "../admin/lib/localActivityLog";
 import { savePinWithFallback } from "../lib/localPin";
+import { runWithFailover } from "../lib/failoverWrite";
 
 const RegisterModal = ({ onClose }) => {
   const { register, completeLogin } = useAuth();
@@ -66,11 +67,28 @@ const RegisterModal = ({ onClose }) => {
   });
 
   // ── Convex mutations / actions ────────────────────
-  const registerPendingUser = useMutation(api.users.registerPendingUser);
-  const verifyOtpAndCreateUser = useMutation(api.users.verifyOtpAndCreateUser);
+  const registerPendingUserMut = useMutation(api.users.registerPendingUser);
+  const verifyOtpAndCreateUserMut = useMutation(api.users.verifyOtpAndCreateUser);
   const resendOtpMutation = useMutation(api.users.resendOtp);
   const setUserPin = useMutation(api.users.setUserPin);
   const resetPasswordByEmail = useMutation(api.users.resetPasswordByEmail);
+
+  const registerPendingUser = (args) =>
+    runWithFailover(registerPendingUserMut, args, {
+      table: "users",
+      mutation: "users:registerPendingUser",
+      docKey: args?.email,
+      payload: args,
+      needsEmail: true,
+    });
+  const verifyOtpAndCreateUser = (args) =>
+    runWithFailover(verifyOtpAndCreateUserMut, args, {
+      table: "users",
+      mutation: "users:createUser",
+      docKey: args?.email || args?.token,
+      payload: args,
+      needsEmail: true,
+    });
   const sendPasswordResetCode = useAction(api.sendEmail.sendPasswordResetCode);
   const sendRegistrationOTP = useAction(api.sendEmail.sendRegistrationOTP);
 
@@ -1030,7 +1048,7 @@ const RegisterModal = ({ onClose }) => {
                 {isLoading ? (
                   <><svg className="spinner" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" style={{ opacity: 0.25 }} /><path fill="currentColor" style={{ opacity: 0.75 }} d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Sending Code...</>
                 ) : (
-                  <><svg viewBox="0 0 20 20" fill="currentColor"><path d="M8 9a3 3 0 100-6 3 3 0 000 6zM8 11a6 6 0 016 6H2a6 6 0 016-6zM16 7a1 1 0 10-2 0v1h-1a1 1 0 100 2h1v1a1 1 0 102 0v-1h1a1 1 0 100-2h-1V7z" /></svg>Create Account</>
+                  <>Create Account</>
                 )}
               </button>
 

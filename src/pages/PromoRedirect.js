@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
+import DkIcon, { DK_ICONS } from '../components/DkIcon';
 
 const PH_OFFSET_MS = 8 * 60 * 60 * 1000;
 
@@ -141,7 +142,9 @@ const PromoRedirect = () => {
               </div>
             )}
             <p style={s.hint}>Check your inbox for newer promos from DKMerch! 💌</p>
-            <button style={s.btnPrimary} onClick={() => navigate('/')}>🛍️ Browse Products</button>
+            <button style={{ ...s.btnPrimary, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 }} onClick={() => navigate('/')}>
+              <DkIcon name={DK_ICONS.browseProducts} size={16} /> Browse Products
+            </button>
           </div>
         </div>
       </div>

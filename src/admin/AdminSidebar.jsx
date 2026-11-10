@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useQuery, useMutation, useConvex } from 'convex/react';
@@ -7,6 +8,7 @@ import { useBackup } from '../context/BackupContext';
 import { TABLES } from './AdminBackup';
 import { downloadEncryptedBackupExcel } from './lib/backupExcel';
 import { formatExportCooldownMessage } from './lib/exportCooldown';
+import DkIcon, { DK_ICONS } from '../components/DkIcon';
 import './AdminSidebar.css';
 
 // ── Logout Backup Modal ───────────────────────────────────────────────────────
@@ -16,7 +18,6 @@ const LogoutModal = ({
 }) => (
   <div className="lo-modal-overlay">
     <div className="lo-modal">
-      <div className="lo-modal-icon"><i className="fas fa-database"></i></div>
       <h2 className="lo-modal-title">Confirm logout</h2>
       {step === 'choose' ? (
         <>
@@ -26,10 +27,10 @@ const LogoutModal = ({
           </p>
           <div className="lo-modal-actions">
             <button className="lo-btn lo-btn--backup" onClick={onLogoutWithBackup} disabled={isBackingUp}>
-              <i className="fas fa-file-excel"></i> Backup &amp; Logout
+              Backup &amp; Logout
             </button>
             <button className="lo-btn lo-btn--skip" onClick={onLogoutNoBackup} disabled={isBackingUp}>
-              <i className="fas fa-sign-out-alt"></i> Logout without backup
+              Logout without backup
             </button>
             <button className="lo-btn lo-btn--cancel" onClick={onClose} disabled={isBackingUp}>
               Cancel
@@ -60,7 +61,7 @@ const LogoutModal = ({
             <button className="lo-btn lo-btn--backup" onClick={onLogoutWithBackup} disabled={isBackingUp || !password.trim()}>
               {isBackingUp
                 ? <><span className="lo-spinner"></span> Encrypting backup…</>
-                : <><i className="fas fa-lock"></i> Verify &amp; Backup</>
+                : <>Verify &amp; Backup</>
               }
             </button>
             <button className="lo-btn lo-btn--cancel" onClick={onClose} disabled={isBackingUp}>
@@ -246,7 +247,7 @@ const AdminSidebar = ({ onLinkClick, onClose, onToggleCollapse }) => {
           {chatUnreadCount > 0 && <span className="order-badge">{chatUnreadCount}</span>}
         </NavLink>
         <NavLink to="/admin/settings" className="admin-nav-link" onClick={handleNavClick}>
-          <i className="fas fa-tools"></i><span>System Maintenance</span>
+          <i className="fas fa-cog"></i><span>Settings</span>
         </NavLink>
       </nav>
 
@@ -256,7 +257,7 @@ const AdminSidebar = ({ onLinkClick, onClose, onToggleCollapse }) => {
         </button>
       </div>
 
-      {showLogoutModal && (
+      {showLogoutModal && createPortal(
         <LogoutModal
           onClose={resetLogoutModal}
           onLogoutNoBackup={handleLogoutNoBackup}
@@ -268,7 +269,8 @@ const AdminSidebar = ({ onLinkClick, onClose, onToggleCollapse }) => {
           passwordError={logoutPwError}
           showPw={showLogoutPw}
           setShowPw={setShowLogoutPw}
-        />
+        />,
+        document.body
       )}
     </>
   );

@@ -143,9 +143,10 @@
 }
 
 .card-icon {
-  width: 46px;
-  height: 46px;
-  border-radius: 10px;
+  width: 40px;
+  height: 40px;
+  border-radius: 0;
+  background: transparent !important;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -157,10 +158,13 @@
   height: 22px;
 }
 
-.revenue-icon   { background: linear-gradient(135deg, #10b981, #34d399); color: white; }
-.orders-icon    { background: linear-gradient(135deg, #3b82f6, #60a5fa); color: white; }
-.completed-icon { background: linear-gradient(135deg, #8b5cf6, #a78bfa); color: white; }
-.average-icon   { background: linear-gradient(135deg, #ec4899, #f472b6); color: white; }
+.revenue-icon,
+.orders-icon,
+.completed-icon,
+.average-icon {
+  background: transparent !important;
+  color: #334155;
+}
 
 .card-content {
   display: flex;
@@ -515,10 +519,10 @@
   border-bottom: 1.5px solid #f1f5f9;
 }
 .smodal-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  background: #f1f5f9;
+  width: 40px;
+  height: 40px;
+  border-radius: 0;
+  background: transparent !important;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -549,11 +553,23 @@
   font-size: 14px;
   color: #64748b;
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   transition: background 0.15s;
+  padding: 0;
+  line-height: 0;
+}
+.smodal-close i,
+.smodal-close svg {
+  display: block;
+  line-height: 1;
+  margin: 0;
+  width: 12px;
+  height: 12px;
+  font-size: 12px;
+  pointer-events: none;
 }
 .smodal-close:hover { background: #e2e8f0; }
 

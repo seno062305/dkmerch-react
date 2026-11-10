@@ -312,9 +312,36 @@ footer {
   .btn { padding: 10px 20px; font-size: 14px; }
   .page-header { padding: 40px 0; }
   .page-title { font-size: 32px; }
+
+  /* Prevent horizontal “sumasabog” on phones */
+  html, body, #root {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  img { max-width: 100%; height: auto; }
+
+  .points-badge {
+    font-size: 9px;
+    padding: 2px 6px;
+    max-width: 100%;
+  }
 }
 
 @media (max-width: 576px) {
   .container { padding: 0 10px; }
   .page-title { font-size: 28px; }
+}
+
+/* Custom DK icons (/public/icons) */
+.dk-icon {
+  width: 1.15em;
+  height: 1.15em;
+  display: inline-block;
+  vertical-align: -0.2em;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.dk-icon--invert {
+  filter: brightness(0) invert(1);
 }

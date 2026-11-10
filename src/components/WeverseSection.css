@@ -80,6 +80,10 @@
     border-radius: 12px;
     overflow: hidden;
     box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-width: 0;
 }
 
 .wv-card:hover {
@@ -156,7 +160,13 @@
 .wv-card:hover .wv-card-img img { transform: scale(1.04); }
 
 /* Card info */
-.wv-card-info { padding: 10px 12px 14px; }
+.wv-card-info {
+    padding: 10px 12px 14px;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+}
 
 .wv-card-group {
     font-size: 11px;
@@ -355,42 +365,51 @@
 @media (max-width: 992px) {
     .weverse-section { margin: 20px; }
     .wv-grid {
-        grid-template-columns: repeat(3, 1fr);  /* 3 cols on tablet */
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 12px;
         padding: 16px;
     }
 }
 
 @media (max-width: 768px) {
+    .weverse-section {
+        margin: 12px;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
     .wv-section-title { font-size: 18px; }
     .wv-grid {
-        grid-template-columns: repeat(3, 1fr);  /* 3 cols on mobile */
-        gap: 8px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
         padding: 12px;
+        padding-bottom: 88px; /* clear chat / download FABs */
+        align-items: stretch;
     }
-    .wv-card-name { font-size: 11px; min-height: 30px; }
-    .wv-card-price-current { font-size: 12px; }
-    .wv-card-info { padding: 6px 8px 10px; }
+    .wv-card-name { font-size: 12px; min-height: 34px; }
+    .wv-card-price-current { font-size: 13px; }
+    .wv-card-info { padding: 8px 8px 12px; }
     .wv-card-img { padding: 8px; }
     .wv-card-fav { width: 28px; height: 28px; opacity: 1; transform: scale(1); }
     .wv-card-fav i { font-size: 13px; }
+    .wv-sale-badge { font-size: 10px; padding: 3px 8px; }
 }
 
 @media (max-width: 576px) {
-    .weverse-section { margin: 8px; }
+    .weverse-section { margin: 8px; border-radius: 12px; }
     .wv-grid {
-        grid-template-columns: repeat(3, 1fr);  /* still 3 cols on small phones */
-        gap: 6px;
-        padding: 8px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        padding: 10px;
+        padding-bottom: 96px;
     }
     .wv-section-header { padding: 12px 12px 0; }
-    .wv-card-group { font-size: 9px; margin-bottom: 3px; }
-    .wv-card-name { font-size: 10px; min-height: 26px; -webkit-line-clamp: 2; }
-    .wv-card-price-current { font-size: 11px; }
-    .wv-card-price-original { font-size: 9px; }
-    .wv-card-info { padding: 5px 6px 8px; }
+    .wv-card-group { font-size: 10px; margin-bottom: 4px; }
+    .wv-card-name { font-size: 11px; min-height: 32px; -webkit-line-clamp: 2; }
+    .wv-card-price-current { font-size: 12px; }
+    .wv-card-price-original { font-size: 10px; }
+    .wv-card-info { padding: 6px 7px 10px; }
     .wv-card-img { padding: 6px; }
-    .wv-card-sold { display: none; } /* hide on tiny screens to save space */
+    .wv-card-sold { display: none; }
     .wv-promo-banner { font-size: 12px; padding: 8px 12px; }
     .wv-promo-badge { font-size: 9px; padding: 2px 7px; }
 }

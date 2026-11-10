@@ -2,10 +2,10 @@ import React, { useEffect } from 'react';
 import './ConfirmModal.css';
 
 const VARIANT_META = {
-  primary: { icon: 'fa-shopping-bag', tone: 'primary' },
-  danger:  { icon: 'fa-trash-alt',    tone: 'danger' },
-  warning: { icon: 'fa-exclamation-triangle', tone: 'warning' },
-  info:    { icon: 'fa-info-circle',  tone: 'info' },
+  primary: { tone: 'primary' },
+  danger:  { tone: 'danger' },
+  warning: { tone: 'warning' },
+  info:    { tone: 'info' },
 };
 
 const ConfirmModal = ({
@@ -14,12 +14,10 @@ const ConfirmModal = ({
   confirmLabel = 'Confirm',
   cancelLabel = 'Cancel',
   variant = 'primary',
-  icon,
   onConfirm,
   onCancel,
 }) => {
   const meta = VARIANT_META[variant] || VARIANT_META.primary;
-  const iconClass = icon || meta.icon;
 
   useEffect(() => {
     const onKey = (e) => {
@@ -39,9 +37,6 @@ const ConfirmModal = ({
         aria-modal="true"
         aria-labelledby="dk-confirm-title"
       >
-        <div className="dk-confirm-icon" aria-hidden="true">
-          <i className={`fas ${iconClass}`}></i>
-        </div>
         <h3 id="dk-confirm-title" className="dk-confirm-title">{title}</h3>
         {message && (
           <p className="dk-confirm-message">{message}</p>

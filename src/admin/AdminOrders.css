@@ -194,10 +194,23 @@
   font-size: 18px !important;
   cursor: pointer !important;
   transition: all 0.3s ease !important;
-  display: flex !important;
+  display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
   flex-shrink: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  line-height: 0 !important;
+}
+.close-btn i,
+.close-btn svg {
+  display: block !important;
+  line-height: 1 !important;
+  margin: 0 !important;
+  width: 14px !important;
+  height: 14px !important;
+  font-size: 14px !important;
+  pointer-events: none !important;
 }
 .close-btn:hover {
   background: #d1d5db !important;
@@ -912,34 +925,211 @@
 }
 
 @media (max-width: 768px) {
-  .admin-orders-page { padding: 16px; }
-  .orders-tabs { flex-wrap: nowrap; overflow-x: auto; margin-bottom: 20px; }
-  .tab-btn { padding: 12px 16px; font-size: 13px; flex-shrink: 0; }
-  .orders-filters { flex-direction: column; }
-  .filter-group { min-width: 100%; }
-  .orders-table { min-width: 800px; }
-  .orders-table th, .orders-table td { padding: 12px 10px; font-size: 13px; }
+  .admin-orders-page {
+    padding: 12px;
+    max-width: 100%;
+    width: 100%;
+    overflow-x: hidden;
+    box-sizing: border-box;
+  }
+
+  /* 2-col tabs — full labels, nothing cut off */
+  .orders-tabs {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin: 0 0 16px;
+    padding: 0 0 4px;
+    border-bottom: none;
+    overflow: visible;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+  .tab-btn {
+    width: 100%;
+    min-width: 0;
+    justify-content: center;
+    padding: 10px 8px;
+    font-size: 11px;
+    gap: 5px;
+    border: 1.5px solid #e2e8f0;
+    bottom: 0;
+    border-radius: 10px;
+    background: #fff;
+    color: #64748b;
+    white-space: normal;
+    line-height: 1.25;
+    text-align: center;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+  .tab-btn i { font-size: 12px; flex-shrink: 0; }
+  .tab-btn.active,
+  .tab-btn-refund.active {
+    border-radius: 10px !important;
+    background: #fff !important;
+    color: #fc1268 !important;
+    border: 1.5px solid #fc1268 !important;
+    box-shadow: 0 2px 8px rgba(252, 18, 104, 0.12) !important;
+  }
+  .tab-btn.active i,
+  .tab-btn-refund.active i { color: #fc1268 !important; }
+  .tab-count-badge { min-width: 18px; height: 18px; font-size: 10px; }
+  .tab-btn.active .tab-count-badge {
+    background: #fc1268;
+    color: #fff;
+  }
+
+  .orders-filters {
+    flex-direction: column;
+    width: 100%;
+    max-width: 100%;
+    gap: 10px;
+    box-sizing: border-box;
+  }
+  .filter-group {
+    min-width: 0 !important;
+    width: 100%;
+    max-width: 100%;
+    flex: none;
+    box-sizing: border-box;
+  }
+  .search-input,
+  .filter-select {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  .date-filter-group {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+  .date-filter-inputs {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  .flow-notice {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    word-break: break-word;
+  }
+  .orders-container {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* Card rows — no horizontal swipe */
+  .orders-table-container {
+    overflow-x: visible;
+    -webkit-overflow-scrolling: auto;
+  }
+  .orders-table {
+    min-width: 0 !important;
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+  .orders-table thead { display: none; }
+  .orders-table tbody { display: block; width: 100%; }
+  .orders-table tr {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    margin-bottom: 12px;
+    padding: 12px 14px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  }
+  .orders-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 7px 0;
+    border-bottom: 1px solid #f1f5f9;
+    font-size: 13px;
+    text-align: right;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .orders-table td:last-child { border-bottom: none; padding-top: 10px; }
+  .orders-table td::before {
+    content: attr(data-label);
+    font-weight: 700;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: #64748b;
+    text-align: left;
+    flex-shrink: 0;
+    padding-top: 2px;
+  }
+  .orders-table td[data-label="Actions"] { justify-content: stretch; }
+  .orders-table td[data-label="Actions"]::before { display: none; }
+  .orders-table td[data-label="Actions"] .view-btn {
+    width: 100%;
+    justify-content: center;
+  }
+  .customer-info { text-align: right; }
+  .customer-info small { display: block; word-break: break-all; }
+
   .order-info-grid { grid-template-columns: 1fr 1fr; }
   .status-buttons { flex-wrap: wrap; }
-  .order-modal { max-width: 100%; border-radius: 20px 20px 0 0; }
   .order-modal-split { grid-template-columns: 1fr; }
   .order-item-card { flex-wrap: wrap; }
   .item-image img { width: 60px; height: 60px; }
   .item-subtotal { width: 100%; text-align: left; margin-top: 8px; font-size: 15px; }
   .modal-section h3 { font-size: 14px; }
   .pod-photo-header { flex-direction: column; gap: 10px; align-items: flex-start; }
-  .cancel-reason-modal { max-width: 100%; }
   .cancel-reason-footer { gap: 8px; }
-  .order-modal-overlay { padding: 0; align-items: flex-end; }
-  .order-modal { border-radius: 20px 20px 0 0; max-height: 94vh; max-width: 100%; }
+
+  /* Centered modals */
+  .order-modal-overlay {
+    padding: 14px;
+    align-items: center;
+    justify-content: center;
+  }
+  .order-modal {
+    border-radius: 16px;
+    max-height: min(82dvh, 720px);
+    max-width: min(480px, calc(100vw - 28px));
+    width: 100%;
+    margin: auto;
+  }
   .modal-header { padding: 16px 16px 14px; }
   .modal-header h2 { font-size: 18px; }
   .modal-body { padding: 16px; }
   .order-info-grid { grid-template-columns: 1fr 1fr; gap: 12px; padding: 14px; }
-  .cancel-reason-overlay { padding: 0; align-items: flex-end; }
-  .cancel-reason-modal { border-radius: 20px 20px 0 0; max-width: 100%; max-height: 92vh; }
-  .waybill-overlay { padding: 0; align-items: flex-end; }
-  .waybill-modal { border-radius: 20px 20px 0 0; max-height: 94vh; }
+  .cancel-reason-overlay {
+    padding: 14px;
+    align-items: center;
+    justify-content: center;
+  }
+  .cancel-reason-modal {
+    border-radius: 16px;
+    max-width: min(420px, calc(100vw - 28px));
+    max-height: min(82dvh, 720px);
+    margin: auto;
+  }
+  .waybill-overlay {
+    padding: 14px;
+    align-items: center;
+    justify-content: center;
+  }
+  .waybill-modal {
+    border-radius: 16px;
+    max-height: min(82dvh, 720px);
+    max-width: min(440px, calc(100vw - 28px));
+    margin: auto;
+  }
   .waybill-preview-wrap { padding: 12px; }
   .waybill-print-root { padding: 12px; width: min(320px, 100%); }
   .wb-cols { grid-template-columns: 0.9fr 1.1fr; }
@@ -953,9 +1143,10 @@
 }
 
 @media (max-width: 576px) {
-  .admin-orders-page { padding: 12px; }
-  .tab-btn { padding: 10px 12px; font-size: 12px; gap: 5px; }
-  .tab-btn i { font-size: 13px; }
+  .admin-orders-page { padding: 10px; }
+  .orders-tabs { gap: 6px; }
+  .tab-btn { padding: 9px 6px; font-size: 10px; gap: 4px; }
+  .tab-btn i { font-size: 11px; }
   .order-info-grid { grid-template-columns: 1fr; }
   .status-buttons { flex-direction: column; }
   .accept-btn, .view-btn { padding: 8px 12px; font-size: 12px; }

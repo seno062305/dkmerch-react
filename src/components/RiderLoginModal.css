@@ -14,6 +14,29 @@
   background-clip: text;
 }
 
+.login-submit-btn.rider-submit-mode {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  gap: 8px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.login-submit-btn.rider-submit-mode svg {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+}
+
+.rider-mode-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 10px auto 0;
+}
+
 /* Purple focus ring */
 .rider-form-input:focus {
   border-color: #7c3aed !important;

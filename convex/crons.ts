@@ -10,4 +10,18 @@ crons.daily(
   internal.backup.runAutoBackup
 );
 
+// Mirror Convex → Cloud Firestore every hour (backup / 2nd database).
+crons.interval(
+  "dkmerch-firebase-mirror",
+  { hours: 1 },
+  internal.firebaseSync.syncAllToFirebase
+);
+
+// Pull pending Firebase failover orders back into Convex every 5 minutes.
+crons.interval(
+  "dkmerch-failover-sync-back",
+  { minutes: 5 },
+  internal.failoverSync.syncFailoverOrdersToConvex
+);
+
 export default crons;

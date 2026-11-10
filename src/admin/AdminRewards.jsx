@@ -31,10 +31,8 @@ const AdminRewards = () => {
     <div className="ar-page">
       <div className="ar-header">
         <div className="ar-header-left">
-          <div className="ar-header-icon">⭐</div>
           <div>
             <h1 className="ar-title">Rewards Management</h1>
-            <p className="ar-subtitle">View customer points and reward redemptions</p>
           </div>
         </div>
       </div>

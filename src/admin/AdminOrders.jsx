@@ -1,9 +1,11 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { QRCodeSVG } from 'qrcode.react';
 import { useConfirm } from '../context/ConfirmContext';
+import DkIcon, { DK_ICONS } from '../components/DkIcon';
+import AdminPager from './AdminPager';
 import './AdminOrders.css';
 
 const SITE_URL = 'https://dkmerchwebsite.vercel.app';
@@ -403,6 +405,8 @@ const AdminOrders = () => {
   const [searchTerm,    setSearchTerm]    = useState('');
   const [startDate,     setStartDate]     = useState('');
   const [endDate,       setEndDate]       = useState('');
+  const [pageSize,      setPageSize]      = useState(5);
+  const [page,          setPage]          = useState(0);
 
   const orders = useQuery(api.orders.getAllOrders) || [];
   const updateOrderStatusMutation = useMutation(api.orders.updateOrderStatus);
@@ -421,6 +425,8 @@ const AdminOrders = () => {
     completed: validOrders.filter(o => o.orderStatus === 'completed').length,
     refund:    refundCount,
   };
+
+  useEffect(() => { setPage(0); }, [activeTab, searchTerm, startDate, endDate, pageSize]);
 
   const filteredOrders = useMemo(() => {
     return validOrders.filter(order => {
@@ -449,6 +455,11 @@ const AdminOrders = () => {
       return (b._creationTime || 0) - (a._creationTime || 0);
     });
   }, [validOrders, activeTab, searchTerm, startDate, endDate]);
+
+  const pagedOrders = useMemo(() => {
+    const start = page * pageSize;
+    return filteredOrders.slice(start, start + pageSize);
+  }, [filteredOrders, page, pageSize]);
 
   const getStatusColor = (status) => {
     const colors = { pending: '#ffc107', confirmed: '#17a2b8', shipped: '#6366f1', out_for_delivery: '#f97316', completed: '#28a745', cancelled: '#dc3545' };
@@ -582,11 +593,6 @@ const AdminOrders = () => {
         })}
       </div>
 
-      <div className="admin-flow-info">
-        <i className="fas fa-info-circle"></i>
-        <span><strong>Order Flow:</strong> Customer pays → <strong>Paid &amp; Awaiting</strong> → Admin confirms → Rider delivers with OTP + photo</span>
-      </div>
-
       {activeTab === 'refund' && refundCount > 0 && (
         <div className="admin-refund-info-banner">
           <i className="fas fa-exclamation-circle"></i>
@@ -626,41 +632,48 @@ const AdminOrders = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredOrders.map(order => {
+                {pagedOrders.map(order => {
                   const pm = getPaymentMethodLabel(order);
                   return (
                     <tr key={order.orderId} className={order.refundStatus === 'requested' ? 'row-refund-pending' : ''}>
-                      <td><strong>#{order.orderId.slice(-8)}</strong></td>
-                      <td><div className="customer-info"><strong>{order.customerName || 'N/A'}</strong><small>{order.email || 'N/A'}</small></div></td>
-                      <td>{order.items.length} item(s)</td>
-                      <td>
+                      <td data-label="Order ID"><strong>#{order.orderId.slice(-8)}</strong></td>
+                      <td data-label="Customer"><div className="customer-info"><strong>{order.customerName || 'N/A'}</strong><small>{order.email || 'N/A'}</small></div></td>
+                      <td data-label="Items">{order.items.length} item(s)</td>
+                      <td data-label="Total">
                         <strong>₱{(order.finalTotal ?? order.total ?? 0).toLocaleString('en-PH')}</strong>
                         {order.promoCode && <div style={{ fontSize: '11px', color: '#ec4899', fontWeight: 700, marginTop: '3px', display: 'flex', alignItems: 'center', gap: '3px' }}><i className="fas fa-tag"></i> {order.promoCode}</div>}
                       </td>
-                      <td><span className={`payment-badge ${order.paymentStatus === 'paid' ? 'paid' : 'pending'}`}>{order.paymentStatus === 'paid' ? 'Paid' : 'Pending'}</span></td>
-                      <td><span className="method-badge" style={{ color: pm.color }}><i className={`fas ${pm.icon}`}></i> {pm.label}</span></td>
-                      <td><span className="status-badge" style={{ backgroundColor: getStatusColor(order.orderStatus) }}>{getStatusLabel(order.orderStatus)}</span></td>
+                      <td data-label="Payment"><span className={`payment-badge ${order.paymentStatus === 'paid' ? 'paid' : 'pending'}`}>{order.paymentStatus === 'paid' ? 'Paid' : 'Pending'}</span></td>
+                      <td data-label="Method"><span className="method-badge" style={{ color: pm.color }}><i className={`fas ${pm.icon}`}></i> {pm.label}</span></td>
+                      <td data-label="Status"><span className="status-badge" style={{ backgroundColor: getStatusColor(order.orderStatus) }}>{getStatusLabel(order.orderStatus)}</span></td>
                       {activeTab === 'refund' && (
-                        <td>
+                        <td data-label="Refund">
                           {order.refundStatus === 'requested' && <span className="refund-table-badge refund-table-pending"><i className="fas fa-clock"></i> Pending</span>}
                           {order.refundStatus === 'approved'  && <span className="refund-table-badge refund-table-approved"><i className="fas fa-check-circle"></i> Approved</span>}
                           {order.refundStatus === 'rejected'  && <span className="refund-table-badge refund-table-rejected"><i className="fas fa-times-circle"></i> Rejected</span>}
                         </td>
                       )}
-                      <td>
+                      <td data-label="Rider">
                         {order.riderInfo
                           ? <div style={{ fontSize: '12px' }}><strong>{order.riderInfo.name}</strong><div style={{ color: '#888' }}>{order.riderInfo.plate}</div></div>
                           : <span style={{ color: '#ccc', fontSize: '12px' }}>-</span>}
                       </td>
-                      <td style={{ whiteSpace: 'nowrap', fontSize: '13px' }}>
+                      <td data-label="Date" style={{ whiteSpace: 'nowrap', fontSize: '13px' }}>
                         {order._creationTime ? new Date(order._creationTime).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}
                       </td>
-                      <td><button className="view-btn" onClick={() => setSelectedOrder(order)}><i className="fas fa-eye"></i> View</button></td>
+                      <td data-label="Actions"><button className="view-btn" onClick={() => setSelectedOrder(order)}><i className="fas fa-eye"></i> View</button></td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
+            <AdminPager
+              total={filteredOrders.length}
+              page={page}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
           </div>
         )}
       </div>
@@ -821,7 +834,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
 
           {order.riderInfo && (
             <div className="modal-section">
-              <h3><i className="fas fa-motorcycle"></i> Assigned Rider</h3>
+              <h3><DkIcon name={DK_ICONS.assignedRider} size={16} /> Assigned Rider</h3>
               <div className="order-info-grid">
                 <div className="info-item"><label>Name</label><strong>{order.riderInfo.name || 'N/A'}</strong></div>
                 <div className="info-item"><label>Phone</label><span>{order.riderInfo.phone || 'N/A'}</span></div>

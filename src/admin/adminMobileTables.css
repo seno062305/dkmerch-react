@@ -1,0 +1,265 @@
+/* Shared admin mobile: tables → cards + tabs/filters never clipped */
+
+/* Hide mobile expand controls on desktop */
+.mobile-card-toggle-cell {
+  display: none !important;
+}
+
+@media (max-width: 768px) {
+  /* Tab bars: 2-col wrap so NOTHING is cut off on mobile */
+  .tab-switcher,
+  .stock-tabs,
+  .orders-tabs,
+  .riders-tabs,
+  .view-toggle {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    overflow: visible !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    border: none !important;
+    border-bottom: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin-bottom: 12px !important;
+    box-sizing: border-box;
+  }
+
+  .tab-switcher .tab-btn,
+  .stock-tabs .tab-btn,
+  .orders-tabs .tab-btn,
+  .riders-tabs .riders-tab-btn,
+  .view-toggle .view-btn {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    justify-content: center !important;
+    white-space: normal !important;
+    line-height: 1.25 !important;
+    border-radius: 10px !important;
+    border: 1.5px solid #e2e8f0 !important;
+    bottom: 0 !important;
+    padding: 10px 8px !important;
+    font-size: 11px !important;
+    background: #fff !important;
+    box-sizing: border-box !important;
+    flex: none !important;
+    color: #64748b !important;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+  }
+
+  .tab-switcher .tab-btn.active,
+  .stock-tabs .tab-btn.active,
+  .orders-tabs .tab-btn.active,
+  .orders-tabs .tab-btn-refund.active,
+  .riders-tabs .riders-tab-btn.active,
+  .view-toggle .view-btn.active {
+    border-radius: 10px !important;
+    background: #fff !important;
+    color: #fc1268 !important;
+    border: 1.5px solid #fc1268 !important;
+    box-shadow: 0 2px 8px rgba(252, 18, 104, 0.12) !important;
+  }
+
+  .tab-switcher .tab-btn.active i,
+  .stock-tabs .tab-btn.active i,
+  .orders-tabs .tab-btn.active i,
+  .riders-tabs .riders-tab-btn.active i,
+  .view-toggle .view-btn.active i {
+    color: #fc1268 !important;
+  }
+
+  .tab-switcher .tab-btn.active .dk-icon,
+  .riders-tabs .riders-tab-btn.active .dk-icon {
+    filter: none !important;
+  }
+
+  /* Inputs / filters never spill past screen */
+  .users-controls,
+  .stock-filters,
+  .orders-filters,
+  .search-box,
+  .filter-group,
+  .date-filter-group {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box;
+  }
+
+  .search-box input,
+  .search-input,
+  .filter-select,
+  .users-controls input,
+  .users-controls select {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .users-table-container,
+  .riders-table-wrapper,
+  .inventory-table-wrapper,
+  .products-table-container,
+  .orders-table-container {
+    overflow-x: visible !important;
+  }
+
+  .users-table,
+  .riders-table,
+  .inventory-table,
+  .products-table {
+    min-width: 0 !important;
+    width: 100% !important;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  .users-table thead,
+  .riders-table thead,
+  .inventory-table thead,
+  .products-table thead {
+    display: none;
+  }
+
+  .users-table tbody,
+  .riders-table tbody,
+  .inventory-table tbody,
+  .products-table tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .users-table tr,
+  .riders-table tr,
+  .inventory-table tr,
+  .products-table tr {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    margin-bottom: 12px;
+    padding: 12px 14px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  }
+
+  .users-table td,
+  .riders-table td,
+  .inventory-table td,
+  .products-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 7px 0 !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    font-size: 13px;
+    text-align: right;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .users-table td:last-child,
+  .riders-table td:last-child,
+  .inventory-table td:last-child,
+  .products-table td:last-child {
+    border-bottom: none !important;
+    padding-top: 10px !important;
+  }
+
+  .users-table td::before,
+  .riders-table td::before,
+  .inventory-table td::before,
+  .products-table td::before {
+    content: attr(data-label);
+    font-weight: 700;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: #64748b;
+    text-align: left;
+    flex-shrink: 0;
+    padding-top: 2px;
+  }
+
+  .users-table td.actions-cell,
+  .users-table td[data-label="Actions"],
+  .riders-table td[data-label="Actions"],
+  .inventory-table td[data-label="Actions"],
+  .products-table td[data-label="Actions"] {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .users-table td.actions-cell::before,
+  .users-table td[data-label="Actions"]::before,
+  .riders-table td[data-label="Actions"]::before,
+  .inventory-table td[data-label="Actions"]::before,
+  .products-table td[data-label="Actions"]::before {
+    display: none;
+  }
+
+  /* ── Collapsed mobile cards: show only key fields until expanded ── */
+  .orders-table tr:not(.is-expanded) > td:not([data-label="Order ID"]):not([data-label="Status"]):not([data-label="Total"]):not([data-label="Actions"]):not(.mobile-card-toggle-cell),
+  .users-table tr:not(.is-expanded) > td:not([data-label="Name"]):not([data-label="Status"]):not([data-label="Actions"]):not(.mobile-card-toggle-cell),
+  .riders-table tr:not(.is-expanded) > td:not([data-label="Name"]):not([data-label="Status"]):not([data-label="Rider ID"]):not([data-label="Actions"]):not(.mobile-card-toggle-cell),
+  .inventory-table tr:not(.is-expanded) > td:not([data-label="Product"]):not([data-label="Name"]):not([data-label="Stock"]):not([data-label="Status"]):not([data-label="Actions"]):not(.mobile-card-toggle-cell),
+  .products-table tr:not(.is-expanded) > td:not([data-label="Product"]):not([data-label="Stock"]):not([data-label="Status"]):not([data-label="Actions"]):not(.mobile-card-toggle-cell),
+  .stock-table tr:not(.is-expanded) > td:not([data-label="Product"]):not([data-label="Stock"]):not([data-label="Status"]):not([data-label="Actions"]):not(.mobile-card-toggle-cell) {
+    display: none !important;
+  }
+
+  .mobile-card-toggle-cell {
+    display: flex !important;
+    justify-content: stretch !important;
+    align-items: center !important;
+    padding-top: 10px !important;
+    border-bottom: none !important;
+    order: 99;
+  }
+
+  .mobile-card-toggle-cell::before {
+    display: none !important;
+    content: none !important;
+  }
+
+  .mobile-card-toggle {
+    width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 9px 12px;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 10px;
+    background: #f8fafc;
+    color: #475569;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+
+  .mobile-card-toggle:hover,
+  .mobile-card-toggle:active {
+    background: #fff0f5;
+    border-color: #fc1268;
+    color: #fc1268;
+  }
+
+  .mobile-card-toggle i {
+    font-size: 11px;
+  }
+
+  /* Keep actions usable in collapsed view */
+  .orders-table tr:not(.is-expanded) td[data-label="Actions"] .view-btn,
+  .users-table tr:not(.is-expanded) td[data-label="Actions"],
+  .products-table tr:not(.is-expanded) td[data-label="Actions"] {
+    margin-top: 0;
+  }
+}

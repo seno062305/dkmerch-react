@@ -4,6 +4,7 @@ import './RiderRegistrationModal.css';
 import { useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { appendActivityLog } from '../admin/lib/localActivityLog';
+import { runWithFailover } from '../lib/failoverWrite';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
@@ -232,7 +233,15 @@ const LICENSE_REGEX = /^[A-Z]\d{2}-\d{2}-\d{6}$/;
 // MAIN COMPONENT
 // ─────────────────────────────────────────────
 const RiderRegistrationModal = ({ onClose }) => {
-  const createRider = useMutation(api.riders.createRiderApplication);
+  const createRiderMut = useMutation(api.riders.createRiderApplication);
+  const createRider = (args) =>
+    runWithFailover(createRiderMut, args, {
+      table: "riderApplications",
+      mutation: "riders:createRiderApplication",
+      docKey: args?.email,
+      payload: args,
+      needsEmail: true,
+    });
 
   const [form, setForm] = useState({
     fullName: '', email: '', phone: '', address: '',
@@ -465,7 +474,11 @@ const RiderRegistrationModal = ({ onClose }) => {
 
       <div className="rider-modal-overlay" onClick={onClose}>
         <div className="rider-modal-container" onClick={(e) => e.stopPropagation()}>
-          <button className="rider-modal-close" onClick={onClose}>✕</button>
+          <button type="button" className="rider-modal-close" onClick={onClose} aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" aria-hidden="true">
+              <path d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
 
           <div className="rider-modal-header">
             <h2 className="rider-modal-title">🛵 Rider Application</h2>

@@ -3,6 +3,7 @@ import './AdminItemList.css';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useUpdateProduct } from '../utils/productStorage';
+import DkIcon, { DK_ICONS } from '../components/DkIcon';
 
 const AdminItemList = () => {
   const products = useQuery(api.products.getAllProductsAdmin) || [];
@@ -63,7 +64,7 @@ const AdminItemList = () => {
     <div className="admin-inventory-page">
       <div className="inventory-stats">
         <div className="stat-card">
-          <div className="stat-icon blue"><i className="fas fa-boxes"></i></div>
+          <div className="stat-icon blue"><DkIcon name={DK_ICONS.totalProducts} size={24} /></div>
           <div className="stat-info"><h3>{totalProducts}</h3><p>Total Products</p></div>
         </div>
         <div className="stat-card">

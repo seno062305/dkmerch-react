@@ -246,12 +246,12 @@
 /* Submit Button */
 .register-submit-btn {
   width: 100%;
-  padding: 16px;
+  padding: 12px 16px;
   background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
   color: white;
   border: none;
-  border-radius: 12px;
-  font-size: 16px;
+  border-radius: 10px;
+  font-size: 15px;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.3s ease;
@@ -259,8 +259,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  margin: 24px 0 20px 0;
+  gap: 8px;
+  margin: 20px 0 16px 0;
 }
 
 .register-submit-btn svg { width: 20px; height: 20px; }
@@ -338,7 +338,11 @@
 
 /* Responsive */
 @media (max-width: 576px) {
-  .register-modal-content { max-width: 100%; border-radius: 16px; }
+  .register-modal-content {
+    max-width: min(400px, calc(100vw - 28px));
+    max-height: min(82dvh, 720px);
+    border-radius: 16px;
+  }
   .register-modal-header { padding: 30px 24px 24px; }
   .register-icon { width: 70px; height: 70px; }
   .register-icon svg { width: 40px; height: 40px; }
@@ -347,7 +351,7 @@
   .register-form .input-group { margin-bottom: 16px; }
   .form-input { padding: 12px 14px 12px 44px; font-size: 14px; }
   .input-icon { left: 14px; width: 18px; height: 18px; }
-  .register-submit-btn { padding: 14px; font-size: 15px; margin: 20px 0 16px 0; }
+  .register-submit-btn { padding: 11px 14px; font-size: 14px; margin: 16px 0 14px 0; }
   .forgot-code-row { flex-direction: column; }
   .send-code-btn { padding: 12px; width: 100%; text-align: center; }
 }

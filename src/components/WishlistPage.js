@@ -5,6 +5,7 @@ import { useWishlist, useRemoveFromWishlist } from '../context/wishlistUtils';
 import { useAddToCart } from '../context/cartUtils';
 import { useNotification } from '../context/NotificationContext';
 import { useConfirm } from '../context/ConfirmContext';
+import DkIcon, { DK_ICONS } from './DkIcon';
 
 const MAX_WISHLIST = 10;
 
@@ -78,18 +79,18 @@ const WishlistPage = () => {
         <section className="wishlist-page">
           {count === 0 ? (
             <div className="orders-empty">
-              <i className="fas fa-star"></i>
+              <DkIcon name={DK_ICONS.favorite} size={48} alt="" />
               <h3>No favorites yet</h3>
               <p>Click the star on any product to save it here.</p>
               <button className="btn btn-primary" onClick={() => navigate('/collections')}>
-                <i className="fas fa-shopping-bag"></i> Browse Products
+                <DkIcon name={DK_ICONS.browseProducts} size={16} /> Browse Products
               </button>
             </div>
           ) : (
             <>
               {/* ✅ Count bar with x/10 indicator */}
               <div className="wishlist-count-bar">
-                <i className="fas fa-star"></i>
+                <DkIcon name={DK_ICONS.favorite} size={16} alt="" />
                 <span>{count} favorite{count !== 1 ? 's' : ''}</span>
                 <span className="wishlist-slot-indicator">
                   <span className={`wishlist-slot-count ${count >= MAX_WISHLIST ? 'full' : ''}`}>
@@ -119,7 +120,7 @@ const WishlistPage = () => {
                         </div>
                       )}
                       <span className="wishlist-star-badge">
-                        <i className="fas fa-star"></i>
+                        <DkIcon name={DK_ICONS.favorite} size={14} alt="" />
                       </span>
                     </div>
 
@@ -150,7 +151,7 @@ const WishlistPage = () => {
 
               <div className="wishlist-footer-actions">
                 <button className="btn btn-primary" onClick={() => navigate('/collections')}>
-                  <i className="fas fa-shopping-bag"></i> Continue Shopping
+                  <DkIcon name={DK_ICONS.browseProducts} size={16} /> Continue Shopping
                 </button>
                 <button className="btn btn-outline-danger" onClick={handleClearWishlist}>
                   <i className="fas fa-trash"></i> Clear Favorites

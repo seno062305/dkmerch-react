@@ -7,9 +7,10 @@
   inset: 0;
   background: rgba(0, 0, 0, 0.65);
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
-  z-index: 2000;
+  /* above chat/download FABs (z-index ~10050) */
+  z-index: 11000;
   padding: 20px;
   box-sizing: border-box;
   overflow-y: auto;
@@ -20,11 +21,14 @@
   border-radius: 16px;
   width: 100%;
   max-width: 860px;
+  max-height: 90vh;
   position: relative;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
   animation: modalSlideIn 0.3s ease;
   margin: auto;
-  overflow: visible;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 @keyframes modalSlideIn {
@@ -45,12 +49,24 @@
   font-size: 13px;
   color: white;
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   z-index: 3000;
   transition: all 0.2s ease;
   box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+  padding: 0;
+  line-height: 0;
+}
+.modal-close i,
+.modal-close svg {
+  display: block;
+  line-height: 1;
+  margin: 0;
+  width: 12px;
+  height: 12px;
+  font-size: 12px;
+  pointer-events: none;
 }
 
 .modal-close:hover {
@@ -98,9 +114,11 @@
 .modal-grid {
   display: grid;
   grid-template-columns: 340px 1fr;
-  min-height: 480px;
+  min-height: 0;
+  max-height: 90vh;
   border-radius: 16px;
   overflow: hidden;
+  overflow-y: auto;
 }
 
 /* LEFT: image column */
@@ -468,7 +486,7 @@
 .modal-lightbox {
   position: fixed; inset: 0;
   background: rgba(0, 0, 0, 0.92);
-  z-index: 9999;
+  z-index: 12000;
   display: flex; align-items: center; justify-content: center;
   padding: 20px; cursor: pointer;
   animation: fadeIn 0.2s ease;
@@ -501,7 +519,7 @@
 .modal-lightbox-close:hover { background: rgba(255, 255, 255, 0.3); }
 
 /* ══════════════════════════════════════
-   MOBILE — image on top, full width
+   MOBILE — centered card (not full screen)
    ══════════════════════════════════════ */
 @media (max-width: 768px) {
   .product-modal-overlay {
@@ -535,7 +553,10 @@
 
   .modal-grid {
     grid-template-columns: 1fr;
-    min-height: auto;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    max-height: min(82dvh, 720px);
   }
 
   .modal-image-section {
@@ -547,6 +568,7 @@
     justify-content: center;
     align-items: center;
     background: #f8f9fa;
+    flex-shrink: 0;
   }
 
   .modal-product-img {
@@ -556,6 +578,8 @@
     object-fit: contain;
     display: block;
   }
+
+  .modal-img-tap-hint { font-size: 11px; }
 
   /* Rating widget — horizontal on mobile */
   .modal-left-rating {
@@ -574,7 +598,7 @@
   .modal-details-section {
     padding: 12px 16px 20px;
     max-height: none;
-    overflow-y: visible;
+    overflow: visible;
   }
 
   .modal-details-section h2 { font-size: 15px; }

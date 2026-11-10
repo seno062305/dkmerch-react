@@ -1,9 +1,11 @@
 // src/admin/AdminUsers.jsx
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import './AdminUsers.css';
 import { useQuery, useMutation, useAction, useConvex } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useConfirm } from '../context/ConfirmContext';
+import DkIcon, { DK_ICONS } from '../components/DkIcon';
+import AdminPager from './AdminPager';
 
 /** Safe archives fetch — avoids hard crash if Convex hasn't deployed listUserArchives yet. */
 function useUserArchivesSafe(enabled) {
@@ -309,6 +311,8 @@ const AdminUsers = () => {
 
   const [searchTerm, setSearchTerm]     = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [pageSize, setPageSize]         = useState(5);
+  const [page, setPage]                 = useState(0);
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [userToDelete, setUserToDelete]           = useState(null);
@@ -381,6 +385,13 @@ const AdminUsers = () => {
       u.role?.toLowerCase().includes(q)
     );
   }).sort(byNewest);
+
+  useEffect(() => { setPage(0); }, [searchTerm, filterStatus, pageSize, activeTab]);
+
+  const pagedUsers = useMemo(() => {
+    const start = page * pageSize;
+    return filteredUsers.slice(start, start + pageSize);
+  }, [filteredUsers, page, pageSize]);
 
   const filteredPending = pendingUsers.filter(u => {
     if (!searchTerm.trim()) return true;
@@ -747,11 +758,11 @@ const AdminUsers = () => {
   const getStatusDisplay = (status) => {
     const s = status || 'active';
     switch (s) {
-      case 'active':           return { label: 'Active',      icon: 'fa-check-circle' };
-      case 'suspended':        return { label: 'Suspended',   icon: 'fa-ban'          };
-      case 'self_deactivated': return { label: 'Deactivated', icon: 'fa-pause-circle' };
-      case 'deleted':          return { label: 'Deleted',     icon: 'fa-trash-alt'    };
-      default:                 return { label: s,             icon: 'fa-circle'       };
+      case 'active':           return { label: 'Active',      dkIcon: DK_ICONS.userActive };
+      case 'suspended':        return { label: 'Suspended',   dkIcon: DK_ICONS.userSuspendedDeleted };
+      case 'self_deactivated': return { label: 'Deactivated', dkIcon: DK_ICONS.userDeactivated };
+      case 'deleted':          return { label: 'Deleted',     dkIcon: DK_ICONS.userSuspendedDeleted };
+      default:                 return { label: s,             dkIcon: null };
     }
   };
 
@@ -829,7 +840,7 @@ const AdminUsers = () => {
         ) : (
           <>
             <div className="au-stat-card">
-              <div className="au-stat-icon au-stat-icon--green"><i className="fas fa-check-circle"></i></div>
+              <div className="au-stat-icon au-stat-icon--green"><DkIcon name={DK_ICONS.userActive} size={22} /></div>
               <div className="au-stat-info">
                 <div className="au-stat-label">ACTIVE</div>
                 <div className="au-stat-number">{activeUsers}</div>
@@ -837,7 +848,7 @@ const AdminUsers = () => {
               </div>
             </div>
             <div className="au-stat-card">
-              <div className="au-stat-icon au-stat-icon--red"><i className="fas fa-ban"></i></div>
+              <div className="au-stat-icon au-stat-icon--red"><DkIcon name={DK_ICONS.userSuspendedDeleted} size={22} /></div>
               <div className="au-stat-info">
                 <div className="au-stat-label">SUSPENDED / DELETED</div>
                 <div className="au-stat-number">{suspendedUsers + deletedUsers}</div>
@@ -850,7 +861,7 @@ const AdminUsers = () => {
               </div>
             </div>
             <div className="au-stat-card">
-              <div className="au-stat-icon au-stat-icon--yellow"><i className="fas fa-pause-circle"></i></div>
+              <div className="au-stat-icon au-stat-icon--yellow"><DkIcon name={DK_ICONS.userDeactivated} size={22} /></div>
               <div className="au-stat-info">
                 <div className="au-stat-label">DEACTIVATED</div>
                 <div className="au-stat-number">{deactivatedUsers}</div>
@@ -864,23 +875,30 @@ const AdminUsers = () => {
       {/* ── TABS ── */}
       <div className="tab-switcher">
         <button className={`tab-btn ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>
-          <i className="fas fa-user"></i> Users
+          <i className="fas fa-user"></i>
+          <span className="tab-label">Users</span>
           <span className="au-tab-badge">{totalUsers}</span>
         </button>
         <button className={`tab-btn ${activeTab === 'pending' ? 'active' : ''}`} onClick={() => setActiveTab('pending')}>
-          <i className="fas fa-user-clock"></i> Pending Activation
+          <i className="fas fa-user-clock"></i>
+          <span className="tab-label tab-label--long">Pending Activation</span>
+          <span className="tab-label tab-label--short">Pending</span>
           <span className="au-tab-badge">{pendingUsers.length}</span>
         </button>
         <button className={`tab-btn ${activeTab === 'archives' ? 'active' : ''}`} onClick={() => setActiveTab('archives')}>
-          <i className="fas fa-archive"></i> Archives
+          <i className="fas fa-archive"></i>
+          <span className="tab-label">Archives</span>
           <span className="au-tab-badge">{userArchives.length}</span>
         </button>
         <button className={`tab-btn ${activeTab === 'riders' ? 'active' : ''}`} onClick={() => setActiveTab('riders')}>
-          <i className="fas fa-motorcycle"></i> Riders
+          <i className="fas fa-motorcycle"></i>
+          <span className="tab-label">Riders</span>
           <span className="au-tab-badge">{totalRiders}</span>
         </button>
         <button className={`tab-btn ${activeTab === 'applications' ? 'active' : ''}`} onClick={() => setActiveTab('applications')}>
-          <i className="fas fa-id-card"></i> Rider Applications
+          <i className="fas fa-id-card"></i>
+          <span className="tab-label tab-label--long">Rider Applications</span>
+          <span className="tab-label tab-label--short">Applications</span>
           <span className="au-tab-badge">{pendingRiders}</span>
         </button>
       </div>
@@ -913,8 +931,8 @@ const AdminUsers = () => {
                   <tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr>
                 </thead>
                 <tbody>
-                  {filteredUsers.map(user => {
-                    const { label: statusLabel, icon: statusIcon } = getStatusDisplay(user.status);
+                  {pagedUsers.map(user => {
+                    const { label: statusLabel, dkIcon: statusDkIcon } = getStatusDisplay(user.status);
                     const isActive      = (user.status || 'active') === 'active';
                     const isSuspended   = user.status === 'suspended';
                     const isDeactivated = user.status === 'self_deactivated';
@@ -923,19 +941,21 @@ const AdminUsers = () => {
 
                     return (
                       <tr key={user._id}>
-                        <td className="user-name"><i className="fas fa-user-circle"></i>{user.name}</td>
-                        <td>@{user.username}</td>
-                        <td>{user.email}</td>
-                        <td>
+                        <td className="user-name" data-label="Name"><i className="fas fa-user-circle"></i>{user.name}</td>
+                        <td data-label="Username">@{user.username}</td>
+                        <td data-label="Email">{user.email}</td>
+                        <td data-label="Role">
                           <span className={getRoleBadgeClass(user.role)}>
                             <i className={`fas ${user.role === 'admin' ? 'fa-shield-alt' : 'fa-user'}`}></i>
                             {user.role}
                           </span>
                         </td>
-                        <td>
+                        <td data-label="Status">
                           <div className="status-cell">
                             <span className={getStatusBadgeClass(user.status)}>
-                              <i className={`fas ${statusIcon}`}></i>
+                              {statusDkIcon
+                                ? <DkIcon name={statusDkIcon} size={12} />
+                                : <i className="fas fa-circle"></i>}
                               {statusLabel}
                             </span>
 
@@ -966,7 +986,7 @@ const AdminUsers = () => {
                             )}
                           </div>
                         </td>
-                        <td className="actions-cell">
+                        <td className="actions-cell" data-label="Actions">
                           {!isAdmin && (
                             <>
                               {/* Active — can suspend */}
@@ -1009,6 +1029,13 @@ const AdminUsers = () => {
                 </tbody>
               </table>
             )}
+            <AdminPager
+              total={filteredUsers.length}
+              page={page}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
           </div>
         </>
       )}
@@ -1040,17 +1067,17 @@ const AdminUsers = () => {
                 <tbody>
                   {filteredPending.map(user => (
                     <tr key={user._id}>
-                      <td className="user-name"><i className="fas fa-user-clock" style={{ color: '#ed8936' }}></i>{user.name}</td>
-                      <td>@{user.username}</td>
-                      <td>{user.email}</td>
-                      <td className="date-cell">{formatDate(user.registeredAt)}</td>
-                      <td>
+                      <td className="user-name" data-label="Name"><i className="fas fa-user-clock" style={{ color: '#ed8936' }}></i>{user.name}</td>
+                      <td data-label="Username">@{user.username}</td>
+                      <td data-label="Email">{user.email}</td>
+                      <td className="date-cell" data-label="Registered">{formatDate(user.registeredAt)}</td>
+                      <td data-label="Reason">
                         <span style={{ background: '#fff3cd', color: '#856404', padding: '4px 10px', borderRadius: 12, fontSize: 11, fontWeight: 700 }}>
                           <i className="fas fa-robot" style={{ marginRight: 4 }}></i>
                           {user.suspendReason === 'spam_registration' ? 'Spam/Bot Detection' : user.suspendReason || 'Flagged'}
                         </span>
                       </td>
-                      <td className="actions-cell">
+                      <td className="actions-cell" data-label="Actions">
                         <button className="btn-suspend btn-activate" title="Activate"
                           onClick={() => { setUserToActivate(user); setShowActivateConfirm(true); }}>
                           <i className="fas fa-check-circle"></i>
@@ -1108,12 +1135,12 @@ const AdminUsers = () => {
                 <tbody>
                   {userArchives.map((row) => (
                     <tr key={row._id}>
-                      <td className="user-name"><i className="fas fa-archive"></i>{row.name}</td>
-                      <td>@{row.username}</td>
-                      <td>{row.email}</td>
-                      <td className="date-cell">{formatDate(row.archivedAt)}</td>
-                      <td>{row.archivedBy || 'admin'}</td>
-                      <td className="actions-cell">
+                      <td className="user-name" data-label="Name"><i className="fas fa-archive"></i>{row.name}</td>
+                      <td data-label="Username">@{row.username}</td>
+                      <td data-label="Email">{row.email}</td>
+                      <td className="date-cell" data-label="Archived">{formatDate(row.archivedAt)}</td>
+                      <td data-label="By">{row.archivedBy || 'admin'}</td>
+                      <td className="actions-cell" data-label="Actions">
                         <button
                           className="btn-delete"
                           title="Permanently wipe archive"
@@ -1169,7 +1196,7 @@ const AdminUsers = () => {
                 <tbody>
                   {filteredRiders.map(rider => (
                     <tr key={rider._id}>
-                      <td className="user-name">
+                      <td className="user-name" data-label="Name">
                         <span className="au-pending-name-cell">
                           {rider.riderPhoto
                             ? <img src={rider.riderPhoto} alt="" className="au-pending-thumb" />
@@ -1177,15 +1204,15 @@ const AdminUsers = () => {
                           {rider.fullName}
                         </span>
                       </td>
-                      <td>{rider.email}</td>
-                      <td>{rider.phone}</td>
-                      <td>Motorcycle</td>
-                      <td>
+                      <td data-label="Email">{rider.email}</td>
+                      <td data-label="Phone">{rider.phone}</td>
+                      <td data-label="Vehicle">Motorcycle</td>
+                      <td data-label="Rider ID">
                         {rider.dkRiderId
                           ? <span className="au-rider-id-chip">{rider.dkRiderId}</span>
                           : <span style={{ color: '#9ca3af', fontSize: 12 }}>—</span>}
                       </td>
-                      <td>
+                      <td data-label="Status">
                         <span className={getRiderStatusBadgeClass(rider.status)}>
                           {rider.status === 'approved'  && <i className="fas fa-check-circle"></i>}
                           {rider.status === 'pending'   && <i className="fas fa-clock"></i>}
@@ -1194,8 +1221,8 @@ const AdminUsers = () => {
                           {rider.status}
                         </span>
                       </td>
-                      <td className="date-cell">{formatDate(rider.appliedAt)}</td>
-                      <td className="actions-cell">
+                      <td className="date-cell" data-label="Applied">{formatDate(rider.appliedAt)}</td>
+                      <td className="actions-cell" data-label="Actions">
                         <button
                           className="btn-suspend btn-activate"
                           onClick={() => setViewingRider(rider)}

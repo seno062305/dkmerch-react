@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
+import DkIcon, { DK_ICONS } from '../components/DkIcon';
+import AdminPager from './AdminPager';
 import './AdminSalesReports.css';
 
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -141,6 +143,8 @@ const AdminSalesReports = () => {
 
   const [startDate, setStartDate] = useState('');
   const [endDate,   setEndDate]   = useState('');
+  const [topPageSize, setTopPageSize] = useState(5);
+  const [topPage, setTopPage]         = useState(0);
 
   const effectiveStart = startDate || defaultStart;
   const effectiveEnd   = endDate   || defaultEnd;
@@ -213,8 +217,15 @@ const AdminSalesReports = () => {
         map[pid].revenue += (item.price || 0) * (item.quantity || 1);
       });
     });
-    return Object.values(map).sort((a, b) => b.revenue - a.revenue).slice(0, 8);
+    return Object.values(map).sort((a, b) => b.revenue - a.revenue);
   }, [filtered, allProducts]);
+
+  useEffect(() => { setTopPage(0); }, [topPageSize, effectiveStart, effectiveEnd]);
+
+  const pagedTopProducts = useMemo(() => {
+    const start = topPage * topPageSize;
+    return topProducts.slice(start, start + topPageSize);
+  }, [topProducts, topPage, topPageSize]);
 
   const buildChartData = useCallback((mode, type) => {
     if (mode === 'today' || mode === 'last_week' || mode === 'last_month') {
@@ -256,7 +267,7 @@ const AdminSalesReports = () => {
     if (type === 'totalSales') {
       setSummaryModal({
         title: 'Total Sales', value: fmt(summary.totalSales),
-        icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+        icon: <DkIcon name={DK_ICONS.totalSales} size={28} />,
         explanation: 'Net revenue from all paid orders within the selected date range, after deducting the total value of approved refunds. Formula: Gross Sales − Total Refund Value.',
         breakdown: [
           { label: 'Gross Sales (paid orders)',  value: fmt(summary.grossSales) },
@@ -267,7 +278,7 @@ const AdminSalesReports = () => {
     } else if (type === 'refundItems') {
       setSummaryModal({
         title: 'Refund Items', value: fmtNum(summary.refundCount),
-        icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>,
+        icon: <DkIcon name={DK_ICONS.refundItems} size={28} />,
         explanation: 'Total number of orders within the selected date range that have been approved for a refund.',
         breakdown: [
           { label: 'Refunded Orders',        value: fmtNum(summary.refundCount),       color: '#dc2626' },
@@ -282,7 +293,7 @@ const AdminSalesReports = () => {
     } else if (type === 'totalRefundValue') {
       setSummaryModal({
         title: 'Total Value of Refund Items', value: fmt(summary.totalRefundValue),
-        icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+        icon: <DkIcon name={DK_ICONS.totalRefundValue} size={28} />,
         explanation: 'Sum of the refund amounts for all approved refund orders in the selected date range.',
         breakdown: [
           { label: 'Refunded Orders',         value: fmtNum(summary.refundCount) },
@@ -293,7 +304,7 @@ const AdminSalesReports = () => {
     } else if (type === 'avgOrderValue') {
       setSummaryModal({
         title: 'Average Order Value', value: fmt(summary.avgOrderValue),
-        icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>,
+        icon: <DkIcon name={DK_ICONS.avgOrderValue} size={28} />,
         explanation: 'Average revenue per completed/delivered order in the selected date range.',
         breakdown: [
           { label: 'Completed Orders', value: fmtNum(summary.completedOrders) },
@@ -393,7 +404,7 @@ const AdminSalesReports = () => {
       <div className="summary-cards">
         <div className="summary-card clickable-summary" onClick={() => openSummaryModal('totalSales')}>
           <div className="card-icon revenue-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            <DkIcon name={DK_ICONS.totalSales} size={26} />
           </div>
           <div className="card-content">
             <div className="card-value">{fmt(summary.totalSales)}</div>
@@ -404,7 +415,7 @@ const AdminSalesReports = () => {
 
         <div className="summary-card clickable-summary" onClick={() => openSummaryModal('refundItems')}>
           <div className="card-icon orders-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
+            <DkIcon name={DK_ICONS.refundItems} size={26} />
           </div>
           <div className="card-content">
             <div className="card-value">{fmtNum(summary.refundCount)}</div>
@@ -415,7 +426,7 @@ const AdminSalesReports = () => {
 
         <div className="summary-card clickable-summary" onClick={() => openSummaryModal('totalRefundValue')}>
           <div className="card-icon completed-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            <DkIcon name={DK_ICONS.totalRefundValue} size={26} />
           </div>
           <div className="card-content">
             <div className="card-value">{fmt(summary.totalRefundValue)}</div>
@@ -426,7 +437,7 @@ const AdminSalesReports = () => {
 
         <div className="summary-card clickable-summary" onClick={() => openSummaryModal('avgOrderValue')}>
           <div className="card-icon average-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+            <DkIcon name={DK_ICONS.avgOrderValue} size={26} />
           </div>
           <div className="card-content">
             <div className="card-value">{fmt(summary.avgOrderValue)}</div>
@@ -520,21 +531,30 @@ const AdminSalesReports = () => {
         {topProducts.length === 0 ? (
           <div className="sales-top-empty">No paid product sales in this range.</div>
         ) : (
-          <div className="sales-top-list">
-            {topProducts.map((p, i) => (
-              <div key={`${p.name}-${i}`} className="sales-top-item">
-                <div className="sales-top-rank">#{i + 1}</div>
-                {p.image
-                  ? <img src={p.image} alt="" className="sales-top-thumb" />
-                  : <div className="sales-top-thumb placeholder">📦</div>}
-                <div className="sales-top-meta">
-                  <strong>{p.name}</strong>
-                  <span>{p.quantity} sold</span>
+          <>
+            <div className="sales-top-list">
+              {pagedTopProducts.map((p, i) => (
+                <div key={`${p.name}-${topPage * topPageSize + i}`} className="sales-top-item">
+                  <div className="sales-top-rank">#{topPage * topPageSize + i + 1}</div>
+                  {p.image
+                    ? <img src={p.image} alt="" className="sales-top-thumb" />
+                    : <div className="sales-top-thumb placeholder">📦</div>}
+                  <div className="sales-top-meta">
+                    <strong>{p.name}</strong>
+                    <span>{p.quantity} sold</span>
+                  </div>
+                  <div className="sales-top-rev">{fmt(p.revenue)}</div>
                 </div>
-                <div className="sales-top-rev">{fmt(p.revenue)}</div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+            <AdminPager
+              total={topProducts.length}
+              page={topPage}
+              pageSize={topPageSize}
+              onPageChange={setTopPage}
+              onPageSizeChange={setTopPageSize}
+            />
+          </>
         )}
       </div>
 

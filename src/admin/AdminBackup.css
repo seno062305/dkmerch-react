@@ -99,16 +99,16 @@
 }
 
 .ab-header-icon {
-  width: 52px;
-  height: 52px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #6a0dad, #9b30ff);
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 22px;
-  color: white;
-  box-shadow: 0 4px 14px rgba(106,13,173,0.35);
+  color: #6a0dad;
+  box-shadow: none;
   flex-shrink: 0;
 }
 
@@ -262,10 +262,10 @@
 }
 
 .ab-card-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #f3e8ff, #f0e6ff);
+  width: 36px;
+  height: 36px;
+  border-radius: 0;
+  background: transparent !important;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -543,10 +543,22 @@
   color: #6b7280;
   font-size: 14px;
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s;
+  padding: 0;
+  line-height: 0;
+}
+.ab-modal-close i,
+.ab-modal-close svg {
+  display: block;
+  line-height: 1;
+  margin: 0;
+  width: 12px;
+  height: 12px;
+  font-size: 12px;
+  pointer-events: none;
 }
 .ab-modal-close:hover { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }
 
@@ -1035,15 +1047,15 @@
 }
 
 .ab-confirm-icon {
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #f3e8ff, #f0e6ff);
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto 18px;
-  font-size: 24px;
+  margin: 0 auto 14px;
+  font-size: 26px;
   color: #6a0dad;
 }
 
@@ -1475,9 +1487,10 @@
 }
 .ab-auto-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
 .ab-auto-icon {
-  width: 40px; height: 40px; border-radius: 12px;
-  background: #f3e8ff; color: #6a0dad;
+  width: auto; height: auto; border-radius: 0;
+  background: transparent; color: #6a0dad;
   display: grid; place-items: center; flex-shrink: 0;
+  font-size: 18px;
 }
 .ab-auto-header h3 { margin: 0; font-size: 14px; font-weight: 800; color: #1f2937; }
 .ab-auto-header p { margin: 2px 0 0; font-size: 12px; color: #6b7280; }
@@ -1642,5 +1655,166 @@
   }
   .ab-logs-pager-right {
     justify-content: space-between;
+  }
+}
+
+/* ── Firebase backup panel ── */
+.fb-mirror-card {
+  padding: 20px 22px 22px !important;
+}
+
+.fb-mirror-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.fb-mirror-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: #fff7ed;
+  color: #ea580c;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.fb-mirror-titles {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.fb-mirror-titles h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: #1f2937;
+}
+
+.fb-mirror-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.fb-mirror-pill.is-ok {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.fb-mirror-pill.is-idle {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.fb-mirror-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.fb-mirror-meta-item {
+  background: #fafafa;
+  border: 1px solid #f1f5f9;
+  border-radius: 10px;
+  padding: 10px 12px;
+  min-width: 0;
+}
+
+.fb-mirror-meta-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+
+.fb-mirror-meta-value {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.fb-mirror-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.fb-mirror-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 14px;
+  border: none;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+  transition: filter 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+
+.fb-mirror-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.fb-mirror-btn--backup {
+  background: linear-gradient(135deg, #6a0dad, #9b30ff);
+  box-shadow: 0 4px 12px rgba(106, 13, 173, 0.25);
+}
+
+.fb-mirror-btn--restore {
+  background: linear-gradient(135deg, #0f766e, #14b8a6);
+  box-shadow: 0 4px 12px rgba(15, 118, 110, 0.22);
+}
+
+.fb-mirror-btn:hover:not(:disabled) {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+
+.fb-mirror-msgs {
+  margin-top: 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.fb-mirror-msg {
+  margin: 0;
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.fb-mirror-msg--ok {
+  color: #0f766e;
+}
+
+@media (max-width: 640px) {
+  .fb-mirror-meta,
+  .fb-mirror-actions {
+    grid-template-columns: 1fr;
   }
 }

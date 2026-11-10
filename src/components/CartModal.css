@@ -20,7 +20,7 @@ body.cart-modal-open {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 9999;
+  z-index: 11000;
   padding: 16px;
   box-sizing: border-box;
 }
@@ -69,18 +69,28 @@ body.cart-modal-open {
   height: 36px;
   border-radius: 50%;
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   transition: background 0.2s, transform 0.15s;
-  line-height: 1;
+  line-height: 0;
   flex-shrink: 0;
   position: relative;
   z-index: 10002;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
   padding: 0;
+  margin: 0;
   pointer-events: all;
+}
+.modal-close svg,
+.modal-close i {
+  width: 16px;
+  height: 16px;
+  display: block;
+  line-height: 1;
+  margin: 0;
+  pointer-events: none;
 }
 
 .modal-close:hover {
@@ -680,28 +690,28 @@ body.cart-modal-open {
 /* ── Responsive ── */
 @media (max-width: 576px) {
   .modal-overlay {
-    padding: 0;
-    align-items: flex-end;
+    padding: 14px;
+    align-items: center;
+    justify-content: center;
   }
 
   .modal-content {
-    border-radius: 20px 20px 0 0;
-    max-height: 92vh;
+    border-radius: 16px;
+    max-height: min(82dvh, 720px);
     width: 100%;
-    max-width: 100%;
+    max-width: min(420px, calc(100vw - 28px));
+    margin: 0 auto;
   }
 
-  /* ✅ More padding so X button has breathing room */
   .modal-header {
-    padding: 20px 20px 18px;
-    min-height: 64px;
+    padding: 16px 16px 14px;
+    min-height: 56px;
   }
 
-  /* ✅ Larger tap target on mobile */
   .modal-close {
-    width: 42px;
-    height: 42px;
-    font-size: 1.5rem;
+    width: 36px;
+    height: 36px;
+    font-size: 1.25rem;
     background: rgba(255, 255, 255, 0.3);
     border: 2px solid rgba(255, 255, 255, 0.5);
   }

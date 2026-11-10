@@ -7,6 +7,7 @@ import { useConfirm } from '../context/ConfirmContext';
 import { useNavigate } from 'react-router-dom';
 import LoginModal from './LoginModal';
 import PromoCodeInput from './PromoCodeInput';
+import DkIcon, { DK_ICONS } from './DkIcon';
 import './ProductModal.css';
 
 const REVIEW_CHAR_LIMIT = 120;
@@ -418,7 +419,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
                         <i className="fas fa-shopping-cart"></i> Pre-Order Now
                       </button>
                       <button className="btn btn-fav-outline" onClick={handleWishlistClick} title="Add to Favorites">
-                        <i className="fas fa-star"></i>
+                        <DkIcon name={DK_ICONS.favorite} size={16} alt="" />
                       </button>
                     </>
                   ) : (
@@ -432,7 +433,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
                         </button>
                       )}
                       <button className="btn btn-fav-outline" onClick={handleWishlistClick} title="Add to Favorites">
-                        <i className="fas fa-star"></i>
+                        <DkIcon name={DK_ICONS.favorite} size={16} alt="" />
                       </button>
                     </>
                   )}

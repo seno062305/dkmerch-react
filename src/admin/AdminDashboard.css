@@ -75,9 +75,10 @@
 }
 
 .stat-icon {
-  width: 60px;
-  height: 60px;
-  border-radius: 12px;
+  width: 48px;
+  height: 48px;
+  border-radius: 0;
+  background: transparent !important;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -85,11 +86,14 @@
   flex-shrink: 0;
 }
 
-/* Icon colors per card type */
-.stat-card.sales .stat-icon   { color: #fc1268; background: #ffe4ef; }
-.stat-card.orders .stat-icon  { color: #2563eb; background: #dbeafe; }
-.stat-card.users .stat-icon   { color: #7c3aed; background: #f3eeff; }
-.stat-card.products .stat-icon { color: #d97706; background: #fef3c7; }
+/* No colored icon plates — graphic only */
+.stat-card.sales .stat-icon,
+.stat-card.orders .stat-icon,
+.stat-card.users .stat-icon,
+.stat-card.products .stat-icon {
+  background: transparent !important;
+  color: inherit;
+}
 
 .stat-details { flex: 1; }
 
@@ -582,9 +586,10 @@
   border-bottom: 1.5px solid #f1f5f9;
 }
 .stat-modal-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
+  width: 44px;
+  height: 44px;
+  border-radius: 0;
+  background: transparent !important;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -613,11 +618,23 @@
   font-size: 14px;
   color: #64748b;
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   transition: background 0.15s;
+  padding: 0;
+  line-height: 0;
+}
+.stat-modal-close i,
+.stat-modal-close svg {
+  display: block;
+  line-height: 1;
+  margin: 0;
+  width: 12px;
+  height: 12px;
+  font-size: 12px;
+  pointer-events: none;
 }
 .stat-modal-close:hover { background: #e2e8f0; }
 

@@ -1,5 +1,5 @@
 // convex/orders.ts
-import { query, mutation } from "./_generated/server";
+import { query, mutation, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 
@@ -69,10 +69,78 @@ export const createOrder = mutation({
     notes: v.optional(v.string()),
     paymentStatus: v.optional(v.string()),
     paymentLinkId: v.optional(v.string()),
+    isRewardOrder: v.optional(v.boolean()),
+    rewardTicketCode: v.optional(v.string()),
   },
   handler: async ({ db }, args) => {
     await db.insert("orders", args);
     return { success: true, orderId: args.orderId };
+  },
+});
+
+/** Used by failover sync-back (Firebase → Convex). Dedupes on orderId. */
+export const upsertOrderFromFailover = internalMutation({
+  args: { order: v.any() },
+  handler: async (ctx, { order }) => {
+    const orderId = String(order?.orderId || "").trim();
+    if (!orderId) return { inserted: false, reason: "missing_orderId" };
+
+    const existing = await ctx.db
+      .query("orders")
+      .withIndex("by_orderId", (q) => q.eq("orderId", orderId))
+      .first();
+    if (existing) {
+      return { inserted: false, reason: "duplicate", convexId: existing._id };
+    }
+
+    const items = Array.isArray(order.items)
+      ? order.items.map((it: any) => ({
+          id: String(it?.id || ""),
+          name: String(it?.name || "Item"),
+          price: Number(it?.price) || 0,
+          image: String(it?.image || ""),
+          quantity: Number(it?.quantity) || 1,
+          isPreOrder: !!it?.isPreOrder,
+          releaseDate: it?.releaseDate ?? null,
+        }))
+      : [];
+
+    const convexId = await ctx.db.insert("orders", {
+      orderId,
+      email: String(order.email || ""),
+      customerName: order.customerName ? String(order.customerName) : undefined,
+      phone: order.phone ? String(order.phone) : undefined,
+      items,
+      total: Number(order.total) || 0,
+      subtotal: order.subtotal != null ? Number(order.subtotal) : undefined,
+      shippingFee: order.shippingFee != null ? Number(order.shippingFee) : undefined,
+      promoCode: order.promoCode ? String(order.promoCode) : undefined,
+      promoName: order.promoName ? String(order.promoName) : undefined,
+      discountAmount: order.discountAmount != null ? Number(order.discountAmount) : undefined,
+      discountPercent: order.discountPercent != null ? Number(order.discountPercent) : undefined,
+      finalTotal: order.finalTotal != null ? Number(order.finalTotal) : undefined,
+      status: String(order.status || "Pending Payment"),
+      orderStatus: String(order.orderStatus || "pending"),
+      shippingAddress: order.shippingAddress ? String(order.shippingAddress) : undefined,
+      addressLat: order.addressLat != null ? Number(order.addressLat) : undefined,
+      addressLng: order.addressLng != null ? Number(order.addressLng) : undefined,
+      paymentMethod: String(order.paymentMethod || "paymongo"),
+      notes: order.notes ? String(order.notes) : undefined,
+      paymentStatus: String(order.paymentStatus || "pending"),
+      paymentLinkId: order.paymentLinkId ? String(order.paymentLinkId) : undefined,
+      paymentLinkUrl: order.paymentLinkUrl ? String(order.paymentLinkUrl) : undefined,
+      isRewardOrder: order.isRewardOrder ? true : undefined,
+      rewardTicketCode: order.rewardTicketCode ? String(order.rewardTicketCode) : undefined,
+    } as any);
+
+    await ctx.db.insert("activityLogs", {
+      action: "failover_order_synced",
+      actorRole: "system",
+      details: `Synced failover order ${orderId} from Firebase → Convex`,
+      createdAt: Date.now(),
+    });
+
+    return { inserted: true, convexId };
   },
 });
 

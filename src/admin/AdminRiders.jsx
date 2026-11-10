@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import './AdminRiders.css';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
+import DkIcon, { DK_ICONS } from '../components/DkIcon';
 const SITE_URL = process.env.REACT_APP_SITE_URL || 'https://dkmerchwebsite.vercel.app';
 
 const toDateStr = (ms) => new Date(ms).toISOString().split('T')[0];
@@ -189,16 +190,21 @@ const RejectApplicationModal = ({ app, onConfirm, onClose }) => {
 const StatusBadge = ({ order }) => {
   const s = (order.orderStatus || order.status || '').toLowerCase();
   const map = {
-    confirmed:        { label: '✅ Confirmed',       bg: '#059669' },
-    processing:       { label: '⚙️ Processing',       bg: '#6366f1' },
-    shipped:          { label: '📦 Shipped',          bg: '#0ea5e9' },
-    out_for_delivery: { label: '🚚 Out for Delivery', bg: '#f59e0b' },
-    completed:        { label: '✅ Delivered',        bg: '#16a34a' },
-    delivered:        { label: '✅ Delivered',        bg: '#16a34a' },
+    confirmed:        { label: 'Confirmed', icon: DK_ICONS.completed, bg: '#059669' },
+    processing:       { label: 'Processing', icon: null, bg: '#6366f1' },
+    shipped:          { label: 'Shipped', icon: DK_ICONS.activeDelivery, bg: '#0ea5e9' },
+    out_for_delivery: { label: 'Out for Delivery', icon: DK_ICONS.outForDelivery, bg: '#f59e0b' },
+    completed:        { label: 'Delivered', icon: DK_ICONS.completed, bg: '#16a34a' },
+    delivered:        { label: 'Delivered', icon: DK_ICONS.completed, bg: '#16a34a' },
   };
   const m = map[s];
   return m
-    ? <span className="ar-status-badge" style={{ background: m.bg }}>{m.label}</span>
+    ? (
+      <span className="ar-status-badge" style={{ background: m.bg }}>
+        {m.icon && <DkIcon name={m.icon} size={14} invert className="ar-status-icon" />}
+        {m.label}
+      </span>
+    )
     : <span className="ar-status-badge" style={{ background: '#6b7280' }}>{s}</span>;
 };
 
@@ -228,16 +234,21 @@ const NotificationBell = () => {
   };
   return (
     <div className="ar-bell-wrap" ref={dropdownRef}>
-      <button className="ar-bell-btn" onClick={handleOpen}>
-        🔔 {unreadCount > 0 && <span className="ar-bell-badge">{unreadCount > 9 ? '9+' : unreadCount}</span>}
+      <button className="ar-bell-btn" onClick={handleOpen} aria-label="Notifications">
+        <DkIcon name={DK_ICONS.notification} size={18} />
+        {unreadCount > 0 && <span className="ar-bell-badge">{unreadCount > 9 ? '9+' : unreadCount}</span>}
       </button>
       {open && (
         <div className="ar-bell-dropdown">
           <div className="ar-bell-header">
-            <span className="ar-bell-title">🛵 Rider Notifications</span>
+            <span className="ar-bell-title">Notifications</span>
             <div className="ar-bell-header-actions">
               {notifications.length > 0 && <button className="ar-bell-clear" onClick={async () => { await clearAll().catch(() => {}); }}>Clear all</button>}
-              <button className="ar-bell-close" onClick={() => setOpen(false)}>✕</button>
+              <button type="button" className="ar-bell-close" onClick={() => setOpen(false)} aria-label="Close">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" aria-hidden="true">
+                  <path d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
           </div>
           <div className="ar-bell-list">
@@ -570,7 +581,7 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
 
         <div className="ar-map-header" style={{ flexShrink: 0 }}>
           <div className="ar-map-title-row">
-            <span className="ar-map-title">📍 Live Rider Location</span>
+            <span className="ar-map-title"><DkIcon name={DK_ICONS.livemap} size={16} /> Live Rider Location</span>
             <span className="ar-map-order-id">#{orderId?.slice(-8).toUpperCase()}</span>
             <span className="ar-ncr-label">NCR Only</span>
             {isDelivered && <span style={{ background: '#d1fae5', color: '#065f46', borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 700 }}>✅ Delivered</span>}
@@ -683,7 +694,9 @@ const ActiveOrderCard = ({ order, collapsed, onToggleCollapse, onOpenMap }) => {
       {!collapsed && (
         <div className="ar-order-body">
           <div className="ar-section">
-            <div className="ar-section-title">👤 Customer</div>
+            <div className="ar-section-title">
+              <DkIcon name={DK_ICONS.customer} size={16} /> Customer
+            </div>
             <div className="ar-compact-row"><span className="ar-cl">Name</span><span className="ar-cv">{order.customerName || '—'}</span></div>
             <div className="ar-compact-row"><span className="ar-cl">Phone</span><span className="ar-cv">{order.phone || '—'}</span></div>
             <div className="ar-compact-row"><span className="ar-cl">Total</span><span className="ar-cv ar-total">₱{(order.finalTotal ?? order.total ?? 0).toLocaleString()}</span></div>
@@ -691,7 +704,7 @@ const ActiveOrderCard = ({ order, collapsed, onToggleCollapse, onOpenMap }) => {
 
           <div className="ar-section">
             <div className="ar-section-title">
-              🛵 Assigned Rider
+              <DkIcon name={DK_ICONS.assignedRider} size={16} /> Assigned Rider
               {hasRiderInfo
                 ? <span className="ar-rider-locked-badge" style={{ background: '#d1fae5', color: '#065f46', border: '1px solid #6ee7b7' }}>✅ From Rider App</span>
                 : <span className="ar-rider-locked-badge" style={{ background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a' }}>⏳ Awaiting rider</span>}
@@ -724,7 +737,9 @@ const ActiveOrderCard = ({ order, collapsed, onToggleCollapse, onOpenMap }) => {
           <div className="ar-section ar-section-full ar-gps-compact">
             <div className="ar-section-title">📍 GPS Tracking</div>
             <div className="ar-map-btn-row">
-              <button className="ar-track-map-btn" onClick={() => onOpenMap(order, false)}>🗺️ Live Map</button>
+              <button className="ar-track-map-btn" onClick={() => onOpenMap(order, false)}>
+                <DkIcon name={DK_ICONS.livemap} size={15} /> Live Map
+              </button>
               <button className="ar-track-map-btn ar-track-map-btn--full" onClick={() => onOpenMap(order, true)}>⛶ Full Map</button>
             </div>
           </div>
@@ -827,8 +842,8 @@ const AdminRiders = () => {
   );
 
   const tabs = [
-    { key: 'delivery',  label: '📦 Active Delivery', count: activeDeliveryItems.length },
-    { key: 'completed', label: '✅ Completed',       count: completedOrders.length, green: true },
+    { key: 'delivery',  label: 'Active Delivery', icon: DK_ICONS.activeDelivery, count: activeDeliveryItems.length },
+    { key: 'completed', label: 'Completed', icon: DK_ICONS.completed, count: completedOrders.length, green: true },
   ];
 
   return (
@@ -836,6 +851,7 @@ const AdminRiders = () => {
       <div className="riders-tabs">
         {tabs.map(t => (
           <button key={t.key} className={`riders-tab-btn ${tab === t.key ? 'active' : ''}`} onClick={() => setTab(t.key)}>
+            <DkIcon name={t.icon} size={15} className="ar-tab-icon" />
             {t.label}
             {t.count > 0 && <span className={`riders-tab-count-badge ${t.green ? 'riders-tab-count-badge--green' : ''}`}>{t.count}</span>}
           </button>
@@ -847,7 +863,7 @@ const AdminRiders = () => {
         <>
           <DateFilter />
           {activeDeliveryItems.length === 0
-            ? <div className="ar-empty"><div className="ar-empty-icon">📭</div><p>No active deliveries{(startDate || endDate) ? ' for selected dates' : ''}.</p><span>Orders claimed by riders after waybill scan appear here.</span></div>
+            ? <div className="ar-empty"><div className="ar-empty-icon"><DkIcon name={DK_ICONS.activeDelivery} size={40} /></div><p>No active deliveries{(startDate || endDate) ? ' for selected dates' : ''}.</p><span>Orders claimed by riders after waybill scan appear here.</span></div>
             : <div className="ar-orders-list">{activeDeliveryItems.map(o => <ActiveOrderCard key={o._id} order={o} collapsed={!!collapsed[o.orderId]} onToggleCollapse={handleToggleCollapse} onOpenMap={openMap} />)}</div>
           }
         </>
@@ -857,7 +873,7 @@ const AdminRiders = () => {
         <>
           <DateFilter />
           {completedOrders.length === 0
-            ? <div className="ar-empty"><div className="ar-empty-icon">✅</div><p>No completed deliveries{(startDate || endDate) ? ' for selected dates' : ''} yet.</p></div>
+            ? <div className="ar-empty"><div className="ar-empty-icon"><DkIcon name={DK_ICONS.completed} size={40} /></div><p>No completed deliveries{(startDate || endDate) ? ' for selected dates' : ''} yet.</p></div>
             : <div className="ar-orders-list">{completedOrders.map(o => <CompletedOrderCard key={o._id} order={o} onRemove={setRemoveTarget} />)}</div>
           }
         </>

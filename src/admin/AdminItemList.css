@@ -30,9 +30,10 @@
 }
 
 .stat-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 12px;
+  width: 44px;
+  height: 44px;
+  border-radius: 0;
+  background: transparent !important;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -40,10 +41,13 @@
   flex-shrink: 0;
 }
 
-.stat-icon.blue   { color: #667eea; background: #eef0fd; }
-.stat-icon.green  { color: #fc1268; background: #ffe4ef; }
-.stat-icon.orange { color: #fb8c00; background: #fff3e0; }
-.stat-icon.red    { color: #e53935; background: #ffebee; }
+.stat-icon.blue,
+.stat-icon.green,
+.stat-icon.orange,
+.stat-icon.red {
+  background: transparent !important;
+  color: #334155;
+}
 
 .stat-info h3 { font-size: 28px; font-weight: 700; color: #1a1f36; margin: 0; }
 .stat-info p  { font-size: 14px; color: #64748b; margin: 4px 0 0 0; }

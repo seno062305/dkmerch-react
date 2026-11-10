@@ -271,11 +271,6 @@ const RiderLoginModal = ({ onClose, onLoginSuccess }) => {
           </button>
 
           <div className="login-modal-header">
-            <div className="login-icon rider-icon-mode">
-              <svg viewBox="0 0 24 24" fill="currentColor">
-                <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
-              </svg>
-            </div>
             <h2 className="rider-login-title">Reset Rider Password</h2>
             <p className="login-subtitle">Enter your email to receive a reset code</p>
           </div>
@@ -438,14 +433,9 @@ const RiderLoginModal = ({ onClose, onLoginSuccess }) => {
         </button>
 
         <div className="login-modal-header">
-          <div className="login-icon rider-icon-mode">
-            <svg viewBox="0 0 24 24" fill="currentColor">
-              <path d="M19 7c0-1.1-.9-2-2-2h-3L12 2H8L6 5H3C1.9 5 1 5.9 1 7v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7zM10 4h4l1 1h-6l1-1zm2 13c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.65 0-3 1.35-3 3s1.35 3 3 3 3-1.35 3-3-1.35-3-3-3z"/>
-            </svg>
-          </div>
           <h2 className="rider-login-title">Rider Login</h2>
           <p className="login-subtitle">Access your DKMerch rider dashboard</p>
-          <div className="rider-mode-badge">🛵 Rider Portal</div>
+          <div className="rider-mode-badge">Rider Portal</div>
         </div>
 
         <form onSubmit={handleSubmit} className="login-form">

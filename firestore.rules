@@ -1,0 +1,40 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default locked — Admin SDK / service account bypasses rules.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Generic Convex-outage queue (all tables).
+    match /failover_writes/{docId} {
+      allow create: if
+        request.resource.data.keys().hasAll([
+          'table', 'mutation', 'args', '_failover', '_syncStatus'
+        ])
+        && request.resource.data._failover == true
+        && request.resource.data._syncStatus == 'pending'
+        && request.resource.data.table is string
+        && request.resource.data.mutation is string;
+
+      allow read, update, delete: if false;
+    }
+
+    // Legacy orders-only failover collection (still accepted).
+    match /failover_orders/{orderId} {
+      allow create: if
+        request.resource.data.keys().hasAll([
+          'orderId', 'email', 'items', 'total', 'paymentMethod', 'status',
+          '_failover', '_syncStatus'
+        ])
+        && request.resource.data.orderId == orderId
+        && request.resource.data._failover == true
+        && request.resource.data._syncStatus == 'pending'
+        && request.resource.data.email is string
+        && request.resource.data.items is list
+        && request.resource.data.total is number;
+
+      allow read, update, delete: if false;
+    }
+  }
+}

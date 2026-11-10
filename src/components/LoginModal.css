@@ -20,7 +20,7 @@ body.login-modal-open {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 9999;
+  z-index: 11000;
   animation: fadeIn 0.3s ease;
   padding: 20px;
 }
@@ -59,22 +59,28 @@ body.login-modal-open {
   background: #f3f4f6;
   border: none;
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.3s ease;
+  transition: background 0.2s ease, color 0.2s ease;
   z-index: 10;
+  padding: 0;
+  margin: 0;
+  line-height: 0;
 }
 
 .modal-close-btn svg {
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
   color: #6b7280;
+  display: block;
+  margin: 0;
+  flex-shrink: 0;
+  pointer-events: none;
 }
 
 .modal-close-btn:hover {
   background: #e5e7eb;
-  transform: rotate(90deg);
 }
 
 .modal-close-btn:hover svg {
@@ -136,28 +142,16 @@ body.login-modal-open {
 }
 
 .login-icon {
-  width: 80px;
-  height: 80px;
-  margin: 0 auto 20px;
-  background: linear-gradient(135deg, #ec4899 0%, #f472b6 100%);
-  border-radius: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 10px 25px rgba(236, 72, 153, 0.3);
-  transition: all 0.4s ease;
+  display: none !important;
 }
 
 /* Rider mode icon style */
 .login-icon.rider-icon-mode {
-  background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
-  box-shadow: 0 10px 25px rgba(124, 58, 237, 0.35);
+  display: none !important;
 }
 
 .login-icon svg {
-  width: 45px;
-  height: 45px;
-  color: white;
+  display: none !important;
 }
 
 .login-modal-header h2 {
@@ -352,21 +346,23 @@ body.login-modal-open {
 /* Submit Button */
 .login-submit-btn {
   width: 100%;
-  padding: 16px;
+  padding: 12px 16px;
   background: linear-gradient(135deg, #ec4899 0%, #f472b6 100%);
   color: white;
   border: none;
-  border-radius: 12px;
-  font-size: 16px;
+  border-radius: 10px;
+  font-size: 15px;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.3s ease;
   box-shadow: 0 4px 12px rgba(236, 72, 153, 0.3);
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  text-align: center;
+  gap: 8px;
   margin-bottom: 24px;
+  box-sizing: border-box;
 }
 
 /* Rider submit button */
@@ -483,11 +479,14 @@ body.login-modal-open {
 /* Responsive Design */
 @media (max-width: 576px) {
   .modal-overlay {
-    padding: 10px;
+    padding: 14px;
+    align-items: center;
+    justify-content: center;
   }
 
   .login-modal-content {
-    max-width: 100%;
+    max-width: min(400px, calc(100vw - 28px));
+    max-height: min(82dvh, 720px);
     border-radius: 16px;
   }
 
@@ -529,8 +528,8 @@ body.login-modal-open {
   }
 
   .login-submit-btn {
-    padding: 14px;
-    font-size: 15px;
+    padding: 11px 14px;
+    font-size: 14px;
   }
 
   .modal-close-btn {

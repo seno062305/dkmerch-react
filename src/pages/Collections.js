@@ -8,6 +8,7 @@ import { useNotification } from '../context/NotificationContext';
 import { useConfirm } from '../context/ConfirmContext';
 import ProductModal from '../components/ProductModal';
 import { PointsBadge } from '../utils/pointsUtils';
+import DkIcon, { DK_ICONS } from '../components/DkIcon';
 import './Collections.css';
 
 const MAX_WISHLIST = 10;
@@ -344,7 +345,7 @@ const Collections = () => {
                   onClick={(e) => handleCardWishlist(e, product)}
                   title={wishlisted ? 'Remove from favorites' : 'Add to favorites'}
                 >
-                  <i className="fas fa-star"></i>
+                  <DkIcon name={DK_ICONS.favorite} size={16} alt="" />
                 </button>
 
                 <div className="collection-card-img">

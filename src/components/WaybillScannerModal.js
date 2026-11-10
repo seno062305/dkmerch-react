@@ -222,7 +222,9 @@ const WaybillScannerModal = ({ onClose, onScan, hint }) => {
     <div className="wb-scan-overlay" onClick={handleClose}>
       <div className="wb-scan-modal" onClick={e => e.stopPropagation()}>
         <button type="button" className="wb-scan-close" onClick={handleClose} aria-label="Close">
-          &times;
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" aria-hidden="true">
+            <path d="M6 18L18 6M6 6l12 12" />
+          </svg>
         </button>
         <h3 className="wb-scan-title"><i className="fas fa-qrcode"></i> Scan Waybill</h3>
         <p className="wb-scan-sub">

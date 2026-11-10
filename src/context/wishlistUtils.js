@@ -1,6 +1,7 @@
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useAuth } from "./AuthContext";
+import { runWithFailover } from "../lib/failoverWrite";
 
 export const useWishlist = () => {
   const { user } = useAuth();
@@ -13,12 +14,18 @@ export const useToggleWishlist = () => {
   const { user } = useAuth();
   return (product) => {
     const userId = user?.id || user?.email || "guest";
-    return mutation({
+    const args = {
       userId,
       productId: product.id || product._id,
       name: product.name,
       price: product.price,
       image: product.image,
+    };
+    return runWithFailover(mutation, args, {
+      table: "wishlist",
+      mutation: "wishlist:toggleWishlist",
+      docKey: `${userId}_${args.productId}`,
+      payload: args,
     });
   };
 };
@@ -28,7 +35,13 @@ export const useRemoveFromWishlist = () => {
   const { user } = useAuth();
   return (productId) => {
     const userId = user?.id || user?.email || "guest";
-    return mutation({ userId, productId });
+    const args = { userId, productId };
+    return runWithFailover(mutation, args, {
+      table: "wishlist",
+      mutation: "wishlist:removeFromWishlist",
+      docKey: `${userId}_${productId}`,
+      payload: args,
+    });
   };
 };
 
@@ -41,7 +54,6 @@ export const useWishlistCount = () => {
   return useWishlist().length;
 };
 
-// Legacy stubs
 export const toggleWishlist = () => console.warn("Use useToggleWishlist() hook instead.");
 export const getWishlist = () => [];
 export const isInWishlist = () => false;

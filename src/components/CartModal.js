@@ -336,7 +336,11 @@ const CartModal = ({ cart, onClose }) => {
       <div className="modal-content" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <h3 className="modal-title">Shopping Cart</h3>
-          <button className="modal-close" onClick={onClose}>&times;</button>
+          <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" aria-hidden="true">
+              <path d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
 
         <div className="modal-body">

@@ -1,5 +1,7 @@
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import { createOrderWithFailoverDual } from "../lib/failoverOrders";
+import { runWithFailover } from "../lib/failoverWrite";
 
 // ── HOOKS ─────────────────────────────────────────
 
@@ -19,16 +21,48 @@ export const useOrderById = (orderId) => {
   return useQuery(api.orders.getOrderById, orderId ? { orderId } : "skip");
 };
 
-export const useCreateOrder  = () => useMutation(api.orders.createOrder);
-export const useUpdateOrderStatus = () => useMutation(api.orders.updateOrderStatus);
-export const useUpdateOrderFields = () => useMutation(api.orders.updateOrderFields);
+/** Convex first; on timeout/outage → Firebase failover. */
+export const useCreateOrder = () => {
+  const mutate = useMutation(api.orders.createOrder);
+  return (args) => createOrderWithFailoverDual(mutate, args);
+};
+
+export const useUpdateOrderStatus = () => {
+  const mutate = useMutation(api.orders.updateOrderStatus);
+  return (args) =>
+    runWithFailover(mutate, args, {
+      table: "orders",
+      mutation: "orders:updateOrderStatus",
+      docKey: args?.orderId,
+      payload: args,
+    });
+};
+
+export const useUpdateOrderFields = () => {
+  const mutate = useMutation(api.orders.updateOrderFields);
+  return (args) =>
+    runWithFailover(mutate, args, {
+      table: "orders",
+      mutation: "orders:updateOrderFields",
+      docKey: args?.orderId,
+      payload: args,
+    });
+};
 
 // ── OTP — args must match convex/orders.ts updateOrderOtp ──
 export const useUpdateOrderOtp = () => {
   const mutate = useMutation(api.orders.updateOrderOtp);
-  // Wrapper so callers can pass { orderId, deliveryOtp } or { orderId, otp }
   return ({ orderId, deliveryOtp, otp }) =>
-    mutate({ orderId, deliveryOtp: deliveryOtp || otp });
+    runWithFailover(
+      mutate,
+      { orderId, deliveryOtp: deliveryOtp || otp },
+      {
+        table: "orders",
+        mutation: "orders:updateOrderOtp",
+        docKey: orderId,
+        payload: { orderId, deliveryOtp: deliveryOtp || otp },
+      }
+    );
 };
 
 export const ORDER_STATUS = {

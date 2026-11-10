@@ -63,6 +63,10 @@
   transition: all 0.3s ease;
   position: relative;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
 }
 
 .preorder-card:hover {
@@ -106,7 +110,13 @@
 .preorder-card:hover .preorder-image img { transform: scale(1.05); }
 
 /* ── Info ── */
-.preorder-info { padding: 16px; }
+.preorder-info {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
 
 .product-group {
   font-size: 11px;
@@ -334,15 +344,20 @@
 
 /* ── RESPONSIVE ── */
 @media (max-width: 992px) {
-  .preorder-grid { grid-template-columns: repeat(3, 1fr); }
+  .preorder-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 @media (max-width: 768px) {
   .preorder-filter-bar { padding: 16px 20px; }
-  .preorder-grid { grid-template-columns: repeat(3, 1fr); }
+  .preorder-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    padding-bottom: 88px;
+    align-items: stretch;
+  }
   .preorder-image { padding: 10px; }
   .preorder-info { padding: 10px; }
-  .product-name { font-size: 11px; min-height: 30px; }
+  .product-name { font-size: 12px; min-height: 34px; }
   .current-price { font-size: 13px; }
   .release-date-badge { font-size: 10px; padding: 4px 7px; }
   .preorder-card .btn { padding: 8px; font-size: 12px; }
@@ -358,15 +373,19 @@
 @media (max-width: 576px) {
   .preorder-filter-bar { padding: 12px 14px; }
   .filter-btn { padding: 6px 12px; font-size: 11px; }
-  .preorder-grid { grid-template-columns: repeat(3, 1fr); }
+  .preorder-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding-bottom: 96px;
+  }
   .preorder-image { padding: 6px; }
   .preorder-info { padding: 6px 8px 10px; }
-  .product-group { font-size: 9px; margin-bottom: 3px; }
-  .product-name { font-size: 10px; min-height: 26px; }
-  .current-price { font-size: 11px; }
-  .original-price { font-size: 9px; }
+  .product-group { font-size: 10px; margin-bottom: 3px; }
+  .product-name { font-size: 11px; min-height: 32px; }
+  .current-price { font-size: 12px; }
+  .original-price { font-size: 10px; }
   .stock-info { display: none; }
   .release-date-badge { font-size: 9px; padding: 3px 5px; }
-  .preorder-card .btn { font-size: 10px; padding: 6px 4px; }
-  .btn-preordered { font-size: 10px; padding: 6px 4px; }
+  .preorder-card .btn { font-size: 11px; padding: 7px 4px; }
+  .btn-preordered { font-size: 11px; padding: 7px 4px; }
 }

@@ -7,6 +7,7 @@ import { useNotification } from '../context/NotificationContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { PointsBadge } from '../utils/pointsUtils';
 import LoginModal from './LoginModal';
+import DkIcon, { DK_ICONS } from './DkIcon';
 import './WeverseSection.css';
 
 const MAX_WISHLIST = 10;
@@ -160,7 +161,7 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
                   onClick={(e) => handleWishlistClick(e, product)}
                   title={isWishlisted(pid) ? 'Remove from favorites' : 'Add to favorites'}
                 >
-                  <i className="fas fa-star"></i>
+                  <DkIcon name={DK_ICONS.favorite} size={16} alt="" />
                 </button>
 
                 <div className="wv-card-img">

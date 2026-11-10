@@ -1,5 +1,5 @@
 // convex/backup.ts
-import { query, mutation, internalMutation } from './_generated/server';
+import { query, mutation, internalMutation, internalQuery } from './_generated/server';
 import { v } from 'convex/values';
 import { internal } from './_generated/api';
 
@@ -200,6 +200,79 @@ const TABLE_NAMES = [
   'riderApplications',
   'riderNotifications',
 ] as const;
+
+/** Extra live tables mirrored to Firebase (beyond Excel backup set). */
+const FIREBASE_EXTRA_TABLES = [
+  'cart',
+  'wishlist',
+  'settings',
+  'activityLogs',
+  'userPoints',
+  'rewardRedemptions',
+  'userArchives',
+] as const;
+
+/** Snapshot for Convex → Firestore backup mirror. */
+export const getAllForFirebaseMirror = internalQuery({
+  handler: async (ctx) => {
+    const tables: Record<string, any[]> = {};
+    for (const name of [...TABLE_NAMES, ...FIREBASE_EXTRA_TABLES]) {
+      try {
+        tables[name] = await ctx.db.query(name as any).collect();
+      } catch {
+        tables[name] = [];
+      }
+    }
+    return tables;
+  },
+});
+
+export const recordFirebaseSyncResult = internalMutation({
+  args: {
+    ok: v.boolean(),
+    message: v.string(),
+    synced: v.optional(v.number()),
+    failed: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db.query('settings').first();
+    const payload = {
+      lastFirebaseSyncAt: Date.now(),
+      lastFirebaseSyncOk: args.ok,
+      lastFirebaseSyncMessage: args.message.slice(0, 500),
+      lastFirebaseSyncCount: args.synced ?? 0,
+      lastFirebaseSyncFailed: args.failed ?? 0,
+    } as any;
+    if (existing) {
+      await ctx.db.patch(existing._id, payload);
+    } else {
+      await ctx.db.insert('settings', {
+        storeName: 'DKMerch Store',
+        ...payload,
+      });
+    }
+    await ctx.db.insert('activityLogs', {
+      action: 'firebase_sync',
+      actorRole: 'system',
+      actorName: 'Firebase Mirror',
+      details: args.message.slice(0, 300),
+      createdAt: Date.now(),
+    });
+  },
+});
+
+export const getFirebaseSyncStatus = query({
+  handler: async (ctx) => {
+    const settings = (await ctx.db.query('settings').first()) as any;
+    return {
+      lastFirebaseSyncAt: settings?.lastFirebaseSyncAt ?? null,
+      lastFirebaseSyncOk: settings?.lastFirebaseSyncOk ?? null,
+      lastFirebaseSyncMessage: settings?.lastFirebaseSyncMessage ?? null,
+      lastFirebaseSyncCount: settings?.lastFirebaseSyncCount ?? 0,
+      lastFirebaseSyncFailed: settings?.lastFirebaseSyncFailed ?? 0,
+    };
+  },
+});
 
 export const getDatabaseStatus = query({
   handler: async (ctx) => {

@@ -1,5 +1,6 @@
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import { runWithFailover } from "../lib/failoverWrite";
 
 // ── HOOKS ─────────────────────────────────────────
 
@@ -16,9 +17,40 @@ export const useCollectionProducts = () => {
   return useQuery(api.products.getCollectionProducts) || [];
 };
 
-export const useAddProduct = () => useMutation(api.products.addProduct);
-export const useUpdateProduct = () => useMutation(api.products.updateProduct);
-export const useDeleteProduct = () => useMutation(api.products.deleteProduct);
+export const useAddProduct = () => {
+  const mutate = useMutation(api.products.addProduct);
+  return (args) =>
+    runWithFailover(mutate, args, {
+      table: "products",
+      mutation: "products:addProduct",
+      docKey: args?.name || `product-${Date.now()}`,
+      payload: args,
+    });
+};
+
+export const useUpdateProduct = () => {
+  const mutate = useMutation(api.products.updateProduct);
+  return (args) =>
+    runWithFailover(mutate, args, {
+      table: "products",
+      mutation: "products:updateProduct",
+      docKey: String(args?.id || args?._id || ""),
+      payload: args,
+    });
+};
+
+export const useDeleteProduct = () => {
+  const mutate = useMutation(api.products.deleteProduct);
+  return (args) => {
+    const normalized = typeof args === "object" ? args : { id: args };
+    return runWithFailover(mutate, normalized, {
+      table: "products",
+      mutation: "products:deleteProduct",
+      docKey: String(normalized?.id || ""),
+      payload: normalized,
+    });
+  };
+};
 
 // ── LEGACY FUNCTIONS ──────────────────────────────
 const STORAGE_KEY = "dkmerch_products";
