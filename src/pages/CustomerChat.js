@@ -13,7 +13,7 @@ const CustomerChat = () => {
   const [error, setError] = useState('');
   const [preview, setPreview] = useState(null);
   const fileRef = useRef(null);
-  const bottomRef = useRef(null);
+  const messagesRef = useRef(null);
 
   const email = user?.email || '';
   const thread = useQuery(api.supportChat.getMyThread, email ? { customerEmail: email } : 'skip');
@@ -35,6 +35,11 @@ const CustomerChat = () => {
     }
   }, [isReady, isAuthenticated, navigate]);
 
+  // Keep page pinned to top — don't let chat scroll into the footer
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, []);
+
   useEffect(() => {
     if (!email || !thread?._id) return;
     if ((thread.unreadByCustomer || 0) > 0) {
@@ -43,7 +48,9 @@ const CustomerChat = () => {
   }, [email, thread?._id, thread?.unreadByCustomer, markRead]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const box = messagesRef.current;
+    if (!box) return;
+    box.scrollTop = box.scrollHeight;
   }, [messages.length]);
 
   const uploadImage = async (file) => {
@@ -123,7 +130,7 @@ const CustomerChat = () => {
           </div>
         </header>
 
-        <div className="customer-chat-messages">
+        <div className="customer-chat-messages" ref={messagesRef}>
           {messages.length === 0 && (
             <div className="customer-chat-empty">
               <i className="fas fa-comments"></i>
@@ -149,7 +156,6 @@ const CustomerChat = () => {
               )}
             </div>
           ))}
-          <div ref={bottomRef} />
         </div>
 
         {preview && (

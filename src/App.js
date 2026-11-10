@@ -197,8 +197,10 @@ function AppContent() {
   const isRiderDashRoute  = location.pathname.startsWith('/rider');
   const isVerifyRoute     = location.pathname.startsWith('/verify-email');
 
+  const isCustomerChatRoute = location.pathname === '/chat' || location.pathname.startsWith('/chat/');
   const hideHeaderFooter  = isAdminRoute || isPromoRoute || isRiderTrackRoute || isRiderDashRoute || isVerifyRoute;
-  const showChatBot       = !isAdminRoute && !isPromoRoute && !isRiderTrackRoute && !isRiderDashRoute && !isVerifyRoute;
+  const hideFooterOnly    = isCustomerChatRoute;
+  const showChatBot       = !isAdminRoute && !isPromoRoute && !isRiderTrackRoute && !isRiderDashRoute && !isVerifyRoute && !isCustomerChatRoute;
   const showCustomerNav   = !hideHeaderFooter;
 
   useEffect(() => {
@@ -269,7 +271,7 @@ function AppContent() {
             </Route>
           </Routes>
 
-          {!hideHeaderFooter && <Footer />}
+          {!hideHeaderFooter && !hideFooterOnly && <Footer />}
           {showCustomerNav && <CustomerBottomNav />}
           {showChatBot && <DKMerchChatBot />}
 
