@@ -492,6 +492,10 @@ export default defineSchema({
     label: v.string(),
     createdAt: v.number(),
     isRemoved: v.optional(v.boolean()),
+    /** Marquee / group logo path (e.g. /images/foo.png) or resolved URL */
+    image: v.optional(v.string()),
+    /** Convex file storage for uploaded group logos */
+    imageStorageId: v.optional(v.id("_storage")),
   })
     .index("by_type", ["type"])
     .index("by_type_value", ["type", "value"]),

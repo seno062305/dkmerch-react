@@ -18,7 +18,7 @@
   margin: 0 0 6px;
   font-size: 26px;
   font-weight: 800;
-  color: #6a0dad;
+  color: #fc1268;
 }
 
 .ab-super-top p {
@@ -33,9 +33,9 @@
   height: 36px;
   padding: 0 14px;
   border-radius: 10px;
-  border: 1px solid #f0e6ff;
+  border: 1px solid #ffd6e7;
   background: #fff;
-  color: #9b30ff;
+  color: #e0105a;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
@@ -62,14 +62,14 @@
 
 .ab-stat-card {
   background: #fff;
-  border: 1px solid #f0e6ff;
+  border: 1px solid #ffd6e7;
   border-radius: 16px;
   padding: 14px 16px;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .ab-stat-card--ok { border-color: #bbf7d0; background: linear-gradient(180deg, #f0fdf4, #fff); }
-.ab-stat-card--brand { border-color: #e9d5ff; background: linear-gradient(180deg, #faf5ff, #fff); }
+.ab-stat-card--brand { border-color: #fecdd3; background: linear-gradient(180deg, #fff1f5, #fff); }
 
 .ab-stat-card-label {
   display: flex;
@@ -82,14 +82,14 @@
   letter-spacing: 0.03em;
 }
 
-.ab-stat-card-label i { color: #6a0dad; }
+.ab-stat-card-label i { color: #fc1268; }
 
 .ab-stat-card strong {
   display: block;
   margin-top: 8px;
   font-size: 22px;
   font-weight: 800;
-  color: #6a0dad;
+  color: #fc1268;
 }
 
 .ab-stat-card span {
@@ -105,7 +105,7 @@
   margin: 0 0 4px;
   font-size: 16px;
   font-weight: 800;
-  color: #6a0dad;
+  color: #fc1268;
 }
 .ab-section-head p {
   margin: 0;
@@ -115,15 +115,15 @@
 
 .ab-card {
   background: #fff;
-  border: 1px solid #f0e6ff;
+  border: 1px solid #ffd6e7;
   border-radius: 16px;
   padding: 16px 18px;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .ab-card--hl {
-  border-color: #e9d5ff;
-  background: linear-gradient(135deg, #faf5ff 0%, #fff 55%);
+  border-color: #fecdd3;
+  background: linear-gradient(135deg, #fff1f5 0%, #fff 55%);
 }
 
 .ab-card--danger {
@@ -141,12 +141,12 @@
   margin: 0;
   font-size: 14px;
   font-weight: 800;
-  color: #6a0dad;
+  color: #fc1268;
 }
 .ab-card-title i {
   width: auto; height: auto; border-radius: 0;
   display: inline-flex; align-items: center; justify-content: center;
-  background: transparent; color: #6a0dad;
+  background: transparent; color: #fc1268;
   font-size: 16px;
 }
 .ab-card-hint {
@@ -198,7 +198,7 @@
 .ab-btn-primary {
   border: none;
   color: #fff;
-  background: linear-gradient(135deg, #6a0dad, #9b30ff);
+  background: linear-gradient(135deg, #fc1268, #e0105a);
   box-shadow: 0 4px 12px rgba(252, 18, 104, 0.25);
 }
 .ab-btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
@@ -209,11 +209,11 @@
 }
 
 .ab-btn-outline {
-  border: 1.5px solid #f0e6ff;
+  border: 1.5px solid #ffd6e7;
   background: #fff;
-  color: #9b30ff;
+  color: #e0105a;
 }
-.ab-btn-outline:hover { border-color: #e9d5ff; background: #faf5ff; }
+.ab-btn-outline:hover { border-color: #fecdd3; background: #fff1f5; }
 .ab-btn-outline:disabled { opacity: 0.55; cursor: not-allowed; }
 
 .ab-danger-tools {
@@ -226,9 +226,9 @@
   height: auto;
   padding: 11px 16px;
   border-radius: 10px;
-  border: 1px solid #f0e6ff;
+  border: 1px solid #ffd6e7;
   background: #fff;
-  color: #6a0dad;
+  color: #fc1268;
   font-size: 13px;
   font-weight: 700;
   line-height: 1.35;
@@ -244,8 +244,8 @@
 }
 .ab-btn-cache i { color: #64748b; flex-shrink: 0; }
 .ab-btn-cache:hover {
-  border-color: #e9d5ff;
-  background: #faf5ff;
+  border-color: #fecdd3;
+  background: #fff1f5;
 }
 
 .ab-auto-mini {
@@ -255,8 +255,8 @@
   margin-bottom: 12px;
 }
 .ab-auto-mini > div {
-  background: #faf5ff;
-  border: 1px solid #f3e8ff;
+  background: #fff1f5;
+  border: 1px solid #ffe4ef;
   border-radius: 12px;
   padding: 10px;
   text-align: center;
@@ -272,7 +272,7 @@
   display: block;
   margin-top: 4px;
   font-size: 12px;
-  color: #6a0dad;
+  color: #fc1268;
 }
 
 .ab-maint-grid {
@@ -303,7 +303,7 @@
   justify-content: space-between;
   gap: 10px;
   padding: 10px 12px;
-  border: 1px solid #f3e8ff;
+  border: 1px solid #ffe4ef;
   border-radius: 12px;
   background: #fff;
 }
@@ -316,11 +316,11 @@
 }
 .ab-table-row-left i {
   width: auto; height: auto; border-radius: 0;
-  background: transparent; color: #6a0dad;
+  background: transparent; color: #fc1268;
   display: inline-flex; align-items: center; justify-content: center;
   font-size: 15px;
 }
-.ab-table-row strong { display: block; font-size: 13px; color: #6a0dad; }
+.ab-table-row strong { display: block; font-size: 13px; color: #fc1268; }
 .ab-table-row span { font-size: 11px; color: #64748b; }
 
 .ab-table-row-actions { display: flex; gap: 6px; flex-shrink: 0; }
@@ -330,7 +330,7 @@
   display: inline-flex; align-items: center; justify-content: center;
   background: transparent;
 }
-.ab-icon-btn--view { background: transparent; color: #6a0dad; border-color: #e9d5ff; }
+.ab-icon-btn--view { background: transparent; color: #fc1268; border-color: #fecdd3; }
 .ab-icon-btn--arch { background: transparent; color: #1d4ed8; border-color: #bfdbfe; }
 .ab-icon-btn--del { background: transparent; color: #e11d48; border-color: #fecdd3; }
 
@@ -338,7 +338,7 @@
   display: flex;
   gap: 4px;
   padding: 4px;
-  background: #f3e8ff;
+  background: #ffe4ef;
   border-radius: 12px;
   margin-bottom: 12px;
 }
@@ -355,7 +355,7 @@
 }
 .ab-hist-tab--on {
   background: #fff;
-  color: #6a0dad;
+  color: #fc1268;
   box-shadow: 0 1px 2px rgba(15,23,42,0.08);
 }
 
@@ -363,7 +363,7 @@
   list-style: none;
   margin: 0;
   padding: 0;
-  border: 1px solid #f3e8ff;
+  border: 1px solid #ffe4ef;
   border-radius: 12px;
   overflow: hidden;
   min-height: 220px;
@@ -374,7 +374,7 @@
   align-items: center;
   gap: 12px;
   padding: 12px 14px;
-  border-top: 1px solid #f3e8ff;
+  border-top: 1px solid #ffe4ef;
   min-height: 72px;
   background: #fff;
 }
@@ -395,7 +395,7 @@
 .ab-hist-meta strong {
   display: block;
   font-size: 13px;
-  color: #6a0dad;
+  color: #fc1268;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -434,17 +434,17 @@
   line-height: 1;
 }
 .ab-pager-nav:disabled {
-  color: #e9d5ff;
+  color: #fecdd3;
   cursor: default;
 }
 .ab-pager-num:hover:not(.ab-pager-on) {
-  color: #6a0dad;
-  background: #faf5ff;
+  color: #fc1268;
+  background: #fff1f5;
 }
 .ab-pager-num.ab-pager-on {
   background: #fff;
-  border: 1px solid #f0e6ff;
-  color: #6a0dad;
+  border: 1px solid #ffd6e7;
+  color: #fc1268;
   font-weight: 600;
   box-shadow: none;
 }
@@ -463,8 +463,8 @@
   font-size: 9px;
   font-weight: 800;
   text-transform: uppercase;
-  background: #f0e6ff;
-  color: #6a0dad;
+  background: #ffd6e7;
+  color: #fc1268;
   vertical-align: middle;
 }
 
@@ -473,7 +473,7 @@
   width: 100%;
   min-height: 44px;
   height: auto;
-  border: 1.5px solid #f0e6ff;
+  border: 1.5px solid #ffd6e7;
   border-radius: 10px;
   padding: 10px 14px;
   font-size: 13px;
@@ -481,7 +481,7 @@
   box-sizing: border-box;
   outline: none;
   background: #fff;
-  color: #6a0dad;
+  color: #fc1268;
 }
 
 .ab-super textarea.ab-oracle-input {

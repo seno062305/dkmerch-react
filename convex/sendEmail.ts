@@ -1,6 +1,6 @@
 // convex/sendEmail.ts
 import { action, internalAction } from "./_generated/server";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { v } from "convex/values";
 
 const PUBLIC_SITE_URL = "https://dkmerchwebsite.vercel.app";
@@ -337,7 +337,23 @@ export const sendPasswordResetCode = action({
   handler: async (
     ctx,
     { to, code, name }: { to: string; code: string; name?: string }
-  ): Promise<{ success: boolean; message?: string; id?: string }> => {
+  ): Promise<{ success: boolean; message?: string; id?: string; notFound?: boolean }> => {
+    const email = String(to || "").trim().toLowerCase();
+    if (!email || !email.includes("@")) {
+      return { success: false, message: "Please enter a valid email address." };
+    }
+
+    // Only send OTP if this email belongs to a registered account
+    const user = await ctx.runQuery(api.users.getUserByEmail, { email });
+    if (!user) {
+      return {
+        success: false,
+        notFound: true,
+        message: "No registered account found with that email.",
+      };
+    }
+
+    const displayName = name || user.name || user.fullName || "there";
     const html = `
       <div style="font-family:'Segoe UI',sans-serif;max-width:500px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
         <div style="background:linear-gradient(135deg,#fc1268,#9c27b0);padding:32px;text-align:center;">
@@ -345,7 +361,7 @@ export const sendPasswordResetCode = action({
           <p style="color:rgba(255,255,255,0.9);margin:8px 0 0;">DKMerch K-Pop Paradise</p>
         </div>
         <div style="padding:32px;">
-          <p style="color:#333;font-size:16px;">Hi ${name ?? "there"},</p>
+          <p style="color:#333;font-size:16px;">Hi ${displayName},</p>
           <p style="color:#555;font-size:15px;">Your verification code to reset your password is:</p>
           <div style="background:#f8f9fa;border:2px dashed #fc1268;border-radius:10px;padding:24px;text-align:center;margin:24px 0;">
             <span style="font-size:40px;font-weight:700;letter-spacing:8px;color:#fc1268;">${code}</span>
@@ -360,7 +376,7 @@ export const sendPasswordResetCode = action({
     `;
 
     return await ctx.runAction(internal.sendEmail.sendEmail, {
-      to,
+      to: user.email || email,
       subject: `${code} — Your DKMerch Password Reset Code`,
       html,
     });

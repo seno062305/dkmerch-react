@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import './AdminProducts.css';
 import { useQuery, useAction, useMutation } from 'convex/react';
@@ -12,6 +12,7 @@ import {
   FALLBACK_CATEGORIES,
   FALLBACK_GROUPS,
 } from '../hooks/useCatalogOptions';
+import AdminPager from './AdminPager';
 
 const ALLOWED_IMAGE_TYPES = [
   'image/jpeg', 'image/jpg', 'image/png',
@@ -86,123 +87,16 @@ const showReleasedBadge = (product) => {
 // ══════════════════════════════════════════════════════════════════════════
 //  PRODUCT MODAL
 // ══════════════════════════════════════════════════════════════════════════
+const GROUP_LOGO_MAX_BYTES = 800 * 1024; // ~800KB — keep marquee logos lean
+
 const ProductModal = ({
   editingId, initialForm, onClose, onSubmit, submitting,
   categories = FALLBACK_CATEGORIES, groups = FALLBACK_GROUPS,
-  onAddCategory, onAddGroup, onRemoveCategory, onRemoveGroup,
-  products = [],
 }) => {
   const [form, setForm]     = useState(initialForm);
   const [errors, setErrors] = useState({});
-  const [addingCategory, setAddingCategory] = useState(false);
-  const [addingGroup, setAddingGroup] = useState(false);
-  const [newCategory, setNewCategory] = useState('');
-  const [newGroup, setNewGroup] = useState('');
-  const [catalogBusy, setCatalogBusy] = useState(false);
-  const [catalogMsg, setCatalogMsg] = useState('');
   const fileInputRef = useRef(null);
   const today = new Date().toISOString().split('T')[0];
-
-  const categoryInUse = products.filter(
-    (p) => String(p.category || '').trim().toLowerCase() === String(form.category || '').trim().toLowerCase()
-  ).length;
-  const groupInUse = products.filter(
-    (p) => String(p.kpopGroup || '').trim().toLowerCase() === String(form.kpopGroup || '').trim().toLowerCase()
-  ).length;
-  const canDeleteCategory = !!form.category && categoryInUse === 0;
-  const canDeleteGroup = !!form.kpopGroup && groupInUse === 0;
-
-  const saveCategory = async () => {
-    if (!onAddCategory || !newCategory.trim()) return;
-    setCatalogBusy(true);
-    setCatalogMsg('');
-    try {
-      const res = await onAddCategory(newCategory.trim());
-      if (res?.success && res.value) {
-        setForm((prev) => ({ ...prev, category: res.value }));
-        setNewCategory('');
-        setAddingCategory(false);
-        setCatalogMsg(res.alreadyExists ? 'Category already exists — selected.' : 'Category added.');
-      } else {
-        setCatalogMsg(res?.message || 'Could not add category.');
-      }
-    } catch {
-      setCatalogMsg('Could not add category.');
-    } finally {
-      setCatalogBusy(false);
-    }
-  };
-
-  const saveGroup = async () => {
-    if (!onAddGroup || !newGroup.trim()) return;
-    setCatalogBusy(true);
-    setCatalogMsg('');
-    try {
-      const res = await onAddGroup(newGroup.trim());
-      if (res?.success && res.value) {
-        setForm((prev) => ({ ...prev, kpopGroup: res.value }));
-        setNewGroup('');
-        setAddingGroup(false);
-        setCatalogMsg(res.alreadyExists ? 'Group already exists — selected.' : 'K-Pop group added.');
-      } else {
-        setCatalogMsg(res?.message || 'Could not add group.');
-      }
-    } catch {
-      setCatalogMsg('Could not add group.');
-    } finally {
-      setCatalogBusy(false);
-    }
-  };
-
-  const deleteCategory = async () => {
-    if (!onRemoveCategory || !form.category) return;
-    if (categoryInUse > 0) {
-      setCatalogMsg(`Cannot delete — ${categoryInUse} product(s) still use this category.`);
-      return;
-    }
-    setCatalogBusy(true);
-    setCatalogMsg('');
-    try {
-      const res = await onRemoveCategory(form.category);
-      if (res?.success) {
-        const next = categories.find((c) => c.value !== form.category)?.value
-          || FALLBACK_CATEGORIES[0].value;
-        setForm((prev) => ({ ...prev, category: next }));
-        setCatalogMsg('Category deleted.');
-      } else {
-        setCatalogMsg(res?.message || 'Could not delete category.');
-      }
-    } catch {
-      setCatalogMsg('Could not delete category.');
-    } finally {
-      setCatalogBusy(false);
-    }
-  };
-
-  const deleteGroup = async () => {
-    if (!onRemoveGroup || !form.kpopGroup) return;
-    if (groupInUse > 0) {
-      setCatalogMsg(`Cannot delete — ${groupInUse} product(s) still use this group.`);
-      return;
-    }
-    setCatalogBusy(true);
-    setCatalogMsg('');
-    try {
-      const res = await onRemoveGroup(form.kpopGroup);
-      if (res?.success) {
-        const next = groups.find((g) => g.value !== form.kpopGroup)?.value
-          || FALLBACK_GROUPS[0].value;
-        setForm((prev) => ({ ...prev, kpopGroup: next }));
-        setCatalogMsg('K-Pop group deleted.');
-      } else {
-        setCatalogMsg(res?.message || 'Could not delete group.');
-      }
-    } catch {
-      setCatalogMsg('Could not delete group.');
-    } finally {
-      setCatalogBusy(false);
-    }
-  };
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -275,125 +169,28 @@ const ProductModal = ({
                   </div>
                   <div className="form-group">
                     <label><i className="fas fa-folder"></i> Category <span className="req">*</span></label>
-                    <div className="catalog-select-row">
-                      <select name="category" value={form.category} onChange={handleChange}>
-                        {!categories.some((c) => c.value === form.category) && form.category && (
-                          <option value={form.category}>{form.category}</option>
-                        )}
-                        {categories.map((c) => (
-                          <option key={c.value} value={c.value}>{c.label}</option>
-                        ))}
-                      </select>
-                      <button
-                        type="button"
-                        className="catalog-add-btn"
-                        onClick={() => { setAddingCategory((v) => !v); setAddingGroup(false); setCatalogMsg(''); }}
-                      >
-                        <i className="fas fa-plus"></i> Add
-                      </button>
-                      <button
-                        type="button"
-                        className={`catalog-del-btn${categoryInUse > 0 ? ' is-locked' : ''}`}
-                        title={
-                          categoryInUse > 0
-                            ? `Cannot delete — ${categoryInUse} product(s) still use this category`
-                            : 'Delete selected category'
-                        }
-                        onClick={deleteCategory}
-                        disabled={catalogBusy || !canDeleteCategory}
-                      >
-                        <i className="fas fa-trash"></i>
-                      </button>
-                    </div>
-                    {categoryInUse > 0 && (
-                      <small className="catalog-inuse-hint">
-                        <i className="fas fa-lock"></i>
-                        In use by {categoryInUse} product{categoryInUse === 1 ? '' : 's'} — cannot delete
-                      </small>
-                    )}
-                    {addingCategory && (
-                      <div className="catalog-add-row">
-                        <input
-                          type="text"
-                          placeholder="New category (e.g. Keyrings)"
-                          value={newCategory}
-                          maxLength={40}
-                          onChange={(e) => setNewCategory(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); saveCategory(); } }}
-                          disabled={catalogBusy}
-                        />
-                        <button type="button" className="catalog-save-btn" onClick={saveCategory} disabled={catalogBusy || !newCategory.trim()}>
-                          Save
-                        </button>
-                        <button type="button" className="catalog-cancel-btn" onClick={() => { setAddingCategory(false); setNewCategory(''); }} disabled={catalogBusy}>
-                          Cancel
-                        </button>
-                      </div>
-                    )}
+                    <select name="category" value={form.category} onChange={handleChange}>
+                      {!categories.some((c) => c.value === form.category) && form.category && (
+                        <option value={form.category}>{form.category}</option>
+                      )}
+                      {categories.map((c) => (
+                        <option key={c.value} value={c.value}>{c.label}</option>
+                      ))}
+                    </select>
+                    <small className="helper-text">Manage categories in the Categories &amp; Groups tab.</small>
                   </div>
                   <div className="form-group">
                     <label><i className="fas fa-users"></i> K-Pop Group <span className="req">*</span></label>
-                    <div className="catalog-select-row">
-                      <select name="kpopGroup" value={form.kpopGroup} onChange={handleChange}>
-                        {!groups.some((g) => g.value === form.kpopGroup) && form.kpopGroup && (
-                          <option value={form.kpopGroup}>{form.kpopGroup}</option>
-                        )}
-                        {groups.map((g) => (
-                          <option key={g.value} value={g.value}>{g.label}</option>
-                        ))}
-                      </select>
-                      <button
-                        type="button"
-                        className="catalog-add-btn"
-                        onClick={() => { setAddingGroup((v) => !v); setAddingCategory(false); setCatalogMsg(''); }}
-                      >
-                        <i className="fas fa-plus"></i> Add
-                      </button>
-                      <button
-                        type="button"
-                        className={`catalog-del-btn${groupInUse > 0 ? ' is-locked' : ''}`}
-                        title={
-                          groupInUse > 0
-                            ? `Cannot delete — ${groupInUse} product(s) still use this group`
-                            : 'Delete selected group'
-                        }
-                        onClick={deleteGroup}
-                        disabled={catalogBusy || !canDeleteGroup}
-                      >
-                        <i className="fas fa-trash"></i>
-                      </button>
-                    </div>
-                    {groupInUse > 0 && (
-                      <small className="catalog-inuse-hint">
-                        <i className="fas fa-lock"></i>
-                        In use by {groupInUse} product{groupInUse === 1 ? '' : 's'} — cannot delete
-                      </small>
-                    )}
-                    {addingGroup && (
-                      <div className="catalog-add-row">
-                        <input
-                          type="text"
-                          placeholder="New group (e.g. aespa)"
-                          value={newGroup}
-                          maxLength={40}
-                          onChange={(e) => setNewGroup(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); saveGroup(); } }}
-                          disabled={catalogBusy}
-                        />
-                        <button type="button" className="catalog-save-btn" onClick={saveGroup} disabled={catalogBusy || !newGroup.trim()}>
-                          Save
-                        </button>
-                        <button type="button" className="catalog-cancel-btn" onClick={() => { setAddingGroup(false); setNewGroup(''); }} disabled={catalogBusy}>
-                          Cancel
-                        </button>
-                      </div>
-                    )}
+                    <select name="kpopGroup" value={form.kpopGroup} onChange={handleChange}>
+                      {!groups.some((g) => g.value === form.kpopGroup) && form.kpopGroup && (
+                        <option value={form.kpopGroup}>{form.kpopGroup}</option>
+                      )}
+                      {groups.map((g) => (
+                        <option key={g.value} value={g.value}>{g.label}</option>
+                      ))}
+                    </select>
+                    <small className="helper-text">Manage groups &amp; marquee logos in the Categories &amp; Groups tab.</small>
                   </div>
-                  {catalogMsg && (
-                    <div className="form-group full-width">
-                      <small className="helper-text"><i className="fas fa-info-circle"></i> {catalogMsg}</small>
-                    </div>
-                  )}
                   <div className={`form-group full-width${errors.image ? ' has-error' : ''}`}>
                     <label><i className="fas fa-image"></i> Product Image <span className="req">*</span></label>
                     <div className="image-input-row">
@@ -565,6 +362,369 @@ const ProductModal = ({
 // ══════════════════════════════════════════════════════════════════════════
 //  STOCK MANAGEMENT
 // ══════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════
+//  CATEGORIES & K-POP GROUPS MANAGER
+// ══════════════════════════════════════════════════════════════════════════
+const CATALOG_PAGE_SIZES = [7, 14, 21, 28];
+
+const CatalogManager = ({
+  products = [],
+  categories = FALLBACK_CATEGORIES,
+  groups = FALLBACK_GROUPS,
+  onAddCategory,
+  onAddGroup,
+  onRemoveCategory,
+  onRemoveGroup,
+  onSetGroupImage,
+}) => {
+  const [newCategory, setNewCategory] = useState('');
+  const [newGroup, setNewGroup] = useState('');
+  const [newGroupFile, setNewGroupFile] = useState(null);
+  const [newGroupPreview, setNewGroupPreview] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [catPage, setCatPage] = useState(0);
+  const [groupPage, setGroupPage] = useState(0);
+  const [catPageSize, setCatPageSize] = useState(7);
+  const [groupPageSize, setGroupPageSize] = useState(7);
+  const groupLogoInputRef = useRef(null);
+  const replaceLogoInputRef = useRef(null);
+  const logoTargetRef = useRef('');
+
+  useEffect(() => { setCatPage(0); }, [categories.length, catPageSize]);
+  useEffect(() => { setGroupPage(0); }, [groups.length, groupPageSize]);
+
+  const pagedCategories = categories.slice(
+    catPage * catPageSize,
+    catPage * catPageSize + catPageSize
+  );
+  const pagedGroups = groups.slice(
+    groupPage * groupPageSize,
+    groupPage * groupPageSize + groupPageSize
+  );
+
+  const usageCount = (type, value) =>
+    products.filter((p) => {
+      const v = type === 'category' ? p.category : p.kpopGroup;
+      return String(v || '').trim().toLowerCase() === String(value || '').trim().toLowerCase();
+    }).length;
+
+  const resetGroupForm = () => {
+    setNewGroup('');
+    setNewGroupFile(null);
+    if (newGroupPreview) URL.revokeObjectURL(newGroupPreview);
+    setNewGroupPreview('');
+  };
+
+  const pickGroupLogo = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type) && !ALLOWED_IMAGE_EXT.test(file.name)) {
+      setMsg('Group logo must be an image (JPG, PNG, GIF, WEBP, SVG, BMP).');
+      return;
+    }
+    if (file.size > GROUP_LOGO_MAX_BYTES) {
+      setMsg('Group logo is too large (max 800KB).');
+      return;
+    }
+    if (newGroupPreview) URL.revokeObjectURL(newGroupPreview);
+    setNewGroupFile(file);
+    setNewGroupPreview(URL.createObjectURL(file));
+    setMsg('');
+  };
+
+  const addCategory = async () => {
+    if (!newCategory.trim()) return;
+    setBusy(true);
+    setMsg('');
+    try {
+      const res = await onAddCategory(newCategory.trim());
+      if (res?.success) {
+        setNewCategory('');
+        setMsg(res.alreadyExists ? 'Category already exists.' : 'Category added.');
+      } else setMsg(res?.message || 'Could not add category.');
+    } catch {
+      setMsg('Could not add category.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const addGroup = async () => {
+    if (!newGroup.trim()) return;
+    if (!newGroupFile) {
+      setMsg('Upload a marquee logo for the new K-Pop group.');
+      return;
+    }
+    setBusy(true);
+    setMsg('');
+    try {
+      const res = await onAddGroup(newGroup.trim(), newGroupFile);
+      if (res?.success) {
+        resetGroupForm();
+        setMsg(
+          res.alreadyExists
+            ? 'Group already exists — logo updated.'
+            : 'K-Pop group added — it will show on the homepage marquee.'
+        );
+      } else setMsg(res?.message || 'Could not add group.');
+    } catch {
+      setMsg('Could not add group.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeCategory = async (value) => {
+    const used = usageCount('category', value);
+    if (used > 0) {
+      setMsg(`Cannot delete "${value}" — ${used} product(s) still use it.`);
+      return;
+    }
+    setBusy(true);
+    setMsg('');
+    try {
+      const res = await onRemoveCategory(value);
+      setMsg(res?.success ? `Category "${value}" deleted.` : (res?.message || 'Could not delete category.'));
+    } catch {
+      setMsg('Could not delete category.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeGroup = async (value) => {
+    const used = usageCount('group', value);
+    if (used > 0) {
+      setMsg(`Cannot delete "${value}" — ${used} product(s) still use it.`);
+      return;
+    }
+    setBusy(true);
+    setMsg('');
+    try {
+      const res = await onRemoveGroup(value);
+      setMsg(res?.success ? `K-Pop group "${value}" deleted.` : (res?.message || 'Could not delete group.'));
+    } catch {
+      setMsg('Could not delete group.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const replaceLogo = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    const target = logoTargetRef.current;
+    if (!file || !target) return;
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type) && !ALLOWED_IMAGE_EXT.test(file.name)) {
+      setMsg('Group logo must be an image (JPG, PNG, GIF, WEBP, SVG, BMP).');
+      return;
+    }
+    if (file.size > GROUP_LOGO_MAX_BYTES) {
+      setMsg('Group logo is too large (max 800KB).');
+      return;
+    }
+    setBusy(true);
+    setMsg('');
+    try {
+      const res = await onSetGroupImage(target, file);
+      setMsg(res?.success ? `Marquee logo updated for ${target}.` : (res?.message || 'Could not update logo.'));
+    } catch {
+      setMsg('Could not update logo.');
+    } finally {
+      setBusy(false);
+      logoTargetRef.current = '';
+    }
+  };
+
+  return (
+    <div className="catalog-manager">
+      <div className="list-header catalog-manager-header">
+        <div>
+          <h2><i className="fas fa-tags"></i> Categories &amp; K-Pop Groups</h2>
+          <p className="catalog-manager-sub">Add or delete options used in products. Group logos appear on the homepage marquee.</p>
+        </div>
+      </div>
+
+      {msg && (
+        <div className="catalog-manager-msg">
+          <i className="fas fa-info-circle"></i> {msg}
+        </div>
+      )}
+
+      <div className="catalog-manager-grid">
+        <section className="catalog-panel">
+          <div className="catalog-panel-head">
+            <h3><i className="fas fa-folder"></i> Categories</h3>
+            <span className="catalog-count">{categories.length}</span>
+          </div>
+          <div className="catalog-add-row">
+            <input
+              type="text"
+              placeholder="New category (e.g. Keyrings)"
+              value={newCategory}
+              maxLength={40}
+              onChange={(e) => setNewCategory(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCategory(); } }}
+              disabled={busy}
+            />
+            <button type="button" className="catalog-save-btn" onClick={addCategory} disabled={busy || !newCategory.trim()}>
+              Add
+            </button>
+          </div>
+          <ul className="catalog-item-list">
+            {pagedCategories.map((c) => {
+              const used = usageCount('category', c.value);
+              return (
+                <li key={c.value} className="catalog-item">
+                  <div className="catalog-item-main">
+                    <strong>{c.label}</strong>
+                    <span className={`catalog-usage${used ? ' is-used' : ''}`}>
+                      {used > 0 ? `${used} product${used === 1 ? '' : 's'}` : 'Not used'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className={`catalog-del-btn${used > 0 ? ' is-locked' : ''}`}
+                    title={used > 0 ? `Cannot delete — in use by ${used} product(s)` : 'Delete category'}
+                    onClick={() => removeCategory(c.value)}
+                    disabled={busy || used > 0}
+                  >
+                    <i className="fas fa-trash"></i>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <AdminPager
+            total={categories.length}
+            page={catPage}
+            pageSize={catPageSize}
+            pageSizeOptions={CATALOG_PAGE_SIZES}
+            onPageChange={setCatPage}
+            onPageSizeChange={setCatPageSize}
+          />
+        </section>
+
+        <section className="catalog-panel">
+          <div className="catalog-panel-head">
+            <h3><i className="fas fa-users"></i> K-Pop Groups</h3>
+            <span className="catalog-count">{groups.length}</span>
+          </div>
+          <div className="catalog-add-group-block">
+            <div className="catalog-add-row">
+              <input
+                type="text"
+                placeholder="New group (e.g. aespa)"
+                value={newGroup}
+                maxLength={40}
+                onChange={(e) => setNewGroup(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addGroup(); } }}
+                disabled={busy}
+              />
+              <button
+                type="button"
+                className="catalog-logo-btn"
+                onClick={() => groupLogoInputRef.current?.click()}
+                disabled={busy}
+              >
+                <i className="fas fa-image"></i> {newGroupFile ? 'Change' : 'Logo'}
+              </button>
+              <button
+                type="button"
+                className="catalog-save-btn"
+                onClick={addGroup}
+                disabled={busy || !newGroup.trim() || !newGroupFile}
+              >
+                Add
+              </button>
+            </div>
+            <input
+              ref={groupLogoInputRef}
+              type="file"
+              accept="image/jpeg,image/jpg,image/png,image/gif,image/webp,image/svg+xml,image/bmp"
+              style={{ display: 'none' }}
+              onChange={pickGroupLogo}
+            />
+            <small className="helper-text">
+              <i className="fas fa-info-circle"></i> Logo required — shows on homepage marquee.
+            </small>
+            {newGroupPreview && (
+              <div className="group-logo-thumb group-logo-thumb--preview">
+                <img src={newGroupPreview} alt="New group logo preview" />
+              </div>
+            )}
+          </div>
+          <ul className="catalog-item-list">
+            {pagedGroups.map((g) => {
+              const used = usageCount('group', g.value);
+              return (
+                <li key={g.value} className="catalog-item">
+                  <div className="catalog-item-main catalog-item-main--group">
+                    <div className="group-logo-thumb">
+                      {g.image ? (
+                        <img src={g.image} alt={g.label} />
+                      ) : (
+                        <span className="group-logo-empty"><i className="fas fa-image"></i></span>
+                      )}
+                    </div>
+                    <div>
+                      <strong>{g.label}</strong>
+                      <span className={`catalog-usage${used ? ' is-used' : ''}`}>
+                        {used > 0 ? `${used} product${used === 1 ? '' : 's'}` : 'Not used'}
+                        {!g.image ? ' · no marquee logo' : ''}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="catalog-item-actions">
+                    <button
+                      type="button"
+                      className="catalog-logo-btn"
+                      title="Upload / change marquee logo"
+                      onClick={() => {
+                        logoTargetRef.current = g.value;
+                        replaceLogoInputRef.current?.click();
+                      }}
+                      disabled={busy}
+                    >
+                      <i className="fas fa-image"></i>
+                    </button>
+                    <button
+                      type="button"
+                      className={`catalog-del-btn${used > 0 ? ' is-locked' : ''}`}
+                      title={used > 0 ? `Cannot delete — in use by ${used} product(s)` : 'Delete group'}
+                      onClick={() => removeGroup(g.value)}
+                      disabled={busy || used > 0}
+                    >
+                      <i className="fas fa-trash"></i>
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          <AdminPager
+            total={groups.length}
+            page={groupPage}
+            pageSize={groupPageSize}
+            pageSizeOptions={CATALOG_PAGE_SIZES}
+            onPageChange={setGroupPage}
+            onPageSizeChange={setGroupPageSize}
+          />
+          <input
+            ref={replaceLogoInputRef}
+            type="file"
+            accept="image/jpeg,image/jpg,image/png,image/gif,image/webp,image/svg+xml,image/bmp"
+            style={{ display: 'none' }}
+            onChange={replaceLogo}
+          />
+        </section>
+      </div>
+    </div>
+  );
+};
+
 const StockManagement = ({ products, updateProduct, onAddProduct, categories = FALLBACK_CATEGORIES }) => {
   const [activeTab, setActiveTab]           = useState('all');
   const [searchTerm, setSearchTerm]         = useState('');
@@ -752,6 +912,22 @@ const AdminProducts = () => {
   const announceNewPreOrder = useAction(api.preOrderRequests.announceNewPreOrderToAllUsers);
 
   const removeCatalogOption = useMutation(api.catalogOptions.remove);
+  const generateGroupLogoUploadUrl = useMutation(api.catalogOptions.generateUploadUrl);
+  const setGroupImage = useMutation(api.catalogOptions.setGroupImage);
+
+  const uploadGroupLogoFile = async (file) => {
+    const postUrl = await generateGroupLogoUploadUrl();
+    const result = await fetch(postUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': file.type || 'application/octet-stream' },
+      body: file,
+    });
+    if (!result.ok) throw new Error('Upload failed');
+    const { storageId } = await result.json();
+    if (!storageId) throw new Error('No storageId returned');
+    return storageId;
+  };
+
   const handleAddCategory = async (name) => {
     try {
       const res = await addCatalogOption({ type: 'category', name });
@@ -761,13 +937,29 @@ const AdminProducts = () => {
       return { success: false, message: err?.message || 'Could not add category.' };
     }
   };
-  const handleAddGroup = async (name) => {
+  const handleAddGroup = async (name, file) => {
     try {
-      const res = await addCatalogOption({ type: 'kpopGroup', name });
+      let imageStorageId;
+      if (file) imageStorageId = await uploadGroupLogoFile(file);
+      const res = await addCatalogOption({
+        type: 'kpopGroup',
+        name,
+        ...(imageStorageId ? { imageStorageId } : {}),
+      });
       await refreshGroups();
       return res;
     } catch (err) {
       return { success: false, message: err?.message || 'Could not add group.' };
+    }
+  };
+  const handleSetGroupImage = async (value, file) => {
+    try {
+      const imageStorageId = await uploadGroupLogoFile(file);
+      const res = await setGroupImage({ value, imageStorageId });
+      await refreshGroups();
+      return res;
+    } catch (err) {
+      return { success: false, message: err?.message || 'Could not update group logo.' };
     }
   };
   const handleRemoveCategory = async (value) => {
@@ -906,14 +1098,19 @@ const AdminProducts = () => {
           <button className={`view-btn${activeView === 'products' ? ' active' : ''}`} onClick={() => setActiveView('products')}>
             Product Catalog
           </button>
+          <button className={`view-btn${activeView === 'catalog' ? ' active' : ''}`} onClick={() => setActiveView('catalog')}>
+            Categories &amp; Groups
+          </button>
           <button className={`view-btn${activeView === 'stock' ? ' active' : ''}`} onClick={() => setActiveView('stock')}>
             Stock Management
             {lowStockCount > 0 && <span className="low-pill">{lowStockCount}</span>}
           </button>
         </div>
-        <button className="add-product-btn" onClick={openAdd}>
-          <i className="fas fa-plus"></i> Add Product
-        </button>
+        {activeView !== 'catalog' && (
+          <button className="add-product-btn" onClick={openAdd}>
+            <i className="fas fa-plus"></i> Add Product
+          </button>
+        )}
       </div>
 
       {activeView === 'products' && (
@@ -996,6 +1193,19 @@ const AdminProducts = () => {
         </div>
       )}
 
+      {activeView === 'catalog' && (
+        <CatalogManager
+          products={products}
+          categories={categories}
+          groups={groups}
+          onAddCategory={handleAddCategory}
+          onAddGroup={handleAddGroup}
+          onRemoveCategory={handleRemoveCategory}
+          onRemoveGroup={handleRemoveGroup}
+          onSetGroupImage={handleSetGroupImage}
+        />
+      )}
+
       {activeView === 'stock' && (
         <StockManagement
           products={products}
@@ -1011,11 +1221,6 @@ const AdminProducts = () => {
           onClose={closeModal} onSubmit={handleModalSubmit} submitting={submitting}
           categories={categories}
           groups={groups}
-          onAddCategory={handleAddCategory}
-          onAddGroup={handleAddGroup}
-          onRemoveCategory={handleRemoveCategory}
-          onRemoveGroup={handleRemoveGroup}
-          products={products}
         />
       )}
     </div>

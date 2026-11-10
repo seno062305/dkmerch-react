@@ -16,7 +16,24 @@ export const getAllUsers = query(async ({ db }) => {
 export const getUserByEmail = query({
   args: { email: v.string() },
   handler: async ({ db }, { email }) => {
-    return await db.query("users").withIndex("by_email", q => q.eq("email", email)).first();
+    const trimmed = String(email || "").trim();
+    if (!trimmed) return null;
+    const normalized = trimmed.toLowerCase();
+    const exact = await db
+      .query("users")
+      .withIndex("by_email", (q) => q.eq("email", trimmed))
+      .first();
+    if (exact) return exact;
+    if (trimmed !== normalized) {
+      return await db
+        .query("users")
+        .withIndex("by_email", (q) => q.eq("email", normalized))
+        .first();
+    }
+    return await db
+      .query("users")
+      .withIndex("by_email", (q) => q.eq("email", normalized))
+      .first();
   },
 });
 
@@ -892,10 +909,18 @@ export const resetPasswordByEmail = mutation({
     newPassword: v.string(),
   },
   handler: async ({ db }, { email, newPassword }) => {
-    const user = await db
+    const trimmed = String(email || "").trim();
+    const normalized = trimmed.toLowerCase();
+    let user = await db
       .query("users")
-      .withIndex("by_email", q => q.eq("email", email))
+      .withIndex("by_email", (q) => q.eq("email", trimmed))
       .first();
+    if (!user && trimmed !== normalized) {
+      user = await db
+        .query("users")
+        .withIndex("by_email", (q) => q.eq("email", normalized))
+        .first();
+    }
     if (!user) return { success: false, message: "No account found with that email." };
     await db.patch(user._id, { password: newPassword });
     return { success: true, message: "Password reset successfully!" };

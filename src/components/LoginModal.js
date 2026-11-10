@@ -763,7 +763,8 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
   // ── FORGOT PASSWORD ───────────────────────────────────────────────────────
   const handleSendCode = async () => {
     if (passwordCooldown > 0) return;
-    if (!forgotEmail.trim() || !/\S+@\S+\.\S+/.test(forgotEmail)) {
+    const email = forgotEmail.trim().toLowerCase();
+    if (!email || !/\S+@\S+\.\S+/.test(email)) {
       setCodeMsg("❌ Please enter a valid email address.");
       return;
     }
@@ -774,20 +775,22 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
       return;
     }
     const code = Math.floor(100000 + Math.random() * 900000).toString();
-    setSentCode(code);
     setSendingCode(true);
     setCodeMsg("");
+    setSentCode("");
     try {
-      const result = await sendPasswordResetCode({ to: forgotEmail, code });
+      const result = await sendPasswordResetCode({ to: email, code });
       if (result?.success) {
-        setCodeMsg(`✅ Code sent to ${forgotEmail}! Check your inbox.`);
+        setForgotEmail(email);
+        setSentCode(code);
+        setCodeMsg(`✅ Code sent to ${email}! Check your inbox.`);
+      } else if (result?.notFound) {
+        setCodeMsg("❌ No registered account found with that email.");
       } else {
         setCodeMsg(`❌ Failed to send: ${result?.message || "Unknown error"}`);
-        setSentCode("");
       }
     } catch {
       setCodeMsg("❌ Failed to send email.");
-      setSentCode("");
     } finally {
       setSendingCode(false);
       const cooldown = passwordAttempts === 0 ? 60 : passwordAttempts === 1 ? 120 : 180;
@@ -806,7 +809,10 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
 
     setResetLoading(true);
     try {
-      const result = await resetPasswordByEmail({ email: forgotEmail, newPassword });
+      const result = await resetPasswordByEmail({
+        email: forgotEmail.trim().toLowerCase(),
+        newPassword,
+      });
       if (result?.success) {
         setResetMsg("✅ Password reset successful! You can now log in.");
         setTimeout(() => {

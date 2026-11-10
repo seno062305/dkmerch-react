@@ -1,34 +1,70 @@
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect, useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useConvex } from 'convex/react';
+import { api } from '../../convex/_generated/api';
 import './LogoMarquee.css';
+
+const FALLBACK_GROUPS = [
+  { name: 'BTS', logo: '/images/BTS_logo.png' },
+  { name: 'BLACKPINK', logo: '/images/BLACKPINK-Logo-Font-1.webp' },
+  { name: 'TWICE', logo: '/images/TWICE-Logo.png' },
+  { name: 'SEVENTEEN', logo: '/images/Seventeen-logo.png' },
+  { name: 'STRAY KIDS', logo: '/images/straykids.jpg' },
+  { name: 'EXO', logo: '/images/Exo-Logo.png' },
+  { name: 'RED VELVET', logo: '/images/redvelvet.jpg' },
+  { name: 'NEWJEANS', logo: '/images/newjeans.jpg' },
+];
 
 const LogoMarquee = () => {
   const navigate = useNavigate();
+  const convex = useConvex();
   const trackRef = useRef(null);
+  const [groups, setGroups] = useState(FALLBACK_GROUPS);
 
-  const posX = useRef(0);           // current translateX (negative = moved left)
+  const posX = useRef(0);
   const isDragging = useRef(false);
   const lastMouseX = useRef(0);
   const dragDistance = useRef(0);
   const isPaused = useRef(false);
   const rafId = useRef(null);
-  const itemSetWidth = useRef(0);   // width of ONE set of items
+  const itemSetWidth = useRef(0);
 
-  const SPEED = 0.6; // px per frame — adjust for faster/slower
+  const SPEED = 0.6;
 
-  const groups = [
-    { name: 'BTS',        logo: '/images/BTS_logo.png' },
-    { name: 'BLACKPINK',  logo: '/images/bp_logo.png' },
-    { name: 'TWICE',      logo: '/images/TWICE-Logo.png' },
-    { name: 'SEVENTEEN',  logo: '/images/Seventeen-logo.png' },
-    { name: 'STRAY KIDS', logo: '/images/straykids.jpg' },
-    { name: 'EXO',        logo: '/images/Exo-Logo.png' },
-    { name: 'RED VELVET', logo: '/images/redvelvet.jpg' },
-    { name: 'NEWJEANS',   logo: '/images/newjeans.jpg' },
-  ];
+  // Safe load — never crash the homepage if a Convex function is mid-deploy
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try {
+        const rows = await convex.query(api.catalogOptions.listForMarquee, {});
+        if (!alive) return;
+        if (Array.isArray(rows) && rows.length) {
+          setGroups(rows);
+          return;
+        }
+      } catch {
+        /* try list() fallback below */
+      }
+      try {
+        const rows = await convex.query(api.catalogOptions.list, { type: 'kpopGroup' });
+        if (!alive) return;
+        const mapped = (Array.isArray(rows) ? rows : [])
+          .filter((g) => g?.image)
+          .map((g) => ({ name: g.value || g.label, logo: g.image }));
+        if (mapped.length) setGroups(mapped);
+      } catch {
+        if (alive) setGroups(FALLBACK_GROUPS);
+      }
+    };
+    load();
+    const id = setInterval(load, 15000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, [convex]);
 
-  // 3 copies — left copy | center (visible) | right copy
-  const tripled = [...groups, ...groups, ...groups];
+  const tripled = useMemo(() => [...groups, ...groups, ...groups], [groups]);
 
   const animate = useCallback(() => {
     if (!trackRef.current) return;
@@ -39,13 +75,11 @@ const LogoMarquee = () => {
       posX.current -= SPEED;
     }
 
-    // Infinite wrap: if scrolled past one full set, jump back by one set
     if (setW > 0) {
       if (posX.current <= -setW * 2) {
         posX.current += setW;
       }
       if (posX.current >= -setW) {
-        // if dragged too far right, wrap forward
         posX.current -= setW;
       }
     }
@@ -55,12 +89,11 @@ const LogoMarquee = () => {
   }, []);
 
   useEffect(() => {
-    // Wait for items to render, then measure one set width
+    if (rafId.current) cancelAnimationFrame(rafId.current);
     const measure = () => {
       if (!trackRef.current) return;
       const totalW = trackRef.current.scrollWidth;
-      itemSetWidth.current = totalW / 3; // 3 copies
-      // Start position: show the middle set
+      itemSetWidth.current = totalW / 3;
       posX.current = -itemSetWidth.current;
       rafId.current = requestAnimationFrame(animate);
     };
@@ -70,9 +103,8 @@ const LogoMarquee = () => {
       clearTimeout(t);
       if (rafId.current) cancelAnimationFrame(rafId.current);
     };
-  }, [animate]);
+  }, [animate, groups]);
 
-  // ── Mouse ──
   const onMouseDown = (e) => {
     isDragging.current = true;
     dragDistance.current = 0;
@@ -104,7 +136,6 @@ const LogoMarquee = () => {
     }
   };
 
-  // ── Touch ──
   const onTouchStart = (e) => {
     isDragging.current = true;
     dragDistance.current = 0;
@@ -128,7 +159,7 @@ const LogoMarquee = () => {
   const handleGroupClick = (groupName) => {
     if (dragDistance.current > 5) return;
     navigate('/collections', {
-      state: { filterGroup: groupName, scrollToTop: true }
+      state: { filterGroup: groupName, scrollToTop: true },
     });
     setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 100);
   };
@@ -157,7 +188,7 @@ const LogoMarquee = () => {
         <div ref={trackRef} className="marquee-track">
           {tripled.map((group, index) => (
             <div
-              key={index}
+              key={`${group.name}-${index}`}
               className="logo-item"
               role="button"
               tabIndex={0}

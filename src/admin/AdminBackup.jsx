@@ -157,7 +157,7 @@ const parseBackupTs = (content) => {
 };
 
 // ── Confirmation Modal ────────────────────────────────────────────────────────
-const ConfirmModal = ({ title, message, confirmLabel, confirmColor = '#6a0dad', onConfirm, onClose }) => (
+const ConfirmModal = ({ title, message, confirmLabel, confirmColor = '#fc1268', onConfirm, onClose }) => (
   <div className="ab-confirm-overlay" onClick={onClose}>
     <div className="ab-confirm-modal" onClick={e => e.stopPropagation()}>
       <div className="ab-confirm-icon">
@@ -246,7 +246,7 @@ const PasswordModal = ({
           {error && <p className="ab-password-error"><i className="fas fa-exclamation-circle"></i> {error}</p>}
           <div className="ab-confirm-actions">
             <button type="button" className="ab-confirm-cancel" onClick={onClose} disabled={busy}>Cancel</button>
-            <button type="submit" className="ab-confirm-proceed" disabled={busy} style={{ background: 'linear-gradient(135deg, #6a0dad, #9b30ff)' }}>
+            <button type="submit" className="ab-confirm-proceed" disabled={busy} style={{ background: 'linear-gradient(135deg, #fc1268, #e0105a)' }}>
               {busy ? <><span className="ab-spinner ab-spinner--white"></span> {busyLabel}</> : confirmLabel}
             </button>
           </div>
@@ -302,7 +302,7 @@ const TypeConfirmModal = ({
           <button
             type="button"
             className="ab-confirm-proceed"
-            style={{ background: ok ? (danger ? '#dc2626' : 'linear-gradient(135deg, #6a0dad, #9b30ff)') : '#fecaca', color: ok ? '#fff' : '#f87171', cursor: ok ? 'pointer' : 'not-allowed' }}
+            style={{ background: ok ? (danger ? '#dc2626' : 'linear-gradient(135deg, #fc1268, #e0105a)') : '#fecaca', color: ok ? '#fff' : '#f87171', cursor: ok ? 'pointer' : 'not-allowed' }}
             disabled={!ok || busy}
             onClick={onConfirm}
           >
@@ -658,7 +658,7 @@ const ImportTab = () => {
 const BackupTab = () => null;
 
 // ── Convex status + storage health ────────────────────────────────────────────
-const SLICE_COLORS = ['#6a0dad', '#fc1268', '#9b30ff', '#c084fc', '#db2777', '#7c3aed', '#a855f7', '#f472b6', '#8b5cf6', '#e879f9'];
+const SLICE_COLORS = ['#fc1268', '#e0105a', '#db2777', '#be185d', '#f472b6', '#fb7185', '#42011e', '#9f1239', '#ec4899', '#f43f5e'];
 
 const TableFootprintProbe = ({ table, onSample }) => {
   const rows = useQuery(table.query);
@@ -699,6 +699,8 @@ const DatabaseStatusPanel = () => {
   const total = Object.values(samples).reduce((s, n) => s + (n?.count || 0), 0);
   const totalBytes = Object.values(samples).reduce((s, n) => s + (n?.bytes || 0), 0);
 
+  const [donutTip, setDonutTip] = useState(null);
+
   const slices = TABLES
     .map((t, i) => ({
       key: t.key,
@@ -711,14 +713,52 @@ const DatabaseStatusPanel = () => {
     .sort((a, b) => b.bytes - a.bytes);
 
   let angle = 0;
-  const gradient = slices.length
-    ? slices.map((s) => {
-        const start = angle;
-        const pct = totalBytes > 0 ? (s.bytes / totalBytes) * 100 : 0;
-        angle += pct;
-        return `${s.color} ${start}% ${angle}%`;
-      }).join(', ')
-    : '#f3e8ff 0% 100%';
+  const slicesWithRange = slices.map((s) => {
+    const start = angle;
+    const pct = totalBytes > 0 ? (s.bytes / totalBytes) * 100 : 0;
+    angle += pct;
+    return { ...s, startPct: start, endPct: angle, pct };
+  });
+  const gradient = slicesWithRange.length
+    ? slicesWithRange.map((s) => `${s.color} ${s.startPct}% ${s.endPct}%`).join(', ')
+    : '#ffe4ef 0% 100%';
+
+  const handleDonutMove = (e) => {
+    if (!slicesWithRange.length) {
+      setDonutTip(null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dx = e.clientX - cx;
+    const dy = e.clientY - cy;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const outerR = rect.width / 2;
+    const holeR = outerR * (68 / 120);
+    if (dist < holeR || dist > outerR) {
+      setDonutTip(null);
+      return;
+    }
+    // CSS conic-gradient starts at 12 o'clock, clockwise
+    const deg = (Math.atan2(dy, dx) * (180 / Math.PI) + 90 + 360) % 360;
+    const pct = (deg / 360) * 100;
+    const hit = slicesWithRange.find((s) => pct >= s.startPct && pct < s.endPct)
+      || slicesWithRange[slicesWithRange.length - 1];
+    if (!hit) {
+      setDonutTip(null);
+      return;
+    }
+    setDonutTip({
+      label: hit.label,
+      count: hit.count,
+      bytes: hit.bytes,
+      pct: hit.pct,
+      color: hit.color,
+      x: e.clientX,
+      y: e.clientY,
+    });
+  };
 
   return (
     <section className="ab-status-panel">
@@ -748,17 +788,42 @@ const DatabaseStatusPanel = () => {
           <p className="ab-storage-deploy">Deployment: {deployment}</p>
           <p className="ab-storage-host">{host}</p>
         </div>
-        <div className="ab-storage-donut" style={{ background: `conic-gradient(${gradient})` }}>
+        <div
+          className="ab-storage-donut"
+          style={{ background: `conic-gradient(${gradient})` }}
+          onMouseMove={handleDonutMove}
+          onMouseLeave={() => setDonutTip(null)}
+          role="img"
+          aria-label="Database table size breakdown"
+        >
           <div className="ab-storage-donut-hole">
             <span>{slices.length || 0}</span>
             <small>tables</small>
           </div>
+          {donutTip && (
+            <div
+              className="ab-storage-donut-tooltip"
+              style={{ left: donutTip.x + 14, top: donutTip.y + 14 }}
+            >
+              <span className="ab-storage-donut-tooltip-swatch" style={{ background: donutTip.color }} />
+              <div className="ab-storage-donut-tooltip-body">
+                <strong>{donutTip.label}</strong>
+                <span>
+                  {formatBytes(donutTip.bytes)} · {donutTip.count.toLocaleString()} records · {donutTip.pct.toFixed(1)}%
+                </span>
+              </div>
+            </div>
+          )}
         </div>
         <div className="ab-storage-legend">
           {(slices.length ? slices : TABLES.map((t, i) => ({
             key: t.key, label: t.label, count: 0, bytes: 0, color: SLICE_COLORS[i % SLICE_COLORS.length],
           }))).map((s) => (
-            <div key={s.key} className="ab-storage-legend-row">
+            <div
+              key={s.key}
+              className="ab-storage-legend-row"
+              title={`${s.label}: ${formatBytes(s.bytes || 0)} · ${(s.count || 0).toLocaleString()} records`}
+            >
               <span className="ab-storage-swatch" style={{ background: s.color }} />
               <span className="ab-storage-legend-label">{s.label}</span>
               <span className="ab-storage-legend-meta">
@@ -1190,6 +1255,7 @@ const AdminBackup = () => {
   // NOTE: cloud Convex may not have newer backup:* functions yet (deploy blocked).
   // Build overview from existing getAll* queries + local history so Settings never hard-crashes.
   const clearTableMutation = useMutation(api.backup.clearTable);
+  const purgeEphemeralCache = useMutation(api.adminCleanup.purgeEphemeralCache);
 
   const importMutations = {};
   for (const t of TABLES) {
@@ -1352,8 +1418,26 @@ const AdminBackup = () => {
     const action = typeAction;
     if (!action) return;
     if (action.type === 'clear-cache') {
-      clearLocalCache();
-      setTypeAction(null);
+      setBusy('maintain');
+      try {
+        clearLocalCache();
+        const result = await purgeEphemeralCache({});
+        const total = Number(result?.total || 0);
+        showNotification(
+          total > 0
+            ? `Permanent cache clear done — removed ${total.toLocaleString()} Convex rows (logs, GPS, pending OTP, notifs).`
+            : 'Local + Convex cache cleared (nothing ephemeral left).',
+          'success'
+        );
+      } catch (err) {
+        showNotification(
+          `Local cache cleared, but Convex purge failed: ${err?.message || err}`,
+          'warning'
+        );
+      } finally {
+        setBusy('');
+        setTypeAction(null);
+      }
       return;
     }
     setBusy('maintain');
@@ -1470,11 +1554,12 @@ const AdminBackup = () => {
 
       {typeAction?.type === 'clear-cache' && (
         <TypeConfirmModal
-          title="Clear local cache?"
-          message="Clears browser snapshot/cache only. Live Convex data is not deleted."
+          title="Clear cache permanently?"
+          message="Deletes browser cache AND Convex ephemeral data forever: activity logs, registration attempts, pending signups, rider GPS locations, rider notifications. Products, orders, and users stay."
           confirmWord="CLEAR CACHE"
-          confirmLabel="Clear local cache"
-          danger={false}
+          confirmLabel="Clear permanently"
+          danger
+          busy={busy === 'maintain'}
           onConfirm={runTypeConfirmed}
           onClose={() => setTypeAction(null)}
         />
@@ -1660,7 +1745,7 @@ const AdminBackup = () => {
         <div className="ab-maint-grid">
           <div className="ab-card">
             <div className="ab-card-title">
-              <i className="fas fa-mobile-alt" style={{ background: '#eef2ff', color: '#4f46e5' }}></i>
+              <i className="fas fa-mobile-alt" style={{ background: '#fff1f5', color: '#fc1268' }}></i>
               <h3>Update the system</h3>
             </div>
             <p className="ab-card-hint">
@@ -1729,7 +1814,6 @@ const AdminBackup = () => {
                 }
               }}
             >
-              <i className="fas fa-cloud-upload-alt" aria-hidden="true"></i>
               <span>{busy === 'app-update' ? 'Publishing…' : 'Publish update & email'}</span>
             </button>
             {updateMsg && <p className="ab-card-hint" style={{ marginTop: 10 }}>{updateMsg}</p>}
@@ -1742,12 +1826,12 @@ const AdminBackup = () => {
 
           <div className="ab-card ab-card--danger">
             <div className="ab-card-title">
-              <i className="fas fa-exclamation-triangle" style={{ background: '#f3e8ff', color: '#e11d48' }}></i>
+              <i className="fas fa-exclamation-triangle" style={{ background: '#fff1f5', color: '#e11d48' }}></i>
               <h3>Danger zone</h3>
             </div>
             <div className="ab-danger-tools">
               <button type="button" className="ab-btn-cache" onClick={() => setTypeAction({ type: 'clear-cache' })}>
-                <i className="fas fa-broom"></i> Clear Cache
+                Clear Cache
               </button>
             </div>
             <label className="ab-password-label" htmlFor="ab-danger-table">Table scope</label>

@@ -24,4 +24,11 @@ crons.interval(
   internal.failoverSync.syncFailoverOrdersToConvex
 );
 
+// Trim old GPS pings, logs, OTP pending rows so free Convex quota lasts longer.
+crons.daily(
+  "dkmerch-purge-old-ephemeral",
+  { hourUTC: 18, minuteUTC: 30 },
+  internal.adminCleanup.purgeOldEphemeral
+);
+
 export default crons;
