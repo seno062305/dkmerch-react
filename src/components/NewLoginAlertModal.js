@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { createPortal } from "react-dom";
+import { isMobileDeviceLabel } from "../utils/deviceInfo";
 import "./NewLoginAlertModal.css";
 
 function formatWhen(at) {
@@ -17,31 +18,92 @@ function formatWhen(at) {
 
 /**
  * Facebook-style prompt when this account signed in on another device.
- * Yes → accept & stay signed out here
- * No  → revoke the other login and restore this device
+ * Yes → confirm screen → activate other device & sign out here
+ * No  → confirm screen → block other login & stay signed in
  */
 const NewLoginAlertModal = ({ alert, onConfirmYes, onConfirmNo }) => {
   const [busy, setBusy] = useState(null); // 'yes' | 'no' | null
   const [error, setError] = useState("");
+  const [done, setDone] = useState(null); // 'yes' | 'no' | null
 
   if (!alert) return null;
 
   const deviceName = alert.deviceName || "Unknown device";
   const location = alert.location || "Unknown location";
   const when = formatWhen(alert.at);
+  const mobile = isMobileDeviceLabel(deviceName, alert.platform || "");
 
   const run = async (kind) => {
-    if (busy) return;
+    if (busy || done) return;
     setBusy(kind);
     setError("");
     try {
       if (kind === "yes") await onConfirmYes?.();
       else await onConfirmNo?.();
+      setDone(kind);
+      setBusy(null);
     } catch (err) {
       setError(String(err?.message || err || "Something went wrong.").slice(0, 160));
       setBusy(null);
     }
   };
+
+  // Confirmation after Yes / No
+  if (done === "yes") {
+    return createPortal(
+      <div className="nla-overlay" role="presentation">
+        <div className="nla-modal" role="alertdialog" aria-modal="true" aria-labelledby="nla-ok-title">
+          <div className="nla-icon" aria-hidden="true">
+            <i className="fas fa-check" />
+          </div>
+          <h2 id="nla-ok-title" className="nla-title">Login approved</h2>
+          <p className="nla-desc">
+            Your account successfully opened on <strong>{deviceName}</strong>
+            {location ? <> ({location})</> : null}.
+          </p>
+          <p className="nla-desc" style={{ marginTop: -8 }}>
+            This device will now be signed out.
+          </p>
+          <div className="nla-actions">
+            <button
+              type="button"
+              className="nla-btn nla-btn-yes"
+              onClick={() => onConfirmYes?.({ finishLogout: true })}
+            >
+              OK — Sign out here
+            </button>
+          </div>
+        </div>
+      </div>,
+      document.body
+    );
+  }
+
+  if (done === "no") {
+    return createPortal(
+      <div className="nla-overlay" role="presentation">
+        <div className="nla-modal" role="alertdialog" aria-modal="true" aria-labelledby="nla-block-title">
+          <div className="nla-icon" aria-hidden="true">
+            <i className="fas fa-shield-alt" />
+          </div>
+          <h2 id="nla-block-title" className="nla-title">Login blocked</h2>
+          <p className="nla-desc">
+            That sign-in on <strong>{deviceName}</strong> was denied. You’re still logged in here.
+          </p>
+          <div className="nla-actions">
+            <button
+              type="button"
+              className="nla-btn nla-btn-yes"
+              onClick={() => onConfirmNo?.({ dismiss: true })}
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      </div>,
+      document.body
+    );
+  }
 
   return createPortal(
     <div className="nla-overlay" role="presentation">
@@ -63,7 +125,7 @@ const NewLoginAlertModal = ({ alert, onConfirmYes, onConfirmNo }) => {
 
         <div className="nla-card">
           <div className="nla-row">
-            <i className="fas fa-laptop" aria-hidden="true" />
+            <i className={`fas ${mobile ? "fa-mobile-alt" : "fa-laptop"}`} aria-hidden="true" />
             <div>
               <div className="nla-label">Device</div>
               <div className="nla-value">{deviceName}</div>

@@ -711,7 +711,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
     const pin = pinValue;
     if (!pendingUser?._id) return;
     if (!accountHasPin && !hasLocalPin(pendingUser._id)) {
-      setPinError("No PIN yet — tap Reset Password below, or use another account.");
+      setPinError("No PIN yet — tap Reset PIN below, or use another account.");
       return;
     }
     if (pin.length < 4) {
@@ -729,7 +729,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
       if (!checked.success) {
         setPinError(
           checked.needsPinSetup
-            ? "No PIN yet — tap Reset Password below, or use another account."
+            ? "No PIN yet — tap Reset PIN below, or use another account."
             : (checked.message || "Incorrect PIN.")
         );
         setPinValue("");
@@ -747,7 +747,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
       setMustAuthenticate(false);
       finishLogin(done.role);
     } catch {
-      setPinError("Incorrect PIN. Try again, or tap Reset Password.");
+      setPinError("Incorrect PIN. Try again, or tap Reset PIN.");
       setPinValue("");
     } finally {
       setPinLoading(false);
@@ -760,8 +760,9 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
       try { return getDeviceUnlock(); } catch { return null; }
     })();
     if (snap?._id) setPinAccountSnapshot(snap);
-    try { logout?.(); } catch { /* ignore */ }
+    try { logout?.({ keepDeviceUnlock: true }); } catch { /* ignore */ }
     try { onSwitchAccount?.(); } catch { /* ignore */ }
+    setResetPasswordMode(false);
     setDeviceUnlockMode(false);
     setAccountHasPin(false);
     setPendingUser(null);
@@ -846,9 +847,10 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
     return { success: true, email };
   };
 
-  /** Open pink Reset Password UI (Gmail) — replaces Forgot PIN on the PIN page. */
+  /** Open pink Reset PIN UI (Gmail password reset) — stays full-screen, never navigates Home. */
   const openResetPassword = () => {
     const email = String(pendingUser?.email || pinAccountSnapshot?.email || "").trim();
+    if (pendingUser?._id) setPinAccountSnapshot(pendingUser);
     setForgotEmail(email);
     setVerificationCode("");
     setNewPassword("");
@@ -859,7 +861,9 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
     setShowNewPw(false);
     setShowConfirmNewPw(false);
     setSwitchAccountMode(false);
+    setDeviceUnlockMode(false);
     setResetPasswordMode(true);
+    setMustAuthenticate(true);
     setView("forgot");
   };
 
@@ -867,16 +871,19 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
     setResetPasswordMode(false);
     setCodeMsg("");
     setResetMsg("");
-    if (deviceUnlockMode || pinAccountSnapshot?._id || pendingUser?._id) {
-      const acc = pendingUser || pinAccountSnapshot || remembered;
-      if (acc?._id) {
-        setPendingUser(acc);
-        setDeviceUnlockMode(true);
-        setAccountHasPin(true);
-        setView("pin");
-        return;
-      }
+    const acc = pendingUser || pinAccountSnapshot || remembered || (() => {
+      try { return getDeviceUnlock(); } catch { return null; }
+    })();
+    if (acc?._id) {
+      setPendingUser(acc);
+      setPinAccountSnapshot(acc);
+      setDeviceUnlockMode(true);
+      setAccountHasPin(true);
+      setMustAuthenticate(true);
+      setView("pin");
+      return;
     }
+    setSwitchAccountMode(true);
     setView("login");
   };
 
@@ -1322,7 +1329,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
               openResetPassword();
             }}
           >
-            Reset Password
+            Reset PIN
           </button>
         </form>
       </div>,
@@ -1335,7 +1342,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
   // ════════════════════════════════════════════════════════════════════
   if (resetPasswordMode) {
     return createPortal(
-      <div className="pin-unlock-screen pin-switch-login" role="dialog" aria-modal="true" aria-label="Reset Password">
+      <div className="pin-unlock-screen pin-switch-login" role="dialog" aria-modal="true" aria-label="Reset PIN">
         <button type="button" className="pin-switch-back" onClick={backFromResetPassword}>
           <i className="fas fa-arrow-left" aria-hidden="true" /> Back
         </button>
@@ -1344,8 +1351,8 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
             <img src="/images/dklogo2-removebg-preview.png" alt="" className="pin-unlock-logo" />
             <span>DKMERCH</span>
           </div>
-          <h2 className="pin-unlock-title pin-switch-welcome">Reset Password</h2>
-          <p className="pin-unlock-hint">Enter your Gmail to reset your password</p>
+          <h2 className="pin-unlock-title pin-switch-welcome">Reset PIN</h2>
+          <p className="pin-unlock-hint">Verify your Gmail, then set a new password to unlock PIN reset</p>
         </div>
 
         <form className="pin-switch-form" onSubmit={handleResetPassword}>
@@ -1460,7 +1467,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
               || !newPasswordsMatch
             }
           >
-            {resetLoading ? "Resetting…" : "Reset Password"}
+            {resetLoading ? "Resetting…" : "Reset PIN"}
           </button>
         </form>
       </div>,
@@ -1546,7 +1553,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); openResetPassword(); }}
             disabled={pinLoading}
           >
-            Reset Password
+            Reset PIN
           </button>
           <button
             type="button"

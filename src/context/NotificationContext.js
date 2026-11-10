@@ -11,9 +11,9 @@ const ICONS = {
 };
 
 const DEFAULT_MS = {
-  success: 3200,
-  info: 3200,
-  warning: 4200,
+  success: 5000,
+  info: 5000,
+  warning: 5000,
   error: 5000,
 };
 

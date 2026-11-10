@@ -12,6 +12,7 @@ import {
 } from "../lib/deviceUnlock";
 import { collectLoginDeviceInfo } from "../utils/deviceInfo";
 import NewLoginAlertModal from "../components/NewLoginAlertModal";
+import { useNotification } from "./NotificationContext";
 
 const AuthContext = createContext(null);
 const AUTH_USER_KEY = "authUser";
@@ -107,6 +108,7 @@ function isStandalonePwa() {
 }
 
 export const AuthProvider = ({ children }) => {
+  const { showNotification } = useNotification();
   const [user, setUser]                       = useState(null);
   const [role, setRole]                       = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -126,6 +128,8 @@ export const AuthProvider = ({ children }) => {
   const confirmLoginAlert  = useMutation(api.users.confirmLoginAlert);
   const denyLoginAlert     = useMutation(api.users.denyLoginAlert);
   const kickedRef = useRef(false);
+  /** After Yes: keep confirmation UI open; don't auto-kick until OK */
+  const holdLogoutConfirmRef = useRef(false);
   const userRef = useRef(null);
   userRef.current = user;
 
@@ -276,6 +280,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const finishSecurityLogout = () => {
+    holdLogoutConfirmRef.current = false;
     clearAuthUser();
     clearSessionAlive();
     clearPendingLogin();
@@ -302,9 +307,11 @@ export const AuthProvider = ({ children }) => {
   // Show FB-style alert while still logged in — new device waits for Yes
   useEffect(() => {
     if (!pendingLoginAlert) {
+      // Keep confirmation screens (approved / denied) until user taps OK
       setSecurityAlert((prev) => (prev?.mode === "pending" ? null : prev));
       return;
     }
+    if (holdLogoutConfirmRef.current) return;
     const current = userRef.current;
     if (!current?._id) return;
     setSecurityAlert({
@@ -333,6 +340,7 @@ export const AuthProvider = ({ children }) => {
     const bump = () => {
       const current = userRef.current;
       if (!current?._id || !pendingLoginAlert) return;
+      if (holdLogoutConfirmRef.current) return;
       setSecurityAlert({
         alert: pendingLoginAlert,
         previousUser: current,
@@ -344,15 +352,23 @@ export const AuthProvider = ({ children }) => {
   }, [pendingLoginAlert]);
 
   // After the other device is approved, this session is invalidated → sign out
+  // (skipped while confirmation screen is showing after Yes)
   useEffect(() => {
     if (!sessionCheck || sessionCheck.valid !== false) return;
     if (sessionCheck.reason !== "new_device_logged_in") return;
+    if (holdLogoutConfirmRef.current) return;
     if (kickedRef.current) return;
     kickedRef.current = true;
     finishSecurityLogout();
   }, [sessionCheck]);
 
-  const handleSecurityYes = async () => {
+  const handleSecurityYes = async (opts = {}) => {
+    // Second step: user tapped OK on confirmation → sign out this device
+    if (opts?.finishLogout) {
+      finishSecurityLogout();
+      return;
+    }
+
     const alert = securityAlert?.alert;
     const prev = securityAlert?.previousUser;
     if (!prev?._id || !alert?.sessionId) {
@@ -365,11 +381,27 @@ export const AuthProvider = ({ children }) => {
     if (!result?.success) {
       throw new Error(result?.message || "Could not approve this login.");
     }
-    // New device becomes active → sign out here
-    finishSecurityLogout();
+    holdLogoutConfirmRef.current = true;
+    setSecurityAlert((prev) =>
+      prev ? { ...prev, mode: "approved" } : prev
+    );
+    const device = alert.deviceName || "the other device";
+    showNotification(
+      `Login approved on ${device}. Your account opened there — signing you out here.`,
+      "success",
+      { duration: 5000, dedupeKey: "login-alert-yes" }
+    );
   };
 
-  const handleSecurityNo = async () => {
+  const handleSecurityNo = async (opts = {}) => {
+    // Second step: dismiss confirmation
+    if (opts?.dismiss) {
+      kickedRef.current = false;
+      holdLogoutConfirmRef.current = false;
+      setSecurityAlert(null);
+      return;
+    }
+
     const alert = securityAlert?.alert;
     const prev = securityAlert?.previousUser;
     if (!prev?._id || !alert?.sessionId) {
@@ -383,9 +415,14 @@ export const AuthProvider = ({ children }) => {
     if (!result?.success) {
       throw new Error(result?.message || "Could not block this login.");
     }
-    // Stay logged in on this device
-    kickedRef.current = false;
-    setSecurityAlert(null);
+    setSecurityAlert((prev) =>
+      prev ? { ...prev, mode: "denied" } : prev
+    );
+    showNotification(
+      "Login blocked. You’re still signed in on this device.",
+      "success",
+      { duration: 5000, dedupeKey: "login-alert-no" }
+    );
   };
 
   const login = async (identifier, password, mode) => {
@@ -675,7 +712,12 @@ export const AuthProvider = ({ children }) => {
     });
   };
 
-  const logout = () => {
+  /**
+   * @param {{ keepDeviceUnlock?: boolean }} [opts]
+   * keepDeviceUnlock: "Use another account" — clear session but keep PIN profile for Back / reopen
+   */
+  const logout = (opts = {}) => {
+    const keepUnlock = !!opts?.keepDeviceUnlock;
     const prev = user;
     if (prev) {
       safeLog({
@@ -683,7 +725,7 @@ export const AuthProvider = ({ children }) => {
         actorEmail: prev.email,
         actorName: prev.name,
         actorRole: prev.role || role || undefined,
-        details: "User logged out",
+        details: keepUnlock ? "Switch account (keep PIN unlock)" : "User logged out",
       });
       // Drop ghost server session so the next login isn't stuck waiting for Yes
       if ((prev.role === "user" || prev.role === "admin") && prev._id) {
@@ -697,14 +739,18 @@ export const AuthProvider = ({ children }) => {
     clearSessionAlive();
     clearPendingLogin();
     try { localStorage.removeItem(LAST_ACTIVE_KEY); } catch { /* ignore */ }
-    // Explicit logout → next open needs email/password login (never leftover PIN unlock)
-    markExplicitLogout();
-    clearDeviceUnlock();
+    if (keepUnlock) {
+      // Stay on PIN chrome — do not mark explicit logout / wipe unlock profile
+      setNeedsDeviceUnlock(false);
+    } else {
+      markExplicitLogout();
+      clearDeviceUnlock();
+      setNeedsDeviceUnlock(false);
+    }
     try { sessionStorage.removeItem("dkmerch_push_asked"); } catch { /* ignore */ }
     setUser(null);
     setRole(null);
     setIsAuthenticated(false);
-    setNeedsDeviceUnlock(false);
   };
 
   const clearDeviceUnlockPrompt = () => setNeedsDeviceUnlock(false);

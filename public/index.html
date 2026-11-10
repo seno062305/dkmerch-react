@@ -27,11 +27,22 @@
   <link rel="icon" href="/images/dklogo2-removebg-preview.png" type="image/png">
 
   <style>
+    /* First paint = pink (avoids white + black-logo flash before splash) */
+    html, body {
+      margin: 0;
+      background: #fc1268 !important;
+      min-height: 100%;
+    }
+    #root:empty {
+      min-height: 100vh;
+      background: #fc1268;
+    }
+
     /* ── Splash Screen ── */
     #splash {
       position: fixed;
       inset: 0;
-      z-index: 99999;
+      z-index: 2147483646;
       background: linear-gradient(145deg, #fc1268 0%, #ff4d94 50%, #ff85b3 100%);
       display: flex;
       flex-direction: column;
@@ -213,12 +224,12 @@
 
   <!-- Register Service Worker + Hide Splash -->
   <script>
-    // Hide splash when React app is ready
+    // Hide splash when React app is ready — keep pink splash visible first
     window.addEventListener('load', function () {
       var isPwaReopen = window.matchMedia('(display-mode: standalone)').matches
         || window.navigator.standalone === true
         || /source=pwa/i.test(window.location.search);
-      var minShow = isPwaReopen ? 350 : 550;
+      var minShow = isPwaReopen ? 700 : 850;
       var startTime = Date.now();
       var splashHidden = false;
 
@@ -233,6 +244,10 @@
             splash.classList.add('hide');
             setTimeout(function () {
               if (splash.parentNode) splash.parentNode.removeChild(splash);
+              try {
+                document.documentElement.classList.add('app-ready');
+                document.body.classList.add('app-ready');
+              } catch (e) { /* ignore */ }
             }, 280);
           }
         }, remaining);
@@ -256,8 +271,8 @@
         hideSplash();
       }
 
-      // Fallback: hide quickly even if React is slow
-      setTimeout(hideSplash, 1600);
+      // Fallback: keep splash a bit longer so pink loading always shows
+      setTimeout(hideSplash, 2200);
 
       // Register Service Worker
       if ('serviceWorker' in navigator) {

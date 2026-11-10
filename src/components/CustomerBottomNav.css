@@ -106,7 +106,9 @@
     padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px) + 12px);
   }
 
-  html, body {
+  /* Don't force white here — flash fights the pink PWA splash on open */
+  html.app-ready,
+  body.app-ready {
     background: #fff;
   }
 

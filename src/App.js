@@ -466,9 +466,10 @@ function AppContent() {
             </Route>
           </Routes>
 
-          {!hideHeaderFooter && !hideFooterOnly && <Footer />}
-          {showCustomerNav && <CustomerBottomNav />}
-          {showChatBot && <DKMerchChatBot />}
+          {/* Hide footer/nav under PIN / login gate — they steal taps (Reset → Home) */}
+          {!hideHeaderFooter && !hideFooterOnly && !showLoginModal && <Footer />}
+          {showCustomerNav && !showLoginModal && <CustomerBottomNav />}
+          {showChatBot && !showLoginModal && <DKMerchChatBot />}
           <PointsClaimModal />
 
           {showLoginModal && (
@@ -483,8 +484,7 @@ function AppContent() {
                 setShowLoginModal(false);
               }}
               onSwitchAccount={() => {
-                // Soft logout only — keep device-unlock profile so reopen returns to PIN
-                try { logout?.(); } catch { /* ignore */ }
+                // Soft logout — keep PIN unlock profile (handled inside LoginModal)
                 setShowLoginModal(true);
               }}
               onLoginSuccess={(loginRole) => {

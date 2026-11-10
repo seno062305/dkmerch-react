@@ -880,22 +880,24 @@ body.login-modal-open {
 .pin-unlock-screen {
   position: fixed;
   inset: 0;
-  z-index: 100060;
+  z-index: 2147483000;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: space-between;
   padding: max(20px, env(safe-area-inset-top, 0px)) 24px max(16px, env(safe-area-inset-bottom, 0px));
   box-sizing: border-box;
-  background: #fc1268 !important;
-  background-image: linear-gradient(145deg, #fc1268 0%, #ff4d94 48%, #ff85b3 100%) !important;
+  /* Light at top (logo readable) → deeper pink at bottom */
+  background: #ff9ec0 !important;
+  background-image: linear-gradient(180deg, #ffb3d0 0%, #ff6aa8 42%, #fc1268 100%) !important;
   color: #fff !important;
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   -webkit-user-select: none;
   user-select: none;
-  pointer-events: auto;
+  pointer-events: auto !important;
+  touch-action: manipulation;
 }
 
 .pin-unlock-top {
@@ -914,7 +916,8 @@ body.login-modal-open {
   font-weight: 900;
   letter-spacing: 0.14em;
   margin-bottom: 22px;
-  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(120, 20, 60, 0.45), 0 2px 14px rgba(0, 0, 0, 0.2);
 }
 
 .pin-unlock-logo {
@@ -922,8 +925,8 @@ body.login-modal-open {
   height: 36px;
   object-fit: contain;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.2);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.14);
 }
 
 .pin-unlock-avatar {
@@ -1032,7 +1035,8 @@ body.login-modal-open {
   height: 74px;
   border-radius: 50%;
   border: none;
-  background: rgba(190, 24, 93, 0.35);
+  background: rgba(140, 10, 70, 0.55);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
   color: #fff;
   font-size: 28px;
   font-weight: 700;
@@ -1046,7 +1050,7 @@ body.login-modal-open {
 
 .pin-unlock-key:active:not(:disabled) {
   transform: scale(0.96);
-  background: rgba(190, 24, 93, 0.55);
+  background: rgba(110, 5, 55, 0.72);
 }
 
 .pin-unlock-key:disabled {
@@ -1067,32 +1071,32 @@ body.login-modal-open {
 
 .pin-unlock-footer {
   position: relative;
-  z-index: 5;
+  z-index: 20;
   width: 100%;
   max-width: 420px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 4px max(8px, env(safe-area-inset-bottom, 0px));
+  padding: 12px 4px max(12px, env(safe-area-inset-bottom, 0px));
   flex-shrink: 0;
-  pointer-events: auto;
+  pointer-events: auto !important;
 }
 
 .pin-unlock-forgot,
 .pin-unlock-switch {
   position: relative;
-  z-index: 6;
+  z-index: 21;
   background: none;
   border: none;
   color: #fff;
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  padding: 12px 8px;
-  min-height: 44px;
-  opacity: 0.95;
-  pointer-events: auto;
+  padding: 14px 10px;
+  min-height: 48px;
+  opacity: 0.98;
+  pointer-events: auto !important;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
