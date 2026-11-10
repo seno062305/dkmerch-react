@@ -292,6 +292,12 @@ export default defineSchema({
     autoBackupSchedule: v.optional(v.string()), // "daily" | "weekly" | "off"
     lastAutoBackupAt:   v.optional(v.number()),
     lastRestoreAt:      v.optional(v.number()),
+    // Firebase mirror sync metadata
+    lastFirebaseSyncAt:      v.optional(v.number()),
+    lastFirebaseSyncCount:   v.optional(v.number()),
+    lastFirebaseSyncFailed:  v.optional(v.number()),
+    lastFirebaseSyncMessage: v.optional(v.string()),
+    lastFirebaseSyncOk:      v.optional(v.boolean()),
   }),
 
   activityLogs: defineTable({

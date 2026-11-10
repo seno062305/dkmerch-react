@@ -133,7 +133,10 @@ export const markOrderFromScan = mutation({
   },
 });
 
-/** Accept via waybill scan → Deliver as Out for Delivery (no extra Start Delivery step). */
+/**
+ * Accept via waybill scan → Deliver as "approved" (Ready to Deliver).
+ * GPS / Out for Delivery starts only when rider taps Notify Customer.
+ */
 export const acceptOrder = mutation({
   args: {
     orderId: v.string(),
@@ -151,21 +154,10 @@ export const acceptOrder = mutation({
     }
 
     const status = (order.orderStatus || order.status || "").toLowerCase();
-    if (["completed", "delivered", "cancelled"].includes(status)) {
+    if (["completed", "delivered", "cancelled", "out_for_delivery"].includes(status)) {
       return { success: false, message: `Order is already ${status.replace(/_/g, " ")}.` };
     }
-    if (status === "out_for_delivery") {
-      const existingOfd = (await db.query("pickupRequests").collect()).find(
-        (p: any) =>
-          p.orderId === order.orderId &&
-          p.riderEmail === args.riderEmail &&
-          p.status === "out_for_delivery"
-      );
-      if (existingOfd) {
-        return { success: true, alreadyClaimed: true, id: existingOfd._id, orderId: order.orderId };
-      }
-    }
-    if (status !== "confirmed" && status !== "shipped" && status !== "out_for_delivery") {
+    if (status !== "confirmed" && status !== "shipped") {
       return { success: false, message: "Only confirmed orders can be accepted." };
     }
 
@@ -184,27 +176,8 @@ export const acceptOrder = mutation({
       email: args.riderEmail,
     };
 
-    const markOutForDelivery = async (pickupId: any) => {
-      await db.patch(pickupId, {
-        status: "out_for_delivery",
-        approvedAt: now,
-        customerName: order.customerName || "",
-        total: order.finalTotal ?? order.total ?? 0,
-      });
-      await db.patch(order._id, {
-        riderId: args.riderId,
-        riderInfo,
-        orderStatus: "out_for_delivery",
-        status: "Out for Delivery",
-        outForDeliveryAt: now,
-      });
-    };
-
     if (claimed) {
       if (claimed.riderEmail === args.riderEmail) {
-        if (claimed.status !== "out_for_delivery") {
-          await markOutForDelivery(claimed._id);
-        }
         return { success: true, alreadyClaimed: true, id: claimed._id, orderId: order.orderId };
       }
       return { success: false, message: "Another rider already accepted this order." };
@@ -226,7 +199,13 @@ export const acceptOrder = mutation({
     }
 
     if (mine) {
-      await markOutForDelivery(mine._id);
+      await db.patch(mine._id, {
+        status: "approved",
+        approvedAt: now,
+        customerName: order.customerName || mine.customerName || "",
+        total: order.finalTotal ?? order.total ?? mine.total ?? 0,
+      });
+      await db.patch(order._id, { riderId: args.riderId, riderInfo });
       return { success: true, id: mine._id, orderId: order.orderId, fromScan: !!mine.fromScan };
     }
 
@@ -241,20 +220,71 @@ export const acceptOrder = mutation({
       customerName: order.customerName || "",
       total: order.finalTotal ?? order.total ?? 0,
       requestedAt: now,
-      status: "out_for_delivery",
+      status: "approved",
       approvedAt: now,
       fromScan: true,
       scannedAt: now,
     });
 
-    await db.patch(order._id, {
-      riderId: args.riderId,
-      riderInfo,
-      orderStatus: "out_for_delivery",
-      status: "Out for Delivery",
-      outForDeliveryAt: now,
-    });
+    await db.patch(order._id, { riderId: args.riderId, riderInfo });
     return { success: true, id, orderId: order.orderId, fromScan: true };
+  },
+});
+
+/** Dev/test helper: put the latest claimed delivery back to Available (confirmed). */
+export const resetLatestClaimedToAvailable = mutation({
+  args: {},
+  handler: async ({ db }) => {
+    const pickups = await db.query("pickupRequests").order("desc").collect();
+    const claimed = pickups.find((p: any) =>
+      ["approved", "out_for_delivery"].includes(p.status)
+    );
+    if (!claimed) {
+      return { success: false, message: "No claimed delivery to reset." };
+    }
+
+    const order = await findOrderByIdOrShort(db, claimed.orderId);
+    const orderId = order?.orderId || claimed.orderId;
+
+    // Remove all pickups for this order
+    for (const p of pickups.filter((x: any) => x.orderId === orderId)) {
+      await db.delete(p._id);
+    }
+
+    // Clear live GPS so customer/admin maps stop showing this rider
+    const locs = await db
+      .query("riderLocations")
+      .withIndex("by_orderId", (q) => q.eq("orderId", orderId))
+      .collect();
+    for (const loc of locs) {
+      await db.delete(loc._id);
+    }
+
+    if (order) {
+      // Rebuild doc without rider/delivery fields so admin + customer maps clear
+      const {
+        riderId: _r,
+        riderInfo: _ri,
+        outForDeliveryAt: _ofd,
+        riderGpsLink: _link,
+        riderLinkSessionId: _sid,
+        riderLinkSessionAt: _sat,
+        riderLinkDeviceInfo: _dev,
+        ...rest
+      } = order as any;
+      await db.replace(order._id, {
+        ...rest,
+        orderStatus: "confirmed",
+        status: "Confirmed",
+      });
+    }
+
+    return {
+      success: true,
+      orderId,
+      shortId: String(orderId).slice(-8).toUpperCase(),
+      message: `Order #${String(orderId).slice(-8).toUpperCase()} is back on Available.`,
+    };
   },
 });
 

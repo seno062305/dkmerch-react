@@ -1040,8 +1040,8 @@ const RiderDashboard = () => {
     const itemCount = targetOrder?.items?.length || 0;
     const acceptOk = await confirm({
       title: 'Accept this order?',
-      message: `Waybill matched order #${shortId}${itemCount ? ` (${itemCount} item${itemCount === 1 ? '' : 's'})` : ''}.\n\nAccepting moves it to Deliver as Out for Delivery. You will be responsible for this delivery.`,
-      confirmLabel: 'Accept & Deliver',
+      message: `Waybill matched order #${shortId}${itemCount ? ` (${itemCount} item${itemCount === 1 ? '' : 's'})` : ''}.\n\nAccept into Deliver? Live location starts when you notify the customer.`,
+      confirmLabel: 'Accept Order',
       cancelLabel: 'Not yet',
       variant: 'primary',
       icon: 'fa-motorcycle',
@@ -1072,18 +1072,16 @@ const RiderDashboard = () => {
           message: result?.message || 'Failed to accept order. Try again.',
         };
       }
-      const deliveredOrderId = result.orderId || scanTargetOrderId;
       setShowWaybillScanner(false);
       setScanTargetOrderId(null);
       setTab('deliver');
       if (result.id) {
         setExpandedDeliveries(prev => ({ ...prev, [result.id]: true }));
       }
-      // Force GPS live immediately so customer + admin maps open with rider location
-      startTracking(deliveredOrderId);
+      // GPS starts only when rider taps Notify Customer — not on accept
       alert(result.alreadyClaimed
-        ? '✅ This order is already Out for Delivery in Deliver.'
-        : '✅ Waybill matched! Order is Out for Delivery at the top of Deliver — location sharing started.');
+        ? '✅ This order is already in Deliver.'
+        : '✅ Waybill matched! Order is in Deliver — tap Notify Customer to start live location.');
       return { ok: true };
     } catch (err) {
       console.error(err);
@@ -1543,24 +1541,20 @@ const RiderDashboard = () => {
                             <div className={`rider-gps-panel ${isThisBeingTracked ? 'gps-panel-active' : ''}`}>
                               <div className="rider-gps-panel-title">
                                 <i className="fas fa-map-marker-alt"></i><span>GPS Location Sharing</span>
-                                {isThisBeingTracked && <span className="rider-gps-live-tag">LIVE</span>}
+                                {isThisBeingTracked
+                                  ? <span className="rider-gps-live-tag">LIVE</span>
+                                  : <span className="rider-gps-live-tag" style={{ background: '#f59e0b' }}>Starting…</span>}
                               </div>
                               {isThisBeingTracked ? (
                                 <>
                                   <div className="rider-gps-status-row">
                                     <span className="rider-gps-dot"></span>
-                                    <span>Sending location every 5 seconds{currentPosition && <> · <strong>±{Math.round(currentPosition.accuracy || 0)}m</strong></>}</span>
+                                    <span>Live for customer &amp; admin{currentPosition && <> · <strong>±{Math.round(currentPosition.accuracy || 0)}m</strong></>}</span>
                                   </div>
                                   {currentPosition && <div className="rider-gps-coords"><i className="fas fa-crosshairs"></i>{currentPosition.lat.toFixed(6)}, {currentPosition.lng.toFixed(6)}</div>}
-                                  <button className="rider-gps-stop-btn" disabled style={{ opacity: 0.4, cursor: 'not-allowed' }}>
-                                    <i className="fas fa-stop-circle"></i> Stop Sharing Location
-                                  </button>
                                 </>
                               ) : (
-                                <>
-                                  <p className="rider-gps-desc">Share your real-time location so the customer can track you on the map.</p>
-                                  <button className="rider-gps-start-btn" onClick={() => startTracking(delivery.orderId)}><i className="fas fa-location-arrow"></i> Start Location Sharing</button>
-                                </>
+                                <p className="rider-gps-desc">Location sharing starts automatically after you notify the customer.</p>
                               )}
                             </div>
                           )}
