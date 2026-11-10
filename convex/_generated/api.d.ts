@@ -10,9 +10,11 @@
 
 import type * as activityLogs from "../activityLogs.js";
 import type * as adminCleanup from "../adminCleanup.js";
+import type * as appUpdates from "../appUpdates.js";
 import type * as backup from "../backup.js";
 import type * as cart from "../cart.js";
 import type * as crons from "../crons.js";
+import type * as deliveryChat from "../deliveryChat.js";
 import type * as failoverApply from "../failoverApply.js";
 import type * as failoverSync from "../failoverSync.js";
 import type * as firebaseSync from "../firebaseSync.js";
@@ -23,6 +25,7 @@ import type * as pickupRequests from "../pickupRequests.js";
 import type * as preOrderRequests from "../preOrderRequests.js";
 import type * as products from "../products.js";
 import type * as promos from "../promos.js";
+import type * as pushSubscriptions from "../pushSubscriptions.js";
 import type * as reviews from "../reviews.js";
 import type * as rewards from "../rewards.js";
 import type * as riderNotifications from "../riderNotifications.js";
@@ -31,6 +34,7 @@ import type * as sendEmail from "../sendEmail.js";
 import type * as settings from "../settings.js";
 import type * as supportChat from "../supportChat.js";
 import type * as users from "../users.js";
+import type * as webPush from "../webPush.js";
 import type * as wishlist from "../wishlist.js";
 
 import type {
@@ -42,9 +46,11 @@ import type {
 declare const fullApi: ApiFromModules<{
   activityLogs: typeof activityLogs;
   adminCleanup: typeof adminCleanup;
+  appUpdates: typeof appUpdates;
   backup: typeof backup;
   cart: typeof cart;
   crons: typeof crons;
+  deliveryChat: typeof deliveryChat;
   failoverApply: typeof failoverApply;
   failoverSync: typeof failoverSync;
   firebaseSync: typeof firebaseSync;
@@ -55,6 +61,7 @@ declare const fullApi: ApiFromModules<{
   preOrderRequests: typeof preOrderRequests;
   products: typeof products;
   promos: typeof promos;
+  pushSubscriptions: typeof pushSubscriptions;
   reviews: typeof reviews;
   rewards: typeof rewards;
   riderNotifications: typeof riderNotifications;
@@ -63,6 +70,7 @@ declare const fullApi: ApiFromModules<{
   settings: typeof settings;
   supportChat: typeof supportChat;
   users: typeof users;
+  webPush: typeof webPush;
   wishlist: typeof wishlist;
 }>;
 

@@ -250,6 +250,13 @@ export default function DKMerchChatBot() {
   };
 
   useEffect(() => {
+    if (!open) return undefined;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [open]);
+
+  useEffect(() => {
     if (open && !hasGreeted) {
       setHasGreeted(true);
       setTimeout(() => {
@@ -406,10 +413,28 @@ export default function DKMerchChatBot() {
 
       {/* ── Chat Window — above CartModal (z-index: 9999) and its content (10000) ── */}
       {open && (
+        <>
+        {/* Block clicks on page / FABs / bottom nav while chat is open */}
+        <div
+          className="dk-chat-backdrop"
+          aria-hidden="true"
+          onClick={() => {
+            setOpen(false);
+            setMessages([]);
+            setHasGreeted(false);
+          }}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 12050,
+            background: "rgba(15, 23, 42, 0.45)",
+            pointerEvents: "auto",
+          }}
+        />
         <div
           className="dk-chat-window"
           style={{
-            position: "fixed", bottom: 130, right: 24, zIndex: 10049,
+            position: "fixed", bottom: 130, right: 24, zIndex: 12051,
             width: 360, maxWidth: "calc(100vw - 48px)",
             background: "#fff",
             borderRadius: 20,
@@ -419,6 +444,7 @@ export default function DKMerchChatBot() {
             animation: "dkSlideUp 0.3s cubic-bezier(0.34,1.56,0.64,1)",
             maxHeight: "70vh",
           }}
+          onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
           <div style={{
@@ -557,6 +583,7 @@ export default function DKMerchChatBot() {
             🎀 DKMerch K-Pop Paradise · Automated Support
           </div>
         </div>
+        </>
       )}
 
       <style>{`

@@ -1,11 +1,14 @@
 // src/App.js
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { useMutation } from 'convex/react';
+import { api } from '../convex/_generated/api';
 import { useAuth } from './context/AuthContext';
 import { useCart, useRemoveFromCart, useCartCount, useAddToCart } from './context/cartUtils';
 import { useWishlist, useWishlistCount, useToggleWishlist } from './context/wishlistUtils';
 import { BackupProvider } from './context/BackupContext';
 import { RewardsProvider } from './context/RewardsContext';
+import { isPushSupported, subscribeToPush, getNotificationPermission } from './utils/pushNotifications';
 
 import Header from './components/Header';
 import Footer from './components/Footer';
@@ -31,6 +34,7 @@ import PrivacyPolicy from './pages/PrivacyPolicy';
 import CartModal from './components/CartModal';
 import ProductModal from './components/ProductModal';
 import WishlistPage from './components/WishlistPage';
+import AppUpdateModal from './components/AppUpdateModal';
 
 import AdminLayout from './admin/AdminLayout';
 import AdminDashboard from './admin/AdminDashboard';
@@ -160,6 +164,8 @@ const RiderRoute = ({ children }) => {
 function AppContent() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, isAuthenticated, role } = useAuth();
+  const savePushSub = useMutation(api.pushSubscriptions.saveSubscription);
 
   const cartItems      = useCart();
   const cartCount      = useCartCount();
@@ -185,6 +191,28 @@ function AppContent() {
     window.addEventListener('openLoginModal', handleOpenLogin);
     return () => window.removeEventListener('openLoginModal', handleOpenLogin);
   }, []);
+
+  // Quietly refresh existing push subscription for logged-in customers (no prompt if already denied)
+  useEffect(() => {
+    if (!isAuthenticated || !user?.email || role === 'admin' || role === 'rider') return;
+    if (!isPushSupported()) return;
+    if (getNotificationPermission() !== 'granted') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const sub = await subscribeToPush();
+        if (cancelled || !sub?.endpoint || !sub?.keys) return;
+        await savePushSub({
+          email: user.email,
+          endpoint: sub.endpoint,
+          p256dh: sub.keys.p256dh,
+          auth: sub.keys.auth,
+          userAgent: navigator.userAgent,
+        });
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [isAuthenticated, user?.email, role, savePushSub]);
 
   const handleLoginSuccess = (loginRole) => {
     setShowLoginModal(false);
@@ -245,7 +273,7 @@ function AppContent() {
             <Route path="/preorder"      element={<PreOrder />} />
             <Route path="/track-order"   element={<TrackOrder />} />
             <Route path="/help"          element={<Help />} />
-            <Route path="/wishlist"      element={<WishlistPage />} />
+            <Route path="/wishlist"      element={<WishlistPage onProductClick={(p) => { setCurrentProduct(p); setShowProductModal(true); }} />} />
             <Route path="/checkout"      element={<Checkout />} />
             <Route path="/settings"      element={<Settings />} />
             <Route path="/more"          element={<MoreSettings />} />
@@ -321,6 +349,8 @@ function AppContent() {
               onRequireLogin={() => { setShowProductModal(false); setShowLoginModal(true); }}
             />
           )}
+
+          {!isAdminRoute && !isRiderDashRoute && <AppUpdateModal />}
         </div>
       </RewardsProvider>
     </StartupRedirect>

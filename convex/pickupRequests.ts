@@ -167,7 +167,7 @@ export const acceptOrder = mutation({
     riderPlate: v.optional(v.string()),
     riderPhoto: v.optional(v.union(v.string(), v.null())),
   },
-  handler: async ({ db }, args) => {
+  handler: async ({ db, scheduler }, args) => {
     const order = await findOrderByIdOrShort(db, args.orderId);
     if (!order) {
       return { success: false, message: "Order not found." };
@@ -223,6 +223,24 @@ export const acceptOrder = mutation({
       }
     }
 
+    const notifyRiderAccepted = async () => {
+      if (!order.email) return;
+      await scheduler.runAfter(0, internal.sendEmail.sendOrderStatusUpdateEmail, {
+        to: order.email,
+        customerName: order.customerName || "Customer",
+        orderId: order.orderId,
+        orderStatus: "rider_assigned",
+        actorLabel: "Rider",
+        note: `${args.riderName} accepted your order and will deliver it soon.`,
+      });
+      await scheduler.runAfter(0, internal.webPush.sendToEmail, {
+        email: order.email,
+        title: "Rider assigned",
+        body: `${args.riderName} accepted your order.`,
+        url: `/track-order?order=${encodeURIComponent(order.orderId)}`,
+      });
+    };
+
     if (mine) {
       await db.patch(mine._id, {
         status: "approved",
@@ -230,7 +248,14 @@ export const acceptOrder = mutation({
         customerName: order.customerName || mine.customerName || "",
         total: order.finalTotal ?? order.total ?? mine.total ?? 0,
       });
-      await db.patch(order._id, { riderId: args.riderId, riderInfo });
+      await db.patch(order._id, {
+        riderId: args.riderId,
+        riderInfo,
+        orderStatus: status === "confirmed" ? "shipped" : order.orderStatus,
+        status: status === "confirmed" ? "Shipped" : order.status,
+        shippedAt: status === "confirmed" ? now : order.shippedAt,
+      });
+      await notifyRiderAccepted();
       return { success: true, id: mine._id, orderId: order.orderId, fromScan: !!mine.fromScan };
     }
 
@@ -251,7 +276,14 @@ export const acceptOrder = mutation({
       scannedAt: now,
     });
 
-    await db.patch(order._id, { riderId: args.riderId, riderInfo });
+    await db.patch(order._id, {
+      riderId: args.riderId,
+      riderInfo,
+      orderStatus: status === "confirmed" ? "shipped" : order.orderStatus,
+      status: status === "confirmed" ? "Shipped" : order.status,
+      shippedAt: status === "confirmed" ? now : order.shippedAt,
+    });
+    await notifyRiderAccepted();
     return { success: true, id, orderId: order.orderId, fromScan: true };
   },
 });

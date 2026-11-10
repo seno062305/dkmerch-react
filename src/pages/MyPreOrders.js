@@ -188,7 +188,7 @@ const MyPreOrders = () => {
             </div>
             <div className="mpo-stat mpo-stat--added">
               <span className="mpo-stat-num">{addedCount}</span>
-              <span className="mpo-stat-label">Added to Cart</span>
+              <span className="mpo-stat-label">In Cart</span>
             </div>
           </div>
 

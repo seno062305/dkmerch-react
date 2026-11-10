@@ -1208,6 +1208,14 @@ const AdminBackup = () => {
   const [showLogs, setShowLogs] = useState(false);
   const [dangerTableKey, setDangerTableKey] = useState(TABLES[0]?.key || 'products');
   const [localHistory, setLocalHistory] = useState(() => readLocalBackupHistory());
+  const [updateForm, setUpdateForm] = useState({
+    version: '',
+    title: 'DKMerch app update',
+    message: 'A new version of the DKMerch customer app is ready. Tap Update to install.',
+  });
+  const [updateMsg, setUpdateMsg] = useState('');
+  const publishAppUpdate = useMutation(api.appUpdates.publishUpdate);
+  const appUpdateList = useQuery(api.appUpdates.listUpdates) || [];
 
   const refreshOverview = async () => {
     setBusy('refresh');
@@ -1650,6 +1658,76 @@ const AdminBackup = () => {
           <h2>Maintenance</h2>
         </div>
         <div className="ab-maint-grid">
+          <div className="ab-card">
+            <div className="ab-card-title">
+              <i className="fas fa-mobile-alt" style={{ background: '#eef2ff', color: '#4f46e5' }}></i>
+              <h3>Update the system</h3>
+            </div>
+            <p className="ab-card-hint">
+              Publish a customer app update. Registered customers get an email with an <strong>Update</strong> button
+              that opens the live app and shows the update popup (loading → confirm → auto restart).
+            </p>
+            <label className="ab-password-label">Version</label>
+            <input
+              className="ab-oracle-input"
+              placeholder="e.g. 1.4.0"
+              value={updateForm.version}
+              onChange={(e) => setUpdateForm((p) => ({ ...p, version: e.target.value }))}
+              style={{ marginBottom: 8 }}
+            />
+            <label className="ab-password-label">Title</label>
+            <input
+              className="ab-oracle-input"
+              value={updateForm.title}
+              onChange={(e) => setUpdateForm((p) => ({ ...p, title: e.target.value }))}
+              style={{ marginBottom: 8 }}
+            />
+            <label className="ab-password-label">Message</label>
+            <textarea
+              className="ab-oracle-input"
+              rows={3}
+              value={updateForm.message}
+              onChange={(e) => setUpdateForm((p) => ({ ...p, message: e.target.value }))}
+              style={{ marginBottom: 10, resize: 'none', minHeight: 72 }}
+            />
+            <button
+              type="button"
+              className="ab-btn-primary"
+              disabled={!!busy}
+              onClick={async () => {
+                setUpdateMsg('');
+                setBusy('app-update');
+                try {
+                  const res = await publishAppUpdate({
+                    version: updateForm.version.trim(),
+                    title: updateForm.title.trim(),
+                    message: updateForm.message.trim(),
+                    notifyEmail: true,
+                  });
+                  if (!res?.success) {
+                    setUpdateMsg(res?.message || 'Failed to publish update.');
+                  } else {
+                    setUpdateMsg('Update published. Customers were emailed.');
+                    setUpdateForm((p) => ({ ...p, version: '' }));
+                  }
+                } catch (err) {
+                  setUpdateMsg(String(err?.message || err || 'Failed'));
+                } finally {
+                  setBusy('');
+                }
+              }}
+            >
+              <i className="fas fa-cloud-upload-alt"></i>{' '}
+              {busy === 'app-update' ? 'Publishing…' : 'Publish update + email customers'}
+            </button>
+            {updateMsg && <p className="ab-card-hint" style={{ marginTop: 10 }}>{updateMsg}</p>}
+            {appUpdateList[0] && (
+              <p className="ab-card-hint" style={{ marginTop: 8 }}>
+                Latest: <strong>v{appUpdateList[0].version}</strong> — {appUpdateList[0].title}
+              </p>
+            )}
+          </div>
+
           <div className="ab-card ab-card--danger">
             <div className="ab-card-title">
               <i className="fas fa-exclamation-triangle" style={{ background: '#f3e8ff', color: '#e11d48' }}></i>

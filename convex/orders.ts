@@ -235,6 +235,22 @@ export const updateOrderStatus = mutation({
 
     if (orderStatus === 'confirmed') {
       await onOrderConfirmed(scheduler, db, order, orderId);
+    } else if (orderStatus && order.email) {
+      // Notify customer on every admin progress step (shipped / completed / cancelled / etc.)
+      await scheduler.runAfter(0, internal.sendEmail.sendOrderStatusUpdateEmail, {
+        to: order.email,
+        customerName: order.customerName || "Customer",
+        orderId,
+        orderStatus,
+        actorLabel: "Admin",
+        note: orderStatus === "cancelled" ? (order.cancelReason || undefined) : undefined,
+      });
+      await scheduler.runAfter(0, internal.webPush.sendToEmail, {
+        email: order.email,
+        title: `Order update · #${orderId.slice(-8).toUpperCase()}`,
+        body: `Status: ${String(orderStatus).replace(/_/g, " ")}`,
+        url: `/track-order?order=${encodeURIComponent(orderId)}`,
+      });
     }
 
     return { success: true };
@@ -282,6 +298,28 @@ export const updateOrderFields = mutation({
 
     if (filtered.orderStatus === 'confirmed') {
       await onOrderConfirmed(scheduler, db, order, orderId);
+    } else if (filtered.orderStatus && order.email) {
+      const isRiderStep =
+        filtered.orderStatus === 'out_for_delivery' || filtered.orderStatus === 'completed';
+      const hasRider = !!(filtered.riderInfo?.name || order.riderInfo?.name);
+      const actorLabel = isRiderStep && hasRider ? 'Rider' : 'Admin';
+      await scheduler.runAfter(0, internal.sendEmail.sendOrderStatusUpdateEmail, {
+        to: order.email,
+        customerName: order.customerName || 'Customer',
+        orderId,
+        orderStatus: filtered.orderStatus,
+        actorLabel,
+        note:
+          filtered.orderStatus === 'cancelled'
+            ? (filtered.cancelReason || order.cancelReason || undefined)
+            : undefined,
+      });
+      await scheduler.runAfter(0, internal.webPush.sendToEmail, {
+        email: order.email,
+        title: `Order update · #${orderId.slice(-8).toUpperCase()}`,
+        body: `${actorLabel}: ${String(filtered.orderStatus).replace(/_/g, ' ')}`,
+        url: `/track-order?order=${encodeURIComponent(orderId)}`,
+      });
     }
 
     await db.patch(order._id, filtered);

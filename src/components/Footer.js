@@ -98,7 +98,7 @@ const Footer = () => {
             <div className="contact-info">
               <p><i className="fas fa-phone"></i> +63 912 345 6789</p>
               <p><i className="fas fa-envelope"></i> dkmerchtest@gmail.com</p>
-              <p><i className="fas fa-clock"></i> Mon-Sat: 9AM-6PM PST</p>
+              <p><i className="fas fa-clock"></i> Mon-Sat: 9AM-6PM PHT</p>
             </div>
           </div>
         </div>

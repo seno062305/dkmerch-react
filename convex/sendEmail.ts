@@ -690,6 +690,98 @@ export const sendOrderConfirmedEmail = internalAction({
   },
 });
 
+/** Generic status progress email → customer (admin / rider updates) */
+export const sendOrderStatusUpdateEmail = internalAction({
+  args: {
+    to: v.string(),
+    customerName: v.string(),
+    orderId: v.string(),
+    orderStatus: v.string(),
+    actorLabel: v.optional(v.string()),
+    note: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<{ success: boolean; message?: string; id?: string }> => {
+    const shortId = args.orderId.slice(-8).toUpperCase();
+    const trackUrl = `${SITE_URL}/track-order?order=${encodeURIComponent(args.orderId)}`;
+    const statusMap: Record<string, { title: string; emoji: string; color: string; blurb: string }> = {
+      confirmed: { title: "Order Confirmed", emoji: "✅", color: "#065f46", blurb: "Admin confirmed your order. We're preparing it for delivery." },
+      shipped: { title: "Order Shipped", emoji: "📦", color: "#4338ca", blurb: "Your package has been handed for shipping." },
+      rider_assigned: { title: "Rider Assigned", emoji: "🏍️", color: "#c2410c", blurb: "A rider accepted your order and will deliver it soon." },
+      out_for_delivery: { title: "Out for Delivery", emoji: "🛵", color: "#c2410c", blurb: "A rider is on the way with your order." },
+      completed: { title: "Delivered", emoji: "🎉", color: "#166534", blurb: "Your order was marked as delivered. Salamat!" },
+      cancelled: { title: "Order Cancelled", emoji: "❌", color: "#991b1b", blurb: "Your order was cancelled." },
+    };
+    const meta = statusMap[args.orderStatus] || {
+      title: "Order Update",
+      emoji: "🔔",
+      color: "#1f2937",
+      blurb: `Your order status is now: ${args.orderStatus}.`,
+    };
+    const actor = args.actorLabel || "DKMerch";
+    const html = `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f4f4f5;font-family:'Segoe UI',Arial,sans-serif;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="padding:32px 0;"><tr><td align="center">
+        <table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;overflow:hidden;">
+          <tr><td style="background:linear-gradient(135deg,#42011e,#fc1268);padding:28px;text-align:center;color:#fff;font-weight:900;font-size:24px;">DKMerch</td></tr>
+          <tr><td style="padding:28px;text-align:center;">
+            <div style="font-size:40px;">${meta.emoji}</div>
+            <h1 style="margin:8px 0;color:${meta.color};font-size:22px;">${meta.title}</h1>
+            <p style="color:#374151;font-size:15px;">Hi <strong>${args.customerName}</strong> — update from <strong>${actor}</strong>.</p>
+            <p style="color:#4b5563;font-size:14px;line-height:1.6;">${meta.blurb}</p>
+            ${args.note ? `<p style="color:#6b7280;font-size:13px;background:#f9fafb;padding:12px;border-radius:8px;">${args.note}</p>` : ""}
+            <p style="color:#6b7280;font-size:13px;">Order <strong>#${shortId}</strong></p>
+            <a href="${trackUrl}" style="display:inline-block;margin-top:12px;background:linear-gradient(135deg,#fc1268,#9c27b0);color:#fff;text-decoration:none;padding:12px 28px;border-radius:10px;font-weight:700;">Track Order</a>
+          </td></tr>
+        </table>
+      </td></tr></table>
+    </body></html>`;
+    return await ctx.runAction(internal.sendEmail.sendEmail, {
+      to: args.to,
+      subject: `${meta.emoji} ${meta.title} — #${shortId} | DKMerch`,
+      html,
+    });
+  },
+});
+
+export const sendAppUpdateEmailToAllUsers = internalAction({
+  args: {
+    version: v.string(),
+    title: v.string(),
+    message: v.string(),
+  },
+  handler: async (ctx, args): Promise<{ success: boolean; sent: number }> => {
+    const users: { name: string; email: string }[] = await ctx.runQuery(
+      internal.users.getAllUsersForPromoNotif, {}
+    );
+    if (!users?.length) return { success: true, sent: 0 };
+    const updateUrl = `${SITE_URL}/?appUpdate=${encodeURIComponent(args.version)}`;
+    let sent = 0;
+    for (const user of users) {
+      if (!user.email) continue;
+      const html = `<div style="font-family:Segoe UI,sans-serif;max-width:560px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;">
+        <div style="background:linear-gradient(135deg,#111827,#4f46e5);padding:32px;text-align:center;color:#fff;">
+          <div style="font-size:40px;">📲</div>
+          <h1 style="margin:8px 0 0;font-size:24px;">App Update Available</h1>
+        </div>
+        <div style="padding:28px;text-align:center;">
+          <p style="color:#374151;">Hi <strong>${user.name || "there"}</strong>!</p>
+          <p style="color:#4b5563;font-size:15px;"><strong>${args.title}</strong></p>
+          <p style="color:#6b7280;font-size:14px;line-height:1.6;">${args.message}</p>
+          <p style="color:#9ca3af;font-size:12px;">Version ${args.version}</p>
+          <a href="${updateUrl}" style="display:inline-block;margin-top:16px;background:linear-gradient(135deg,#4f46e5,#ec4899);color:#fff;text-decoration:none;padding:14px 32px;border-radius:10px;font-weight:700;">Update</a>
+        </div>
+      </div>`;
+      await ctx.runAction(internal.sendEmail.sendEmail, {
+        to: user.email,
+        subject: `📲 Update available — ${args.title} | DKMerch`,
+        html,
+      });
+      await new Promise((r) => setTimeout(r, 400));
+      sent++;
+    }
+    return { success: true, sent };
+  },
+});
+
 // ── NEW ORDER EMAIL → ALL APPROVED RIDERS ────────────────────────────────────
 
 export const sendRiderNewOrderEmail = internalAction({

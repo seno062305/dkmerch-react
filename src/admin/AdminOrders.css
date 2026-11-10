@@ -869,7 +869,7 @@
 .admin-refund-action { padding: 16px; background: white; border-top: 1.5px solid #fde68a; display: flex; flex-direction: column; gap: 10px; }
 .admin-refund-note-label { font-size: 13px; font-weight: 700; color: #374151; display: flex; align-items: center; gap: 7px; }
 .admin-refund-note-label i { color: #6b7280; }
-.admin-refund-note-input { width: 100%; padding: 10px 12px; border: 1.5px solid #e5e7eb; border-radius: 8px; font-size: 13px; font-family: inherit; resize: vertical; transition: border-color 0.2s; box-sizing: border-box; color: #1a1f36; }
+.admin-refund-note-input { width: 100%; padding: 10px 12px; border: 1.5px solid #e5e7eb; border-radius: 8px; font-size: 13px; font-family: inherit; resize: none !important; min-height: 64px; max-height: 160px; height: 64px; overflow-y: auto; transition: border-color 0.2s; box-sizing: border-box; color: #1a1f36; field-sizing: fixed; }
 .admin-refund-note-input:focus { outline: none; border-color: #f59e0b; box-shadow: 0 0 0 3px rgba(245,158,11,0.12); }
 .admin-refund-action-btns { display: flex; gap: 10px; }
 .admin-refund-reject-btn { flex: 1; padding: 11px 14px; background: white; border: 1.5px solid #fca5a5; color: #dc2626; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; transition: all 0.2s; }

@@ -241,25 +241,39 @@
   box-shadow: var(--box-shadow);
 }
 
-.orders-empty i { font-size: 64px; color: #e0e0e0; margin-bottom: 20px; display: block; }
+.orders-empty > i { font-size: 48px; color: #e0e0e0; margin-bottom: 16px; display: block; }
 .orders-empty-icon {
   display: block;
-  width: 72px;
-  height: 72px;
-  margin: 0 auto 20px;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 16px;
   object-fit: contain;
 }
+.orders-empty .btn,
 .orders-empty .btn-primary {
+  width: auto !important;
+  max-width: 100%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
+  padding: 10px 18px !important;
+  font-size: 14px !important;
+  border-radius: 10px;
+}
+.orders-empty .btn i,
+.orders-empty .btn-primary i {
+  font-size: 14px !important;
+  margin: 0 !important;
+  color: inherit;
 }
 .orders-empty .btn-primary .dk-icon {
+  width: 16px !important;
+  height: 16px !important;
   filter: brightness(0) invert(1);
 }
-.orders-empty h3 { font-size: 22px; color: var(--dark-color); margin-bottom: 10px; }
-.orders-empty p  { color: var(--gray-color); margin-bottom: 24px; }
+.orders-empty h3 { font-size: 20px; color: var(--dark-color); margin-bottom: 8px; }
+.orders-empty p  { color: var(--gray-color); margin: 0 auto 16px; max-width: 280px; }
 
 /* TRACKING FORM */
 .tracking-form-section {
@@ -606,8 +620,29 @@
 .timeline-item.cancelled-step .timeline-marker i { color: white; }
 
 .timeline-content { padding-top: 1px; }
-.timeline-content h4 { font-size: 15px; color: var(--dark-color); margin-bottom: 4px; line-height: 1.3; }
+.timeline-label-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.timeline-content h4 { font-size: 15px; color: var(--dark-color); margin: 0; line-height: 1.3; }
 .timeline-content p  { font-size: 13px; color: var(--gray-color); margin: 0; }
+.timeline-actor-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  line-height: 1.4;
+}
+.timeline-actor-customer { background: #eff6ff; color: #1d4ed8; }
+.timeline-actor-admin { background: #fdf2f8; color: #be185d; }
+.timeline-actor-rider { background: #fff7ed; color: #c2410c; }
 
 .timeline-desc-done    { color: #374151 !important; }
 .timeline-desc-pending { color: #9ca3af !important; font-style: italic; }
@@ -1253,9 +1288,14 @@
 
 .refund-comment-box {
   width: 100%; padding: 10px 12px; border: 1.5px solid #e5e7eb; border-radius: 8px;
-  font-size: 13px; font-family: inherit; resize: vertical; transition: border-color 0.2s; box-sizing: border-box;
+  font-size: 13px; font-family: inherit; resize: none !important; min-height: 64px; max-height: 180px;
+  height: 64px; overflow-y: auto; line-height: 1.45; transition: border-color 0.2s; box-sizing: border-box;
+  field-sizing: fixed;
 }
-.refund-comment-box:focus { border-color: #f59e0b; outline: none; box-shadow: 0 0 0 3px rgba(245,158,11,0.12); }
+.refund-comment-box:focus {
+  border-color: #f59e0b; outline: none; box-shadow: 0 0 0 3px rgba(245,158,11,0.12);
+  transform: none;
+}
 
 .refund-error-msg {
   display: flex; align-items: center; gap: 8px; background: #fef2f2;

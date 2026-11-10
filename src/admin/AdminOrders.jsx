@@ -933,7 +933,21 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                   <div className="admin-refund-action">
                     <div className="admin-refund-confirm-notice"><i className="fas fa-info-circle"></i><span>Approving will refund <strong>₱{refundAmount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</strong> to customer's {REFUND_METHOD_LABELS[order.refundMethod]?.label || 'account'}{order.refundAccountNumber ? ` (${order.refundAccountNumber})` : ''}. Send money first before approving.</span></div>
                     <label className="admin-refund-note-label"><i className="fas fa-comment-alt"></i> Response note <span style={{ color: '#9ca3af', fontWeight: 400 }}>(optional)</span></label>
-                    <textarea className="admin-refund-note-input" placeholder="e.g. We've processed your refund…" value={refundAdminNote} onChange={e => setRefundAdminNote(e.target.value)} rows={2} maxLength={300} />
+                    <textarea
+                      className="admin-refund-note-input"
+                      placeholder="e.g. We've processed your refund…"
+                      value={refundAdminNote}
+                      rows={2}
+                      maxLength={300}
+                      onChange={(e) => {
+                        setRefundAdminNote(e.target.value);
+                        const el = e.target;
+                        el.style.height = '64px';
+                        if (el.scrollHeight > 64) {
+                          el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+                        }
+                      }}
+                    />
                     <div className="admin-refund-action-btns">
                       <button className="admin-refund-reject-btn" onClick={() => setShowRejectConfirm(true)} disabled={resolvingRefund}>{resolvingRefund ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-times-circle"></i>} Reject</button>
                       <button className="admin-refund-approve-btn" onClick={() => handleRefundResolve('approved')} disabled={resolvingRefund}>{resolvingRefund ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-check-circle"></i>} Approve & Mark Paid</button>

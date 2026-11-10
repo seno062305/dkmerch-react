@@ -7,11 +7,28 @@ import { useNotification } from '../context/NotificationContext';
 import { useConfirm } from '../context/ConfirmContext';
 const MAX_WISHLIST = 10;
 
-const WishlistPage = () => {
+const WishlistPage = ({ onProductClick }) => {
   const navigate = useNavigate();
   const { showNotification } = useNotification();
   const { confirm } = useConfirm();
   const [lightboxImg, setLightboxImg] = useState(null);
+
+  const openProduct = (item) => {
+    if (!onProductClick || !item) return;
+    onProductClick({
+      _id: item.productId,
+      id: item.productId,
+      name: item.name,
+      price: item.price,
+      image: item.image,
+      stock: item.stock,
+      category: item.category,
+      group: item.group,
+      description: item.description,
+      isPreOrder: item.isPreOrder,
+      releaseDate: item.releaseDate,
+    });
+  };
 
   const wishlistItems = useWishlist();
   const removeFromWishlist = useRemoveFromWishlist();
@@ -102,21 +119,31 @@ const WishlistPage = () => {
 
               <div className="orders-grid">
                 {displayItems.map(item => (
-                  <div key={item.productId} className="order-card">
+                  <div
+                    key={item.productId}
+                    className="order-card wishlist-card-clickable"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => openProduct(item)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        openProduct(item);
+                      }
+                    }}
+                  >
                     <div
                       className="order-card-img"
-                      onClick={() => item.image && setLightboxImg(item.image)}
-                      title={item.image ? 'Click to view image' : ''}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openProduct(item);
+                      }}
+                      title="View product"
                     >
                       {item.image
                         ? <img src={item.image} alt={item.name} />
                         : <i className="fas fa-box order-no-img"></i>
                       }
-                      {item.image && (
-                        <div className="order-img-zoom">
-                          <i className="fas fa-search-plus"></i>
-                        </div>
-                      )}
                       <span className="wishlist-star-badge">
                         <i className="fas fa-star" aria-hidden="true"></i>
                       </span>
@@ -132,13 +159,13 @@ const WishlistPage = () => {
                       <button
                         className="btn btn-primary btn-small order-view-btn"
                         style={{ marginBottom: '8px' }}
-                        onClick={() => handleAddToCart(item)}
+                        onClick={(e) => { e.stopPropagation(); handleAddToCart(item); }}
                       >
                         <i className="fas fa-shopping-cart"></i> Add to Cart
                       </button>
                       <button
                         className="order-remove-btn"
-                        onClick={() => handleRemoveFromWishlist(item.productId, item.name)}
+                        onClick={(e) => { e.stopPropagation(); handleRemoveFromWishlist(item.productId, item.name); }}
                       >
                         <i className="fas fa-trash-alt"></i> Remove
                       </button>

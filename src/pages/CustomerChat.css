@@ -1,10 +1,12 @@
 .customer-chat-page {
-  height: calc(100dvh - 64px - 72px - env(safe-area-inset-bottom, 0px));
-  max-height: calc(100dvh - 64px - 72px - env(safe-area-inset-bottom, 0px));
+  /* Use visualViewport height when keyboard is open (set by JS --chat-vvh) */
+  height: calc(var(--chat-vvh, 100dvh) - 64px - 72px);
+  max-height: calc(var(--chat-vvh, 100dvh) - 64px - 72px);
   background: linear-gradient(180deg, #fff5f8 0%, #f8fafc 45%, #fff 100%);
   padding: 10px 10px 8px;
   overflow: hidden;
   box-sizing: border-box;
+  transition: height 0.15s ease, max-height 0.15s ease;
 }
 
 .customer-chat-shell {
@@ -158,9 +160,11 @@
 .customer-chat-composer {
   display: flex;
   gap: 8px;
-  padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+  /* No safe-area pad here — bottom nav already owns it; avoids leftover gap after keyboard */
+  padding: 10px 12px;
   border-top: 1px solid #eef2f7;
   background: #fff;
+  flex-shrink: 0;
 }
 
 .customer-chat-composer input[type="text"] {
@@ -208,8 +212,8 @@
 
 @media (max-width: 768px) {
   .customer-chat-page {
-    height: calc(100dvh - 56px - 72px - env(safe-area-inset-bottom, 0px));
-    max-height: calc(100dvh - 56px - 72px - env(safe-area-inset-bottom, 0px));
+    height: calc(var(--chat-vvh, 100dvh) - 56px - 72px);
+    max-height: calc(var(--chat-vvh, 100dvh) - 56px - 72px);
     padding: 6px 6px 4px;
   }
   .customer-chat-shell { border-radius: 12px; }

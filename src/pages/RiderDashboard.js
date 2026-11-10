@@ -14,6 +14,7 @@ import InstallAppModal, {
   isInsecureInstallHost,
 } from '../components/InstallAppModal';
 import { isLbcOrder } from '../utils/deliveryUtils';
+import DeliveryChatPanel from '../components/DeliveryChatPanel';
 import './RiderDashboard.css';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1872,6 +1873,17 @@ const RiderDashboard = () => {
                               </button>
                             </div>
                           )}
+                          <DeliveryChatPanel
+                            orderId={delivery.orderId}
+                            role="rider"
+                            userName={riderInfo.fullName || user?.name || 'Rider'}
+                            userEmail={riderInfo.email || user?.email || ''}
+                            peerName={customerName}
+                            customerName={customerName}
+                            customerEmail={ord?.email || ''}
+                            riderName={riderInfo.fullName || user?.name}
+                            riderEmail={riderInfo.email || user?.email}
+                          />
                         </div>
                       )}
                     </div>

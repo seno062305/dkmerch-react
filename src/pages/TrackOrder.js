@@ -8,6 +8,7 @@ import { useProducts, usePreOrderProducts } from '../utils/productStorage';
 import { isLbcOrder, openLbcTracker, LBC_TRACK_URL } from '../utils/deliveryUtils';
 import DkIcon, { DK_ICONS } from '../components/DkIcon';
 import { useNotification } from '../context/NotificationContext';
+import DeliveryChatPanel from '../components/DeliveryChatPanel';
 import './TrackOrder.css';
 
 const LbcTrackPanel = ({ compact = false }) => (
@@ -164,7 +165,22 @@ const RefundModal = ({ order, onClose, onSuccess }) => {
           )}
           <div className="refund-field-group">
             <label className="refund-modal-label">Additional Details <span style={{ color: '#9ca3af', fontWeight: 400 }}>(optional)</span></label>
-            <textarea className="refund-comment-box" placeholder="Describe the damage…" value={comment} onChange={e => setComment(e.target.value)} rows={2} maxLength={500} />
+            <textarea
+              className="refund-comment-box"
+              placeholder="Describe the damage…"
+              value={comment}
+              rows={2}
+              maxLength={500}
+              onChange={(e) => {
+                setComment(e.target.value);
+                const el = e.target;
+                // Grow only when text overflows the base height (no expand-on-hold)
+                el.style.height = '64px';
+                if (el.scrollHeight > 64) {
+                  el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
+                }
+              }}
+            />
           </div>
           {error && <div className="refund-error-msg"><i className="fas fa-exclamation-circle"></i> {error}</div>}
         </div>
@@ -494,7 +510,7 @@ const TrackOrder = () => {
   const navigate = useNavigate();
   const { showNotification } = useNotification();
   const { user, isAuthenticated } = useAuth();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const orderIdParam = searchParams.get('order') || searchParams.get('orderId') || searchParams.get('id');
 
   const [filter,             setFilter]             = useState('active');
@@ -507,6 +523,7 @@ const TrackOrder = () => {
   const [removeConfirm,      setRemoveConfirm]      = useState(null);
   const [refundOrder,        setRefundOrder]        = useState(null);
   const [refundSuccess,      setRefundSuccess]      = useState(false);
+  const openedFromUrlRef = useRef(null);
   const [hiddenOrders,       setHiddenOrders]       = useState(() => {
     try { return JSON.parse(localStorage.getItem('hiddenDeliveredOrders') || '[]'); } catch { return []; }
   });
@@ -525,14 +542,38 @@ const TrackOrder = () => {
   );
 
   useEffect(() => {
-    if (!orderIdParam) return;
+    if (!orderIdParam) {
+      openedFromUrlRef.current = null;
+      return;
+    }
+    // Prevent reopen race after close (URL clear is async)
+    if (openedFromUrlRef.current === orderIdParam) return;
     if (selectedOrderId || qrOrder) return;
     const found = [...orders, ...emailOrders].find(o => o.orderId === orderIdParam);
-    if (found) { setSelectedOrderId(found._id); return; }
-    if (directOrder) { setQrOrder(directOrder); }
+    if (found) {
+      openedFromUrlRef.current = orderIdParam;
+      setSelectedOrderId(found._id);
+      return;
+    }
+    if (directOrder) {
+      openedFromUrlRef.current = orderIdParam;
+      setQrOrder(directOrder);
+    }
   }, [orderIdParam, orders, emailOrders, directOrder, selectedOrderId, qrOrder]);
 
-  const handleCloseModal = useCallback(() => setSelectedOrderId(null), []);
+  const handleCloseModal = useCallback(() => {
+    setSelectedOrderId(null);
+    setQrOrder(null);
+    // Clear ?order= so the reopen effect does not immediately pop the modal again
+    if (orderIdParam) {
+      openedFromUrlRef.current = orderIdParam; // block reopen until param is gone
+      const next = new URLSearchParams(searchParams);
+      next.delete('order');
+      next.delete('orderId');
+      next.delete('id');
+      setSearchParams(next, { replace: true });
+    }
+  }, [orderIdParam, searchParams, setSearchParams]);
   const handleOpenModal  = useCallback((order) => setSelectedOrderId(order._id), []);
   const getProductById   = useCallback((id) => products.find(p => p._id === id || p.id === id), [products]);
 
@@ -578,20 +619,20 @@ const TrackOrder = () => {
     ];
     if (lbc) {
       return [
-        { label: 'Order Placed',      icon: 'fa-shopping-cart', completed: true, time: fmt(order._creationTime), desc: 'Your order has been placed.' },
-        { label: 'Payment Confirmed', icon: 'fa-credit-card',   completed: order.paymentStatus === 'paid', time: fmt(order.paidAt), desc: order.paymentStatus === 'paid' ? 'Payment received.' : 'Waiting for payment.' },
-        { label: 'Order Confirmed',   icon: 'fa-check-circle',  completed: ['confirmed','shipped','out_for_delivery','delivered','completed'].includes(status), time: fmt(order.confirmedAt), desc: ['confirmed','shipped','out_for_delivery','delivered','completed'].includes(status) ? 'Admin confirmed your order.' : 'Waiting for confirmation.' },
-        { label: 'Shipped via LBC',   icon: 'fa-truck',         completed: ['shipped','out_for_delivery','delivered','completed'].includes(status), time: fmt(order.shippedAt || order.outForDeliveryAt), desc: ['shipped','out_for_delivery','delivered','completed'].includes(status) ? 'Package handed to LBC Express. Admin will send your LBC tracking / order ID — use it on the LBC Tracker.' : 'Waiting to ship via LBC.' },
-        { label: 'Delivered',         icon: 'fa-check-double',  completed: ['delivered','completed'].includes(status), time: fmt(order.deliveryConfirmedAt), desc: ['delivered','completed'].includes(status) ? 'Delivered successfully!' : 'Waiting for LBC delivery.' },
+        { label: 'Order Placed',      icon: 'fa-shopping-cart', completed: true, time: fmt(order._creationTime), desc: 'Customer · Your order has been placed.', actor: 'customer' },
+        { label: 'Payment Confirmed', icon: 'fa-credit-card',   completed: order.paymentStatus === 'paid', time: fmt(order.paidAt), desc: order.paymentStatus === 'paid' ? 'Customer · Payment received.' : 'Customer · Waiting for payment.', actor: 'customer' },
+        { label: 'Order Confirmed',   icon: 'fa-check-circle',  completed: ['confirmed','shipped','out_for_delivery','delivered','completed'].includes(status), time: fmt(order.confirmedAt), desc: ['confirmed','shipped','out_for_delivery','delivered','completed'].includes(status) ? 'Admin · Order confirmed (LBC shipping).' : 'Admin · Waiting for confirmation.', actor: 'admin' },
+        { label: 'Shipped via LBC',   icon: 'fa-truck',         completed: ['shipped','out_for_delivery','delivered','completed'].includes(status), time: fmt(order.shippedAt || order.outForDeliveryAt), desc: ['shipped','out_for_delivery','delivered','completed'].includes(status) ? 'Admin · Package handed to LBC Express. Tracking ID will be sent to you.' : 'Admin · Waiting to ship via LBC.', actor: 'admin' },
+        { label: 'Delivered',         icon: 'fa-check-double',  completed: ['delivered','completed'].includes(status), time: fmt(order.deliveryConfirmedAt), desc: ['delivered','completed'].includes(status) ? 'Admin · Delivered successfully!' : 'Waiting for LBC delivery.', actor: 'admin' },
       ];
     }
     return [
-      { label: 'Order Placed',      icon: 'fa-shopping-cart', completed: true, time: fmt(order._creationTime), desc: 'Your order has been placed.' },
-      { label: 'Payment Confirmed', icon: 'fa-credit-card',   completed: order.paymentStatus === 'paid', time: fmt(order.paidAt), desc: order.paymentStatus === 'paid' ? 'Payment received.' : 'Waiting for payment.' },
-      { label: 'Order Confirmed',   icon: 'fa-check-circle',  completed: ['confirmed','shipped','out_for_delivery','delivered','completed'].includes(status), time: fmt(order.confirmedAt), desc: ['confirmed','shipped','out_for_delivery','delivered','completed'].includes(status) ? 'Admin confirmed your order.' : 'Waiting for confirmation.' },
-      { label: 'Rider Assigned',    icon: 'fa-motorcycle',    completed: ['shipped','out_for_delivery','delivered','completed'].includes(status), time: fmt(order.shippedAt), desc: order.riderInfo ? `${order.riderInfo.name} will deliver your order.` : ['shipped','out_for_delivery','delivered','completed'].includes(status) ? 'Rider assigned.' : 'Waiting for rider.' },
-      { label: 'Out for Delivery',  icon: 'fa-shipping-fast', completed: ['out_for_delivery','delivered','completed'].includes(status), time: fmt(order.outForDeliveryAt), desc: ['out_for_delivery','delivered','completed'].includes(status) ? 'Your rider is on the way!' : 'Waiting for pickup.' },
-      { label: 'Delivered',         icon: 'fa-check-double',  completed: ['delivered','completed'].includes(status), time: fmt(order.deliveryConfirmedAt), desc: ['delivered','completed'].includes(status) ? 'Delivered successfully!' : 'Waiting for delivery.' },
+      { label: 'Order Placed',      icon: 'fa-shopping-cart', completed: true, time: fmt(order._creationTime), desc: 'Customer · Your order has been placed.', actor: 'customer' },
+      { label: 'Payment Confirmed', icon: 'fa-credit-card',   completed: order.paymentStatus === 'paid', time: fmt(order.paidAt), desc: order.paymentStatus === 'paid' ? 'Customer · Payment received.' : 'Customer · Waiting for payment.', actor: 'customer' },
+      { label: 'Order Confirmed',   icon: 'fa-check-circle',  completed: ['confirmed','shipped','out_for_delivery','delivered','completed'].includes(status), time: fmt(order.confirmedAt), desc: ['confirmed','shipped','out_for_delivery','delivered','completed'].includes(status) ? 'Admin · Order confirmed.' : 'Admin · Waiting for confirmation.', actor: 'admin' },
+      { label: 'Rider Assigned',    icon: 'fa-motorcycle',    completed: !!order.riderInfo || ['shipped','out_for_delivery','delivered','completed'].includes(status), time: fmt(order.shippedAt), desc: order.riderInfo ? `Rider · ${order.riderInfo.name} accepted your order.` : 'Rider · Waiting for rider.', actor: 'rider' },
+      { label: 'Out for Delivery',  icon: 'fa-shipping-fast', completed: ['out_for_delivery','delivered','completed'].includes(status), time: fmt(order.outForDeliveryAt), desc: ['out_for_delivery','delivered','completed'].includes(status) ? 'Rider · On the way to you.' : 'Rider · Waiting for pickup.', actor: 'rider' },
+      { label: 'Delivered',         icon: 'fa-check-double',  completed: ['delivered','completed'].includes(status), time: fmt(order.deliveryConfirmedAt), desc: ['delivered','completed'].includes(status) ? 'Rider · Delivered successfully!' : 'Rider · Waiting for delivery.', actor: 'rider' },
     ];
   };
 
@@ -970,6 +1011,20 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
             </div>
           )}
 
+          {!isGuest && !isCancelled && !isLbcOrder(order) && order.riderInfo && (
+            <DeliveryChatPanel
+              orderId={order.orderId}
+              role="customer"
+              userName={order.customerName || 'Customer'}
+              userEmail={order.email || ''}
+              peerName={order.riderInfo?.name}
+              riderName={order.riderInfo?.name}
+              riderEmail={order.riderInfo?.email}
+              customerName={order.customerName}
+              customerEmail={order.email}
+            />
+          )}
+
           {isCancelled && (
             <div className="cancelled-banner">
               <div className="cancelled-banner-icon"><i className="fas fa-ban"></i></div>
@@ -1040,10 +1095,17 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
             <h3>Order Timeline</h3>
             <div className="timeline">
               {timelineSteps.map((step, index) => (
-                <div key={index} className={`timeline-item ${step.completed ? 'completed' : ''} ${step.isCancelled ? 'cancelled-step' : ''}`}>
+                <div key={index} className={`timeline-item ${step.completed ? 'completed' : ''} ${step.isCancelled ? 'cancelled-step' : ''}${step.actor ? ` actor-${step.actor}` : ''}`}>
                   <div className="timeline-marker"><i className={`fas ${step.icon}`}></i></div>
                   <div className="timeline-content">
-                    <h4>{step.label}</h4>
+                    <div className="timeline-label-row">
+                      <h4>{step.label}</h4>
+                      {step.actor && (
+                        <span className={`timeline-actor-pill timeline-actor-${step.actor}`}>
+                          {step.actor === 'customer' ? 'Customer' : step.actor === 'admin' ? 'Admin' : 'Rider'}
+                        </span>
+                      )}
+                    </div>
                     {step.time && step.completed && <span className="timeline-timestamp"><i className="fas fa-clock"></i> {step.time}</span>}
                     <p className={step.completed ? 'timeline-desc-done' : 'timeline-desc-pending'}>{step.desc || (step.completed ? 'Completed' : 'Pending')}</p>
                     {step.isCancelled && step.cancelReason && <div className="timeline-cancel-reason"><div className="timeline-cancel-reason-label"><i className="fas fa-comment-alt"></i> Reason:</div><div className="timeline-cancel-reason-text">{step.cancelReason}</div></div>}

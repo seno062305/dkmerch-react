@@ -1,5 +1,5 @@
 // DKMerch Service Worker — PWA support
-const CACHE_NAME = 'dkmerch-v2-cart-select';
+const CACHE_NAME = 'dkmerch-v4-push-ui';
 
 // Only cache essential static assets
 const STATIC_ASSETS = [
@@ -80,25 +80,40 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-// Push notifications (for future use)
+// Push notifications → system tray (installed PWA / supported browsers)
 self.addEventListener('push', (event) => {
-  if (!event.data) return;
-  const data = event.data.json();
+  let data = { title: 'DKMerch', body: 'You have a new update', url: '/' };
+  try {
+    if (event.data) data = { ...data, ...event.data.json() };
+  } catch {
+    try {
+      data.body = event.data?.text() || data.body;
+    } catch { /* ignore */ }
+  }
   event.waitUntil(
     self.registration.showNotification(data.title || 'DKMerch', {
       body: data.body || 'You have a new notification',
       icon: '/images/dklogo2-removebg-preview.png',
       badge: '/images/dklogo2-removebg-preview.png',
       vibrate: [200, 100, 200],
-      data: { url: data.url || '/rider' },
+      data: { url: data.url || '/' },
     })
   );
 });
 
-// Notification click — open app
+// Notification click — focus existing tab or open app
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+  const targetUrl = event.notification.data?.url || '/';
   event.waitUntil(
-    clients.openWindow(event.notification.data?.url || '/rider')
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const client of list) {
+        if ('focus' in client) {
+          client.navigate?.(targetUrl);
+          return client.focus();
+        }
+      }
+      return clients.openWindow(targetUrl);
+    })
   );
 });

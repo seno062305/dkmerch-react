@@ -417,4 +417,57 @@ export default defineSchema({
     imageStorageId: v.optional(v.id("_storage")),
     createdAt: v.number(),
   }).index("by_threadId", ["threadId"]),
+
+  // Customer ↔ Rider delivery chat (per order)
+  deliveryThreads: defineTable({
+    orderId: v.string(),
+    customerEmail: v.string(),
+    customerName: v.string(),
+    riderEmail: v.optional(v.string()),
+    riderName: v.optional(v.string()),
+    lastMessageAt: v.number(),
+    lastMessagePreview: v.optional(v.string()),
+    unreadByCustomer: v.number(),
+    unreadByRider: v.number(),
+    status: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_orderId", ["orderId"])
+    .index("by_customerEmail", ["customerEmail"])
+    .index("by_riderEmail", ["riderEmail"]),
+
+  deliveryMessages: defineTable({
+    threadId: v.id("deliveryThreads"),
+    orderId: v.string(),
+    senderRole: v.string(), // customer | rider
+    senderName: v.string(),
+    senderEmail: v.optional(v.string()),
+    body: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_threadId", ["threadId"])
+    .index("by_orderId", ["orderId"]),
+
+  // Customer app update announcements (Maintenance → Update system)
+  appUpdates: defineTable({
+    version: v.string(),
+    title: v.string(),
+    message: v.string(),
+    publishedAt: v.number(),
+    isActive: v.boolean(),
+  }).index("by_publishedAt", ["publishedAt"]),
+
+  // Web Push subscriptions (installed PWA / browser)
+  pushSubscriptions: defineTable({
+    email: v.string(),
+    endpoint: v.string(),
+    p256dh: v.string(),
+    auth: v.string(),
+    userAgent: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_email", ["email"])
+    .index("by_endpoint", ["endpoint"]),
 });

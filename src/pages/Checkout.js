@@ -1378,7 +1378,23 @@ const Checkout = () => {
               {/* ── Order Notes ── */}
               <div className="checkout-section">
                 <h2>Order Notes <span className="notes-optional">(Optional)</span></h2>
-                <textarea name="notes" value={formData.notes} onChange={handleChange} placeholder="Any special instructions for your order..." rows="4"></textarea>
+                <textarea
+                  name="notes"
+                  className="order-notes-box"
+                  value={formData.notes}
+                  rows={3}
+                  maxLength={500}
+                  placeholder="Any special instructions for your order..."
+                  onChange={(e) => {
+                    handleChange(e);
+                    const el = e.target;
+                    // Grow only when text needs more than the base box (chat-style)
+                    el.style.height = '72px';
+                    if (el.scrollHeight > 72) {
+                      el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
+                    }
+                  }}
+                />
               </div>
             </div>
 

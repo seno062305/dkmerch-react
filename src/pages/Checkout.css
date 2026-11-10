@@ -407,12 +407,18 @@
   background: #fafafa;
 }
 
-.form-group input:focus,
-.form-group textarea:focus {
+.form-group input:focus {
   border-color: var(--primary-pink);
   background: var(--bg-secondary);
   box-shadow: 0 0 0 4px rgba(252, 18, 104, 0.08), var(--shadow-md);
   transform: translateY(-1px);
+}
+
+.form-group textarea:focus {
+  border-color: var(--primary-pink);
+  background: var(--bg-secondary);
+  box-shadow: 0 0 0 4px rgba(252, 18, 104, 0.08), var(--shadow-md);
+  transform: none;
 }
 
 .form-group input.input-error {
@@ -481,10 +487,22 @@
 }
 
 textarea {
-  resize: vertical;
+  resize: none;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  min-height: 120px;
-  line-height: 1.6;
+  min-height: 72px;
+  max-height: 220px;
+  line-height: 1.5;
+  overflow-y: auto;
+}
+
+.form-group textarea.order-notes-box,
+textarea.order-notes-box {
+  min-height: 72px;
+  max-height: 220px;
+  height: 72px;
+  resize: none !important;
+  overflow-y: auto;
+  field-sizing: fixed;
 }
 
 /* ═══════════════════════════════════

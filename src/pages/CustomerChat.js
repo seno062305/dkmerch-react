@@ -50,6 +50,29 @@ const CustomerChat = () => {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   }, []);
 
+  // Sync layout to visualViewport so keyboard open/close doesn't leave bottom gap
+  useEffect(() => {
+    const root = document.documentElement;
+    const sync = () => {
+      const vv = window.visualViewport;
+      const h = vv?.height || window.innerHeight;
+      root.style.setProperty('--chat-vvh', `${Math.round(h)}px`);
+    };
+    sync();
+    const vv = window.visualViewport;
+    vv?.addEventListener('resize', sync);
+    vv?.addEventListener('scroll', sync);
+    window.addEventListener('resize', sync);
+    window.addEventListener('focusout', sync);
+    return () => {
+      vv?.removeEventListener('resize', sync);
+      vv?.removeEventListener('scroll', sync);
+      window.removeEventListener('resize', sync);
+      window.removeEventListener('focusout', sync);
+      root.style.removeProperty('--chat-vvh');
+    };
+  }, []);
+
   useEffect(() => {
     if (!email || !thread?._id) return;
     if ((thread.unreadByCustomer || 0) > 0) {

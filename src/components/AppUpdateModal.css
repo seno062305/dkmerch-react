@@ -1,0 +1,77 @@
+.aum-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20000;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.aum-modal {
+  width: 100%;
+  max-width: 380px;
+  background: #fff;
+  border-radius: 18px;
+  padding: 28px 24px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+}
+
+.aum-icon {
+  font-size: 48px;
+  margin-bottom: 8px;
+}
+
+.aum-modal h2 {
+  margin: 0 0 8px;
+  font-size: 22px;
+  color: #111827;
+}
+
+.aum-title {
+  margin: 0 0 8px;
+  font-weight: 700;
+  color: #4f46e5;
+  font-size: 15px;
+}
+
+.aum-msg {
+  margin: 0 0 10px;
+  color: #6b7280;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.aum-ver {
+  margin: 0 0 18px;
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.aum-btn {
+  width: 100%;
+  border: none;
+  border-radius: 12px;
+  padding: 13px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+  background: linear-gradient(135deg, #4f46e5, #ec4899);
+}
+
+.aum-spinner {
+  width: 44px;
+  height: 44px;
+  margin: 8px auto 16px;
+  border: 3px solid #e5e7eb;
+  border-top-color: #4f46e5;
+  border-radius: 50%;
+  animation: aumSpin 0.8s linear infinite;
+}
+
+@keyframes aumSpin {
+  to { transform: rotate(360deg); }
+}
