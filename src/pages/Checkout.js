@@ -643,7 +643,10 @@ const Checkout = () => {
         return !i.promoCode;
       });
       if (matched.length) return matched;
-      if (buyNowFilter.item) return [{ ...buyNowFilter.item, qty: 1 }];
+      if (buyNowFilter.item) {
+        const qty = Math.max(1, Number(buyNowFilter.item.qty) || 1);
+        return [{ ...buyNowFilter.item, qty }];
+      }
     }
     return [];
   })();
@@ -886,6 +889,8 @@ const Checkout = () => {
       cancelLabel: 'Cancel',
       variant: 'primary',
       icon: 'fa-credit-card',
+      rememberKey: 'dk_skip_checkout_pay_confirm',
+      rememberLabel: 'Do not show again',
     });
     if (!payOk) return;
 

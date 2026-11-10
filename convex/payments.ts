@@ -2,6 +2,7 @@
 import { action, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { api } from "./_generated/api";
+import { awardPointsForOrderDb } from "./rewards";
 
 // ✅ Works in both Node.js and Convex edge runtime (no Buffer dependency)
 function toBase64(str: string): string {
@@ -162,7 +163,13 @@ export const checkPaymentStatus = action({
   args: { orderId: v.string() },
   handler: async (ctx, { orderId }) => {
     const order = await ctx.runQuery(api.orders.getOrderById, { orderId });
-    if (order?.paymentStatus === "paid") return { status: "paid" };
+    if (order?.paymentStatus === "paid") {
+      // Backfill points for older paid orders that never received them
+      if (!order.pointsAwarded) {
+        await ctx.runMutation(api.payments.markOrderPaid, { orderId });
+      }
+      return { status: "paid", paymentMethod: order.paymentMethod || "" };
+    }
 
     const secretKey = process.env.PAYMONGO_SECRET_KEY;
 
@@ -215,15 +222,29 @@ export const markOrderPaid = mutation({
       .withIndex("by_orderId", (q) => q.eq("orderId", orderId))
       .first();
     if (!order) return { success: false };
-    if (order.paymentStatus === "paid") return { success: true };
 
-    const updates: any = {
-      paymentStatus: "paid",
-      paidAt:        new Date().toISOString(),
-    };
-    if (paymentMethod) updates.paymentMethod = paymentMethod;
+    if (order.paymentStatus !== "paid") {
+      const updates: any = {
+        paymentStatus: "paid",
+        paidAt:        new Date().toISOString(),
+      };
+      if (paymentMethod) updates.paymentMethod = paymentMethod;
+      await db.patch(order._id, updates);
+    } else if (paymentMethod && !order.paymentMethod) {
+      await db.patch(order._id, { paymentMethod });
+    }
 
-    await db.patch(order._id, updates);
+    // Award loyalty points once payment succeeds (idempotent via pointsAwarded)
+    if (order.email && !order.pointsAwarded) {
+      const orderTotal = Number(order.finalTotal ?? order.total ?? 0);
+      await awardPointsForOrderDb(db, {
+        email: order.email,
+        userName: order.customerName || "Customer",
+        orderId,
+        orderTotal,
+      });
+    }
+
     return { success: true };
   },
 });

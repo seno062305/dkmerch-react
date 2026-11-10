@@ -3,6 +3,7 @@ import { useQuery } from 'convex/react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { api } from '../../convex/_generated/api';
 import {
+  clearUpdatePromptDismiss,
   dismissUpdatePrompt,
   isAppOutdated,
   isUpdatePromptDismissed,
@@ -11,8 +12,9 @@ import {
 import './AppUpdateModal.css';
 
 /**
- * Soft prompt while browsing (close / Maybe later).
+ * Soft prompt while browsing (close / Maybe later — persists across reloads).
  * Forced on checkout / payment and when opened from email (?appUpdate=).
+ * Cart / wishlist live in Convex + localStorage — update never clears those.
  */
 const AppUpdateModal = ({ force = false }) => {
   const latest = useQuery(api.appUpdates.getLatestUpdate);
@@ -48,7 +50,7 @@ const AppUpdateModal = ({ force = false }) => {
       return;
     }
 
-    // Browsing: respect Maybe later / X for this session
+    // Browsing: respect Maybe later / X (localStorage — survives reload)
     if (isUpdatePromptDismissed(latest.version)) {
       setOpen(false);
       return;
@@ -70,22 +72,30 @@ const AppUpdateModal = ({ force = false }) => {
 
   const runUpdate = async () => {
     setPhase('loading');
+    // Mark version first so reload does not re-prompt; keep cart/local data intact
+    setInstalledAppVersion(latest.version);
+    clearUpdatePromptDismiss(latest.version);
+
     try {
-      if ('caches' in window) {
-        const keys = await caches.keys();
-        await Promise.all(keys.map((k) => caches.delete(k)));
-      }
       if (navigator.serviceWorker?.getRegistrations) {
         const regs = await navigator.serviceWorker.getRegistrations();
         await Promise.all(regs.map((r) => r.update().catch(() => {})));
       }
+      // Refresh app shell cache only — do not wipe storage / IndexedDB / localStorage
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(
+          keys
+            .filter((k) => String(k).startsWith('dkmerch-'))
+            .map((k) => caches.delete(k))
+        );
+      }
     } catch { /* ignore */ }
 
-    await new Promise((r) => setTimeout(r, 1800));
-    setInstalledAppVersion(latest.version);
+    await new Promise((r) => setTimeout(r, 1200));
     setPhase('done');
 
-    await new Promise((r) => setTimeout(r, 1000));
+    await new Promise((r) => setTimeout(r, 700));
     if (forcedVersion) {
       const next = new URLSearchParams(searchParams);
       next.delete('appUpdate');

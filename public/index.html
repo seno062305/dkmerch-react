@@ -101,7 +101,20 @@
       width: 80px;
       height: 80px;
       object-fit: contain;
-      filter: brightness(0) invert(1);
+      display: block;
+      /* Keep original logo colors — invert made reopen look broken when cache lagged */
+    }
+
+    .splash-logo-fallback {
+      display: none;
+      width: 80px;
+      height: 80px;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      font-weight: 800;
+      color: #fff;
+      letter-spacing: 0.5px;
     }
 
     /* Glow ring around logo */
@@ -178,7 +191,16 @@
   <div id="splash">
     <div class="splash-logo-wrap">
       <div class="splash-logo">
-        <img src="/images/dklogo2-removebg-preview.png" alt="DKMerch Logo" />
+        <img
+          src="/images/dklogo2-removebg-preview.png"
+          alt="DKMerch Logo"
+          width="80"
+          height="80"
+          decoding="async"
+          fetchpriority="high"
+          onerror="this.style.display='none';var f=this.nextElementSibling;if(f){f.style.display='flex';}"
+        />
+        <div class="splash-logo-fallback" aria-hidden="true">DK</div>
       </div>
       <div class="splash-logo-glow"></div>
     </div>
@@ -197,10 +219,17 @@
     // Hide splash when React app is ready
     window.addEventListener('load', function () {
       // Wait a bit for React to mount, then fade out splash
-      var minShow = 2200; // minimum 2.2s so animation fully plays
+      // Shorter splash on PWA reopen so logo/animation don't look stuck/broken
+      var isPwaReopen = window.matchMedia('(display-mode: standalone)').matches
+        || window.navigator.standalone === true
+        || /source=pwa/i.test(window.location.search);
+      var minShow = isPwaReopen ? 900 : 1800;
       var startTime = Date.now();
+      var splashHidden = false;
 
       function hideSplash() {
+        if (splashHidden) return;
+        splashHidden = true;
         var elapsed = Date.now() - startTime;
         var remaining = Math.max(0, minShow - elapsed);
         setTimeout(function () {
@@ -209,7 +238,7 @@
             splash.classList.add('hide');
             setTimeout(function () {
               if (splash.parentNode) splash.parentNode.removeChild(splash);
-            }, 600);
+            }, 500);
           }
         }, remaining);
       }

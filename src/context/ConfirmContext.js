@@ -6,22 +6,44 @@ const ConfirmContext = createContext(null);
 export const ConfirmProvider = ({ children }) => {
   const [state, setState] = useState(null);
   const resolverRef = useRef(null);
+  const dontShowRef = useRef(false);
+  const rememberKeyRef = useRef(null);
 
   const close = useCallback((result) => {
     const resolve = resolverRef.current;
+    const rememberKey = rememberKeyRef.current;
+    const saveDontShow = dontShowRef.current && result === true && rememberKey;
     resolverRef.current = null;
+    dontShowRef.current = false;
+    rememberKeyRef.current = null;
     setState(null);
+    if (saveDontShow) {
+      try {
+        localStorage.setItem(rememberKey, '1');
+      } catch { /* ignore */ }
+    }
     if (resolve) resolve(result);
   }, []);
 
   const confirm = useCallback((options = {}) => {
     const opts = typeof options === 'string' ? { message: options } : options;
+    const rememberKey = opts.rememberKey || null;
+
+    if (rememberKey) {
+      try {
+        if (localStorage.getItem(rememberKey) === '1') {
+          return Promise.resolve(true);
+        }
+      } catch { /* ignore */ }
+    }
 
     return new Promise((resolve) => {
       if (resolverRef.current) {
         resolverRef.current(false);
       }
       resolverRef.current = resolve;
+      dontShowRef.current = false;
+      rememberKeyRef.current = rememberKey;
       setState({
         title: opts.title || 'Please confirm',
         message: opts.message || '',
@@ -29,6 +51,8 @@ export const ConfirmProvider = ({ children }) => {
         cancelLabel: opts.cancelLabel || 'Cancel',
         variant: opts.variant || 'primary',
         icon: opts.icon || null,
+        rememberKey,
+        rememberLabel: opts.rememberLabel || 'Do not show again',
       });
     });
   }, []);
@@ -44,6 +68,9 @@ export const ConfirmProvider = ({ children }) => {
           cancelLabel={state.cancelLabel}
           variant={state.variant}
           icon={state.icon}
+          rememberKey={state.rememberKey}
+          rememberLabel={state.rememberLabel}
+          onDontShowChange={(checked) => { dontShowRef.current = !!checked; }}
           onConfirm={() => close(true)}
           onCancel={() => close(false)}
         />

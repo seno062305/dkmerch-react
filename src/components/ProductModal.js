@@ -28,6 +28,8 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
   const [showLightbox, setShowLightbox]         = useState(false);
   const [cartToast, setCartToast]               = useState(false);
   const [expandedReviews, setExpandedReviews]   = useState({});
+  const [showBuyNowQty, setShowBuyNowQty]       = useState(false);
+  const [buyNowQty, setBuyNowQty]               = useState(1);
   const reviewBoxRef = useRef(null);
 
   const productId = product._id || product.id || '';
@@ -203,7 +205,9 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
     triggerCartToast();
   };
 
-  const handleBuyNowClick = async () => {
+  const maxBuyQty = Math.max(1, Math.min(99, Number(product.stock) > 0 ? Number(product.stock) : 99));
+
+  const handleBuyNowClick = () => {
     if (!isAuthenticated) {
       showNotification('Please login to buy now', 'error');
       setHideProductModal(true);
@@ -218,19 +222,20 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
       showNotification('Unable to checkout right now.', 'error');
       return;
     }
-    const priceDisplay = appliedPromo
-      ? `₱${discountedPrice.toLocaleString()} (${appliedPromo.discount}% off)`
-      : `₱${product.price.toLocaleString()}`;
-    const ok = await confirm({
-      title: 'Buy now?',
-      message: `Buy "${product.name}" now?\n\nPrice: ${priceDisplay}\n\nYou'll go straight to checkout.`,
-      confirmLabel: 'Buy Now',
-      variant: 'primary',
-      icon: 'fa-bolt',
-    });
-    if (!ok) return;
+    setBuyNowQty(1);
+    setShowBuyNowQty(true);
+  };
+
+  const confirmBuyNow = async () => {
+    const qty = Math.max(1, Math.min(maxBuyQty, Math.floor(Number(buyNowQty) || 1)));
+    setShowBuyNowQty(false);
     const productId = String(product._id || product.id);
-    const result = await onAddToCart({ ...product, appliedPromo, finalPrice: discountedPrice });
+    const result = await onAddToCart({
+      ...product,
+      qty,
+      appliedPromo,
+      finalPrice: discountedPrice,
+    });
     onClose?.();
     navigate('/checkout', {
       state: {
@@ -244,7 +249,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
           name: product.name,
           price: product.price,
           image: product.image,
-          qty: 1,
+          qty,
           ...(appliedPromo && {
             finalPrice: discountedPrice,
             promoCode: appliedPromo.code,
@@ -578,6 +583,59 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
             <i className="fas fa-times"></i>
           </button>
           <img src={product.image} alt={product.name} onClick={(e) => e.stopPropagation()} />
+        </div>
+      )}
+
+      {showBuyNowQty && (
+        <div className="buynow-qty-overlay" onClick={() => setShowBuyNowQty(false)} role="presentation">
+          <div className="buynow-qty-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+            <button type="button" className="buynow-qty-close" onClick={() => setShowBuyNowQty(false)} aria-label="Close">
+              <i className="fas fa-times" />
+            </button>
+            <h3>Buy Now</h3>
+            <p className="buynow-qty-name">{product.name}</p>
+            <p className="buynow-qty-hint">How many items do you want to buy?</p>
+            <div className="buynow-qty-stepper">
+              <button
+                type="button"
+                className="buynow-qty-btn"
+                disabled={buyNowQty <= 1}
+                onClick={() => setBuyNowQty((q) => Math.max(1, q - 1))}
+                aria-label="Decrease quantity"
+              >
+                −
+              </button>
+              <input
+                type="number"
+                className="buynow-qty-input"
+                min={1}
+                max={maxBuyQty}
+                value={buyNowQty}
+                onChange={(e) => {
+                  const n = Math.floor(Number(e.target.value) || 1);
+                  setBuyNowQty(Math.max(1, Math.min(maxBuyQty, n)));
+                }}
+              />
+              <button
+                type="button"
+                className="buynow-qty-btn"
+                disabled={buyNowQty >= maxBuyQty}
+                onClick={() => setBuyNowQty((q) => Math.min(maxBuyQty, q + 1))}
+                aria-label="Increase quantity"
+              >
+                +
+              </button>
+            </div>
+            <p className="buynow-qty-total">
+              Total:{' '}
+              <strong>
+                ₱{((discountedPrice || product.price) * buyNowQty).toLocaleString('en-PH')}
+              </strong>
+            </p>
+            <button type="button" className="buynow-qty-confirm" onClick={confirmBuyNow}>
+              <i className="fas fa-bolt" /> Continue to Checkout
+            </button>
+          </div>
         </div>
       )}
 

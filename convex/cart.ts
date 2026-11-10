@@ -23,16 +23,18 @@ export const addToCart = mutation({
     name:           v.string(),
     price:          v.number(),
     image:          v.string(),
+    qty:            v.optional(v.number()),
     finalPrice:     v.optional(v.number()),
     promoCode:      v.optional(v.string()),
     discountAmount: v.optional(v.number()),
     promoDiscount:  v.optional(v.number()),
   },
   handler: async ({ db }, {
-    userId, productId, name, price, image,
+    userId, productId, name, price, image, qty,
     finalPrice, promoCode, discountAmount, promoDiscount
   }) => {
     const hasPromo = !!promoCode;
+    const addQty = Math.max(1, Math.min(99, Math.floor(Number(qty) || 1)));
 
     // Promo and non-promo entries for same product are SEPARATE cart items
     const allUserCart = await db
@@ -47,11 +49,11 @@ export const addToCart = mutation({
     });
 
     if (existing) {
-      await db.patch(existing._id, { qty: existing.qty + 1 });
+      await db.patch(existing._id, { qty: (existing.qty || 0) + addQty });
       return { success: true, cartItemId: existing._id };
     }
     const cartItemId = await db.insert("cart", {
-      userId, productId, name, price, image, qty: 1,
+      userId, productId, name, price, image, qty: addQty,
       ...(finalPrice     !== undefined && { finalPrice }),
       ...(promoCode      !== undefined && { promoCode }),
       ...(discountAmount !== undefined && { discountAmount }),

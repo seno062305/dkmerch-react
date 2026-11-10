@@ -15,12 +15,14 @@ export const useAddToCart = () => {
   return (product) => {
     const userId = user?.id || user?.email || "guest";
     const hasPromo = product.appliedPromo && product.finalPrice !== undefined;
+    const qty = Math.max(1, Math.min(99, Math.floor(Number(product.qty) || 1)));
     const args = {
       userId,
       productId: product.id || product._id,
       name: product.name,
       price: product.price,
       image: product.image,
+      qty,
       ...(hasPromo && {
         finalPrice: product.finalPrice,
         promoCode: product.appliedPromo.code,
@@ -32,7 +34,7 @@ export const useAddToCart = () => {
       table: "cart",
       mutation: "cart:addToCart",
       docKey: `${userId}_${args.productId}_${args.promoCode || "plain"}`,
-      payload: { ...args, qty: 1 },
+      payload: args,
     });
   };
 };

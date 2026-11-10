@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import './ConfirmModal.css';
 
 const VARIANT_META = {
@@ -14,10 +14,14 @@ const ConfirmModal = ({
   confirmLabel = 'Confirm',
   cancelLabel = 'Cancel',
   variant = 'primary',
+  rememberKey = null,
+  rememberLabel = 'Do not show again',
+  onDontShowChange,
   onConfirm,
   onCancel,
 }) => {
   const meta = VARIANT_META[variant] || VARIANT_META.primary;
+  const [dontShow, setDontShow] = useState(false);
 
   useEffect(() => {
     const onKey = (e) => {
@@ -27,6 +31,12 @@ const ConfirmModal = ({
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [onCancel, onConfirm]);
+
+  const toggleDontShow = () => {
+    const next = !dontShow;
+    setDontShow(next);
+    onDontShowChange?.(next);
+  };
 
   return (
     <div className="dk-confirm-overlay" onClick={onCancel} role="presentation">
@@ -40,6 +50,16 @@ const ConfirmModal = ({
         <h3 id="dk-confirm-title" className="dk-confirm-title">{title}</h3>
         {message && (
           <p className="dk-confirm-message">{message}</p>
+        )}
+        {rememberKey && (
+          <label className="dk-confirm-remember">
+            <input
+              type="checkbox"
+              checked={dontShow}
+              onChange={toggleDontShow}
+            />
+            <span>{rememberLabel}</span>
+          </label>
         )}
         <div className="dk-confirm-actions">
           <button type="button" className="dk-confirm-cancel" onClick={onCancel}>

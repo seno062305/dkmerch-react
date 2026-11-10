@@ -53,6 +53,26 @@
   word-break: break-word;
 }
 
+.dk-confirm-remember {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: -4px 0 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  cursor: pointer;
+  user-select: none;
+}
+
+.dk-confirm-remember input {
+  width: 15px;
+  height: 15px;
+  accent-color: #fc1268;
+  cursor: pointer;
+}
+
 .dk-confirm-actions {
   display: flex;
   flex-direction: row;

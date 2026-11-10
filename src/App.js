@@ -91,9 +91,17 @@ const StartupRedirect = ({ children }) => {
 
   if (!isReady || !redirectDone) {
     return (
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', background:'#fff' }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', background:'linear-gradient(145deg, #fc1268 0%, #ff4d94 50%, #ff85b3 100%)' }}>
         <div style={{ textAlign:'center' }}>
-          <div style={{ width:48, height:48, border:'4px solid #f3f4f6', borderTop:'4px solid #ec4899', borderRadius:'50%', animation:'spin 0.8s linear infinite', margin:'0 auto 12px' }} />
+          <img
+            src="/images/dklogo2-removebg-preview.png"
+            alt="DKMerch"
+            width={72}
+            height={72}
+            style={{ width:72, height:72, objectFit:'contain', display:'block', margin:'0 auto 14px' }}
+            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+          />
+          <div style={{ width:40, height:40, border:'3px solid rgba(255,255,255,0.35)', borderTop:'3px solid #fff', borderRadius:'50%', animation:'spin 0.8s linear infinite', margin:'0 auto' }} />
           <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
       </div>

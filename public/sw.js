@@ -1,11 +1,13 @@
 // DKMerch Service Worker — PWA support
-const CACHE_NAME = 'dkmerch-v4-push-ui';
+const CACHE_NAME = 'dkmerch-v5-splash-pod';
 
 // Only cache essential static assets
 const STATIC_ASSETS = [
   '/',
   '/rider',
   '/index.html',
+  '/manifest.json',
+  '/images/dklogo2-removebg-preview.png',
 ];
 
 // Install — cache static assets

@@ -965,6 +965,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
   const createPaymentLink = useAction(api.payments.createPaymentLink);
   const [localOtp,          setLocalOtp]          = useState(order.deliveryOtp || null);
   const [continuingPayment, setContinuingPayment] = useState(false);
+  const [proofExpanded,     setProofExpanded]     = useState(true);
 
   const isCancelled      = (order.orderStatus || order.status || '').toLowerCase() === 'cancelled';
   const isOutForDelivery = isOutForDeliveryStatus(order);
@@ -1084,6 +1085,41 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
           {!isGuest && delivered && !order.refundStatus && expired && <div className="refund-window-banner refund-window-expired"><i className="fas fa-clock"></i><span>Refund window expired.</span></div>}
           {!isGuest && delivered && (!order.refundStatus || order.refundStatus === 'rejected') && canRefund && (
             <button className="modal-refund-btn" onClick={() => onRequestRefund(order)}><i className="fas fa-undo-alt"></i>{order.refundStatus === 'rejected' ? 'Request Again' : 'Request Refund'}</button>
+          )}
+
+          {delivered && order.deliveryProofPhoto && (
+            <div className="customer-pod-section">
+              <button
+                type="button"
+                className="customer-pod-header"
+                onClick={() => setProofExpanded((v) => !v)}
+              >
+                <span className="customer-pod-label">
+                  <i className="fas fa-camera"></i>
+                  <strong>Proof of Delivery</strong>
+                </span>
+                <i className={`fas fa-chevron-${proofExpanded ? 'up' : 'down'}`}></i>
+              </button>
+              {proofExpanded && (
+                <div className="customer-pod-body">
+                  <p className="customer-pod-note">Photo taken by your rider when the order was delivered.</p>
+                  <img
+                    src={order.deliveryProofPhoto}
+                    alt="Proof of delivery"
+                    className="customer-pod-photo"
+                  />
+                  {order.deliveryConfirmedAt && (
+                    <span className="customer-pod-time">
+                      <i className="fas fa-clock"></i>{' '}
+                      {new Date(order.deliveryConfirmedAt).toLocaleString('en-PH', {
+                        dateStyle: 'medium',
+                        timeStyle: 'short',
+                      })}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
           )}
 
           {isOutForDelivery && !isLbcOrder(order) && (

@@ -737,6 +737,112 @@ body.product-modal-open .dk-chat-fab-stack {
   .modal-left-reviews { max-height: 120px; overflow-y: auto; }
 }
 
+/* Buy Now quantity popup */
+.buynow-qty-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100050;
+  background: rgba(15, 10, 20, 0.55);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.buynow-qty-modal {
+  position: relative;
+  width: 100%;
+  max-width: 340px;
+  background: #fff;
+  border-radius: 16px;
+  padding: 22px 20px 18px;
+  text-align: center;
+  box-shadow: 0 24px 60px rgba(252, 18, 104, 0.18);
+}
+.buynow-qty-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: #f3f4f6;
+  color: #6b7280;
+  cursor: pointer;
+}
+.buynow-qty-modal h3 {
+  margin: 0 0 6px;
+  font-size: 17px;
+  font-weight: 800;
+  color: #1a1a2e;
+}
+.buynow-qty-name {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #374151;
+}
+.buynow-qty-hint {
+  margin: 0 0 14px;
+  font-size: 12px;
+  color: #6b7280;
+}
+.buynow-qty-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.buynow-qty-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1.5px solid #e5e7eb;
+  background: #fff;
+  font-size: 20px;
+  font-weight: 700;
+  color: #fc1268;
+  cursor: pointer;
+}
+.buynow-qty-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.buynow-qty-input {
+  width: 64px;
+  height: 40px;
+  text-align: center;
+  font-size: 16px;
+  font-weight: 800;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 10px;
+  outline: none;
+}
+.buynow-qty-input:focus { border-color: #fc1268; }
+.buynow-qty-total {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: #6b7280;
+}
+.buynow-qty-total strong { color: #fc1268; font-size: 16px; }
+.buynow-qty-confirm {
+  width: 100%;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, #fc1268, #e0105a);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
 @media (max-width: 480px) {
   .product-modal-content { max-height: calc(100dvh - 64px); }
   .modal-image-section { padding: 50px 14px 12px; }

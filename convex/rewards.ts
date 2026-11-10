@@ -35,9 +35,11 @@ const genTicketCode = (): string => {
 export const getUserPoints = query({
   args: { email: v.string() },
   handler: async ({ db }, { email }) => {
+    const normalized = String(email || "").trim().toLowerCase();
+    if (!normalized) return null;
     return await db
       .query("userPoints")
-      .withIndex("by_email", q => q.eq("email", email))
+      .withIndex("by_email", q => q.eq("email", normalized))
       .first();
   },
 });
@@ -48,6 +50,58 @@ export const getAllUserPoints = query({
   },
 });
 
+/** Shared DB helper — also used from payments.markOrderPaid when order becomes paid. */
+export async function awardPointsForOrderDb(
+  db: any,
+  {
+    email,
+    userName,
+    orderId,
+    orderTotal,
+  }: { email: string; userName: string; orderId: string; orderTotal: number }
+) {
+  const order = await db
+    .query("orders")
+    .withIndex("by_orderId", (q: any) => q.eq("orderId", orderId))
+    .first();
+  if (!order || order.pointsAwarded) return { success: false, reason: "already_awarded" as const };
+
+  const points = getPointsForTotal(orderTotal);
+  if (points <= 0) {
+    await db.patch(order._id, { pointsAwarded: true });
+    return { success: true, pointsAwarded: 0 };
+  }
+
+  const now = new Date().toISOString();
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  if (!normalizedEmail) return { success: false, reason: "no_email" as const };
+
+  const existing = await db
+    .query("userPoints")
+    .withIndex("by_email", (q: any) => q.eq("email", normalizedEmail))
+    .first();
+
+  if (existing) {
+    await db.patch(existing._id, {
+      totalPoints: existing.totalPoints + points,
+      history: [
+        { orderId, points, orderTotal, earnedAt: now },
+        ...existing.history,
+      ],
+    });
+  } else {
+    await db.insert("userPoints", {
+      email: normalizedEmail,
+      userName: userName || "Customer",
+      totalPoints: points,
+      history: [{ orderId, points, orderTotal, earnedAt: now }],
+    });
+  }
+
+  await db.patch(order._id, { pointsAwarded: true });
+  return { success: true, pointsAwarded: points };
+}
+
 export const awardPointsForOrder = mutation({
   args: {
     email:      v.string(),
@@ -55,41 +109,7 @@ export const awardPointsForOrder = mutation({
     orderId:    v.string(),
     orderTotal: v.number(),
   },
-  handler: async ({ db }, { email, userName, orderId, orderTotal }) => {
-    const order = await db
-      .query("orders")
-      .withIndex("by_orderId", q => q.eq("orderId", orderId))
-      .first();
-    if (!order || order.pointsAwarded) return { success: false, reason: "already_awarded" };
-
-    const points = getPointsForTotal(orderTotal);
-    const now    = new Date().toISOString();
-
-    const existing = await db
-      .query("userPoints")
-      .withIndex("by_email", q => q.eq("email", email))
-      .first();
-
-    if (existing) {
-      await db.patch(existing._id, {
-        totalPoints: existing.totalPoints + points,
-        history: [
-          { orderId, points, orderTotal, earnedAt: now },
-          ...existing.history,
-        ],
-      });
-    } else {
-      await db.insert("userPoints", {
-        email,
-        userName,
-        totalPoints: points,
-        history: [{ orderId, points, orderTotal, earnedAt: now }],
-      });
-    }
-
-    await db.patch(order._id, { pointsAwarded: true });
-    return { success: true, pointsAwarded: points };
-  },
+  handler: async ({ db }, args) => awardPointsForOrderDb(db, args),
 });
 
 export const redeemPoints = mutation({
