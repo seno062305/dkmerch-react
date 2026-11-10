@@ -49,11 +49,17 @@ export const sendToEmail = internalAction({
 
     const site = resolveSiteUrl();
     const path = args.url || "/";
-    const absoluteUrl = path.startsWith("http") ? path : `${site}${path.startsWith("/") ? "" : "/"}${path}`;
+    // Prefer same-origin path so notification click opens the installed PWA.
+    // Absolute URLs are kept only when the caller already passed a full URL.
+    const openUrl = path.startsWith("http")
+      ? path
+      : (path.startsWith("/") ? path : `/${path}`);
     const payload = JSON.stringify({
       title: args.title,
       body: args.body,
-      url: absoluteUrl,
+      url: openUrl,
+      // Include absolute for older SWs that only understand full URLs
+      absoluteUrl: path.startsWith("http") ? path : `${site}${openUrl}`,
     });
 
     let sent = 0;

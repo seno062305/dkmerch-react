@@ -1,9 +1,21 @@
-import React from "react";
+import React, { useState } from "react";
 import { createPortal } from "react-dom";
 import "./NewLoginAlertModal.css";
 
 /** Full-screen overlay modal — waiting for Yes on the other device. */
-export function WaitingApprovalModal() {
+export function WaitingApprovalModal({ onClose }) {
+  const [closing, setClosing] = useState(false);
+
+  const handleClose = async () => {
+    if (closing) return;
+    setClosing(true);
+    try {
+      await onClose?.();
+    } finally {
+      setClosing(false);
+    }
+  };
+
   return createPortal(
     <div className="nla-overlay" role="presentation" style={{ zIndex: 100090 }}>
       <div
@@ -23,6 +35,16 @@ export function WaitingApprovalModal() {
         </p>
         <div className="nla-wait-spinner" aria-hidden="true" />
         <p className="nla-hint">Keep this screen open — we’ll continue automatically.</p>
+        <div className="nla-actions" style={{ marginTop: 14 }}>
+          <button
+            type="button"
+            className="nla-btn nla-btn-no"
+            disabled={closing}
+            onClick={handleClose}
+          >
+            {closing ? "Closing…" : "Close"}
+          </button>
+        </div>
       </div>
     </div>,
     document.body

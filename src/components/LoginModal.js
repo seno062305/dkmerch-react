@@ -14,6 +14,7 @@ import { api } from "../../convex/_generated/api";
 import { QRCodeSVG } from "qrcode.react";
 import { hasLocalPin, getLocalPinLength, savePinWithFallback, verifyPinWithFallback, clearLocalPin } from "../lib/localPin";
 import { getDeviceUnlock } from "../lib/deviceUnlock";
+import { guessLocation } from "../utils/deviceInfo";
 import { PRODUCTION_SITE_URL } from "./InstallAppModal";
 import { useNotification } from "../context/NotificationContext";
 import { useCloseOnHistoryBack } from "../hooks/useCloseOnHistoryBack";
@@ -271,6 +272,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
   const generateLoginOtp      = useMutation(api.users.generateLoginOtp);
   const verifyLoginOtp        = useMutation(api.users.verifyLoginOtp);
   const clearUserPinAfterOtp  = useMutation(api.users.clearUserPinAfterOtp);
+  const cancelPendingLogin    = useMutation(api.users.cancelPendingLogin);
   const sendLoginOTP          = useAction(api.sendEmail.sendLoginOTP);
   // sendPasswordResetCode is already deployed + working — used as PIN-reset email fallback
 
@@ -309,6 +311,12 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
     const t = setInterval(tick, 1000);
     return () => clearInterval(t);
   }, [pendingUser?._id]);
+
+  // Prefetch location while user types PIN so login itself stays instant
+  useEffect(() => {
+    if (view !== "pin" && view !== "createPin" && !deviceUnlockMode) return;
+    guessLocation().catch(() => {});
+  }, [view, deviceUnlockMode]);
 
   useEffect(() => {
     if (view === "pin" || view === "createPin") {
@@ -633,7 +641,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
       setLoginCooldown(0);
 
       // Customer: password OK → Enter PIN if they have one, else Create PIN (legacy / post-update)
-      if (result.pendingUser && result.role === "user") {
+      if (result.pendingUser && result.role === "user" && !result.pendingApproval) {
         setPendingUser(result.pendingUser);
         setIsPinReset(false);
         const hasPin = !!(result.needsPin || hasLocalPin(result.pendingUser._id));
@@ -645,6 +653,16 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
         setPinError("");
         setSwitchAccountMode(false); // leave pink switch screen → normal PIN / create PIN
         setView(needsSetup ? "createPin" : "pin");
+        return;
+      }
+
+      // Admin (or any account) waiting for Yes on the other logged-in device
+      if (result.pendingApproval) {
+        beginAwaitingApproval({
+          sessionId: result.sessionId,
+          user: result.user || result.pendingUser,
+          pendingApproval: true,
+        });
         return;
       }
 
@@ -1198,7 +1216,28 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
   //  WAITING / DENIED — popup modal only on the device trying to log in
   // ════════════════════════════════════════════════════════════════════
   if (awaitingApproval && !loginDenied) {
-    return <WaitingApprovalModal />;
+    return (
+      <WaitingApprovalModal
+        onClose={async () => {
+          try {
+            if (awaitingApproval.userId && awaitingApproval.sessionId) {
+              await cancelPendingLogin({
+                userId: String(awaitingApproval.userId),
+                sessionId: String(awaitingApproval.sessionId),
+              });
+            }
+          } catch { /* ignore */ }
+          clearPendingLogin();
+          setAwaitingApproval(null);
+          setLoginDenied(false);
+          setMustAuthenticate(false);
+          setPinValue("");
+          setPinLoading(false);
+          setView("login");
+          try { onClose?.(); } catch { /* ignore */ }
+        }}
+      />
+    );
   }
 
   if (loginDenied) {

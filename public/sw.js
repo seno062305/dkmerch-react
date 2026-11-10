@@ -1,5 +1,5 @@
 // DKMerch Service Worker — PWA support
-const CACHE_NAME = 'dkmerch-v8-notif-deeplink';
+const CACHE_NAME = 'dkmerch-v9-pwa-notif-open';
 
 // Only cache essential static assets (never webpack JS bundles)
 const STATIC_ASSETS = [
@@ -96,6 +96,19 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
+/** Normalize notification target to a same-origin path (keeps opens inside the PWA). */
+function notifPath(raw) {
+  try {
+    const u = new URL(String(raw || '/'), self.location.origin);
+    if (u.origin !== self.location.origin) {
+      return `/${u.pathname.replace(/^\//, '')}${u.search}${u.hash}` || '/';
+    }
+    return `${u.pathname}${u.search}${u.hash}` || '/';
+  } catch {
+    return '/';
+  }
+}
+
 // Push notifications → system tray (installed PWA / supported browsers)
 self.addEventListener('push', (event) => {
   let data = { title: 'DKMerch', body: 'You have a new update', url: '/' };
@@ -106,11 +119,10 @@ self.addEventListener('push', (event) => {
       data.body = event.data?.text() || data.body;
     } catch { /* ignore */ }
   }
-  const url = data.url || '/';
+  const path = notifPath(data.url || '/');
   let open = '';
   try {
-    const u = new URL(url, self.location.origin);
-    open = u.searchParams.get('open') || '';
+    open = new URL(path, self.location.origin).searchParams.get('open') || '';
   } catch { /* ignore */ }
   event.waitUntil(
     self.registration.showNotification(data.title || 'DKMerch', {
@@ -120,26 +132,21 @@ self.addEventListener('push', (event) => {
       vibrate: [200, 100, 200],
       tag: open === 'loginAlert' ? 'dkmerch-login-alert' : (data.tag || undefined),
       renotify: open === 'loginAlert',
-      data: { url, open },
+      data: { url: path, open },
     })
   );
 });
 
-// Notification click — open the deep-link topic (e.g. login Yes/No popup)
+// Notification click — focus installed PWA (not a random browser tab) + deep-link
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const targetUrl = event.notification.data?.url || '/';
+  const path = notifPath(event.notification.data?.url || '/');
   const open = event.notification.data?.open || '';
+  const absolute = new URL(path, self.location.origin).href;
 
   event.waitUntil((async () => {
-    const absolute = (() => {
-      try {
-        return new URL(targetUrl, self.location.origin).href;
-      } catch {
-        return self.location.origin + '/';
-      }
-    })();
     const list = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+    // Prefer an already-open app window on this origin
     for (const client of list) {
       if (!client.url.startsWith(self.location.origin)) continue;
       try {
@@ -150,10 +157,16 @@ self.addEventListener('notificationclick', (event) => {
         });
       } catch { /* ignore */ }
       if (typeof client.navigate === 'function') {
-        try { await client.navigate(absolute); } catch { /* ignore */ }
+        try { await client.navigate(path); } catch {
+          try { await client.navigate(absolute); } catch { /* ignore */ }
+        }
       }
       if ('focus' in client) return client.focus();
     }
-    return clients.openWindow(absolute);
+    // No open window — openWindow with same-origin URL so Android/iOS reuse the PWA
+    if (clients.openWindow) {
+      return clients.openWindow(path);
+    }
+    return undefined;
   })());
 });

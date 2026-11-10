@@ -171,16 +171,9 @@ export const loginUser = mutation({
         usernameChangedAt: (user as any).usernameChangedAt ?? null,
       };
 
-      // Admins skip PIN / second factor — mint session immediately (kick other admin sessions)
+      // Admins skip PIN — client starts session (same Yes/No gate as customers when another device is online)
       if (user.role === "admin") {
-        const sessionId = genSessionId();
-        await db.patch(user._id, {
-          activeSessionId: sessionId,
-          activeDeviceAt: Date.now(),
-          // Never leave a customer-style loginAlert on admin accounts
-          loginAlert: undefined,
-        } as any);
-        return { success: true, user: safeUser, skipSecondFactor: true, sessionId };
+        return { success: true, user: safeUser, skipSecondFactor: true };
       }
 
       const hasPin = !!(user as any).pin && String((user as any).pin).length >= 4;
@@ -241,9 +234,29 @@ export const hasLoginPin = query({
   },
 });
 
+/** Only treat another device as "online" if it heartbeated very recently. */
+const SESSION_ACTIVE_MS = 90 * 1000;
+
+function activateSessionPatch(
+  sessionId: string,
+  now: number,
+  deviceName: string,
+  location: string,
+  platform: string,
+) {
+  return {
+    activeSessionId: sessionId,
+    activeDeviceAt: now,
+    activeDeviceName: deviceName,
+    activeDeviceLocation: location,
+    activeDevicePlatform: platform || undefined,
+    loginAlert: undefined,
+  };
+}
+
 /**
- * Start a session. If another device is already active, create a PENDING login
- * alert instead of activating immediately (needs Yes on the old device).
+ * Start a session. Pending Yes/No only when another device is RECENTLY active.
+ * Stale / same-device / same-session / admin → activate immediately (no alert, no push).
  */
 export const startUserSession = mutation({
   args: {
@@ -251,13 +264,14 @@ export const startUserSession = mutation({
     deviceName: v.optional(v.string()),
     location: v.optional(v.string()),
     platform: v.optional(v.string()),
+    /** Existing local session (PIN unlock) — refresh without Yes/No. */
+    currentSessionId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { db, scheduler } = ctx;
     const user = await db.get(args.userId) as any;
     if (!user) return { success: false, message: "Account not found." };
 
-    const sessionId = genSessionId();
     const now = Date.now();
     const deviceName = String(args.deviceName || "Unknown device").slice(0, 120);
     const location = String(args.location || "Unknown location").slice(0, 160);
@@ -265,21 +279,49 @@ export const startUserSession = mutation({
     const previousSessionId = user.activeSessionId
       ? String(user.activeSessionId)
       : undefined;
+    const currentSessionId = String(args.currentSessionId || "").trim();
 
-    // Admin / first session → activate immediately (no Yes/No gate)
-    if (user.role === "admin" || !previousSessionId) {
-      await db.patch(args.userId, {
-        activeSessionId: sessionId,
-        activeDeviceAt: now,
-        activeDeviceName: deviceName,
-        activeDeviceLocation: location,
-        activeDevicePlatform: platform || undefined,
-        loginAlert: undefined,
-      } as any);
+    // Same session already active (e.g. PIN unlock on this device) → refresh only
+    if (previousSessionId && currentSessionId && previousSessionId === currentSessionId) {
+      await db.patch(
+        args.userId,
+        activateSessionPatch(previousSessionId, now, deviceName, location, platform) as any,
+      );
+      return { success: true, sessionId: previousSessionId, pendingApproval: false };
+    }
+
+    const sessionId = genSessionId();
+    const lastActive = Number(user.activeDeviceAt) || 0;
+    const otherStillActive =
+      !!previousSessionId
+      && lastActive > 0
+      && (now - lastActive) <= SESSION_ACTIVE_MS;
+    const sameDevice =
+      !!previousSessionId
+      && String(user.activeDeviceName || "") === deviceName
+      && String(user.activeDevicePlatform || "") === platform;
+    // Stuck / abandoned Yes-No request — don't block login forever
+    const stuckPending =
+      user.loginAlert
+      && user.loginAlert.status === "pending"
+      && !user.loginAlert.resolved;
+
+    // First login / stale / same device / stuck pending → take over now
+    // (Admin uses the same Yes/No gate when another admin session is recently active.)
+    if (
+      !previousSessionId
+      || !otherStillActive
+      || sameDevice
+      || stuckPending
+    ) {
+      await db.patch(
+        args.userId,
+        activateSessionPatch(sessionId, now, deviceName, location, platform) as any,
+      );
       return { success: true, sessionId, pendingApproval: false };
     }
 
-    // Customer: another device is active → pending until that device taps Yes
+    // Another device is recently active → wait for Yes on that device
     const alert = {
       sessionId,
       previousSessionId,
@@ -298,7 +340,7 @@ export const startUserSession = mutation({
           email: String(user.email).toLowerCase(),
           title: "New login to your DKMerch account",
           body: `${deviceName} · ${location}. Confirm if this was you.`,
-          // Deep-link: open app and surface the Yes / No confirm modal
+          // Path-only so the installed PWA opens (not a fresh browser tab)
           url: "/?open=loginAlert",
         });
       } catch { /* push optional */ }
@@ -310,6 +352,93 @@ export const startUserSession = mutation({
       pendingApproval: true,
       replacedSession: true,
     };
+  },
+});
+
+/** Keep the active session marked online while the app is open. */
+export const touchUserSession = mutation({
+  args: {
+    userId: v.string(),
+    sessionId: v.string(),
+  },
+  handler: async ({ db }, { userId, sessionId }) => {
+    const id = String(userId || "").trim();
+    const sid = String(sessionId || "").trim();
+    if (!id || !sid) return { success: false };
+    try {
+      const user = await db.get(id as any) as any;
+      if (!user) return { success: false };
+      if (String(user.activeSessionId || "") !== sid) return { success: false };
+      await db.patch(user._id, { activeDeviceAt: Date.now() } as any);
+      return { success: true };
+    } catch {
+      return { success: false };
+    }
+  },
+});
+
+/** Clear server session on logout so the next login is not blocked by a ghost session. */
+export const endUserSession = mutation({
+  args: {
+    userId: v.string(),
+    sessionId: v.optional(v.string()),
+  },
+  handler: async ({ db }, { userId, sessionId }) => {
+    const id = String(userId || "").trim();
+    if (!id) return { success: false };
+    try {
+      const user = await db.get(id as any) as any;
+      if (!user) return { success: false };
+      const sid = String(sessionId || "").trim();
+      // Only clear if this device owns the active session (or no sid provided for cleanup)
+      if (sid && String(user.activeSessionId || "") !== sid) {
+        return { success: true, cleared: false };
+      }
+      await db.patch(user._id, {
+        activeSessionId: undefined,
+        activeDeviceAt: undefined,
+        loginAlert: undefined,
+      } as any);
+      return { success: true, cleared: true };
+    } catch {
+      return { success: false };
+    }
+  },
+});
+
+/**
+ * New device tapped Close on "Waiting for approval".
+ * Drops the pending request and abandons the ghost "other" session so login can proceed.
+ */
+export const cancelPendingLogin = mutation({
+  args: {
+    userId: v.string(),
+    sessionId: v.string(),
+  },
+  handler: async ({ db }, { userId, sessionId }) => {
+    const id = String(userId || "").trim();
+    const sid = String(sessionId || "").trim();
+    if (!id || !sid) return { success: false };
+    try {
+      const user = await db.get(id as any) as any;
+      if (!user) return { success: false };
+      const alert = user.loginAlert;
+      if (alert && String(alert.sessionId) === sid) {
+        await db.patch(user._id, {
+          loginAlert: undefined,
+          // Allow immediate re-login without another Yes/No wait
+          activeDeviceAt: 0,
+        } as any);
+      } else {
+        await db.patch(user._id, {
+          loginAlert: undefined,
+          activeDeviceAt: 0,
+        } as any);
+      }
+      return { success: true };
+    } catch {
+      return { success: false };
+    }
   },
 });
 
@@ -349,8 +478,7 @@ export const getPendingLoginAlert = query({
     if (!id) return null;
     try {
       const user = await db.get(id as any) as any;
-      // Admin never uses the FB-style Yes/No gate
-      if (!user?.loginAlert || user.role === "admin") return null;
+      if (!user?.loginAlert) return null;
       const alert = user.loginAlert;
       // Only brand-new pending requests (ignore legacy alerts without status)
       if (alert.resolved) return null;

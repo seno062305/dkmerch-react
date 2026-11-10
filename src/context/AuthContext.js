@@ -121,6 +121,8 @@ export const AuthProvider = ({ children }) => {
   const loginRiderMutation = useMutation(api.riders.loginRider);
   const createUserMutation = useMutation(api.users.createUser);
   const startUserSession   = useMutation(api.users.startUserSession);
+  const touchUserSession   = useMutation(api.users.touchUserSession);
+  const endUserSession     = useMutation(api.users.endUserSession);
   const confirmLoginAlert  = useMutation(api.users.confirmLoginAlert);
   const denyLoginAlert     = useMutation(api.users.denyLoginAlert);
   const kickedRef = useRef(false);
@@ -131,22 +133,27 @@ export const AuthProvider = ({ children }) => {
     try { appendActivityLog(payload); } catch {}
   };
 
-  // Customers only — admin uses immediate session replace (no Yes/No / false logout)
+  // Customer + admin — kick when another device was approved
   const sessionCheck = useQuery(
     api.users.checkUserSession,
-    isAuthenticated && user?._id && user?.sessionId && user.role === "user"
+    isAuthenticated
+      && user?._id
+      && user?.sessionId
+      && (user.role === "user" || user.role === "admin")
       ? { userId: String(user._id), sessionId: String(user.sessionId) }
       : "skip"
   );
 
   /**
    * Pending new-device login while THIS device is still the active session.
-   * Customers only. Also runs during PIN gate so a tapped push (`?open=loginAlert`)
+   * Customer + admin. Also runs during PIN gate so a tapped push (`?open=loginAlert`)
    * can show the Yes/No modal on top immediately.
    */
   const pendingLoginAlert = useQuery(
     api.users.getPendingLoginAlert,
-    isAuthenticated && user?._id && user.role === "user"
+    isAuthenticated
+      && user?._id
+      && (user.role === "user" || user.role === "admin")
       ? { userId: String(user._id) }
       : "skip"
   );
@@ -223,12 +230,26 @@ export const AuthProvider = ({ children }) => {
     setIsReady(true);
   }, []);
 
-  // Keep last-active fresh after unlock — never while PIN gate is up
+  // Keep last-active fresh after unlock — never while PIN gate is up.
+  // Also heartbeat the server so "another device online" is accurate.
   useEffect(() => {
     if (!isAuthenticated || needsDeviceUnlock) return;
-    const touch = () => {
+    const touchLocal = () => {
       try { localStorage.setItem(LAST_ACTIVE_KEY, String(Date.now())); } catch { /* ignore */ }
       markSessionAlive();
+    };
+    const touchServer = () => {
+      const u = userRef.current;
+      if (!u?._id || !u?.sessionId) return;
+      if (u.role !== "user" && u.role !== "admin") return;
+      touchUserSession({
+        userId: String(u._id),
+        sessionId: String(u.sessionId),
+      }).catch(() => {});
+    };
+    const touch = () => {
+      touchLocal();
+      touchServer();
     };
     touch();
     const onVis = () => { if (!document.hidden) touch(); };
@@ -240,7 +261,7 @@ export const AuthProvider = ({ children }) => {
       document.removeEventListener("visibilitychange", onVis);
       window.clearInterval(id);
     };
-  }, [isAuthenticated, needsDeviceUnlock]);
+  }, [isAuthenticated, needsDeviceUnlock, touchUserSession]);
 
   const applySession = (sessionUser) => {
     kickedRef.current = false;
@@ -460,14 +481,21 @@ export const AuthProvider = ({ children }) => {
             };
           }
 
-          applySession(sessionUser);
-          safeLog({
-            action: "login",
-            actorEmail: sessionUser.email,
-            actorName: sessionUser.name,
-            actorRole: sessionUser.role,
-            details: "Account login success",
-          });
+          // Admin (and any skipSecondFactor account): start session with Yes/No gate
+          const done = await completeLogin(
+            sessionUser,
+            sessionUser.role === "admin" ? "Admin login" : "Account login success"
+          );
+          if (done?.pendingApproval) {
+            return {
+              success: true,
+              pendingApproval: true,
+              sessionId: done.sessionId,
+              role: sessionUser.role,
+              user: done.user || sessionUser,
+              pendingUser: done.user || sessionUser,
+            };
+          }
           return { success: true, role: sessionUser.role };
         }
 
@@ -565,12 +593,17 @@ export const AuthProvider = ({ children }) => {
     let sessionId = pendingUser.sessionId;
     let pendingApproval = false;
     try {
-      const device = await collectLoginDeviceInfo();
+      // Fast device info — don't block PIN login on GPS / IP geolocation
+      const device = await collectLoginDeviceInfo({ fast: true });
       const started = await startUserSession({
         userId: pendingUser._id,
         deviceName: device.deviceName,
         location: device.location,
         platform: device.platform,
+        // PIN unlock / returning visit: reuse local session so we don't ask Yes/No of nobody
+        currentSessionId: pendingUser.sessionId
+          ? String(pendingUser.sessionId)
+          : undefined,
       });
       if (started?.sessionId) sessionId = started.sessionId;
       pendingApproval = !!started?.pendingApproval;
@@ -640,14 +673,22 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
-    if (user) {
+    const prev = user;
+    if (prev) {
       safeLog({
         action: "logout",
-        actorEmail: user.email,
-        actorName: user.name,
-        actorRole: user.role || role || undefined,
+        actorEmail: prev.email,
+        actorName: prev.name,
+        actorRole: prev.role || role || undefined,
         details: "User logged out",
       });
+      // Drop ghost server session so the next login isn't stuck waiting for Yes
+      if ((prev.role === "user" || prev.role === "admin") && prev._id) {
+        endUserSession({
+          userId: String(prev._id),
+          sessionId: prev.sessionId ? String(prev.sessionId) : undefined,
+        }).catch(() => {});
+      }
     }
     clearAuthUser();
     clearSessionAlive();

@@ -41,97 +41,226 @@ export function getPlatformLabel() {
   return "Web";
 }
 
+const LOC_CACHE_KEY = "dkmerch_loc_v2";
+const LOC_STICKY_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** City-level place only — never country-only / timezone. */
+export function isSpecificPlace(place) {
+  const p = String(place || "").trim();
+  if (!p) return false;
+  if (/^philippines$/i.test(p)) return false;
+  if (/^unknown/i.test(p)) return false;
+  if (/unavailable/i.test(p)) return false;
+  if (/^[A-Za-z]+\/[A-Za-z_]+$/.test(p)) return false; // Asia/Manila
+  if (/^asia\b/i.test(p) && !/,/.test(p)) return false;
+  return true;
+}
+
+function readLocCache() {
+  try {
+    const raw = localStorage.getItem(LOC_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const place = String(parsed?.place || "").trim();
+    const source = parsed?.source === "gps" ? "gps" : "ip";
+    const at = Number(parsed?.at) || 0;
+    if (!isSpecificPlace(place)) return null;
+    return { place, source, at };
+  } catch {
+    return null;
+  }
+}
+
+function writeLocCache(place, source) {
+  if (!isSpecificPlace(place)) return;
+  try {
+    localStorage.setItem(
+      LOC_CACHE_KEY,
+      JSON.stringify({
+        place: String(place).trim(),
+        source: source === "gps" ? "gps" : "ip",
+        at: Date.now(),
+      })
+    );
+  } catch { /* ignore */ }
+}
+
 function formatPlace(parts) {
   return parts.filter(Boolean).join(", ");
 }
 
-/** Reverse-geocode GPS coords via OpenStreetMap Nominatim. */
 async function reverseGeocode(lat, lon) {
   try {
     const ctrl = typeof AbortSignal !== "undefined" && AbortSignal.timeout
-      ? AbortSignal.timeout(4000)
+      ? AbortSignal.timeout(3000)
       : undefined;
     const url =
       `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}`
       + `&lon=${encodeURIComponent(lon)}&zoom=12&addressdetails=1`;
     const res = await fetch(url, {
       signal: ctrl,
-      headers: {
-        Accept: "application/json",
-        // Nominatim asks for a valid UA; browsers set their own.
-      },
+      headers: { Accept: "application/json" },
     });
     if (!res.ok) return null;
     const data = await res.json();
     const a = data?.address || {};
     const city =
       a.city
-      || a.town
       || a.municipality
+      || a.town
       || a.village
       || a.suburb
+      || a.city_district
       || a.county
       || "";
     const region = a.state || a.region || "";
     const country = a.country || "";
-    const place = formatPlace([city || region, country]);
-    return place || null;
+    // Require a city/municipality — not country alone
+    if (!city) return null;
+    return formatPlace([city, country || region]);
   } catch {
     return null;
   }
 }
 
-/** Prefer device GPS (city-level); fall back to IP geo / timezone. */
-export async function guessLocation() {
-  // 1) Browser geolocation → reverse geocode (more accurate than ISP IP)
+async function lookupGpsLocation() {
+  if (typeof navigator === "undefined" || !navigator.geolocation) return null;
   try {
-    if (typeof navigator !== "undefined" && navigator.geolocation) {
-      const pos = await new Promise((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: false,
-          timeout: 5000,
-          maximumAge: 10 * 60 * 1000,
-        });
+    const pos = await new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: false,
+        timeout: 3000,
+        maximumAge: 60 * 60 * 1000,
       });
-      const lat = pos?.coords?.latitude;
-      const lon = pos?.coords?.longitude;
-      if (Number.isFinite(lat) && Number.isFinite(lon)) {
-        const place = await reverseGeocode(lat, lon);
-        if (place) return place;
-      }
-    }
-  } catch { /* permission denied / timeout — fall through */ }
+    });
+    const lat = pos?.coords?.latitude;
+    const lon = pos?.coords?.longitude;
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+    const place = await reverseGeocode(lat, lon);
+    return isSpecificPlace(place) ? place : null;
+  } catch {
+    return null;
+  }
+}
 
-  // 2) IP-based (coarse — often ISP hub city, e.g. Caloocan vs Valenzuela)
-  try {
+async function lookupIpLocation() {
+  // Try two providers — require a city name (not country-only)
+  const tryIpapi = async () => {
     const ctrl = typeof AbortSignal !== "undefined" && AbortSignal.timeout
-      ? AbortSignal.timeout(3500)
+      ? AbortSignal.timeout(2500)
       : undefined;
     const res = await fetch("https://ipapi.co/json/", {
       signal: ctrl,
       headers: { Accept: "application/json" },
     });
-    if (res.ok) {
-      const data = await res.json();
-      const city = String(data?.city || "").trim();
-      const region = String(data?.region || "").trim();
-      const country = String(data?.country_name || data?.country || "").trim();
-      const parts = [city || region, country].filter(Boolean);
-      if (parts.length) return parts.join(", ");
-    }
-  } catch { /* ignore */ }
+    if (!res.ok) return null;
+    const data = await res.json();
+    const city = String(data?.city || "").trim();
+    const country = String(data?.country_name || data?.country || "").trim();
+    if (!city) return null;
+    return formatPlace([city, country || "Philippines"]);
+  };
+
+  const tryIpWho = async () => {
+    const ctrl = typeof AbortSignal !== "undefined" && AbortSignal.timeout
+      ? AbortSignal.timeout(2500)
+      : undefined;
+    const res = await fetch("https://ipwho.is/", {
+      signal: ctrl,
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data?.success === false) return null;
+    const city = String(data?.city || "").trim();
+    const country = String(data?.country || "").trim();
+    if (!city) return null;
+    return formatPlace([city, country || "Philippines"]);
+  };
 
   try {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
-    if (tz) return tz.replace(/_/g, " ");
+    const a = await tryIpapi();
+    if (a) return a;
   } catch { /* ignore */ }
-
-  return "Unknown location";
+  try {
+    const b = await tryIpWho();
+    if (b) return b;
+  } catch { /* ignore */ }
+  return null;
 }
 
-export async function collectLoginDeviceInfo() {
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((resolve) => setTimeout(() => resolve(null), ms)),
+  ]);
+}
+
+/**
+ * Resolve a city-level location quickly (GPS + IP in parallel).
+ * Sticky cache prevents city flipping across logins.
+ */
+export async function guessLocation() {
+  const cached = readLocCache();
+  const cacheFresh = cached && (Date.now() - cached.at) < LOC_STICKY_MS;
+
+  if (cached?.source === "gps" && cacheFresh) return cached.place;
+
+  // Parallel GPS + IP for speed; prefer GPS
+  const [gps, ip] = await Promise.all([
+    withTimeout(lookupGpsLocation(), 3500),
+    withTimeout(lookupIpLocation(), 2800),
+  ]);
+
+  if (isSpecificPlace(gps)) {
+    writeLocCache(gps, "gps");
+    return gps;
+  }
+
+  if (cached && cacheFresh) return cached.place;
+
+  if (isSpecificPlace(ip)) {
+    writeLocCache(ip, "ip");
+    return ip;
+  }
+
+  return cached?.place || null;
+}
+
+/**
+ * For login alerts: use sticky city cache, otherwise wait briefly for a real city.
+ * Never returns bare "Philippines".
+ */
+export async function collectLoginDeviceInfo({ fast = true } = {}) {
   const deviceName = getDeviceLabel();
   const platform = getPlatformLabel();
-  const location = await guessLocation();
-  return { deviceName, location, platform };
+
+  const cached = readLocCache();
+  if (cached?.place && isSpecificPlace(cached.place)) {
+    // Keep GPS upgrades warm without blocking
+    try {
+      Promise.resolve().then(() => guessLocation().catch(() => {}));
+    } catch { /* ignore */ }
+    return { deviceName, location: cached.place, platform };
+  }
+
+  // No city cached yet — wait a short moment so the alert shows a real city
+  const waitMs = fast ? 3200 : 6000;
+  const resolved = await withTimeout(guessLocation(), waitMs);
+  if (isSpecificPlace(resolved)) {
+    return { deviceName, location: resolved, platform };
+  }
+
+  // Last resort: one more short IP attempt
+  const ipOnly = await withTimeout(lookupIpLocation(), 2000);
+  if (isSpecificPlace(ipOnly)) {
+    writeLocCache(ipOnly, "ip");
+    return { deviceName, location: ipOnly, platform };
+  }
+
+  return {
+    deviceName,
+    location: "City unavailable — enable location access",
+    platform,
+  };
 }
