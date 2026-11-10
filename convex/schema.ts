@@ -135,6 +135,8 @@ export default defineSchema({
     shippingAddress: v.optional(v.string()),
     addressLat: v.optional(v.number()),
     addressLng: v.optional(v.number()),
+    /** 'rider' = NCR motorcycle delivery; 'lbc' = outside NCR via LBC Express */
+    deliveryMethod: v.optional(v.string()),
     paymentMethod: v.string(),
     notes: v.optional(v.string()),
     riderId: v.optional(v.string()),

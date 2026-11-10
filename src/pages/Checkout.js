@@ -11,21 +11,8 @@ import { useMutation, useQuery, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { runWithFailover } from '../lib/failoverWrite';
 import { failoverCheckoutAssist, isFailoverPayConfigured } from '../lib/failoverPayEmail';
+import { isWithinNCR, LBC_FLAT_SHIPPING_FEE } from '../utils/deliveryUtils';
 import './Checkout.css';
-
-// ─── NCR BOUNDS ───────────────────────────────────────────────────────────────
-const NCR_BOUNDS = {
-  minLat: 14.3500, maxLat: 14.8000,
-  minLng: 120.8600, maxLng: 121.1500,
-};
-
-const isWithinNCR = (lat, lng) => {
-  if (!lat || !lng) return true;
-  return (
-    lat >= NCR_BOUNDS.minLat && lat <= NCR_BOUNDS.maxLat &&
-    lng >= NCR_BOUNDS.minLng && lng <= NCR_BOUNDS.maxLng
-  );
-};
 
 // ─── LALAMOVE SHIPPING CONFIG ─────────────────────────────────────────────────
 const LALAMOVE_CONFIG = {
@@ -436,8 +423,8 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords, on
                   <span>
                     {s.label}
                     {!sInNCR && (
-                      <span style={{ display: 'block', fontSize: 11, color: '#dc2626', fontWeight: 700, marginTop: 2 }}>
-                        ⚠️ Outside NCR — delivery not available
+                      <span style={{ display: 'block', fontSize: 11, color: '#b45309', fontWeight: 700, marginTop: 2 }}>
+                        📦 Outside NCR — LBC Express delivery
                       </span>
                     )}
                   </span>
@@ -456,7 +443,7 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords, on
           <div ref={mapRef} className="address-map-preview-container" />
           <div className="address-map-preview-hint">
             <i className="fas fa-hand-pointer"></i> Drag the 📍 pin to fine-tune your delivery location
-            <span style={{ marginLeft: 'auto', fontSize: 10, color: '#64748b', fontWeight: 600 }}>📍 NCR Only</span>
+            <span style={{ marginLeft: 'auto', fontSize: 10, color: '#64748b', fontWeight: 600 }}>📍 NCR rider · Outside = LBC</span>
           </div>
         </div>
       )}
@@ -525,15 +512,15 @@ const ShippingBreakdown = ({ shippingInfo, isEstimate = false }) => {
   );
 };
 
-// ─── NCR VIOLATION BANNER ─────────────────────────────────────────────────────
-const NCRViolationBanner = () => (
-  <div className="ncr-violation-banner">
-    <div className="ncr-violation-icon">🚫</div>
-    <div className="ncr-violation-body">
-      <strong>Address Outside Delivery Area</strong>
+// ─── OUTSIDE NCR → LBC BANNER ─────────────────────────────────────────────────
+const LbcDeliveryBanner = () => (
+  <div className="lbc-delivery-banner">
+    <div className="lbc-delivery-icon">📦</div>
+    <div className="lbc-delivery-body">
+      <strong>Outside NCR — LBC Express delivery</strong>
       <p>
-        Sorry, we currently only deliver within <strong>Metro Manila (NCR)</strong>.
-        Please enter an address within NCR to proceed with your order.
+        This address is outside Metro Manila. Your order will be shipped via <strong>LBC Express</strong>.
+        After we ship, we’ll chat you the LBC tracking number — then track it on the LBC site from your Track page.
       </p>
     </div>
   </div>
@@ -622,7 +609,13 @@ const Checkout = () => {
   const shippingInfo = addressCoords && !isOutsideNCR
     ? calcLalamoveShipping(STORE_LAT, STORE_LNG, addressCoords.lat, addressCoords.lng, shippingCartItems, products)
     : null;
-  const shippingFee = shippingInfo?.fee ?? 0;
+  const lbcShippingInfo = isOutsideNCR && addressCoords
+    ? { fee: LBC_FLAT_SHIPPING_FEE, km: null, totalQty: shippingCartItems.reduce((n, i) => n + (i.qty ?? i.quantity ?? 1), 0), isLbc: true }
+    : null;
+  const shippingFee = isOutsideNCR
+    ? (lbcShippingInfo?.fee ?? LBC_FLAT_SHIPPING_FEE)
+    : (shippingInfo?.fee ?? 0);
+  const deliveryMethod = isOutsideNCR ? 'lbc' : 'rider';
 
   // ── Init form ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -736,7 +729,9 @@ const Checkout = () => {
   const isAddressComplete = () => savedAddress.address.trim();
 
   const isFormReady = () =>
-    isContactComplete() && isAddressComplete() && !isEditingContact && !isEditingAddress && !isOutsideNCR;
+    isContactComplete() && isAddressComplete() && !isEditingContact && !isEditingAddress
+    && !!addressCoords
+    && (isOutsideNCR ? !!lbcShippingInfo : !!shippingInfo);
 
   const handleSaveContact = async () => {
     if (!formData.fullName.trim()) { showNotification('Please enter your full name', 'error'); return; }
@@ -757,8 +752,8 @@ const Checkout = () => {
 
   const handleSaveAddress = async () => {
     if (!formData.address.trim()) { showNotification('Please enter your street address', 'error'); return; }
-    if (isOutsideNCR) {
-      showNotification('Please enter an address within Metro Manila (NCR) to proceed.', 'error');
+    if (!addressCoords) {
+      showNotification('Please pin your location on the map.', 'error');
       return;
     }
     setSavedAddress({ address: formData.address, city: formData.city, zipCode: formData.zipCode });
@@ -770,17 +765,17 @@ const Checkout = () => {
         address: formData.address, city: formData.city, zipCode: formData.zipCode,
         ...(addressCoords ? { addressLat: addressCoords.lat, addressLng: addressCoords.lng } : {}),
       });
-      showNotification('Shipping address saved!', 'success');
+      showNotification(
+        isOutsideNCR
+          ? 'Address saved — this order will ship via LBC Express.'
+          : 'Shipping address saved!',
+        'success'
+      );
     } catch { showNotification('Address saved locally', 'success'); }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (isOutsideNCR) {
-      showNotification('Delivery is only available within Metro Manila (NCR). Please update your address.', 'error');
-      setIsEditingAddress(true);
-      return;
-    }
     if (!isFormReady()) {
       showNotification('Please fill in and save all required fields', 'error');
       if (!isContactComplete()) setIsEditingContact(true);
@@ -866,16 +861,17 @@ const Checkout = () => {
         total:           originalSubtotal + shipping,
         subtotal:        originalSubtotal,
         shippingFee:     shipping,
+        finalTotal,
         ...(totalDiscount > 0 && promoItem && {
           promoCode:       promoItem.promoCode,
           discountAmount:  totalDiscount,
           discountPercent: promoItem.promoDiscount,
-          finalTotal,
         }),
         status:          'Pending Payment',
         orderStatus:     'pending',
         shippingAddress: shippingAddressStr,
         ...(addressCoords ? { addressLat: addressCoords.lat, addressLng: addressCoords.lng } : {}),
+        deliveryMethod,
         paymentMethod:   'paymongo',
         notes:           formData.notes || '',
         paymentStatus:   'pending',
@@ -1151,28 +1147,22 @@ const Checkout = () => {
                 <div className="section-header">
                   <h2>
                     Shipping Address
-                    {isAddressComplete() && !isEditingAddress && !isOutsideNCR && (
+                    {isAddressComplete() && !isEditingAddress && (
                       <span className="section-complete-badge"><i className="fas fa-check-circle"></i> Saved</span>
                     )}
                     {isOutsideNCR && (
-                      <span className="section-ncr-badge"><i className="fas fa-exclamation-triangle"></i> Outside NCR</span>
+                      <span className="section-lbc-badge"><i className="fas fa-box"></i> LBC Express</span>
                     )}
                   </h2>
                   {!isEditingAddress
                     ? <button type="button" className="edit-info-btn" onClick={() => setIsEditingAddress(true)}><i className="fas fa-pen"></i> Edit</button>
-                    : <button
-                        type="button"
-                        className="save-info-btn"
-                        onClick={handleSaveAddress}
-                        disabled={isOutsideNCR}
-                        style={isOutsideNCR ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
-                      >
+                    : <button type="button" className="save-info-btn" onClick={handleSaveAddress}>
                         <i className="fas fa-check"></i> Save
                       </button>
                   }
                 </div>
 
-                {isEditingAddress && isOutsideNCR && <NCRViolationBanner />}
+                {isEditingAddress && isOutsideNCR && <LbcDeliveryBanner />}
 
                 {!isEditingAddress ? (
                   <div className="info-display-grid">
@@ -1182,12 +1172,20 @@ const Checkout = () => {
                     </div>
                     {isOutsideNCR && (
                       <div className="info-display-item info-display-full" style={{ padding: 0, background: 'transparent', border: 'none' }}>
-                        <NCRViolationBanner />
+                        <LbcDeliveryBanner />
                       </div>
                     )}
                     {shippingInfo && !isOutsideNCR && (
                       <div className="info-display-item info-display-full" style={{ padding: 0, background: 'transparent', border: 'none' }}>
                         <ShippingBreakdown shippingInfo={shippingInfo} isEstimate={!hasStoreLocation} />
+                      </div>
+                    )}
+                    {isOutsideNCR && lbcShippingInfo && (
+                      <div className="info-display-item info-display-full" style={{ background: '#fff7ed', borderColor: '#fdba74' }}>
+                        <span className="info-label" style={{ color: '#9a3412' }}><i className="fas fa-truck"></i> LBC Shipping</span>
+                        <span className="info-value" style={{ fontSize: '14px', color: '#9a3412', fontWeight: 700 }}>
+                          ₱{lbcShippingInfo.fee.toLocaleString()} flat rate · courier shipping
+                        </span>
                       </div>
                     )}
                     {!shippingInfo && isAddressComplete() && !isOutsideNCR && (
@@ -1205,6 +1203,15 @@ const Checkout = () => {
                         <span className="info-value" style={{ fontSize: '13px', color: '#1e3a8a' }}>
                           <i className="fas fa-check-circle" style={{ color: '#3b82f6', marginRight: '6px' }}></i>
                           Exact location saved — rider will navigate to your pin
+                        </span>
+                      </div>
+                    )}
+                    {addressCoords && isOutsideNCR && (
+                      <div className="info-display-item info-display-full" style={{ background: '#fff7ed', borderColor: '#fdba74' }}>
+                        <span className="info-label" style={{ color: '#9a3412' }}><i className="fas fa-map-marker-alt"></i> Map Pin</span>
+                        <span className="info-value" style={{ fontSize: '13px', color: '#9a3412' }}>
+                          <i className="fas fa-check-circle" style={{ color: '#ea580c', marginRight: '6px' }}></i>
+                          Location saved — package will ship via LBC Express
                         </span>
                       </div>
                     )}
@@ -1229,6 +1236,16 @@ const Checkout = () => {
                         </div>
                       ) : null;
                     })()}
+                    {addressCoords && isOutsideNCR && (
+                      <div className="form-group full-width">
+                        <div className="info-display-item info-display-full" style={{ background: '#fff7ed', borderColor: '#fdba74' }}>
+                          <span className="info-label" style={{ color: '#9a3412' }}><i className="fas fa-truck"></i> LBC Shipping</span>
+                          <span className="info-value" style={{ fontSize: '14px', color: '#9a3412', fontWeight: 700 }}>
+                            ₱{LBC_FLAT_SHIPPING_FEE.toLocaleString()} flat rate
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1371,19 +1388,22 @@ const Checkout = () => {
 
                   <div className="summary-row">
                     <span>
-                      <i className="fas fa-motorcycle" style={{ marginRight: '6px', color: '#fc1268' }}></i>
+                      <i className={`fas ${isOutsideNCR ? 'fa-truck' : 'fa-motorcycle'}`} style={{ marginRight: '6px', color: isOutsideNCR ? '#ea580c' : '#fc1268' }}></i>
                       Shipping
-                      {shippingInfo && (
+                      {shippingInfo && !isOutsideNCR && (
                         <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 400, marginLeft: '4px' }}>
                           (~{shippingInfo.km} km · {shippingInfo.totalQty} item{shippingInfo.totalQty > 1 ? 's' : ''})
+                        </span>
+                      )}
+                      {isOutsideNCR && (
+                        <span style={{ fontSize: '11px', color: '#ea580c', fontWeight: 700, marginLeft: '4px' }}>
+                          · LBC Express
                         </span>
                       )}
                     </span>
                     <span>
                       {isOutsideNCR
-                        ? <span style={{ fontSize: '12px', color: '#dc2626', fontWeight: 700 }}>
-                            <i className="fas fa-ban" style={{ marginRight: '4px' }}></i>NCR only
-                          </span>
+                        ? <strong style={{ color: '#9a3412' }}>₱{(lbcShippingInfo?.fee ?? LBC_FLAT_SHIPPING_FEE).toLocaleString()}</strong>
                         : shippingInfo
                           ? <strong style={{ color: '#1e293b' }}>₱{shippingInfo.fee.toLocaleString()}</strong>
                           : <span style={{ fontSize: '12px', color: '#f59e0b', fontWeight: 600 }}>
@@ -1403,23 +1423,21 @@ const Checkout = () => {
                   <div className="summary-row total">
                     <span>Total</span>
                     <span>
-                      {isOutsideNCR
-                        ? <span style={{ fontSize: '14px', color: '#dc2626' }}>Address outside NCR</span>
-                        : shippingInfo
-                          ? `₱${finalTotal.toLocaleString()}`
-                          : <span style={{ fontSize: '15px', color: '#f59e0b' }}>Set address to see total</span>
+                      {(isOutsideNCR ? lbcShippingInfo : shippingInfo)
+                        ? `₱${finalTotal.toLocaleString()}`
+                        : <span style={{ fontSize: '15px', color: '#f59e0b' }}>Set address to see total</span>
                       }
                     </span>
                   </div>
 
-                  {rewardOrder && shippingInfo && !isOutsideNCR && (
+                  {rewardOrder && (shippingInfo || lbcShippingInfo) && (
                     <div className="reward-shipping-note">
                       <i className="fas fa-info-circle"></i>
                       Item is free — total is shipping only.
                     </div>
                   )}
 
-                  {!rewardOrder && totalDiscount > 0 && !isOutsideNCR && (
+                  {!rewardOrder && totalDiscount > 0 && (
                     <div className="promo-savings-checkout">
                       <i className="fas fa-piggy-bank"></i>
                       You're saving <strong>₱{totalDiscount.toLocaleString()}</strong> with your promo!
@@ -1428,9 +1446,9 @@ const Checkout = () => {
                 </div>
 
                 {isOutsideNCR && (
-                  <div className="ncr-summary-block">
-                    <i className="fas fa-map-marker-alt"></i>
-                    <span>We only deliver within <strong>Metro Manila (NCR)</strong>. Please update your address.</span>
+                  <div className="lbc-summary-block">
+                    <i className="fas fa-truck"></i>
+                    <span>Outside NCR → ships via <strong>LBC Express</strong>. We’ll chat your LBC tracking number after shipping.</span>
                   </div>
                 )}
 
@@ -1441,10 +1459,10 @@ const Checkout = () => {
                 >
                   {loading
                     ? <><i className="fas fa-spinner fa-spin"></i> Processing...</>
-                    : isOutsideNCR
-                      ? <><i className="fas fa-ban"></i> Address Outside NCR</>
-                      : !isFormReady()
-                        ? <><i className="fas fa-lock"></i> Complete Your Info First</>
+                    : !isFormReady()
+                      ? <><i className="fas fa-lock"></i> Complete Your Info First</>
+                      : isOutsideNCR
+                        ? <><i className="fas fa-truck"></i> Pay · LBC Shipping</>
                         : <>Pay</>
                   }
                 </button>
@@ -1452,10 +1470,9 @@ const Checkout = () => {
                 {!isFormReady() && !loading && (
                   <p className="form-incomplete-hint">
                     <i className="fas fa-exclamation-circle"></i>{' '}
-                    {isOutsideNCR
-                      ? 'Your address is outside NCR. We only deliver within Metro Manila.'
-                      : isEditingContact ? 'Click "Save" on Contact Information to continue.'
+                    {isEditingContact ? 'Click "Save" on Contact Information to continue.'
                       : isEditingAddress ? 'Click "Save" on Shipping Address to continue.'
+                      : !addressCoords ? 'Pin your delivery location on the map to continue.'
                       : 'Fill in and save your contact and address info above.'}
                   </p>
                 )}

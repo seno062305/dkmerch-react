@@ -1344,3 +1344,46 @@
   .refund-status-badge { font-size: 10px; padding: 2px 8px; }
   .rider-map-container { height: 220px; }
 }
+/* -- LBC tracking panel -- */
+.lbc-track-panel {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin: 12px 16px;
+  padding: 14px;
+  background: #fff7ed;
+  border: 1.5px solid #fdba74;
+  border-radius: 12px;
+}
+.lbc-track-panel-icon {
+  width: 40px; height: 40px; border-radius: 10px;
+  background: #ea580c; color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; font-size: 16px;
+}
+.lbc-track-panel-body { flex: 1; min-width: 0; }
+.lbc-track-panel-body strong {
+  display: block; font-size: 14px; color: #9a3412; margin-bottom: 4px;
+}
+.lbc-track-panel-body p {
+  margin: 0 0 10px; font-size: 12px; color: #c2410c; line-height: 1.45;
+}
+.lbc-track-panel-actions {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+}
+.lbc-track-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: linear-gradient(135deg, #ea580c, #c2410c);
+  color: #fff; border: none; border-radius: 10px;
+  padding: 10px 14px; font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.lbc-track-link {
+  font-size: 12px; font-weight: 600; color: #9a3412; text-decoration: underline;
+}
+.order-card-lbc-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin: 0 0 6px;
+  padding: 3px 10px; border-radius: 999px;
+  background: #fff7ed; border: 1px solid #fdba74;
+  color: #9a3412; font-size: 11px; font-weight: 700;
+}

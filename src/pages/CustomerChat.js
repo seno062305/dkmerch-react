@@ -3,6 +3,7 @@ import { useMutation, useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { LBC_TRACK_URL, openLbcTracker } from '../utils/deliveryUtils';
 import './CustomerChat.css';
 
 const CustomerChat = () => {
@@ -144,11 +145,27 @@ const CustomerChat = () => {
           </div>
         </header>
 
+        <div className="customer-chat-lbc-gateway">
+          <div className="customer-chat-lbc-copy">
+            <strong><i className="fas fa-truck"></i> LBC tracking</strong>
+            <span>
+              For outside-NCR orders, admin will chat your LBC waybill / tracking number here.
+              Then open the LBC tracker and enter that ID.
+            </span>
+          </div>
+          <button type="button" className="customer-chat-lbc-btn" onClick={openLbcTracker}>
+            <i className="fas fa-external-link-alt"></i> Open LBC Tracker
+          </button>
+          <a className="customer-chat-lbc-url" href={LBC_TRACK_URL} target="_blank" rel="noreferrer">
+            lbcexpress.com/track
+          </a>
+        </div>
+
         <div className="customer-chat-messages" ref={messagesRef}>
           {messages.length === 0 && (
             <div className="customer-chat-empty">
               <i className="fas fa-comments"></i>
-              <p>No messages yet. Say hi to DKMerch admin.</p>
+              <p>No messages yet. Say hi to DKMerch admin — or wait for your LBC tracking number here.</p>
             </div>
           )}
           {messages.map((msg) => (

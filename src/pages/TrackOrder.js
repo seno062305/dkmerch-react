@@ -5,7 +5,29 @@ import { useQuery, useAction, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useUserOrders, useOrdersByEmail } from '../utils/orderStorage';
 import { useProducts, usePreOrderProducts } from '../utils/productStorage';
+import { isLbcOrder, openLbcTracker, LBC_TRACK_URL } from '../utils/deliveryUtils';
 import './TrackOrder.css';
+
+const LbcTrackPanel = ({ compact = false }) => (
+  <div className={`lbc-track-panel${compact ? ' lbc-track-panel--compact' : ''}`}>
+    <div className="lbc-track-panel-icon"><i className="fas fa-truck"></i></div>
+    <div className="lbc-track-panel-body">
+      <strong>LBC Express tracking</strong>
+      <p>
+        Outside NCR orders ship via LBC. Admin will chat you the LBC tracking / waybill number —
+        then open the tracker and enter that ID.
+      </p>
+      <div className="lbc-track-panel-actions">
+        <button type="button" className="lbc-track-btn" onClick={openLbcTracker}>
+          <i className="fas fa-external-link-alt"></i> Open LBC Tracker
+        </button>
+        <a className="lbc-track-link" href={LBC_TRACK_URL} target="_blank" rel="noreferrer">
+          lbcexpress.com/track
+        </a>
+      </div>
+    </div>
+  </div>
+);
 
 const formatTimeAgo = (timestamp) => {
   if (!timestamp) return 'unknown';
@@ -545,11 +567,21 @@ const TrackOrder = () => {
   const getTimelineSteps = (order) => {
     const status = (order.orderStatus || order.status || 'pending').toLowerCase().replace(/\s+/g, '_');
     const fmt = (ts) => ts ? new Date(ts).toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : null;
+    const lbc = isLbcOrder(order);
     if (status === 'cancelled') return [
       { label: 'Order Placed', icon: 'fa-shopping-cart', completed: true, time: fmt(order._creationTime) },
       { label: 'Payment',      icon: 'fa-credit-card',   completed: !!order.paidAt, time: fmt(order.paidAt) },
       { label: 'Cancelled',    icon: 'fa-times-circle',  completed: true, isCancelled: true, cancelReason: order.cancelReason },
     ];
+    if (lbc) {
+      return [
+        { label: 'Order Placed',      icon: 'fa-shopping-cart', completed: true, time: fmt(order._creationTime), desc: 'Your order has been placed.' },
+        { label: 'Payment Confirmed', icon: 'fa-credit-card',   completed: order.paymentStatus === 'paid', time: fmt(order.paidAt), desc: order.paymentStatus === 'paid' ? 'Payment received.' : 'Waiting for payment.' },
+        { label: 'Order Confirmed',   icon: 'fa-check-circle',  completed: ['confirmed','shipped','out_for_delivery','delivered','completed'].includes(status), time: fmt(order.confirmedAt), desc: ['confirmed','shipped','out_for_delivery','delivered','completed'].includes(status) ? 'Admin confirmed your order.' : 'Waiting for confirmation.' },
+        { label: 'Shipped via LBC',   icon: 'fa-truck',         completed: ['shipped','out_for_delivery','delivered','completed'].includes(status), time: fmt(order.shippedAt || order.outForDeliveryAt), desc: ['shipped','out_for_delivery','delivered','completed'].includes(status) ? 'Package handed to LBC Express. Check Chat for your LBC tracking number.' : 'Waiting to ship via LBC.' },
+        { label: 'Delivered',         icon: 'fa-check-double',  completed: ['delivered','completed'].includes(status), time: fmt(order.deliveryConfirmedAt), desc: ['delivered','completed'].includes(status) ? 'Delivered successfully!' : 'Waiting for LBC delivery.' },
+      ];
+    }
     return [
       { label: 'Order Placed',      icon: 'fa-shopping-cart', completed: true, time: fmt(order._creationTime), desc: 'Your order has been placed.' },
       { label: 'Payment Confirmed', icon: 'fa-credit-card',   completed: order.paymentStatus === 'paid', time: fmt(order.paidAt), desc: order.paymentStatus === 'paid' ? 'Payment received.' : 'Waiting for payment.' },
@@ -668,6 +700,9 @@ const TrackOrder = () => {
         </div>
         <div className="order-card-info">
           <p className="order-card-id">Order #{order.orderId?.slice(-8) || 'N/A'}</p>
+          {isLbcOrder(order) && (
+            <div className="order-card-lbc-badge"><i className="fas fa-truck"></i> LBC Express</div>
+          )}
           <p className="order-card-name">
             {order.items?.[0]?.name || getProductById(order.items?.[0]?.id)?.name || 'Order'}
             {(order.items?.length || 1) > 1 && <span className="order-and-more"> +{order.items.length - 1} more</span>}
@@ -903,7 +938,9 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
             </div>
           )}
 
-          {order.riderInfo && !isCancelled && (
+          {isLbcOrder(order) && !isCancelled && <LbcTrackPanel />}
+
+          {order.riderInfo && !isCancelled && !isLbcOrder(order) && (
             <div className="rider-info-banner">
               {order.riderInfo.photo ? (
                 <img src={order.riderInfo.photo} alt={order.riderInfo.name || 'Rider'} className="rider-info-photo" />
@@ -945,7 +982,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
             <button className="modal-refund-btn" onClick={() => onRequestRefund(order)}><i className="fas fa-undo-alt"></i>{order.refundStatus === 'rejected' ? 'Request Again' : 'Request Refund'}</button>
           )}
 
-          {isOutForDelivery && (
+          {isOutForDelivery && !isLbcOrder(order) && (
             <div className="rider-map-section">
               <div className="rider-map-section-title">
                 <i className="fas fa-map-marked-alt"></i>
@@ -956,7 +993,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
             </div>
           )}
 
-          {!isGuest && isOutForDelivery && (
+          {!isGuest && isOutForDelivery && !isLbcOrder(order) && (
             <div className="customer-otp-section">
               {localOtp ? (
                 <div className="otp-display-card">

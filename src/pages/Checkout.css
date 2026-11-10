@@ -2193,3 +2193,59 @@ html { scroll-behavior: smooth; }
 }
 
 .reward-shipping-note i { color: #8b5cf6; flex-shrink: 0; }
+/* -- LBC delivery (outside NCR) -- */
+.lbc-delivery-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  background: #fff7ed;
+  border: 2px solid #fdba74;
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+}
+.lbc-delivery-icon { font-size: 28px; flex-shrink: 0; line-height: 1; }
+.lbc-delivery-body { flex: 1; }
+.lbc-delivery-body strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 800;
+  color: #9a3412;
+  margin-bottom: 4px;
+}
+.lbc-delivery-body p {
+  font-size: 13px;
+  color: #c2410c;
+  line-height: 1.5;
+  margin: 0;
+  font-weight: 500;
+}
+.section-lbc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #9a3412;
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  border-radius: 20px;
+  padding: 3px 10px;
+  margin-left: 10px;
+  vertical-align: middle;
+}
+.lbc-summary-block {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #fff7ed;
+  border: 1.5px solid #fdba74;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  color: #9a3412;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.lbc-summary-block i { color: #ea580c; margin-top: 2px; flex-shrink: 0; }

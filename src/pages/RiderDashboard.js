@@ -1033,9 +1033,11 @@ const RiderDashboard = () => {
     );
 
   // Newest confirmed orders first — each order stays its own Available card (never grouped by customer)
+  // LBC (outside NCR) orders are courier-shipped — not for motorcycle riders to scan
   const availableOrders = allOrders
     .filter(o =>
       (o.orderStatus === 'confirmed' || o.status === 'Confirmed') &&
+      o.deliveryMethod !== 'lbc' &&
       !isOrderClaimed(o.orderId)
     )
     .sort((a, b) => {
