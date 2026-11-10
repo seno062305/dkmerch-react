@@ -20,6 +20,7 @@ import type * as failoverApply from "../failoverApply.js";
 import type * as failoverSync from "../failoverSync.js";
 import type * as firebaseSync from "../firebaseSync.js";
 import type * as init from "../init.js";
+import type * as lib_orderSeq from "../lib/orderSeq.js";
 import type * as orders from "../orders.js";
 import type * as payments from "../payments.js";
 import type * as pickupRequests from "../pickupRequests.js";
@@ -59,6 +60,7 @@ declare const fullApi: ApiFromModules<{
   failoverSync: typeof failoverSync;
   firebaseSync: typeof firebaseSync;
   init: typeof init;
+  "lib/orderSeq": typeof lib_orderSeq;
   orders: typeof orders;
   payments: typeof payments;
   pickupRequests: typeof pickupRequests;

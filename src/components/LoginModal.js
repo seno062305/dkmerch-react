@@ -593,6 +593,16 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
 
   const sanitizePinInput = (raw) => String(raw || "").replace(/\D/g, "").slice(0, 6);
 
+  const appendPinDigit = (digit) => {
+    setPinError("");
+    setPinValue((prev) => sanitizePinInput(`${prev}${digit}`));
+  };
+
+  const backspacePin = () => {
+    setPinError("");
+    setPinValue((prev) => prev.slice(0, -1));
+  };
+
   const openSetNewPin = () => {
     if (pendingUser?._id) clearLocalPin(pendingUser._id);
     setPinValue("");
@@ -620,7 +630,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
       if (!checked.success) {
         setPinError(
           checked.needsPinSetup
-            ? "No PIN yet — tap Reset PIN below to create one."
+            ? "No PIN yet — tap Forgot PIN below to create one."
             : (checked.message || "Incorrect PIN.")
         );
         setPinValue("");
@@ -978,6 +988,111 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
   }
 
   const isLockedOut = loginCooldown > 0;
+
+  // Unlock pad: debounce verify so 5–6 digit PINs can keep typing past 4
+  useEffect(() => {
+    if (!(view === "pin" && deviceUnlockMode)) return;
+    if (pinLoading) return;
+    if (pinValue.length < 4 || pinValue.length > 6) return;
+    const delay = pinValue.length >= 6 ? 80 : 650;
+    const t = setTimeout(() => { handleVerifyPin(); }, delay);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pinValue, view, deviceUnlockMode, pinLoading]);
+
+  // ════════════════════════════════════════════════════════════════════
+  //  DEVICE UNLOCK — full-screen pink PIN (GCash-style), only after app close
+  // ════════════════════════════════════════════════════════════════════
+  if (view === "pin" && deviceUnlockMode) {
+    const initials = String(pendingUser?.name || pendingUser?.email || "U")
+      .trim()
+      .split(/\s+/)
+      .map((w) => w[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase() || "U";
+    const dots = 6;
+    return createPortal(
+      <div className="pin-unlock-screen" role="dialog" aria-modal="true" aria-label="Enter PIN">
+        <div className="pin-unlock-top">
+          <div className="pin-unlock-brand">DKMERCH</div>
+          <div className="pin-unlock-avatar" aria-hidden="true">{initials}</div>
+          <div className="pin-unlock-name">{pendingUser?.name || "Welcome back"}</div>
+          <div className="pin-unlock-email">{pendingUser?.email || ""}</div>
+        </div>
+
+        <div className="pin-unlock-mid">
+          <h2 className="pin-unlock-title">Enter your PIN</h2>
+          <p className="pin-unlock-hint">
+            <i className="fas fa-info-circle" aria-hidden="true" />
+            Never share your PIN with anyone.
+          </p>
+          <div className="pin-unlock-dots" aria-hidden="true">
+            {Array.from({ length: dots }).map((_, i) => (
+              <span key={i} className={`pin-unlock-dot${i < pinValue.length ? " filled" : ""}`} />
+            ))}
+          </div>
+          {pinError && <div className="pin-unlock-error">{pinError}</div>}
+          {pinLoading && <div className="pin-unlock-loading">Checking…</div>}
+        </div>
+
+        <div className="pin-unlock-pad">
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
+            <button
+              key={n}
+              type="button"
+              className="pin-unlock-key"
+              disabled={pinLoading || pinValue.length >= 6}
+              onClick={() => appendPinDigit(String(n))}
+            >
+              {n}
+            </button>
+          ))}
+          <span className="pin-unlock-key pin-unlock-key--spacer" aria-hidden="true" />
+          <button
+            type="button"
+            className="pin-unlock-key"
+            disabled={pinLoading || pinValue.length >= 6}
+            onClick={() => appendPinDigit("0")}
+          >
+            0
+          </button>
+          <button
+            type="button"
+            className="pin-unlock-key pin-unlock-key--ghost"
+            disabled={pinLoading || !pinValue}
+            onClick={backspacePin}
+            aria-label="Delete"
+          >
+            ⌫
+          </button>
+        </div>
+
+        <div className="pin-unlock-footer">
+          <button type="button" className="pin-unlock-forgot" onClick={handleForgotPin} disabled={pinLoading}>
+            Forgot PIN
+          </button>
+          <button
+            type="button"
+            className="pin-unlock-switch"
+            disabled={pinLoading}
+            onClick={() => {
+              clearDeviceUnlock();
+              setDeviceUnlockMode(false);
+              setAccountHasPin(false);
+              setPendingUser(null);
+              setPinValue("");
+              setPinError("");
+              setView("login");
+            }}
+          >
+            Use another account
+          </button>
+        </div>
+      </div>,
+      document.body
+    );
+  }
 
   // ════════════════════════════════════════════════════════════════════
   //  RENDER — portal to body so product/header stacking never hides login
@@ -1372,7 +1487,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
               <div className="signup-section" style={{ marginTop: 0 }}>
                 <p>
                   <button type="button" className="signup-link" style={{ color: accentColor }} onClick={handleForgotPin}>
-                    Reset PIN
+                    Forgot PIN
                   </button>
                 </p>
                 <p>
@@ -1390,7 +1505,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
                       setView("login");
                     }}
                   >
-                    {deviceUnlockMode ? "Use another account" : "← Back"}
+                    ← Back
                   </button>
                 </p>
               </div>

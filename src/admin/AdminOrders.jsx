@@ -9,7 +9,7 @@ import { useNotification } from '../context/NotificationContext';
 import DkIcon, { DK_ICONS } from '../components/DkIcon';
 import AdminPager from './AdminPager';
 import { isLbcOrder } from '../utils/deliveryUtils';
-import { formatOrderShortId } from '../utils/orderId';
+import { formatOrderShortId } from '../utils/orderId.js';
 import './AdminOrders.css';
 
 const SITE_URL = 'https://dkmerchwebsite.vercel.app';
@@ -774,7 +774,16 @@ const AdminOrders = () => {
                           : <span style={{ color: '#ccc', fontSize: '12px' }}>-</span>}
                       </td>
                       <td data-label="Date" style={{ whiteSpace: 'nowrap', fontSize: '13px' }}>
-                        {order._creationTime ? new Date(order._creationTime).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}
+                        {order._creationTime
+                          ? new Date(order._creationTime).toLocaleString('en-PH', {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric',
+                              hour: 'numeric',
+                              minute: '2-digit',
+                              hour12: true,
+                            })
+                          : 'N/A'}
                       </td>
                       <td data-label="Actions"><button className="view-btn" onClick={() => setSelectedOrder(order)}><i className="fas fa-eye"></i> View</button></td>
                     </tr>
@@ -1011,7 +1020,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
           <div className="modal-section">
             <h3><i className="fas fa-info-circle"></i> Order Information</h3>
             <div className="order-info-grid">
-              <div className="info-item"><label>Order ID</label><strong>#{order.orderId}</strong></div>
+              <div className="info-item"><label>Order ID</label><strong>#{formatOrderShortId(order)}</strong></div>
               <div className="info-item"><label>Date</label><span>{order._creationTime ? new Date(order._creationTime).toLocaleString('en-PH') : 'N/A'}</span></div>
               <div className="info-item"><label>Payment Method</label><span className="method-display" style={{ color: pm.color, display: 'inline-flex', alignItems: 'center', gap: 6 }}><PaymentMethodMark pm={pm} /> {pm.label}</span></div>
               <div className="info-item"><label>Payment Status</label><span className={`payment-badge ${isPaid ? 'paid' : 'pending'}`}>{isPaid ? 'Paid' : 'Pending'}</span></div>

@@ -9,8 +9,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  /* above chat/download FABs (z-index ~10050) */
-  z-index: 20000;
+  /* above Header (z-index 25000–27000) so close button isn't clipped */
+  z-index: 28000;
   padding: 20px;
   box-sizing: border-box;
   overflow-y: auto;
@@ -635,13 +635,15 @@ body.product-modal-open .dk-chat-fab-stack {
     padding: 0;
     align-items: flex-end;
     background: rgba(15, 23, 42, 0.45);
+    /* cover full viewport including under sticky header */
+    z-index: 28000;
   }
 
   .product-modal-content {
     border-radius: 18px 18px 0 0;
     max-width: 100%;
     width: 100%;
-    max-height: calc(100dvh - 72px);
+    max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 12px);
     min-height: 0;
     overflow-x: hidden;
     overflow-y: auto;
@@ -651,7 +653,7 @@ body.product-modal-open .dk-chat-fab-stack {
 
   .product-modal-content .modal-close {
     position: absolute;
-    top: 12px;
+    top: max(12px, env(safe-area-inset-top, 0px));
     right: 12px;
     left: auto;
     float: none;
@@ -860,7 +862,7 @@ body.product-modal-open .dk-chat-fab-stack {
 }
 
 @media (max-width: 480px) {
-  .product-modal-content { max-height: calc(100dvh - 64px); }
+  .product-modal-content { max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 8px); }
   .modal-image-section { padding: 50px 14px 12px; }
   .modal-product-img {
     width: min(170px, 56vw) !important;

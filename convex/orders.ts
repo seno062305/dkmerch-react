@@ -2,38 +2,12 @@
 import { query, mutation, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-
-/** Atomic sequential order number — concurrent createOrder calls serialize on this doc. */
-async function allocateOrderSeq(db: any): Promise<number> {
-  const counter = await db
-    .query("orderCounters")
-    .withIndex("by_name", (q: any) => q.eq("name", "orders"))
-    .first();
-
-  if (!counter) {
-    const existing = await db.query("orders").collect();
-    let maxSeq = 0;
-    for (const o of existing) {
-      if (typeof o.orderSeq === "number" && o.orderSeq > maxSeq) maxSeq = o.orderSeq;
-      const m = String(o.orderId || "").match(/^DK-(\d+)-/i);
-      if (m) maxSeq = Math.max(maxSeq, parseInt(m[1], 10) || 0);
-    }
-    // Also never go below current order count (legacy timestamp ids)
-    maxSeq = Math.max(maxSeq, existing.length);
-    const seq = maxSeq + 1;
-    await db.insert("orderCounters", { name: "orders", nextSeq: seq + 1 });
-    return seq;
-  }
-
-  const seq = Number(counter.nextSeq) || 1;
-  await db.patch(counter._id, { nextSeq: seq + 1 });
-  return seq;
-}
-
-function buildOrderId(seq: number): string {
-  const suffix = Math.random().toString(36).substring(2, 8).toUpperCase().padEnd(6, "X");
-  return `DK-${String(seq).padStart(4, "0")}-${suffix}`;
-}
+import {
+  allocateOrderSeq,
+  buildOrderId,
+  ensureOrderCounterSeeded,
+  repairDuplicateOrderSeqs,
+} from "./lib/orderSeq";
 
 export const getAllOrders = query(async ({ db }) => {
   // Newest orders first system-wide
@@ -119,12 +93,29 @@ export const createOrder = mutation({
       }
     }
 
+    // Make sure counter doc exists so concurrent checkouts OCC-serialize (not all get the same #)
+    await ensureOrderCounterSeeded(db);
     const orderSeq = await allocateOrderSeq(db);
     const orderId = buildOrderId(orderSeq);
     const { orderId: _ignored, ...rest } = args;
     await db.insert("orders", { ...rest, orderId, orderSeq });
     return { success: true, orderId, orderSeq };
   },
+});
+
+/** One-shot: seed counter + renumber duplicate orderSeq (display #) without breaking orderId links. */
+export const repairOrderNumbers = mutation({
+  args: {},
+  handler: async ({ db }) => {
+    const repaired = await repairDuplicateOrderSeqs(db);
+    const seeded = await ensureOrderCounterSeeded(db);
+    return { ...repaired, seeded };
+  },
+});
+
+export const ensureOrderCounter = mutation({
+  args: {},
+  handler: async ({ db }) => ensureOrderCounterSeeded(db),
 });
 
 /** Used by failover sync-back (Firebase → Convex). Dedupes on orderId. */

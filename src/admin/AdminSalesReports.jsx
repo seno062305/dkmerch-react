@@ -3,7 +3,7 @@ import { Navigate, Link } from 'react-router-dom';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import DkIcon, { DK_ICONS } from '../components/DkIcon';
-import { formatOrderShortId } from '../utils/orderId';
+import { formatOrderShortId } from '../utils/orderId.js';
 import './AdminSalesReports.css';
 
 const MiniTrend = ({ values = [], color = '#16a34a', fullWidth = false }) => {

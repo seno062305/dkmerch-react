@@ -3,7 +3,13 @@ import React, { createContext, useContext, useEffect, useRef, useState } from "r
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { appendActivityLog } from "../admin/lib/localActivityLog";
-import { saveDeviceUnlock, clearDeviceUnlock, getDeviceUnlock } from "../lib/deviceUnlock";
+import {
+  saveDeviceUnlock,
+  clearDeviceUnlock,
+  getDeviceUnlock,
+  markExplicitLogout,
+  clearExplicitLogoutFlag,
+} from "../lib/deviceUnlock";
 
 const AuthContext = createContext(null);
 const AUTH_USER_KEY = "authUser";
@@ -102,6 +108,7 @@ export const AuthProvider = ({ children }) => {
     const storedUser = readAuthUser();
     const alive = isSessionAlive();
     const pwa = isStandalonePwa();
+    const unlock = getDeviceUnlock(); // null after explicit logout
 
     if (storedUser && alive) {
       // Same session — stay logged in, no PIN; keep current route/tab
@@ -117,21 +124,15 @@ export const AuthProvider = ({ children }) => {
       setIsAuthenticated(true);
       setNeedsDeviceUnlock(false);
     } else if (storedUser && !alive && pwa) {
-      // Installed app closed then opened — PIN unlock for customers
-      const unlock = getDeviceUnlock();
+      // Installed app closed then opened — PIN unlock ONLY if last login wasn't Logout
       const isCustomer = !storedUser.role || storedUser.role === "user";
       if (isCustomer && unlock?._id && String(unlock._id) === String(storedUser._id)) {
         setNeedsDeviceUnlock(true);
         setUser(null);
         setRole(null);
         setIsAuthenticated(false);
-      } else if (!isCustomer) {
-        clearAuthUser();
-        setUser(null);
-        setRole(null);
-        setIsAuthenticated(false);
-        setNeedsDeviceUnlock(false);
       } else {
+        // Logged out earlier, or no unlock profile → require full login next time
         clearAuthUser();
         clearDeviceUnlock();
         setUser(null);
@@ -154,6 +155,7 @@ export const AuthProvider = ({ children }) => {
 
   const applySession = (sessionUser) => {
     kickedRef.current = false;
+    clearExplicitLogoutFlag();
     writeAuthUser(sessionUser);
     markSessionAlive();
     if (sessionUser.role === "user") saveDeviceUnlock(sessionUser);
@@ -171,6 +173,7 @@ export const AuthProvider = ({ children }) => {
     kickedRef.current = true;
     clearAuthUser();
     clearSessionAlive();
+    markExplicitLogout();
     try { sessionStorage.removeItem("dkmerch_push_asked"); } catch { /* ignore */ }
     setUser(null);
     setRole(null);
@@ -425,7 +428,8 @@ export const AuthProvider = ({ children }) => {
     }
     clearAuthUser();
     clearSessionAlive();
-    // Explicit logout → next time must use email/password (not PIN unlock)
+    // Explicit logout → next open needs email/password login (never leftover PIN unlock)
+    markExplicitLogout();
     clearDeviceUnlock();
     try { sessionStorage.removeItem("dkmerch_push_asked"); } catch { /* ignore */ }
     setUser(null);

@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useUserOrders } from '../utils/orderStorage';
 import { useProducts } from '../utils/productStorage';
 import { useCloseOnHistoryBack } from '../hooks/useCloseOnHistoryBack';
-import { formatOrderShortId } from '../utils/orderId';
+import { formatOrderShortId } from '../utils/orderId.js';
 import './MyOrders.css';
 
 const MyOrders = () => {

@@ -3,6 +3,7 @@
  */
 import { internalMutation } from "./_generated/server";
 import { v } from "convex/values";
+import { allocateOrderSeq, ensureOrderCounterSeeded } from "./lib/orderSeq";
 
 function asNum(n: any, fallback = 0) {
   const x = Number(n);
@@ -40,20 +41,13 @@ async function upsertOrder(ctx: any, order: any) {
       }))
     : [];
   // Allocate sequential number under the same counter lock used by orders.createOrder
-  let orderSeq: number | undefined = order.orderSeq != null ? asNum(order.orderSeq) : undefined;
+  let orderSeq: number | undefined =
+    order.orderSeq != null && asNum(order.orderSeq) <= 999_999
+      ? asNum(order.orderSeq)
+      : undefined;
   if (orderSeq == null) {
-    const counter = await ctx.db
-      .query("orderCounters")
-      .withIndex("by_name", (q: any) => q.eq("name", "orders"))
-      .first();
-    if (!counter) {
-      const existing = await ctx.db.query("orders").collect();
-      orderSeq = existing.length + 1;
-      await ctx.db.insert("orderCounters", { name: "orders", nextSeq: orderSeq + 1 });
-    } else {
-      orderSeq = Number(counter.nextSeq) || 1;
-      await ctx.db.patch(counter._id, { nextSeq: orderSeq + 1 });
-    }
+    await ensureOrderCounterSeeded(ctx.db);
+    orderSeq = await allocateOrderSeq(ctx.db);
   }
 
   const convexId = await ctx.db.insert("orders", {

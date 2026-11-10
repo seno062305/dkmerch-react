@@ -874,3 +874,204 @@ body.login-modal-open {
 }
 .error-banner.success-banner svg { color: #059669; }
 .error-banner.success-banner span { color: #065f46; }
+/* --------------------------------------
+   DEVICE UNLOCK — GCash-style pink PIN
+   -------------------------------------- */
+.pin-unlock-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 100060;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: max(20px, env(safe-area-inset-top, 0px)) 24px max(16px, env(safe-area-inset-bottom, 0px));
+  box-sizing: border-box;
+  background: linear-gradient(145deg, #fc1268 0%, #ff4d94 48%, #ff85b3 100%);
+  color: #fff;
+  overflow: hidden;
+}
+
+.pin-unlock-top {
+  width: 100%;
+  max-width: 420px;
+  text-align: center;
+  padding-top: 12px;
+}
+
+.pin-unlock-brand {
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  margin-bottom: 22px;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+}
+
+.pin-unlock-avatar {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 14px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+  border: 3px solid rgba(255, 255, 255, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  font-weight: 800;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.pin-unlock-name {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.pin-unlock-email {
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  opacity: 0.92;
+  word-break: break-all;
+}
+
+.pin-unlock-mid {
+  width: 100%;
+  max-width: 420px;
+  text-align: center;
+}
+
+.pin-unlock-title {
+  margin: 0 0 8px;
+  font-size: 22px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.pin-unlock-hint {
+  margin: 0 0 22px;
+  font-size: 12px;
+  opacity: 0.9;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pin-unlock-dots {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  min-height: 18px;
+}
+
+.pin-unlock-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.95);
+  background: transparent;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.pin-unlock-dot.filled {
+  background: #fff;
+  transform: scale(1.05);
+}
+
+.pin-unlock-error {
+  margin-top: 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+
+.pin-unlock-loading {
+  margin-top: 12px;
+  font-size: 13px;
+  opacity: 0.9;
+}
+
+.pin-unlock-pad {
+  width: 100%;
+  max-width: 340px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px 18px;
+  justify-items: center;
+  padding: 8px 0 4px;
+}
+
+.pin-unlock-key {
+  width: 74px;
+  height: 74px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(190, 24, 93, 0.35);
+  color: #fff;
+  font-size: 28px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, transform 0.1s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pin-unlock-key:active:not(:disabled) {
+  transform: scale(0.96);
+  background: rgba(190, 24, 93, 0.55);
+}
+
+.pin-unlock-key:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.pin-unlock-key--ghost {
+  background: transparent;
+  font-size: 22px;
+}
+
+.pin-unlock-key--spacer {
+  visibility: hidden;
+  pointer-events: none;
+  background: transparent;
+}
+
+.pin-unlock-footer {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+.pin-unlock-forgot,
+.pin-unlock-switch {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 8px 4px;
+  opacity: 0.95;
+}
+
+.pin-unlock-switch {
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+@media (max-width: 380px) {
+  .pin-unlock-key { width: 64px; height: 64px; font-size: 24px; }
+  .pin-unlock-pad { gap: 10px 12px; max-width: 300px; }
+  .pin-unlock-brand { font-size: 18px; }
+}
