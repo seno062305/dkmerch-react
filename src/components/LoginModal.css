@@ -1078,3 +1078,125 @@ body.login-modal-open {
   .pin-unlock-pad { gap: 10px 12px; max-width: 300px; }
   .pin-unlock-brand { font-size: 18px; }
 }
+
+/* ── Use another account — pink login (same chrome as PIN) ── */
+.pin-switch-login {
+  justify-content: flex-start;
+  gap: 8px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pin-switch-welcome {
+  margin-bottom: 4px !important;
+}
+
+.pin-switch-form {
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 0 24px;
+  box-sizing: border-box;
+}
+
+.pin-switch-label {
+  font-size: 12px;
+  font-weight: 700;
+  opacity: 0.95;
+  margin-top: 6px;
+  text-align: left;
+}
+
+.pin-switch-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: none;
+  border-radius: 12px;
+  padding: 14px 16px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a1a2e;
+  background: rgba(255, 255, 255, 0.95);
+  outline: none;
+}
+
+.pin-switch-input:focus {
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.45);
+}
+
+.pin-switch-password-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.pin-switch-password-wrap .pin-switch-input {
+  padding-right: 48px;
+}
+
+.pin-switch-eye {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pin-switch-eye svg {
+  width: 20px;
+  height: 20px;
+}
+
+.pin-switch-submit {
+  margin-top: 14px;
+  width: 100%;
+  border: none;
+  border-radius: 12px;
+  padding: 14px 16px;
+  font-size: 15px;
+  font-weight: 800;
+  color: #fc1268;
+  background: #fff;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+.pin-switch-submit:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+
+.pin-switch-link {
+  margin-top: 8px;
+  border: none;
+  background: none;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  opacity: 0.95;
+  padding: 8px;
+}
+
+.pin-switch-banner {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  text-align: left;
+  margin-bottom: 4px;
+}
+
+.pin-switch-banner.ok {
+  background: rgba(22, 163, 74, 0.35);
+}

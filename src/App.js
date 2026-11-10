@@ -213,10 +213,19 @@ function AppContent() {
   useEffect(() => {
     const handleOpenLogin = (e) => {
       const customersOnly = !!e?.detail?.customersOnly;
+      const redirectTo = e?.detail?.redirectTo;
       // Opening login from header/cart/etc. clears the customer-chat-only gate
       if (!customersOnly) {
         try { sessionStorage.removeItem('dk_login_customers_only'); } catch { /* ignore */ }
       }
+      // Profile/header → home. Chat passes customersOnly (keeps /chat). Explicit redirectTo wins.
+      try {
+        if (typeof redirectTo === 'string' && redirectTo) {
+          sessionStorage.setItem('redirectAfterLogin', redirectTo);
+        } else if (!customersOnly) {
+          sessionStorage.setItem('redirectAfterLogin', '/');
+        }
+      } catch { /* ignore */ }
       setShowLoginModal(true);
     };
     window.addEventListener('openLoginModal', handleOpenLogin);
@@ -226,6 +235,8 @@ function AppContent() {
   // Cold start after closing the app → PIN unlock (even if session is restored underneath)
   useEffect(() => {
     if (!isReady || !needsDeviceUnlock) return;
+    // Don't inherit a stale /chat redirect from an earlier visit
+    try { sessionStorage.removeItem('redirectAfterLogin'); } catch { /* ignore */ }
     setShowLoginModal(true);
   }, [isReady, needsDeviceUnlock]);
 
@@ -262,22 +273,36 @@ function AppContent() {
     setShowLoginModal(false);
     try { sessionStorage.removeItem('dkmerch_push_asked'); } catch { /* ignore */ }
     try { sessionStorage.removeItem('dk_login_customers_only'); } catch { /* ignore */ }
-    const redirect = sessionStorage.getItem('redirectAfterLogin');
-    if (redirect) {
+    let redirect = null;
+    try {
+      redirect = sessionStorage.getItem('redirectAfterLogin');
       sessionStorage.removeItem('redirectAfterLogin');
-      // Never send staff into customer chat after login
-      if ((loginRole === 'admin' || loginRole === 'rider') && String(redirect).startsWith('/chat')) {
-        navigate(loginRole === 'admin' ? '/admin/chat' : '/rider', { replace: true });
-        return;
-      }
-      // Stay on current page if redirect matches (PIN unlock / reload) — avoid unnecessary remount
-      if (redirect === location.pathname + location.search) return;
+    } catch { /* ignore */ }
+
+    if (loginRole === 'admin') {
+      navigate('/admin', { replace: true });
+      return;
+    }
+    if (loginRole === 'rider') {
+      navigate('/rider', { replace: true });
+      return;
+    }
+
+    // Chat login only when chat explicitly set the redirect
+    if (redirect && String(redirect).startsWith('/chat')) {
       navigate(redirect, { replace: true });
       return;
     }
-    // Customer PIN unlock / login while already on a page — do not bounce to home
-    if (loginRole === 'admin')  navigate('/admin',  { replace: true });
-    else if (loginRole === 'rider')  navigate('/rider',  { replace: true });
+
+    // Profile / header / generic login → home
+    if (redirect === '/' || redirect == null) {
+      if (location.pathname !== '/') navigate('/', { replace: true });
+      return;
+    }
+
+    // Protected-route login (settings, wishlist, etc.) → that page
+    if (redirect === location.pathname + location.search) return;
+    navigate(redirect, { replace: true });
   };
 
   const isAdminRoute      = location.pathname.startsWith('/admin');

@@ -158,6 +158,8 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
   const [qsiDesktopHost] = useState(() => canGenerateQuickSignInQr());
   const [pendingUser, setPendingUser] = useState(startUnlockUi ? remembered : null);
   const [deviceUnlockMode, setDeviceUnlockMode] = useState(startUnlockUi);
+  /** Pink full-screen login after "Use another account" (stays in PIN-page chrome) */
+  const [switchAccountMode, setSwitchAccountMode] = useState(false);
   const [pinValue, setPinValue] = useState("");
   const [pinConfirmValue, setPinConfirmValue] = useState("");
   const [pinStep, setPinStep] = useState(0); // 0 = enter new, 1 = confirm (set/reset only)
@@ -606,6 +608,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
         setPinConfirmValue("");
         setPinStep(0);
         setPinError("");
+        setSwitchAccountMode(false); // leave pink switch screen → normal PIN / create PIN
         setView(needsSetup ? "createPin" : "pin");
         return;
       }
@@ -702,7 +705,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
   };
 
   const switchToAnotherAccount = () => {
-    // Stay on this login screen — never bounce to homepage
+    // Stay inside pink unlock chrome — swap PIN pad for pink login (never bounce home)
     try { clearDeviceUnlock(); } catch { /* ignore */ }
     try { markExplicitLogout(); } catch { /* ignore */ }
     try { logout?.(); } catch { /* ignore */ }
@@ -712,9 +715,11 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
     setPendingUser(null);
     setPinValue("");
     setPinError("");
+    setError("");
     setFormData({ email: "", password: "" });
     setMustAuthenticate(true);
     setShowRegister(false);
+    setSwitchAccountMode(true);
     setView("login");
   };
 
@@ -1071,6 +1076,89 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
 
   if (showRegister) {
     return <RegisterModal onClose={handleRegisterSuccess} />;
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  //  USE ANOTHER ACCOUNT — same pink full-screen as PIN (not the white modal)
+  // ════════════════════════════════════════════════════════════════════
+  if (switchAccountMode && view === "login") {
+    return createPortal(
+      <div className="pin-unlock-screen pin-switch-login" role="dialog" aria-modal="true" aria-label="Log in">
+        <div className="pin-unlock-top">
+          <div className="pin-unlock-brand">DKMERCH</div>
+          <h2 className="pin-unlock-title pin-switch-welcome">Welcome</h2>
+          <p className="pin-unlock-hint">Log in with another account</p>
+        </div>
+
+        <form className="pin-switch-form" onSubmit={handleSubmit}>
+          {isLockedOut && (
+            <div className="pin-switch-banner">
+              Too many failed attempts. Try again in <strong>{formatCooldown(loginCooldown)}</strong>
+            </div>
+          )}
+          {error && !isLockedOut && (
+            <div className={`pin-switch-banner${error.startsWith("✅") ? " ok" : ""}`}>
+              {error.startsWith("✅") ? error.replace("✅ ", "") : error}
+            </div>
+          )}
+
+          <label className="pin-switch-label" htmlFor="switch-email">Email / Username</label>
+          <input
+            id="switch-email"
+            name="email"
+            type="text"
+            className="pin-switch-input"
+            placeholder="Email or username"
+            value={formData.email}
+            onChange={handleChange}
+            required
+            autoComplete="username"
+            disabled={isLockedOut || isLoading}
+          />
+
+          <label className="pin-switch-label" htmlFor="switch-password">Password</label>
+          <div className="pin-switch-password-wrap">
+            <input
+              id="switch-password"
+              name="password"
+              type={showPassword ? "text" : "password"}
+              className="pin-switch-input"
+              placeholder="Password"
+              value={formData.password}
+              onChange={handleChange}
+              required
+              autoComplete="current-password"
+              disabled={isLockedOut || isLoading}
+            />
+            <button
+              type="button"
+              className="pin-switch-eye"
+              onClick={() => setShowPassword(!showPassword)}
+              aria-label={showPassword ? "Hide password" : "Show password"}
+            >
+              <PwToggleIcon show={showPassword} />
+            </button>
+          </div>
+
+          <button
+            type="submit"
+            className="pin-switch-submit"
+            disabled={isLoading || isLockedOut}
+          >
+            {isLockedOut ? `Locked — ${formatCooldown(loginCooldown)}` : isLoading ? "Logging in…" : "Log In"}
+          </button>
+
+          <button
+            type="button"
+            className="pin-switch-link"
+            onClick={() => { setSwitchAccountMode(false); setView("forgot"); }}
+          >
+            Forgot Password?
+          </button>
+        </form>
+      </div>,
+      document.body
+    );
   }
 
   // ════════════════════════════════════════════════════════════════════
@@ -1825,7 +1913,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
           <>
             <div className="login-modal-header">
               <h2 style={{ background: accentGradient, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
-                Welcome Back!
+                Welcome
               </h2>
               <p className="login-subtitle">Log in to your DKMerch account</p>
             </div>
