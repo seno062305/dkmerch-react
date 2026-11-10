@@ -8,7 +8,7 @@ import { useMutation, useAction, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { QRCodeSVG } from "qrcode.react";
 import { hasLocalPin, getLocalPinLength, savePinWithFallback, verifyPinWithFallback, clearLocalPin } from "../lib/localPin";
-import { getDeviceUnlock, clearDeviceUnlock, markExplicitLogout } from "../lib/deviceUnlock";
+import { getDeviceUnlock } from "../lib/deviceUnlock";
 import { PRODUCTION_SITE_URL } from "./InstallAppModal";
 import { useNotification } from "../context/NotificationContext";
 import { useCloseOnHistoryBack } from "../hooks/useCloseOnHistoryBack";
@@ -160,6 +160,8 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
   const [deviceUnlockMode, setDeviceUnlockMode] = useState(startUnlockUi);
   /** Pink full-screen login after "Use another account" (stays in PIN-page chrome) */
   const [switchAccountMode, setSwitchAccountMode] = useState(false);
+  /** Remember who to restore when tapping Back from Use another account */
+  const [pinAccountSnapshot, setPinAccountSnapshot] = useState(startUnlockUi ? remembered : null);
   const [pinValue, setPinValue] = useState("");
   const [pinConfirmValue, setPinConfirmValue] = useState("");
   const [pinStep, setPinStep] = useState(0); // 0 = enter new, 1 = confirm (set/reset only)
@@ -705,9 +707,11 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
   };
 
   const switchToAnotherAccount = () => {
-    // Stay inside pink unlock chrome — swap PIN pad for pink login (never bounce home)
-    try { clearDeviceUnlock(); } catch { /* ignore */ }
-    try { markExplicitLogout(); } catch { /* ignore */ }
+    // Keep device-unlock profile so Back + app reopen still return to PIN
+    const snap = pendingUser || remembered || (() => {
+      try { return getDeviceUnlock(); } catch { return null; }
+    })();
+    if (snap?._id) setPinAccountSnapshot(snap);
     try { logout?.(); } catch { /* ignore */ }
     try { onSwitchAccount?.(); } catch { /* ignore */ }
     setDeviceUnlockMode(false);
@@ -721,6 +725,27 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
     setShowRegister(false);
     setSwitchAccountMode(true);
     setView("login");
+  };
+
+  const backToPinFromSwitch = () => {
+    const acc = pinAccountSnapshot || (() => {
+      try { return getDeviceUnlock(); } catch { return null; }
+    })();
+    if (!acc?._id) {
+      setSwitchAccountMode(false);
+      setView("login");
+      return;
+    }
+    setPendingUser(acc);
+    setAccountHasPin(true);
+    setDeviceUnlockMode(true);
+    setSwitchAccountMode(false);
+    setPinValue("");
+    setPinError("");
+    setError("");
+    setFormData({ email: "", password: "" });
+    setMustAuthenticate(true);
+    setView("pin");
   };
 
   const requestClose = () => {
@@ -1084,8 +1109,14 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
   if (switchAccountMode && view === "login") {
     return createPortal(
       <div className="pin-unlock-screen pin-switch-login" role="dialog" aria-modal="true" aria-label="Log in">
+        <button type="button" className="pin-switch-back" onClick={backToPinFromSwitch}>
+          <i className="fas fa-arrow-left" aria-hidden="true" /> Back
+        </button>
         <div className="pin-unlock-top">
-          <div className="pin-unlock-brand">DKMERCH</div>
+          <div className="pin-unlock-brand">
+            <img src="/images/dklogo2-removebg-preview.png" alt="" className="pin-unlock-logo" />
+            <span>DKMERCH</span>
+          </div>
           <h2 className="pin-unlock-title pin-switch-welcome">Welcome</h2>
           <p className="pin-unlock-hint">Log in with another account</p>
         </div>
@@ -1176,7 +1207,10 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
     return createPortal(
       <div className="pin-unlock-screen" role="dialog" aria-modal="true" aria-label="Enter PIN">
         <div className="pin-unlock-top">
-          <div className="pin-unlock-brand">DKMERCH</div>
+          <div className="pin-unlock-brand">
+            <img src="/images/dklogo2-removebg-preview.png" alt="" className="pin-unlock-logo" />
+            <span>DKMERCH</span>
+          </div>
           <div className="pin-unlock-avatar" aria-hidden="true">{initials}</div>
           <div className="pin-unlock-name">{pendingUser?.name || "Welcome back"}</div>
           <div className="pin-unlock-email">{pendingUser?.email || ""}</div>

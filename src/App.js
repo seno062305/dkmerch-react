@@ -406,8 +406,7 @@ function AppContent() {
                 setShowLoginModal(false);
               }}
               onSwitchAccount={() => {
-                // Stay on login UI — clear session but keep this modal open
-                clearDeviceUnlockPrompt?.();
+                // Soft logout only — keep device-unlock profile so reopen returns to PIN
                 try { logout?.(); } catch { /* ignore */ }
                 setShowLoginModal(true);
               }}
