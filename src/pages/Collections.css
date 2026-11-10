@@ -260,9 +260,6 @@
 .collection-card-fav.active i {
   color: #f5a623;
 }
-  color: #ccc;
-  font-size: 15px;
-}
 
 .collection-card-fav:hover {
   background: white;
