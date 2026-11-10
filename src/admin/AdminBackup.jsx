@@ -28,7 +28,7 @@ import {
   pushLocalBackupHistory,
   removeLocalBackupHistory,
 } from './lib/localBackupHistory';
-import AdminPager from './AdminPager';
+import AdminPager, { fixedPageStyle } from './AdminPager';
 import './AdminBackup.css';
 import './AdminSettingsSuper.css';
 
@@ -1189,7 +1189,10 @@ const LogsTab = () => {
       )}
       {logs.length > 0 && (
         <>
-          <div className="ab-logs-list">
+          <div
+            className="ab-logs-list dk-fixed-page dk-fixed-page--stack"
+            style={fixedPageStyle(pageSize, { '--dk-row-h': '88px', '--dk-gap': '10px' })}
+          >
             {pageLogs.map((row) => (
               <div key={row._id} className="ab-log-row">
                 <div className="ab-log-main">
@@ -1930,7 +1933,10 @@ const AdminBackup = () => {
                 No packages yet. Use <strong>Create backup</strong> or Archive in Danger zone.
               </div>
             ) : (
-              <ul className="ab-hist-list">
+              <ul
+                className="ab-hist-list dk-fixed-page dk-fixed-page--stack"
+                style={fixedPageStyle(HISTORY_PAGE_SIZE, { '--dk-row-h': '64px', '--dk-gap': '8px' })}
+              >
                 {pageRows.map((row) => (
                   <li key={`${row.kind}-${row.id}`} className="ab-hist-item">
                     <span className={`ab-hist-ico ab-hist-ico--${row.kind}`}>

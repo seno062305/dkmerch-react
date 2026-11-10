@@ -25,59 +25,78 @@
 /* Filters */
 .collections-filters {
   background: #f8f9fa;
-  padding: 30px 40px;
+  padding: 22px 40px;
   border-bottom: 2px solid #eee;
   overflow: visible;
+  position: relative;
+  z-index: 40;
 }
 
 .filters-single-line {
   display: flex;
-  align-items: center;
-  gap: 30px;
+  align-items: flex-end;
+  gap: 20px 28px;
   flex-wrap: wrap;
 }
 
 .filter-group {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 200px;
+  flex: 0 1 260px;
 }
 
 .filter-group label {
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 800;
   color: #333;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
   white-space: nowrap;
   margin: 0;
 }
 
-.filter-buttons { display: flex; flex-wrap: wrap; gap: 10px; }
+.filter-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+}
 
 .filter-btn {
-  padding: 8px 20px;
+  padding: 7px 14px;
   background: white;
-  border: 1.5px solid #ccc;
-  border-radius: 20px;
-  font-size: 13px;
+  border: 1.5px solid #d1d5db;
+  border-radius: 999px;
+  font-size: 12.5px;
   font-weight: 600;
   color: #333;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
   white-space: nowrap;
+  text-transform: capitalize;
 }
 
 .filter-btn:hover { border-color: #111; background: #f5f5f5; }
 .filter-btn.active { background: #111; color: #fff; border-color: #111; }
 
-.filter-divider { width: 1px; height: 30px; background: #ccc; flex-shrink: 0; }
+.filter-divider {
+  width: 1px;
+  align-self: stretch;
+  min-height: 48px;
+  background: #d1d5db;
+  flex-shrink: 0;
+}
 
 /* ── DROPDOWN (mobile only) ── */
 .filter-dropdown {
   position: relative;
-  min-width: 0;
+  width: 100%;
+  min-width: 180px;
+  max-width: 280px;
+  z-index: 50;
 }
 
 .filter-dropdown-toggle {
@@ -86,10 +105,11 @@
   justify-content: space-between;
   gap: 10px;
   width: 100%;
+  min-height: 40px;
   padding: 9px 16px;
   background: white;
   border: 1.5px solid #ccc;
-  border-radius: 20px;
+  border-radius: 12px;
   font-size: 13px;
   font-weight: 600;
   color: #333;
@@ -114,14 +134,23 @@
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
-  z-index: 200;
+  right: 0;
+  z-index: 60;
+  max-height: none;
+  overflow: visible;
   background: white;
   border: 1.5px solid #e0e0e0;
   border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
-  overflow: hidden;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
   min-width: 180px;
   animation: dropdownFadeIn 0.15s ease;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.filter-dropdown-menu::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 @keyframes dropdownFadeIn {
@@ -158,10 +187,6 @@
   font-size: 11px;
   color: var(--primary-color, #fc1268);
 }
-
-/* show/hide helpers */
-.desktop-only { display: flex; }
-.mobile-only  { display: none; }
 
 /* Results Count */
 .results-count { padding: 20px 40px; border-bottom: 1px solid #eee; }
@@ -265,7 +290,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 6;
+  z-index: 2;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   transition: all 0.2s ease;
   color: #cbd5e1;
@@ -388,15 +413,15 @@
   align-items: center;
   gap: 5px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   margin-bottom: 6px;
   line-height: 1.2;
-  color: #f59e0b;
+  color: #c2410c;
 }
-.collection-stock-badge i { font-size: 12px; color: #f59e0b; }
-.collection-stock-badge.stock-in,
-.collection-stock-badge.stock-low,
-.collection-stock-badge.stock-out { color: #f59e0b; }
+.collection-stock-badge i { font-size: 12px; color: inherit; }
+.collection-stock-badge.stock-in { color: #c2410c; }
+.collection-stock-badge.stock-low { color: #9a3412; }
+.collection-stock-badge.stock-out { color: #b91c1c; }
 
 .collection-oos-overlay {
   position: absolute;
@@ -524,11 +549,61 @@
 .collection-promo-hint i { font-size: 10px; flex-shrink: 0; }
 .collection-promo-hint strong { font-family: 'Courier New', monospace; color: #be185d; font-size: 12px; letter-spacing: 0.5px; }
 
+/* Shop pagination */
+.shop-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 28px 20px 8px;
+}
+.shop-pager-nav,
+.shop-pager-num {
+  min-width: 38px;
+  height: 38px;
+  padding: 0 10px;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+  color: #374151;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.shop-pager-nav:hover:not(:disabled),
+.shop-pager-num:hover {
+  border-color: #fc1268;
+  color: #fc1268;
+  background: #fff5f8;
+}
+.shop-pager-nav:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.shop-pager-num.is-active {
+  border-color: #fc1268;
+  background: #fc1268;
+  color: #fff;
+}
+.shop-pager-nums {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.shop-pager-ellipsis {
+  min-width: 18px;
+  text-align: center;
+  color: #9ca3af;
+  font-weight: 700;
+}
+
 /* ── RESPONSIVE ── */
 @media (max-width: 992px) {
-  .filters-single-line { flex-direction: column; align-items: flex-start; gap: 20px; }
-  .filter-group { width: 100%; }
-  .filter-divider { width: 100%; height: 1px; }
   .collections-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
@@ -547,10 +622,6 @@
     margin: 0;
     line-height: 1.35;
   }
-  .collections-search-wrap {
-    margin: 8px auto 12px;
-    padding: 0 12px;
-  }
   .collections-filters { padding: 12px; }
   .results-count { padding: 10px 12px; }
   .collections-grid {
@@ -563,18 +634,16 @@
   .collection-card-name { font-size: 12px; min-height: 34px; }
   .collection-card-price { font-size: 13px; }
 
-  /* Switch to dropdowns on mobile */
-  .desktop-only { display: none !important; }
-  .mobile-only  { display: flex !important; }
-
   .filters-single-line {
+    display: flex !important;
     flex-direction: row !important;
-    align-items: flex-start !important;
+    align-items: flex-end !important;
     flex-wrap: nowrap !important;
     gap: 8px !important;
     width: 100%;
     box-sizing: border-box;
   }
+  .shop-pager { padding: 20px 12px 4px; }
 
   .filter-group {
     flex-direction: column !important;
@@ -626,10 +695,6 @@
   }
   .collections-header h1 { font-size: 20px; margin-bottom: 2px; }
   .collections-header p { font-size: 12px; }
-  .collections-search-wrap {
-    margin: 6px auto 10px;
-    padding: 0 10px;
-  }
   .collections-filters { padding: 10px; }
   .collections-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -653,70 +718,12 @@
   }
 }
 
-/* ══════════════════════════════════════════
-   DAGDAG SA Collections.css
-   (i-paste sa dulo ng Collections.css)
-══════════════════════════════════════════ */
-
-/* Search bar */
-.collections-search-wrap {
-  max-width: 520px;
-  margin: 0 auto 20px;
-  padding: 0 16px;
-}
-
-.collections-search-box {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.collections-search-box i.fa-search {
-  position: absolute;
-  left: 14px;
-  color: #94a3b8;
-  font-size: 15px;
-  pointer-events: none;
-}
-
-.collections-search-box input {
-  width: 100%;
-  padding: 12px 44px 12px 42px;
-  border: 1.5px solid #e2e8f0;
-  border-radius: 12px;
-  font-size: 14px;
-  background: white;
-  transition: all 0.2s;
-  box-sizing: border-box;
-  font-family: inherit;
-}
-
-.collections-search-box input:focus {
-  outline: none;
-  border-color: #fc1268;
-  box-shadow: 0 0 0 3px rgba(252,18,104,0.1);
-}
-
-.collections-search-clear {
-  position: absolute;
-  right: 12px;
-  background: none;
-  border: none;
-  color: #94a3b8;
-  cursor: pointer;
-  font-size: 14px;
-  padding: 4px;
-  transition: color 0.2s;
-}
-
-.collections-search-clear:hover { color: #fc1268; }
-
 /* Released badge on collection card */
 .collection-released-badge {
   position: absolute;
   top: 10px;
   left: 10px;
-  background: linear-gradient(135deg, #10b981, #059669);
+  background: linear-gradient(135deg, var(--primary-color, #fc1268), #e0005a);
   color: white;
   font-size: 11px;
   font-weight: 800;
@@ -726,7 +733,7 @@
   align-items: center;
   gap: 4px;
   z-index: 2;
-  box-shadow: 0 2px 8px rgba(16,185,129,0.35);
+  box-shadow: 0 2px 8px rgba(252, 18, 104, 0.35);
 }
 
 .collection-released-badge i { font-size: 10px; }
@@ -736,7 +743,7 @@
   top: 10px;
   left: 10px;
   z-index: 2;
-  background: linear-gradient(135deg, #fc1268, #9c27b0);
+  background: linear-gradient(135deg, var(--primary-color, #fc1268), #9c27b0);
   color: white;
   font-size: 11px;
   font-weight: 800;
@@ -748,36 +755,5 @@
 
 /* Highlight border for released cards */
 .collection-card-released {
-  border: 2px solid #10b981 !important;
-}
-
-
-/* ══════════════════════════════════════════
-   DAGDAG SA WeverseSection.css
-   (i-paste sa dulo ng WeverseSection.css)
-══════════════════════════════════════════ */
-
-/* Released badge on weverse card */
-.wv-released-badge {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  background: linear-gradient(135deg, #10b981, #059669);
-  color: white;
-  font-size: 11px;
-  font-weight: 800;
-  padding: 4px 10px;
-  border-radius: 20px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  z-index: 2;
-  box-shadow: 0 2px 8px rgba(16,185,129,0.35);
-}
-
-.wv-released-badge i { font-size: 10px; }
-
-/* Highlight border for released cards */
-.wv-card-released {
-  border: 2px solid #10b981 !important;
+  border: 2px solid var(--primary-color, #fc1268) !important;
 }

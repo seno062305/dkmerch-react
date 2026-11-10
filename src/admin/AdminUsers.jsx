@@ -5,7 +5,8 @@ import { useQuery, useMutation, useAction, useConvex } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useConfirm } from '../context/ConfirmContext';
 import DkIcon, { DK_ICONS } from '../components/DkIcon';
-import AdminPager from './AdminPager';
+import AdminPager, { fixedPageStyle } from './AdminPager';
+import useBodyScrollLock from '../hooks/useBodyScrollLock';
 
 /** Safe archives fetch — avoids hard crash if Convex hasn't deployed listUserArchives yet. */
 function useUserArchivesSafe(enabled) {
@@ -48,6 +49,7 @@ const fileToDataUrl = (file) =>
   });
 
 const RiderViewModal = ({ rider, onClose, onPhotoUpdated }) => {
+  useBodyScrollLock(true);
   const cardRef = useRef();
   const photoInputRef = useRef();
   const updateRiderPhoto = useMutation(api.riders.updateRiderPhoto);
@@ -190,6 +192,7 @@ const RiderViewModal = ({ rider, onClose, onPhotoUpdated }) => {
 };
 
 const PendingAppDetailModal = ({ app, onClose, onApprove, onReject }) => {
+  useBodyScrollLock(true);
   const [viewImg, setViewImg] = useState(null);
   return (
     <div className="au-rider-view-overlay" onClick={onClose}>
@@ -354,6 +357,19 @@ const AdminUsers = () => {
   const [pendingAppDetail, setPendingAppDetail] = useState(null);
   const [showRiderPw, setShowRiderPw]     = useState(false);
   const [viewingRider, setViewingRider]   = useState(null);
+
+  useBodyScrollLock(
+    !!(
+      showSuspendModal
+      || showUnsuspendConfirm
+      || showActivateConfirm
+      || showDeleteConfirm
+      || showRiderDeleteModal
+      || archiveToWipe
+      || viewingRider
+      || pendingAppDetail
+    )
+  );
 
   const [notification, setNotification] = useState({ show: false, message: '', type: '' });
 
@@ -928,6 +944,7 @@ const AdminUsers = () => {
             {filteredUsers.length === 0 ? (
               <div className="no-users"><i className="fas fa-user-slash"></i><p>No users found</p></div>
             ) : (
+              <div className="dk-fixed-page dk-fixed-page--table" style={fixedPageStyle(pageSize, { '--dk-row-h': '64px' })}>
               <table className="users-table">
                 <thead>
                   <tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr>
@@ -1030,6 +1047,7 @@ const AdminUsers = () => {
                   })}
                 </tbody>
               </table>
+              </div>
             )}
             <AdminPager
               total={filteredUsers.length}

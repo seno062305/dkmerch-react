@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import useBodyScrollLock from '../hooks/useBodyScrollLock';
+import { getOverlayRoot } from '../utils/scrollLock';
 import './AdminProducts.css';
 import { useQuery, useAction, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
@@ -93,6 +95,7 @@ const ProductModal = ({
   editingId, initialForm, onClose, onSubmit, submitting,
   categories = FALLBACK_CATEGORIES, groups = FALLBACK_GROUPS,
 }) => {
+  useBodyScrollLock(true);
   const [form, setForm]     = useState(initialForm);
   const [errors, setErrors] = useState({});
   const fileInputRef = useRef(null);
@@ -355,7 +358,7 @@ const ProductModal = ({
         </div>
       </div>
     </div>,
-    document.body
+    getOverlayRoot() || document.body
   );
 };
 
@@ -543,7 +546,6 @@ const CatalogManager = ({
       <div className="list-header catalog-manager-header">
         <div>
           <h2><i className="fas fa-tags"></i> Categories &amp; K-Pop Groups</h2>
-          <p className="catalog-manager-sub">Add or delete options used in products. Group logos appear on the homepage marquee.</p>
         </div>
       </div>
 
@@ -573,7 +575,10 @@ const CatalogManager = ({
               Add
             </button>
           </div>
-          <ul className="catalog-item-list">
+          <ul
+            className="catalog-item-list"
+            style={{ '--catalog-page-size': Math.max(1, Number(catPageSize) || 7) }}
+          >
             {pagedCategories.map((c) => {
               const used = usageCount('category', c.value);
               return (
@@ -647,16 +652,16 @@ const CatalogManager = ({
               style={{ display: 'none' }}
               onChange={pickGroupLogo}
             />
-            <small className="helper-text">
-              <i className="fas fa-info-circle"></i> Logo required — shows on homepage marquee.
-            </small>
             {newGroupPreview && (
               <div className="group-logo-thumb group-logo-thumb--preview">
                 <img src={newGroupPreview} alt="New group logo preview" />
               </div>
             )}
           </div>
-          <ul className="catalog-item-list">
+          <ul
+            className="catalog-item-list"
+            style={{ '--catalog-page-size': Math.max(1, Number(groupPageSize) || 7) }}
+          >
             {pagedGroups.map((g) => {
               const used = usageCount('group', g.value);
               return (
@@ -736,6 +741,7 @@ const getStockStatus = (stock) => {
 
 const StockPanelList = ({
   products,
+  pageSize = 5,
   showPrice,
   rowClass,
   editingStock,
@@ -746,7 +752,10 @@ const StockPanelList = ({
   onSaveEdit,
   onStockValueChange,
 }) => (
-  <div className="stock-list">
+  <div
+    className="stock-list"
+    style={{ '--stock-page-size': Math.max(1, Number(pageSize) || 5) }}
+  >
     {products.map((product) => {
       const status = getStockStatus(product.stock);
       const isEditing = editingStock === product._id;
@@ -767,45 +776,55 @@ const StockPanelList = ({
               )}
             </div>
           </div>
-          <div className="stock-list-stock">
-            {isEditing ? (
-              <div className="stock-edit-wrap">
-                <div className="stock-edit">
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    maxLength={3}
-                    value={stockValue}
-                    onChange={onStockValueChange}
-                    onKeyPress={(e) => {
-                      if (!/[0-9]/.test(e.key) && e.key !== 'Enter') { e.preventDefault(); return; }
-                      if (e.key === 'Enter') onSaveEdit(product._id);
-                    }}
-                    placeholder="0–999"
-                    autoFocus
-                  />
-                  <button className="save-btn" onClick={() => onSaveEdit(product._id)}><i className="fas fa-check"></i></button>
-                  <button className="cancel-btn" onClick={onCancelEdit}><i className="fas fa-times"></i></button>
-                </div>
-                {stockError && <span className="stock-inline-err">{stockError}</span>}
+          {isEditing ? (
+            <div className="stock-list-edit-panel">
+              <div className="stock-edit">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={3}
+                  value={stockValue}
+                  onChange={onStockValueChange}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      onSaveEdit(product._id);
+                    }
+                  }}
+                  placeholder="0–999"
+                  aria-label="Stock quantity"
+                  aria-invalid={!!stockError}
+                  title={stockError || 'Stock quantity'}
+                  autoFocus
+                />
+                <button type="button" className="save-btn" onClick={() => onSaveEdit(product._id)} title="Save">
+                  <i className="fas fa-check"></i>
+                </button>
+                <button type="button" className="cancel-btn" onClick={onCancelEdit} title="Cancel">
+                  <i className="fas fa-times"></i>
+                </button>
               </div>
-            ) : (
-              <strong className={product.stock === 0 ? 'stock-zero' : product.stock <= 10 ? 'stock-low' : ''}>
-                {product.stock}
-              </strong>
-            )}
-          </div>
-          <span className={`status-badge ${status.cls}`}>{status.label}</span>
-          {!isEditing && (
-            <button
-              type="button"
-              className="edit-stock-btn stock-list-edit"
-              onClick={() => onStartEdit(product._id, product.stock)}
-              title="Edit stock"
-            >
-              <i className="fas fa-edit"></i>
-            </button>
+              <span className={`status-badge ${status.cls}`}>{status.label}</span>
+              {stockError && <span className="stock-inline-err">{stockError}</span>}
+            </div>
+          ) : (
+            <>
+              <div className="stock-list-stock">
+                <strong className={product.stock === 0 ? 'stock-zero' : product.stock <= 10 ? 'stock-low' : ''}>
+                  {product.stock}
+                </strong>
+              </div>
+              <span className={`status-badge ${status.cls}`}>{status.label}</span>
+              <button
+                type="button"
+                className="edit-stock-btn stock-list-edit"
+                onClick={() => onStartEdit(product._id, product.stock)}
+                title="Edit stock"
+              >
+                <i className="fas fa-edit"></i>
+              </button>
+            </>
           )}
         </div>
       );
@@ -820,9 +839,9 @@ const StockManagement = ({ products, updateProduct, onAddProduct, categories = F
   const [stockValue, setStockValue]         = useState('');
   const [stockError, setStockError]         = useState('');
   const [allPage, setAllPage]               = useState(0);
-  const [allPageSize, setAllPageSize]       = useState(10);
+  const [allPageSize, setAllPageSize]       = useState(5);
   const [lowPage, setLowPage]               = useState(0);
-  const [lowPageSize, setLowPageSize]       = useState(10);
+  const [lowPageSize, setLowPageSize]       = useState(5);
 
   const filteredProducts = products.filter(p => {
     const matchSearch =
@@ -924,7 +943,7 @@ const StockManagement = ({ products, updateProduct, onAddProduct, categories = F
             </div>
           ) : (
             <>
-              <StockPanelList products={pagedAll} showPrice {...tableProps} />
+              <StockPanelList products={pagedAll} pageSize={allPageSize} showPrice {...tableProps} />
               <AdminPager
                 total={sortedFiltered.length}
                 page={allPage}
@@ -953,7 +972,7 @@ const StockManagement = ({ products, updateProduct, onAddProduct, categories = F
             </div>
           ) : (
             <>
-              <StockPanelList products={pagedLow} rowClass="low-stock-row" {...tableProps} />
+              <StockPanelList products={pagedLow} pageSize={lowPageSize} rowClass="low-stock-row" {...tableProps} />
               <AdminPager
                 total={lowStockProducts.length}
                 page={lowPage}

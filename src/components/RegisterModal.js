@@ -1,5 +1,6 @@
 // src/components/RegisterModal.js
 import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import "./RegisterModal.css";
 import { useAuth } from "../context/AuthContext";
 import { useMutation, useAction, useQuery } from "convex/react";
@@ -8,6 +9,8 @@ import { appendActivityLog } from "../admin/lib/localActivityLog";
 import { savePinWithFallback } from "../lib/localPin";
 import { runWithFailover } from "../lib/failoverWrite";
 import { useNotification } from "../context/NotificationContext";
+import useBodyScrollLock from "../hooks/useBodyScrollLock";
+import { getOverlayRoot } from "../utils/scrollLock";
 
 const RegisterModal = ({ onClose }) => {
   const { register, completeLogin } = useAuth();
@@ -102,11 +105,11 @@ const RegisterModal = ({ onClose }) => {
   const MAX_USERNAME_LENGTH = 10;
 
   // ── EFFECTS ──────────────────────────────────────
+  useBodyScrollLock(true);
+
   useEffect(() => {
-    document.body.style.overflow = "hidden";
     document.body.classList.add("login-modal-open");
     return () => {
-      document.body.style.overflow = "";
       document.body.classList.remove("login-modal-open");
     };
   }, []);
@@ -575,8 +578,8 @@ const RegisterModal = ({ onClose }) => {
   };
 
   // ── RENDER ───────────────────────────────────────
-  return (
-    <div className="modal-overlay" onClick={onClose}>
+  return createPortal(
+    <div className="modal-overlay register-modal-overlay" onClick={onClose}>
       <div className="register-modal-content" onClick={(e) => e.stopPropagation()}>
 
         <button className="modal-close-btn" onClick={onClose} aria-label="Close">
@@ -1013,10 +1016,8 @@ const RegisterModal = ({ onClose }) => {
                   <div className="reg-consent-notice-text">
                     <strong>Data Privacy Notice</strong>
                     <p>
-                      In compliance with the <strong>Data Privacy Act of 2012 (RA 10173)</strong>, DKMerch collects and processes
-                      your personal information (name, email, phone, address) solely for account management, order processing,
-                      and delivery coordination. Your data will not be shared with third parties without your consent.
-                      You have the right to access, correct, and request deletion of your data at any time.
+                      In compliance with the <strong>Data Privacy Act of 2012 (RA 10173)</strong>, we use your info for
+                      account, orders, and delivery only — not shared without consent.
                     </p>
                   </div>
                 </div>
@@ -1032,15 +1033,14 @@ const RegisterModal = ({ onClose }) => {
                     }}
                   />
                   <span>
-                    I have read and agree to the{" "}
+                    I agree to the{" "}
                     <a href="/privacy-policy" className="reg-consent-link">
                       Privacy Policy
                     </a>{" "}
                     and{" "}
                     <a href="/terms-and-conditions" className="reg-consent-link">
-                      Terms & Conditions
+                      Terms
                     </a>.
-                    I consent to the collection and use of my personal data as described above.
                   </span>
                 </label>
                 {errors.consent && (
@@ -1072,7 +1072,8 @@ const RegisterModal = ({ onClose }) => {
           </>
         )}
       </div>
-    </div>
+    </div>,
+    getOverlayRoot() || document.body
   );
 };
 

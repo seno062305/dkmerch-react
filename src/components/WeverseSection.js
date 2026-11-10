@@ -50,17 +50,21 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
     return product.kpopGroup?.trim().toUpperCase() === activePromo.name.trim().toUpperCase();
   };
 
-  // New Arrivals: newest released / newly added products (latest 5)
-  const NEW_ARRIVALS_LIMIT = 5;
+  // New Arrivals: max 8 cards; just-released (date+time) always first
+  const NEW_ARRIVALS_LIMIT = 8;
   const nowMs = Date.now();
   const newArrivals = (products || [])
     .slice()
     .filter((p) => {
-      const anchor = getProductNewAnchorMs(p);
-      // Only already-released / already-added items (no future pre-orders)
-      return anchor > 0 && anchor <= nowMs;
+      // Within new-arrival window (by release date+time / createdAt), already out
+      return isNewArrival(p, nowMs);
     })
-    .sort((a, b) => getProductNewAnchorMs(b) - getProductNewAnchorMs(a))
+    .sort((a, b) => {
+      const tb = getProductNewAnchorMs(b);
+      const ta = getProductNewAnchorMs(a);
+      if (tb !== ta) return tb - ta;
+      return (Number(b._creationTime) || 0) - (Number(a._creationTime) || 0);
+    })
     .slice(0, NEW_ARRIVALS_LIMIT);
 
   const saleProducts = (products || [])
@@ -163,7 +167,7 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
       >
         {showReleasedBadge ? (
           <div className="wv-released-badge">
-            <i className="fas fa-bolt"></i> Just Released
+            <i className="fas fa-sparkles"></i> Just Released
           </div>
         ) : showNewBadgeResolved ? (
           <div className="wv-new-badge">NEW</div>

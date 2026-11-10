@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useLocation, useSearchParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useCatalogOptions } from '../hooks/useCatalogOptions';
@@ -23,6 +23,24 @@ import './Collections.css';
 
 const MAX_WISHLIST = 10;
 const JUST_RELEASED_MS = 24 * 60 * 60 * 1000;
+const PRODUCTS_PER_PAGE = 20;
+
+function buildShopPageList(page, totalPages) {
+  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i);
+  const pages = new Set([0, totalPages - 1, page]);
+  for (let i = page - 1; i <= page + 1; i++) {
+    if (i > 0 && i < totalPages - 1) pages.add(i);
+  }
+  const sorted = [...pages].sort((a, b) => a - b);
+  const out = [];
+  let prev = null;
+  sorted.forEach((n) => {
+    if (prev !== null && n - prev > 1) out.push('…');
+    out.push(n);
+    prev = n;
+  });
+  return out;
+}
 
 const getReleaseMs = (product) => {
   if (product?.releasedAt) return Number(product.releasedAt);
@@ -34,14 +52,13 @@ const isReleased = (product) => isProductReleased(product);
 
 const Collections = () => {
   const location = useLocation();
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { showNotification } = useNotification();
   const { confirm } = useConfirm();
 
   const [selectedCategory, setSelectedCategory]         = useState('all');
   const [selectedGroup, setSelectedGroup]               = useState('all');
-  const [searchTerm, setSearchTerm]                     = useState('');
+  const [page, setPage]                                 = useState(0);
   const [highlightedProductId, setHighlightedProductId] = useState(null);
   const [selectedProduct, setSelectedProduct]           = useState(null);
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
@@ -94,31 +111,38 @@ const Collections = () => {
 
   useEffect(() => {
     const productId = searchParams.get('product');
-    if (productId) {
-      setHighlightedProductId(productId);
-      setSelectedCategory('all');
-      setSelectedGroup('all');
-      setSearchTerm('');
-      setTimeout(() => {
-        const element = document.querySelector(`[data-product-id="${productId}"]`);
-        if (element) element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }, 300);
-      setTimeout(() => setHighlightedProductId(null), 3000);
-    }
+    if (!productId) return;
+    setHighlightedProductId(productId);
+    setSelectedCategory('all');
+    setSelectedGroup('all');
+    setTimeout(() => setHighlightedProductId(null), 3000);
   }, [searchParams]);
 
   const categories = ['all', ...catalogCategories.map((c) => c.value)];
   const groups = ['all', ...catalogGroups.map((g) => g.value)];
 
+  useEffect(() => {
+    setPage(0);
+  }, [selectedCategory, selectedGroup]);
+
+  useEffect(() => {
+    const productId = searchParams.get('product');
+    if (!productId || !(products || []).length) return;
+    const idx = products.findIndex((p) => String(p._id || p.id) === String(productId));
+    if (idx < 0) return;
+    const t = setTimeout(() => {
+      setPage(Math.floor(idx / PRODUCTS_PER_PAGE));
+      const element = document.querySelector(`[data-product-id="${productId}"]`);
+      if (element) element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 80);
+    return () => clearTimeout(t);
+  }, [searchParams, products]);
+
   const filteredProducts = (products || [])
     .filter(product => {
       const categoryMatch = selectedCategory === 'all' || product.category === selectedCategory;
       const groupMatch    = selectedGroup    === 'all' || product.kpopGroup === selectedGroup;
-      const searchMatch   = !searchTerm.trim() ||
-        product.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        product.kpopGroup?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        product.category?.toLowerCase().includes(searchTerm.toLowerCase());
-      return categoryMatch && groupMatch && searchMatch;
+      return categoryMatch && groupMatch;
     })
     .sort((a, b) => {
       const aReleased  = isReleased(a);
@@ -130,6 +154,24 @@ const Collections = () => {
       if (aReleased  && bReleased)  return bReleaseMs - aReleaseMs;
       return (b._creationTime || 0) - (a._creationTime || 0);
     });
+
+  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE) || 1);
+  const safePage = Math.min(Math.max(0, page), totalPages - 1);
+  const pagedProducts = useMemo(() => {
+    const start = safePage * PRODUCTS_PER_PAGE;
+    return filteredProducts.slice(start, start + PRODUCTS_PER_PAGE);
+  }, [filteredProducts, safePage]);
+  const pageList = useMemo(
+    () => buildShopPageList(safePage, totalPages),
+    [safePage, totalPages]
+  );
+  const showingFrom = filteredProducts.length === 0 ? 0 : safePage * PRODUCTS_PER_PAGE + 1;
+  const showingTo = Math.min((safePage + 1) * PRODUCTS_PER_PAGE, filteredProducts.length);
+
+  const goToPage = (next) => {
+    setPage(next);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const handleAddToCart = async (product) => {
     if (Number(product.stock) <= 0) {
@@ -208,45 +250,33 @@ const Collections = () => {
         )}
       </div>
 
-      {/* ── Search bar ── */}
-      <div className="collections-search-wrap">
-        <div className="collections-search-box">
-          <i className="fas fa-search"></i>
-          <input
-            type="text"
-            placeholder="Search products, groups, categories..."
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-          />
-          {searchTerm && (
-            <button className="collections-search-clear" onClick={() => setSearchTerm('')}>
-              <i className="fas fa-times"></i>
-            </button>
-          )}
-        </div>
-      </div>
-
       <div className="collections-filters">
         <div className="filters-single-line">
           <div className="filter-group">
             <label>CATEGORY:</label>
-            <div className="filter-buttons desktop-only">
-              {categories.map(cat => (
-                <button key={cat} className={`filter-btn ${selectedCategory === cat ? 'active' : ''}`} onClick={() => setSelectedCategory(cat)}>
-                  {cat}
-                </button>
-              ))}
-            </div>
-            <div className="filter-dropdown mobile-only" ref={categoryRef}>
-              <button className="filter-dropdown-toggle" onClick={() => { setCategoryDropdownOpen(o => !o); setGroupDropdownOpen(false); }}>
-                <span>{selectedCategory}</span>
+            <div className="filter-dropdown" ref={categoryRef}>
+              <button
+                type="button"
+                className="filter-dropdown-toggle"
+                aria-haspopup="listbox"
+                aria-expanded={categoryDropdownOpen}
+                onClick={() => { setCategoryDropdownOpen(o => !o); setGroupDropdownOpen(false); }}
+              >
+                <span>{selectedCategory === 'all' ? 'All Categories' : selectedCategory}</span>
                 <i className={`fas fa-chevron-down ${categoryDropdownOpen ? 'open' : ''}`}></i>
               </button>
               {categoryDropdownOpen && (
-                <div className="filter-dropdown-menu">
+                <div className="filter-dropdown-menu" role="listbox">
                   {categories.map(cat => (
-                    <button key={cat} className={`filter-dropdown-item ${selectedCategory === cat ? 'active' : ''}`} onClick={() => { setSelectedCategory(cat); setCategoryDropdownOpen(false); }}>
-                      {cat}
+                    <button
+                      key={cat}
+                      type="button"
+                      role="option"
+                      aria-selected={selectedCategory === cat}
+                      className={`filter-dropdown-item ${selectedCategory === cat ? 'active' : ''}`}
+                      onClick={() => { setSelectedCategory(cat); setCategoryDropdownOpen(false); }}
+                    >
+                      {cat === 'all' ? 'All Categories' : cat}
                       {selectedCategory === cat && <i className="fas fa-check"></i>}
                     </button>
                   ))}
@@ -259,20 +289,16 @@ const Collections = () => {
 
           <div className="filter-group">
             <label>GROUP:</label>
-            <div className="filter-buttons desktop-only">
-              {groups.map(group => (
-                <button key={group} className={`filter-btn ${selectedGroup === group ? 'active' : ''}`} onClick={() => setSelectedGroup(group)}>
-                  {group}
-                  {activePromo && activePromo.isActive && group.toUpperCase() === activePromo.name?.toUpperCase() && (
-                    <span className="filter-promo-dot" title={`${activePromo.discount}% off!`}>●</span>
-                  )}
-                </button>
-              ))}
-            </div>
-            <div className="filter-dropdown mobile-only" ref={groupRef}>
-              <button className="filter-dropdown-toggle" onClick={() => { setGroupDropdownOpen(o => !o); setCategoryDropdownOpen(false); }}>
+            <div className="filter-dropdown" ref={groupRef}>
+              <button
+                type="button"
+                className="filter-dropdown-toggle"
+                aria-haspopup="listbox"
+                aria-expanded={groupDropdownOpen}
+                onClick={() => { setGroupDropdownOpen(o => !o); setCategoryDropdownOpen(false); }}
+              >
                 <span>
-                  {selectedGroup}
+                  {selectedGroup === 'all' ? 'All Groups' : selectedGroup}
                   {activePromo && activePromo.isActive && selectedGroup.toUpperCase() === activePromo.name?.toUpperCase() && (
                     <span className="filter-promo-dot">●</span>
                   )}
@@ -280,11 +306,18 @@ const Collections = () => {
                 <i className={`fas fa-chevron-down ${groupDropdownOpen ? 'open' : ''}`}></i>
               </button>
               {groupDropdownOpen && (
-                <div className="filter-dropdown-menu">
+                <div className="filter-dropdown-menu" role="listbox">
                   {groups.map(group => (
-                    <button key={group} className={`filter-dropdown-item ${selectedGroup === group ? 'active' : ''}`} onClick={() => { setSelectedGroup(group); setGroupDropdownOpen(false); }}>
+                    <button
+                      key={group}
+                      type="button"
+                      role="option"
+                      aria-selected={selectedGroup === group}
+                      className={`filter-dropdown-item ${selectedGroup === group ? 'active' : ''}`}
+                      onClick={() => { setSelectedGroup(group); setGroupDropdownOpen(false); }}
+                    >
                       <span>
-                        {group}
+                        {group === 'all' ? 'All Groups' : group}
                         {activePromo && activePromo.isActive && group.toUpperCase() === activePromo.name?.toUpperCase() && (
                           <span className="filter-promo-dot">●</span>
                         )}
@@ -301,26 +334,29 @@ const Collections = () => {
 
       <div className="results-count">
         <p>
-          Showing {filteredProducts.length} product{filteredProducts.length !== 1 ? 's' : ''}
+          {filteredProducts.length === 0
+            ? 'No products'
+            : `Showing ${showingFrom}–${showingTo} of ${filteredProducts.length} product${filteredProducts.length !== 1 ? 's' : ''}`}
           {selectedGroup !== 'all' && ` for ${selectedGroup}`}
           {selectedCategory !== 'all' && ` in ${selectedCategory}`}
-          {searchTerm && ` matching "${searchTerm}"`}
+          {filteredProducts.length > PRODUCTS_PER_PAGE && ` · ${PRODUCTS_PER_PAGE} per page`}
         </p>
       </div>
 
       {filteredProducts.length === 0 ? (
         <div className="no-results">
           <i className="fas fa-box-open"></i>
-          <p>{searchTerm ? `No products found for "${searchTerm}"` : selectedGroup !== 'all' ? `No products found for ${selectedGroup}` : 'No products available'}</p>
-          {(selectedGroup !== 'all' || selectedCategory !== 'all' || searchTerm) && (
-            <button className="reset-filters-btn" onClick={() => { setSelectedCategory('all'); setSelectedGroup('all'); setSearchTerm(''); }}>
+          <p>{selectedGroup !== 'all' ? `No products found for ${selectedGroup}` : selectedCategory !== 'all' ? `No products found in ${selectedCategory}` : 'No products available'}</p>
+          {(selectedGroup !== 'all' || selectedCategory !== 'all') && (
+            <button className="reset-filters-btn" onClick={() => { setSelectedCategory('all'); setSelectedGroup('all'); }}>
               Reset Filters
             </button>
           )}
         </div>
       ) : (
+        <>
         <div className="collections-grid">
-          {filteredProducts.map(product => {
+          {pagedProducts.map(product => {
             const pid      = product._id || product.id;
             const hasPromo = isPromoProduct(product);
             const wishlisted = isWishlisted(pid);
@@ -345,7 +381,7 @@ const Collections = () => {
                 onClick={() => setSelectedProduct(product)}
               >
                 {showReleasedBadge ? (
-                  <div className="collection-released-badge"><i className="fas fa-bolt"></i> Just Released</div>
+                  <div className="collection-released-badge"><i className="fas fa-sparkles"></i> Just Released</div>
                 ) : showNewBadge ? (
                   <div className="collection-new-badge">NEW</div>
                 ) : (showSale || showPreOrder) ? (
@@ -428,6 +464,46 @@ const Collections = () => {
             );
           })}
         </div>
+
+        {filteredProducts.length > PRODUCTS_PER_PAGE && (
+          <nav className="shop-pager" aria-label="Product pages">
+            <button
+              type="button"
+              className="shop-pager-nav"
+              disabled={safePage <= 0}
+              onClick={() => goToPage(safePage - 1)}
+              aria-label="Previous page"
+            >
+              <i className="fas fa-chevron-left"></i>
+            </button>
+            <div className="shop-pager-nums">
+              {pageList.map((item, idx) => (
+                item === '…' ? (
+                  <span key={`e-${idx}`} className="shop-pager-ellipsis">…</span>
+                ) : (
+                  <button
+                    key={item}
+                    type="button"
+                    className={`shop-pager-num ${safePage === item ? 'is-active' : ''}`}
+                    onClick={() => goToPage(item)}
+                  >
+                    {item + 1}
+                  </button>
+                )
+              ))}
+            </div>
+            <button
+              type="button"
+              className="shop-pager-nav"
+              disabled={safePage >= totalPages - 1}
+              onClick={() => goToPage(safePage + 1)}
+              aria-label="Next page"
+            >
+              <i className="fas fa-chevron-right"></i>
+            </button>
+          </nav>
+        )}
+        </>
       )}
 
       {selectedProduct && (

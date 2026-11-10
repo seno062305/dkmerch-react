@@ -8,6 +8,8 @@ import { useConfirm, addToCartConfirmRememberKey } from '../context/ConfirmConte
 import { useNavigate } from 'react-router-dom';
 import PromoCodeInput from './PromoCodeInput';
 import { formatSaleEndLabel, formatSaleEndShort, formatSaleRange, shouldShowSaleBadge, shouldShowPreOrderBadge, hasDiscountedPrice } from '../utils/saleUtils';
+import useBodyScrollLock from '../hooks/useBodyScrollLock';
+import { getOverlayRoot } from '../utils/scrollLock';
 import './ProductModal.css';
 
 const REVIEW_CHAR_LIMIT = 120;
@@ -114,54 +116,24 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
     setExpandedReviews({});
     setShowLightbox(false);
     setShowBuyNowQty(false);
-
-    const getScrollY = () => {
-      const bodyTop = document.body.style.top;
-      if (bodyTop) return Math.abs(parseInt(bodyTop, 10)) || 0;
-      return window.scrollY || window.pageYOffset || 0;
-    };
-
-    const scrollY = getScrollY();
-    document.body.classList.add('product-modal-open');
-    document.body.style.position = 'fixed';
-    document.body.style.top = `-${scrollY}px`;
-    document.body.style.left = '0';
-    document.body.style.right = '0';
-    document.body.style.width = '100%';
-    document.body.style.overflow = 'hidden';
-
-    return () => {
-      document.body.classList.remove('product-modal-open');
-      const otherLock =
-        document.body.classList.contains('login-modal-open')
-        || document.body.classList.contains('cart-modal-open');
-      if (!otherLock) {
-        document.body.style.position = '';
-        document.body.style.top = '';
-        document.body.style.left = '';
-        document.body.style.right = '';
-        document.body.style.width = '';
-        document.body.style.overflow = '';
-        try {
-          window.scrollTo({ top: scrollY, left: 0, behavior: 'instant' });
-        } catch {
-          window.scrollTo(0, scrollY);
-        }
-      }
-    };
   }, [productId]);
 
-  // One history trap: Back closes lightbox → buy-now → modal, without leaving the current tab
+  // One history trap: Back closes lightbox → buy-now → modal, without leaving the current tab.
+  // Keep scroll Y around pushState — some browsers jump to top on history changes.
   useEffect(() => {
-    try {
-      window.history.pushState({ dkLayer: 'productModal' }, '');
-    } catch { /* ignore */ }
-
-    let closedByBack = false;
-    const reTrap = () => {
+    const keepScroll = () => {
+      const y = window.scrollY || window.pageYOffset || 0;
+      try { window.history.scrollRestoration = 'manual'; } catch { /* ignore */ }
       try {
         window.history.pushState({ dkLayer: 'productModal' }, '');
       } catch { /* ignore */ }
+      try { window.scrollTo(0, y); } catch { /* ignore */ }
+    };
+    keepScroll();
+
+    let closedByBack = false;
+    const reTrap = () => {
+      keepScroll();
     };
 
     const onPopState = () => {
@@ -280,7 +252,9 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
     setTimeout(() => setCartToast(false), 2200);
   };
 
-  const outOfStock = Number(product.stock) <= 0;
+  const stockQty = Number(product.stock) || 0;
+  const outOfStock = stockQty <= 0;
+  const lowStock = !outOfStock && stockQty <= 5;
   const showSaleBadge = !outOfStock && shouldShowSaleBadge(product);
   const showPreOrderBadge = shouldShowPreOrderBadge(product) && !isReleased;
 
@@ -402,6 +376,15 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
   const toggleExpand = (id) => {
     setExpandedReviews(prev => ({ ...prev, [id]: !prev[id] }));
   };
+
+  useBodyScrollLock(true);
+
+  useEffect(() => {
+    document.body.classList.add('product-modal-open');
+    return () => {
+      document.body.classList.remove('product-modal-open');
+    };
+  }, []);
 
   return createPortal(
     <>
@@ -561,9 +544,15 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
                   </div>
                 )}
 
-                <div className="stock-info">
+                <div className={`stock-info ${outOfStock ? 'stock-out' : lowStock ? 'stock-low' : 'stock-in'}`}>
                   <i className="fas fa-box"></i>
-                  <span>{outOfStock ? 'Out of stock' : `${product.stock} items in stock`}</span>
+                  <span>
+                    {outOfStock
+                      ? 'Out of stock'
+                      : lowStock
+                        ? `Only ${stockQty} left`
+                        : `${stockQty} items in stock`}
+                  </span>
                 </div>
                 <div className="sold-info">
                   <i className="fas fa-shopping-bag"></i>
@@ -759,7 +748,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
       )}
 
     </>,
-    document.body
+    getOverlayRoot() || document.body
   );
 };
 

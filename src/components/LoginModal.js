@@ -18,6 +18,8 @@ import { guessLocation } from "../utils/deviceInfo";
 import { PRODUCTION_SITE_URL } from "./InstallAppModal";
 import { useNotification } from "../context/NotificationContext";
 import { useCloseOnHistoryBack } from "../hooks/useCloseOnHistoryBack";
+import useBodyScrollLock from "../hooks/useBodyScrollLock";
+import { getOverlayRoot } from "../utils/scrollLock";
 // Static import — lazy chunk breaks Create Account after HMR / stale builds
 import RegisterModal from "./RegisterModal";
 import { WaitingApprovalModal, LoginDeniedModal } from "./LoginApprovalModals";
@@ -345,38 +347,12 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
     setView("login");
   }, [preferPinUnlock, remembered, rememberedLocalPin, unlockPinStatus]);
 
+  useBodyScrollLock(true);
+
   useEffect(() => {
-    const getScrollY = () => {
-      const bodyTop = document.body.style.top;
-      if (bodyTop) return Math.abs(parseInt(bodyTop, 10)) || 0;
-      return window.scrollY || window.pageYOffset || 0;
-    };
-    const scrollY = getScrollY();
     document.body.classList.add("login-modal-open");
-    document.body.style.position = "fixed";
-    document.body.style.top = `-${scrollY}px`;
-    document.body.style.left = "0";
-    document.body.style.right = "0";
-    document.body.style.width = "100%";
-    document.body.style.overflow = "hidden";
     return () => {
       document.body.classList.remove("login-modal-open");
-      const otherLock =
-        document.body.classList.contains("product-modal-open")
-        || document.body.classList.contains("cart-modal-open");
-      if (!otherLock) {
-        document.body.style.position = "";
-        document.body.style.top = "";
-        document.body.style.left = "";
-        document.body.style.right = "";
-        document.body.style.width = "";
-        document.body.style.overflow = "";
-        try {
-          window.scrollTo({ top: scrollY, left: 0, behavior: "instant" });
-        } catch {
-          window.scrollTo(0, scrollY);
-        }
-      }
     };
   }, []);
 
@@ -644,8 +620,10 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
       if (result.pendingUser && result.role === "user" && !result.pendingApproval) {
         setPendingUser(result.pendingUser);
         setIsPinReset(false);
-        const hasPin = !!(result.needsPin || hasLocalPin(result.pendingUser._id));
-        const needsSetup = !!(result.needsPinSetup && !hasLocalPin(result.pendingUser._id)) || !hasPin;
+        const localPin = hasLocalPin(result.pendingUser._id);
+        const hasPin = !!(result.needsPin || localPin);
+        const needsSetup =
+          (!!result.needsPinSetup && !localPin && !result.needsPin) || !hasPin;
         setAccountHasPin(hasPin && !needsSetup);
         setPinValue("");
         setPinConfirmValue("");
@@ -668,8 +646,10 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
 
       if (onLoginSuccess) {
         onLoginSuccess(result.role);
-      } else {
+      } else if (result.role === "rider") {
         onClose();
+      } else {
+        setError("Please enter your PIN to continue.");
       }
     } catch (err) {
       setError("Login failed. Please try again.");
@@ -1578,12 +1558,12 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
           </button>
         </div>
       </div>,
-      document.body
+      getOverlayRoot() || document.body
     );
   }
 
   // ════════════════════════════════════════════════════════════════════
-  //  RENDER — portal to body so product/header stacking never hides login
+  //  RENDER — portal above #root so scroll-lock freeze never shifts login
   // ════════════════════════════════════════════════════════════════════
   return createPortal(
     <div
@@ -1932,8 +1912,10 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
                 {deviceUnlockMode
                   ? `Hi ${pendingUser?.name || "there"} — enter your PIN to unlock.`
                   : accountHasPin
-                    ? `Hi ${pendingUser?.name || "there"} — enter your PIN to start shopping.`
-                    : `Hi ${pendingUser?.name || "there"} — tap Reset PIN to create your shopping PIN.`}
+                    ? pendingUser?.role === "admin"
+                      ? `Hi ${pendingUser?.name || "Admin"} — enter your PIN to open the admin panel.`
+                      : `Hi ${pendingUser?.name || "there"} — enter your PIN to start shopping.`
+                    : `Hi ${pendingUser?.name || "there"} — tap Forgot PIN to create your PIN.`}
               </p>
             </div>
             <div className="login-form">
@@ -1976,7 +1958,13 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
                 disabled={pinLoading || (accountHasPin && pinValue.length < 4)}
                 style={{ background: accentGradient, boxShadow: `0 4px 12px ${accentShadow}`, color: "#fff" }}
               >
-                {pinLoading ? "Checking…" : deviceUnlockMode ? "Unlock" : "Continue to Shop"}
+                {pinLoading
+                  ? "Checking…"
+                  : deviceUnlockMode
+                    ? "Unlock"
+                    : pendingUser?.role === "admin"
+                      ? "Continue to Admin"
+                      : "Continue to Shop"}
               </button>
               <div className="signup-section" style={{ marginTop: 0 }}>
                 <p>
@@ -2364,7 +2352,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
         )}
       </div>
     </div>,
-    document.body
+    getOverlayRoot() || document.body
   );
 };
 

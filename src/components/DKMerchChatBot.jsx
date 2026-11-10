@@ -4,6 +4,7 @@ import InstallAppModal, {
   isStandaloneApp,
   isInsecureInstallHost,
 } from "./InstallAppModal";
+import useBodyScrollLock from "../hooks/useBodyScrollLock";
 
 // ─── DKMerch Brand Colors ───
 const PINK = "#fc1268";
@@ -249,12 +250,7 @@ export default function DKMerchChatBot() {
     setInstallPrompt(null);
   };
 
-  useEffect(() => {
-    if (!open) return undefined;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
-  }, [open]);
+  useBodyScrollLock(open);
 
   useEffect(() => {
     if (open && !hasGreeted) {

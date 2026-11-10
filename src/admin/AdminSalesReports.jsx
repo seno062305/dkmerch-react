@@ -4,6 +4,7 @@ import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import DkIcon, { DK_ICONS } from '../components/DkIcon';
 import { formatOrderShortId } from '../utils/orderId';
+import useBodyScrollLock from '../hooks/useBodyScrollLock';
 import './AdminSalesReports.css';
 
 const MiniTrend = ({ values = [], color = '#16a34a', fullWidth = false }) => {
@@ -126,6 +127,7 @@ const CHART_FILTERS = [
 //  SUMMARY CARD DETAIL MODAL
 // ══════════════════════════════════════════════════════════════════════════
 const SummaryModal = ({ data, onClose }) => {
+  useBodyScrollLock(!!data);
   if (!data) return null;
   return (
     <div className="smodal-overlay" onClick={onClose}>
@@ -479,10 +481,43 @@ export const SalesAnalyticsPanel = ({ recentOrders = [] }) => {
   };
 
   const salesKpis = [
-    { key: 'totalSales', label: 'Total Sales', value: fmt(summary.totalSales), icon: DK_ICONS.totalSales, color: '#16a34a', trend: kpiTrend },
-    { key: 'avgOrderValue', label: 'Avg Order Value', value: fmt(summary.avgOrderValue), icon: DK_ICONS.avgOrderValue, color: '#14b8a6', trend: kpiTrend },
-    { key: 'refundItems', label: 'Refund Items', value: fmtNum(summary.refundCount), icon: DK_ICONS.refundItems, color: '#3b82f6', trend: volumeTrend, hint: `Rate ${refundRate}` },
-    { key: 'totalRefundValue', label: 'Refund Value', value: fmt(summary.totalRefundValue), icon: DK_ICONS.totalRefundValue, color: '#f97316', trend: kpiTrend },
+    {
+      key: 'totalSales',
+      label: 'Total Sales',
+      value: fmt(summary.totalSales),
+      icon: DK_ICONS.totalSales,
+      color: '#16a34a',
+      trend: kpiTrend,
+      tooltip: 'Net revenue from all paid orders within the selected date range, after deducting the total value of approved refunds. Formula: Gross Sales − Total Refund Value.',
+    },
+    {
+      key: 'avgOrderValue',
+      label: 'Avg Order Value',
+      value: fmt(summary.avgOrderValue),
+      icon: DK_ICONS.avgOrderValue,
+      color: '#14b8a6',
+      trend: kpiTrend,
+      tooltip: 'Average revenue per completed/delivered order in the selected date range.',
+    },
+    {
+      key: 'refundItems',
+      label: 'Refund Items',
+      value: fmtNum(summary.refundCount),
+      icon: DK_ICONS.refundItems,
+      color: '#3b82f6',
+      trend: volumeTrend,
+      hint: `Rate ${refundRate}`,
+      tooltip: 'Total number of orders within the selected date range that have been approved for a refund.',
+    },
+    {
+      key: 'totalRefundValue',
+      label: 'Refund Value',
+      value: fmt(summary.totalRefundValue),
+      icon: DK_ICONS.totalRefundValue,
+      color: '#f97316',
+      trend: kpiTrend,
+      tooltip: 'Sum of the refund amounts for all approved refund orders in the selected date range.',
+    },
   ];
 
   return (
@@ -505,7 +540,13 @@ export const SalesAnalyticsPanel = ({ recentOrders = [] }) => {
 
       <div className="bento-kpi-row">
         {salesKpis.map((m) => (
-          <button key={m.key} type="button" className="bento-kpi-card" onClick={() => openSummaryModal(m.key)}>
+          <button
+            key={m.key}
+            type="button"
+            className="bento-kpi-card"
+            title={m.tooltip}
+            onClick={() => openSummaryModal(m.key)}
+          >
             <div className="bento-kpi-top">
               <div>
                 <div className="bento-kpi-label">{m.label}</div>
@@ -527,7 +568,6 @@ export const SalesAnalyticsPanel = ({ recentOrders = [] }) => {
             <div className="bento-card-head">
               <div>
                 <h3>Sales Trend</h3>
-                <p>Revenue performance for the selected range</p>
               </div>
               <div className="bento-head-controls">
                 <div className="chart-filter-pills">
@@ -575,7 +615,6 @@ export const SalesAnalyticsPanel = ({ recentOrders = [] }) => {
             <div className="bento-card-head">
               <div>
                 <h3>Order Volume</h3>
-                <p>Number of orders over time</p>
               </div>
               <div className="bento-head-controls">
                 <div className="chart-filter-pills">
@@ -619,7 +658,6 @@ export const SalesAnalyticsPanel = ({ recentOrders = [] }) => {
             <div className="bento-card-head">
               <div>
                 <h3>Order Status</h3>
-                <p>Distribution in selected range</p>
               </div>
             </div>
             <div className="bento-donut-wrap">
@@ -648,7 +686,6 @@ export const SalesAnalyticsPanel = ({ recentOrders = [] }) => {
             <div className="bento-card-head">
               <div>
                 <h3>Recent Orders</h3>
-                <p>Latest 5 orders</p>
               </div>
               <Link to="/admin/orders" className="bento-view-all">View all →</Link>
             </div>
@@ -679,7 +716,6 @@ export const SalesAnalyticsPanel = ({ recentOrders = [] }) => {
           <div className="bento-card-head">
             <div>
               <h3>Top Selling Products</h3>
-              <p>Best performers in selected range</p>
             </div>
             <Link to="/admin/products" className="bento-view-all">View all →</Link>
           </div>
@@ -719,7 +755,6 @@ export const SalesAnalyticsPanel = ({ recentOrders = [] }) => {
           <div className="bento-card-head">
             <div>
               <h3>Sales by Category</h3>
-              <p>Revenue distribution across product types</p>
             </div>
           </div>
           {salesByCategory.length === 0 ? (

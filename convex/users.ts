@@ -98,17 +98,36 @@ export const getAllUsersForPromoNotif = internalQuery({
 export const loginUser = mutation({
   args: { identifier: v.string(), password: v.string() },
   handler: async ({ db }, { identifier, password }) => {
+    const raw = String(identifier || "").trim();
+    const normalized = raw.toLowerCase();
+
     const byEmail = await db
       .query("users")
-      .withIndex("by_email", q => q.eq("email", identifier))
+      .withIndex("by_email", (q) => q.eq("email", raw))
       .first();
+
+    const byEmailLower =
+      !byEmail && raw !== normalized
+        ? await db
+            .query("users")
+            .withIndex("by_email", (q) => q.eq("email", normalized))
+            .first()
+        : null;
 
     const byUsername = await db
       .query("users")
-      .withIndex("by_username", q => q.eq("username", identifier))
+      .withIndex("by_username", (q) => q.eq("username", raw))
       .first();
 
-    let user = byEmail || byUsername;
+    const byUsernameLower =
+      !byUsername && raw !== normalized
+        ? await db
+            .query("users")
+            .withIndex("by_username", (q) => q.eq("username", normalized))
+            .first()
+        : null;
+
+    let user = byEmail || byEmailLower || byUsername || byUsernameLower;
 
     if (user && user.password === password) {
       // ── Auto-unsuspend if suspension has expired ──
@@ -180,7 +199,7 @@ export const loginUser = mutation({
       if (hasPin) {
         return { success: true, user: safeUser, needsPin: true };
       }
-      // First login / legacy accounts without PIN → OTP then create PIN
+      // Legacy / first login without PIN → go straight to Create PIN (client)
       return { success: true, user: safeUser, needsPinSetup: true };
     }
     return { success: false, user: null, message: "Invalid username/email or password" };
@@ -597,9 +616,6 @@ export const setUserPin = mutation({
     }
     const user = await db.get(userId);
     if (!user) return { success: false, message: "Account not found." };
-    if (user.role === "admin") {
-      return { success: false, message: "Admin accounts do not use a login PIN." };
-    }
     const pinHash = await hashPin(pin);
     await db.patch(userId, {
       pin: pinHash,
@@ -660,11 +676,13 @@ export const generateLoginOtp = mutation({
   handler: async ({ db }, { userId, resetPin }) => {
     const user = await db.get(userId) as any;
     if (!user) return { success: false, message: "Account not found." };
-    if (user.role === "admin") {
-      return { success: false, message: "Admin accounts do not use login OTP." };
-    }
+    // OTP is for Forgot PIN / reset only when a PIN already exists.
+    // First-time Create PIN after password does NOT call this.
     if (user.pin && !resetPin) {
       return { success: false, message: "PIN already set. Use your PIN to sign in." };
+    }
+    if (!user.pin && !resetPin) {
+      return { success: false, message: "No PIN yet — create one after signing in with your password." };
     }
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const loginOtpExpiresAt = Date.now() + 1000 * 60 * 3;
@@ -710,7 +728,7 @@ export const clearUserPinAfterOtp = mutation({
   handler: async ({ db }, { userId }) => {
     const user = await db.get(userId) as any;
     if (!user) return { success: false, message: "Account not found." };
-    await db.patch(userId, { pin: undefined } as any);
+    await db.patch(userId, { pin: undefined, pinLength: undefined } as any);
     return { success: true };
   },
 });
@@ -1311,24 +1329,58 @@ export const permanentDeleteUserArchive = mutation({
   },
 });
 
+const PRIMARY_ADMIN_EMAIL = "rayavelasquez26@gmail.com";
+const PRIMARY_ADMIN_PASSWORD = "@Rayabisaya143";
+const PRIMARY_ADMIN_USERNAME = "rayavelasquez26";
+
+/** Ensure primary admin exists. First login with no PIN → Create PIN (no OTP). */
 export const seedAdmin = mutation({
   args: {},
   handler: async ({ db }) => {
-    const existing = await db
+    const byPrimaryEmail = await db
       .query("users")
-      .withIndex("by_email", q => q.eq("email", "admin"))
+      .withIndex("by_email", (q) => q.eq("email", PRIMARY_ADMIN_EMAIL))
       .first();
-    if (!existing) {
-      await db.insert("users", {
-        name: "Administrator",
-        username: "admin",
-        email: "admin",
-        password: "admin123",
+    const byLegacyEmail = await db
+      .query("users")
+      .withIndex("by_email", (q) => q.eq("email", "admin"))
+      .first();
+    const byLegacyUsername = await db
+      .query("users")
+      .withIndex("by_username", (q) => q.eq("username", "admin"))
+      .first();
+    const byPrimaryUsername = await db
+      .query("users")
+      .withIndex("by_username", (q) => q.eq("username", PRIMARY_ADMIN_USERNAME))
+      .first();
+
+    const existing =
+      byPrimaryEmail || byPrimaryUsername || byLegacyEmail || byLegacyUsername;
+
+    if (existing) {
+      // Always keep primary admin login as Raya credentials until a PIN exists.
+      // After PIN is set, password can still be changed via Forgot Password (OTP).
+      const patch: Record<string, any> = {
         role: "admin",
         status: "active",
-      });
+        email: PRIMARY_ADMIN_EMAIL,
+        username: PRIMARY_ADMIN_USERNAME,
+        name: existing.name || "Administrator",
+        password: PRIMARY_ADMIN_PASSWORD,
+      };
+      await db.patch(existing._id, patch);
+      return { success: true, updated: true, email: PRIMARY_ADMIN_EMAIL };
     }
-    return { success: true };
+
+    await db.insert("users", {
+      name: "Administrator",
+      username: PRIMARY_ADMIN_USERNAME,
+      email: PRIMARY_ADMIN_EMAIL,
+      password: PRIMARY_ADMIN_PASSWORD,
+      role: "admin",
+      status: "active",
+    });
+    return { success: true, created: true };
   },
 });
 

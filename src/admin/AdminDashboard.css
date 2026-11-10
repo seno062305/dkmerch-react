@@ -385,76 +385,100 @@
 }
 
 @media (max-width: 992px) {
-  .admin-dashboard { padding: 25px; }
-  .stats-grid { gap: 20px; }
-  .bottom-grid { gap: 20px; grid-template-columns: 1fr; }
+  .admin-dashboard { padding: 0; }
+  .stats-grid { gap: 12px; }
+  .bottom-grid { gap: 16px; grid-template-columns: 1fr; }
   .chart-body { height: 280px; }
   .chart-card.full-width .chart-body { height: 300px; }
 }
 
 @media (max-width: 768px) {
-  /* admin-content already pads — avoid double padding that clips/overlaps */
   .admin-dashboard {
     padding: 0;
     max-width: 100%;
     overflow-x: hidden;
   }
   .dash-page-intro {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
-    margin-bottom: 14px;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
   }
   .dash-page-intro h2 {
     font-size: 18px;
     line-height: 1.25;
   }
   .dash-sales-link {
-    width: 100%;
+    width: auto;
     justify-content: center;
     box-sizing: border-box;
+    padding: 8px 12px;
+    font-size: 12px;
   }
   .stats-grid {
-    grid-template-columns: 1fr;
-    gap: 10px;
-    margin-bottom: 14px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .stat-card {
+    border-radius: 0;
   }
   .stat-card.wave-card { padding: 0; }
-  .stat-card-top { padding: 10px; }
-  .stat-icon-chip { width: 38px; height: 38px; }
-  .stat-icon { width: 40px; height: 40px; font-size: 20px; }
-  .stat-value { font-size: 18px; }
-  .stat-details h3 { font-size: 11px; }
-  .stat-label { font-size: 12px; }
+  .stat-card-top {
+    padding: 10px;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  .stat-card-copy h3 {
+    font-size: 10px;
+    margin-bottom: 4px;
+  }
+  .stat-icon-chip {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+  }
+  .stat-icon { width: 34px; height: 34px; font-size: 18px; }
+  .stat-value { font-size: 16px; }
+  .stat-label {
+    font-size: 10px;
+    margin-top: 2px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    line-height: 1.3;
+  }
   .chart-card,
   .data-card {
-    padding: 14px;
+    padding: 12px;
     overflow: visible;
     max-width: 100%;
+    border-radius: 0;
   }
   .chart-header {
     flex-direction: column;
     align-items: flex-start;
-    gap: 10px;
-    margin-bottom: 12px;
-    padding-bottom: 10px;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
   }
   .chart-controls { width: 100%; }
-  .chart-controls button { flex: 1; font-size: 12px; padding: 6px 12px; }
+  .chart-controls button { flex: 1; font-size: 12px; padding: 6px 10px; }
   .chart-title h3,
-  .card-header h3 { font-size: 15px; }
-  .chart-body { height: 240px; }
-  .chart-card.full-width .chart-body { height: 260px; }
-  .chart-card.full-width { margin-top: 12px !important; }
-  .bottom-grid { grid-template-columns: 1fr; gap: 12px; }
-  .product-rank { width: 34px; height: 34px; font-size: 14px; }
+  .card-header h3 { font-size: 14px; }
+  .chart-body { height: 220px; }
+  .chart-card.full-width .chart-body { height: 240px; }
+  .chart-card.full-width { margin-top: 10px !important; }
+  .bottom-grid { grid-template-columns: 1fr; gap: 10px; }
+  .product-rank { width: 32px; height: 32px; font-size: 13px; }
   .product-info h4 { font-size: 13px; }
   .product-stats { font-size: 12px; }
-  .order-item { padding: 12px; }
+  .order-item { padding: 10px; }
   .order-id { font-size: 13px; }
   .order-customer { font-size: 12px; }
-  .order-total { font-size: 15px; }
-  .order-status { font-size: 10px; padding: 3px 10px; }
+  .order-total { font-size: 14px; }
+  .order-status { font-size: 10px; padding: 3px 8px; }
   .dash-store-form {
     padding: 12px !important;
     gap: 12px !important;
@@ -475,11 +499,15 @@
 @media (max-width: 576px) {
   .admin-dashboard { padding: 0; }
   .dash-page-intro h2 { font-size: 17px; }
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
   .stat-card.wave-card { padding: 0; }
-  .stat-card-top { padding: 10px; }
-  .stat-icon-chip { width: 36px; height: 36px; }
-  .stat-icon { width: 36px; height: 36px; font-size: 18px; }
-  .stat-value { font-size: 17px; }
+  .stat-card-top { padding: 10px 8px; }
+  .stat-icon-chip { width: 32px; height: 32px; }
+  .stat-icon { width: 32px; height: 32px; font-size: 16px; }
+  .stat-value { font-size: 15px; }
   .chart-card,
   .data-card { padding: 12px; }
   .chart-title h3,
@@ -487,9 +515,9 @@
   .chart-body { height: 200px; }
   .chart-card.full-width .chart-body { height: 220px; }
   .bottom-grid { gap: 10px; }
-  .product-item { padding: 12px 14px; gap: 12px; }
-  .product-rank { width: 32px; height: 32px; font-size: 14px; }
-  .product-stats .revenue { font-size: 16px; }
+  .product-item { padding: 12px; gap: 10px; }
+  .product-rank { width: 30px; height: 30px; font-size: 13px; }
+  .product-stats .revenue { font-size: 15px; }
   .order-item {
     padding: 10px;
     flex-direction: column;
@@ -502,8 +530,8 @@
     justify-content: space-between;
     align-items: center;
   }
-  .no-data { padding: 32px 16px; }
-  .no-data i { font-size: 36px; }
+  .no-data { padding: 28px 14px; }
+  .no-data i { font-size: 32px; }
   .no-data p { font-size: 13px; }
 }
 

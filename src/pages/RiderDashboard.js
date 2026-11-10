@@ -15,6 +15,8 @@ import InstallAppModal, {
 } from '../components/InstallAppModal';
 import { isLbcOrder } from '../utils/deliveryUtils';
 import DeliveryChatPanel from '../components/DeliveryChatPanel';
+import useBodyScrollLock from '../hooks/useBodyScrollLock';
+import { getOverlayRoot } from '../utils/scrollLock';
 import './RiderDashboard.css';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -375,12 +377,11 @@ const FullscreenMapModal = ({ address, customerName, orderId, coords, riderCoord
   const routeDrawnRef  = useRef(false);
   const [geocoding, setGeocoding] = useState(!coords);
 
+  useBodyScrollLock(true);
+
   useEffect(() => {
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
     document.body.classList.add('rider-fullscreen-map-open');
     return () => {
-      document.body.style.overflow = prevOverflow;
       document.body.classList.remove('rider-fullscreen-map-open');
     };
   }, []);
@@ -557,7 +558,7 @@ const FullscreenMapModal = ({ address, customerName, orderId, coords, riderCoord
         </div>
       </div>
     </div>,
-    document.body
+    getOverlayRoot() || document.body
   );
 };
 

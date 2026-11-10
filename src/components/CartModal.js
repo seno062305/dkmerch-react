@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../context/NotificationContext';
 import { useConfirm } from '../context/ConfirmContext';
@@ -6,6 +7,8 @@ import { useProducts, usePreOrderProducts, useCollectionProducts } from '../util
 import { useUpdateCartQtyById, useRemoveFromCartById, useClearCart } from '../context/cartUtils';
 import { getPointsForPrice } from '../utils/pointsUtils';
 import { useCloseOnHistoryBack } from '../hooks/useCloseOnHistoryBack';
+import useBodyScrollLock from '../hooks/useBodyScrollLock';
+import { getOverlayRoot } from '../utils/scrollLock';
 import './CartModal.css';
 
 const CartModal = ({ cart, onClose }) => {
@@ -13,6 +16,7 @@ const CartModal = ({ cart, onClose }) => {
   const { showNotification } = useNotification();
   const { confirm } = useConfirm();
   useCloseOnHistoryBack(true, onClose, 'cartModal');
+  useBodyScrollLock(true);
 
   const regularProducts    = useProducts() || [];
   const preOrderProducts   = usePreOrderProducts() || [];
@@ -46,37 +50,9 @@ const CartModal = ({ cart, onClose }) => {
   }, [cartIdsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    const getScrollY = () => {
-      const bodyTop = document.body.style.top;
-      if (bodyTop) return Math.abs(parseInt(bodyTop, 10)) || 0;
-      return window.scrollY || window.pageYOffset || 0;
-    };
-    const scrollY = getScrollY();
     document.body.classList.add('cart-modal-open');
-    document.body.style.position = 'fixed';
-    document.body.style.top = `-${scrollY}px`;
-    document.body.style.left = '0';
-    document.body.style.right = '0';
-    document.body.style.width = '100%';
-    document.body.style.overflow = 'hidden';
     return () => {
       document.body.classList.remove('cart-modal-open');
-      const otherLock =
-        document.body.classList.contains('product-modal-open')
-        || document.body.classList.contains('login-modal-open');
-      if (!otherLock) {
-        document.body.style.position = '';
-        document.body.style.top = '';
-        document.body.style.left = '';
-        document.body.style.right = '';
-        document.body.style.width = '';
-        document.body.style.overflow = '';
-        try {
-          window.scrollTo({ top: scrollY, left: 0, behavior: 'instant' });
-        } catch {
-          window.scrollTo(0, scrollY);
-        }
-      }
     };
   }, []);
 
@@ -351,7 +327,7 @@ const CartModal = ({ cart, onClose }) => {
   const promoCartItems    = cart.filter(i => !!i.promoCode);
   const nonPromoCartItems = cart.filter(i => !i.promoCode);
 
-  return (
+  return createPortal(
     <div className="modal-overlay cart-modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
@@ -515,7 +491,8 @@ const CartModal = ({ cart, onClose }) => {
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    getOverlayRoot() || document.body
   );
 };
 

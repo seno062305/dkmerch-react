@@ -1,10 +1,13 @@
 // src/components/RiderRegistrationModal.js
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import './RiderRegistrationModal.css';
 import { useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { appendActivityLog } from '../admin/lib/localActivityLog';
 import { runWithFailover } from '../lib/failoverWrite';
+import useBodyScrollLock from '../hooks/useBodyScrollLock';
+import { getOverlayRoot } from '../utils/scrollLock';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
@@ -265,10 +268,7 @@ const RiderRegistrationModal = ({ onClose }) => {
   const validId1Ref   = useRef();
   const validId2Ref   = useRef();
 
-  useEffect(() => {
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = ''; };
-  }, []);
+  useBodyScrollLock(true);
 
   const validateRiderPassword = (pw) => {
     if (!pw) return ['Password is required.'];
@@ -466,7 +466,7 @@ const RiderRegistrationModal = ({ onClose }) => {
 
   const passwordStrength = getPasswordStrength(form.password);
 
-  return (
+  return createPortal(
     <>
       {showCrop && cropSrc && (
         <CropModal imageSrc={cropSrc} onCropDone={handleCropDone} onCancel={handleCropCancel} />
@@ -766,7 +766,8 @@ const RiderRegistrationModal = ({ onClose }) => {
           )}
         </div>
       </div>
-    </>
+    </>,
+    getOverlayRoot() || document.body
   );
 };
 

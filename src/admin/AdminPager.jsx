@@ -3,6 +3,24 @@ import './AdminPager.css';
 
 export const PAGE_SIZES = [5, 10, 15, 20];
 
+/** CSS vars for `.dk-fixed-page` — keep card height tied to rows-per-page. */
+export function fixedPageStyle(pageSize, extra = {}) {
+  return {
+    '--dk-page-size': Math.max(1, Number(pageSize) || 5),
+    ...extra,
+  };
+}
+
+export function fixedGridPageStyle(pageSize, cols = 3, extra = {}) {
+  const size = Math.max(1, Number(pageSize) || 5);
+  const columns = Math.max(1, Number(cols) || 3);
+  return {
+    '--dk-page-size': size,
+    '--dk-page-rows': Math.max(1, Math.ceil(size / columns)),
+    ...extra,
+  };
+}
+
 /** Compact page list with ellipsis: 1 2 3 … 10 */
 function buildPageList(page, totalPages) {
   if (totalPages <= 7) {

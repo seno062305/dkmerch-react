@@ -10,6 +10,7 @@ import { BackupProvider } from './context/BackupContext';
 import { RewardsProvider } from './context/RewardsContext';
 import { isPushSupported, subscribeToPush, getNotificationPermission } from './utils/pushNotifications';
 import { scrollPageToTop } from './utils/navScroll';
+import { clearScrollLockIfIdle, isScrollLocked } from './utils/scrollLock';
 
 import Header from './components/Header';
 import Footer from './components/Footer';
@@ -195,6 +196,7 @@ function AppContent() {
   // Footer / bottom-nav: after landing on a tab, scroll to that page top
   useEffect(() => {
     if (!location.state?.scrollToTop) return;
+    if (isScrollLocked()) return;
     scrollPageToTop({ smooth: true });
     // Clear state so back/forward doesn't re-trigger
     navigate(`${location.pathname}${location.search}${location.hash}`, {
@@ -204,7 +206,9 @@ function AppContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, location.key]);
 
-  // Safety: never leave product/cart lock classes stuck (they disable bottom-nav / scroll)
+  // Safety: never leave product/cart lock classes stuck (they disable bottom-nav / scroll).
+  // Do NOT wipe body top/position while useBodyScrollLock holds the shared lock —
+  // that was jumping the page to the header on open and scrolling back down on close.
   useEffect(() => {
     if (!showProductModal) document.body.classList.remove('product-modal-open');
     if (!showCartModal) document.body.classList.remove('cart-modal-open');
@@ -214,12 +218,7 @@ function AppContent() {
       && !showLoginModal
       && !document.body.classList.contains('login-modal-open')
     ) {
-      document.body.style.position = '';
-      document.body.style.top = '';
-      document.body.style.left = '';
-      document.body.style.right = '';
-      document.body.style.width = '';
-      document.body.style.overflow = '';
+      clearScrollLockIfIdle();
     }
   }, [showProductModal, showCartModal, showLoginModal]);
 

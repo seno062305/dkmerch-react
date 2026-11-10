@@ -12,38 +12,131 @@
   padding: 20px 40px;
   border-bottom: 2px solid #eee;
   margin-bottom: 0;
+  overflow: visible;
+  position: relative;
+  z-index: 40;
 }
 
-.preorder-filter-bar h3 {
-  font-size: 13px;
-  font-weight: 700;
+.preorder-filters-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 20px 28px;
+  flex-wrap: wrap;
+}
+
+.preorder-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 200px;
+  flex: 0 1 260px;
+}
+
+.preorder-filter-group label {
+  font-size: 12px;
+  font-weight: 800;
   color: #333;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 12px;
+  letter-spacing: 0.6px;
+  margin: 0;
 }
 
-.filter-options {
+.preorder-filter-divider {
+  width: 1px;
+  align-self: stretch;
+  min-height: 40px;
+  background: #d1d5db;
+  flex-shrink: 0;
+}
+
+.preorder-dropdown {
+  position: relative;
+  width: 100%;
+  max-width: 280px;
+  z-index: 50;
+}
+
+.preorder-dropdown-toggle {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
   gap: 10px;
-}
-
-.filter-btn {
-  padding: 8px 20px;
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 16px;
   background: white;
   border: 1.5px solid #ccc;
-  border-radius: 20px;
+  border-radius: 12px;
   font-size: 13px;
   font-weight: 600;
   color: #333;
   cursor: pointer;
-  transition: all 0.3s ease;
-  white-space: nowrap;
+  text-transform: capitalize;
 }
 
-.filter-btn:hover { border-color: #111; background: #f5f5f5; }
-.filter-btn.active { background: #111; color: #fff; border-color: #111; }
+.preorder-dropdown-toggle:hover {
+  border-color: #111;
+  background: #f5f5f5;
+}
+
+.preorder-dropdown-toggle .fa-chevron-down {
+  font-size: 11px;
+  color: #666;
+  transition: transform 0.2s ease;
+}
+
+.preorder-dropdown-toggle .fa-chevron-down.open {
+  transform: rotate(180deg);
+}
+
+.preorder-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 200;
+  background: white;
+  border: 1.5px solid #e0e0e0;
+  border-radius: 12px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+  overflow: visible;
+  max-height: none;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.preorder-dropdown-menu::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.preorder-dropdown-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 16px;
+  background: none;
+  border: none;
+  font-size: 13px;
+  font-weight: 500;
+  color: #333;
+  cursor: pointer;
+  text-align: left;
+  text-transform: capitalize;
+}
+
+.preorder-dropdown-item:hover { background: #f5f5f5; }
+.preorder-dropdown-item.active {
+  color: #111;
+  font-weight: 700;
+  background: #f0f0f0;
+}
+.preorder-dropdown-item .fa-check {
+  font-size: 11px;
+  color: var(--primary-color, #fc1268);
+}
 
 /* ── Grid ── */
 .preorder-grid {
@@ -222,17 +315,17 @@
 }
 
 /* ── Stock ── */
-.stock-info {
+.preorder-card .stock-info {
   display: flex;
   align-items: center;
   gap: 6px;
   margin-bottom: 12px;
   font-size: 12px;
-  color: var(--warning-color);
-  font-weight: 600;
+  color: #c2410c;
+  font-weight: 700;
 }
 
-.stock-info i { font-size: 12px; }
+.preorder-card .stock-info i { font-size: 12px; color: inherit; }
 .preorder-card .btn { width: 100%; padding: 10px; font-size: 13px; }
 
 /* ── Pre-Ordered button state ── */
@@ -391,6 +484,18 @@
 
 @media (max-width: 768px) {
   .preorder-filter-bar { padding: 16px 20px; }
+  .preorder-filters-row {
+    flex-wrap: nowrap;
+    gap: 8px;
+    align-items: flex-end;
+  }
+  .preorder-filter-group {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: calc(50% - 4px);
+  }
+  .preorder-filter-divider { display: none; }
+  .preorder-dropdown { max-width: none; }
   .preorder-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
@@ -414,7 +519,7 @@
 
 @media (max-width: 576px) {
   .preorder-filter-bar { padding: 12px 14px; }
-  .filter-btn { padding: 6px 12px; font-size: 11px; }
+  .preorder-dropdown-toggle { font-size: 12px; padding: 8px 10px; }
   .preorder-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
@@ -426,7 +531,7 @@
   .product-name { font-size: 11px; min-height: 32px; }
   .current-price { font-size: 12px; }
   .original-price { font-size: 10px; }
-  .stock-info { display: none; }
+  .preorder-card .stock-info { display: none; }
   .release-date-badge { font-size: 9px; padding: 3px 5px; }
   .preorder-card .btn { font-size: 11px; padding: 7px 4px; }
   .btn-preordered { font-size: 11px; padding: 7px 4px; }

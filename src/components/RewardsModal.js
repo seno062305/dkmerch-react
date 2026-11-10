@@ -1,9 +1,12 @@
 // src/components/RewardsModal.js
 import React, { useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, useMutation } from 'convex/react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../convex/_generated/api';
 import { useAuth } from '../context/AuthContext';
+import useBodyScrollLock from '../hooks/useBodyScrollLock';
+import { getOverlayRoot } from '../utils/scrollLock';
 import './RewardsModal.css';
 
 const REWARDS = [
@@ -33,6 +36,8 @@ const ProductPicker = ({ ticket, onClose, onConfirm }) => {
   const [confirming,   setConfirming]   = useState(false);
   const [loading,      setLoading]      = useState(false);
 
+  useBodyScrollLock(true);
+
   const groups = useMemo(() => {
     return [...new Set(products.map(p => p.kpopGroup).filter(Boolean))].sort();
   }, [products]);
@@ -50,7 +55,7 @@ const ProductPicker = ({ ticket, onClose, onConfirm }) => {
   };
 
   if (confirming && selectedProd) {
-    return (
+    return createPortal(
       <div className="rm-picker-overlay" onClick={() => setConfirming(false)}>
         <div className="rm-picker-modal" onClick={e => e.stopPropagation()}>
           <div className="rm-picker-header">
@@ -90,11 +95,12 @@ const ProductPicker = ({ ticket, onClose, onConfirm }) => {
             </div>
           </div>
         </div>
-      </div>
+      </div>,
+      getOverlayRoot() || document.body
     );
   }
 
-  return (
+  return createPortal(
     <div className="rm-picker-overlay" onClick={onClose}>
       <div className="rm-picker-modal" onClick={e => e.stopPropagation()}>
         <div className="rm-picker-header">
@@ -169,7 +175,8 @@ const ProductPicker = ({ ticket, onClose, onConfirm }) => {
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    getOverlayRoot() || document.body
   );
 };
 
@@ -177,6 +184,7 @@ const ProductPicker = ({ ticket, onClose, onConfirm }) => {
    Main RewardsModal
 ───────────────────────────────────────────── */
 const RewardsModal = ({ onClose }) => {
+  useBodyScrollLock(true);
   const { user }   = useAuth();
   const navigate   = useNavigate();
 
@@ -250,7 +258,7 @@ const RewardsModal = ({ onClose }) => {
     });
   };
 
-  return (
+  return createPortal(
     <>
       <div className="rm-overlay" onClick={onClose}>
         <div className="rm-modal" onClick={e => e.stopPropagation()}>
@@ -549,7 +557,8 @@ const RewardsModal = ({ onClose }) => {
           onConfirm={handleSelectProduct}
         />
       )}
-    </>
+    </>,
+    getOverlayRoot() || document.body
   );
 };
 

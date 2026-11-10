@@ -114,7 +114,7 @@
 .tab-switcher {
   display: flex;
   gap: 0;
-  background: white;
+  background: transparent;
   padding: 0 0 0 0;
   border-radius: 0;
   box-shadow: none;
@@ -189,17 +189,17 @@
 
 /* Search Controls */
 .users-controls {
-  background: white;
-  padding: 14px 18px;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  background: transparent;
+  padding: 0 0 14px;
+  border-radius: 0;
+  box-shadow: none;
   margin-bottom: 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 16px;
   flex-wrap: wrap;
-  border: 1.5px solid #e2e8f0;
+  border: none;
 }
 
 .search-box {
@@ -290,19 +290,24 @@
    TABLE — white/clean, dark navy header
 ══════════════════════════════════════════ */
 .users-table-container {
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  background: #fff;
+  border-radius: 0;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
   overflow: hidden;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  border: 1.5px solid #e2e8f0;
+  border: 1px solid #e2e8f0;
 }
 
-.users-table { width: 100%; border-collapse: collapse; min-width: 700px; }
+.users-table {
+  width: 100%;
+  border-collapse: collapse;
+  border-spacing: 0;
+  min-width: 700px;
+}
 
 /* Dark navy header — same as AdminRiders ar-order-header */
-.users-table thead { background: #ffffff; }
+.users-table thead { background: transparent; }
 
 .users-table th {
   padding: 12px 16px;
@@ -313,26 +318,40 @@
   letter-spacing: 0.5px;
   color: rgba(0, 0, 0, 0.75);
   white-space: nowrap;
+  border-bottom: 1px solid #e2e8f0;
 }
 
 .users-table tbody tr {
-  border-bottom: 1px solid #f1f5f9;
   transition: background-color 0.15s;
 }
 
 .users-table tbody tr:hover { background-color: #f8fafc; }
-.users-table tbody tr:last-child { border-bottom: none; }
+.users-table tbody tr:last-child td { border-bottom: none; }
 
 .users-table td {
   padding: 12px 16px;
   font-size: 13px;
   color: #374151;
+  border-bottom: 1px solid #e2e8f0;
+  vertical-align: middle;
+}
+
+/* Keep td as table-cell — display:flex on td breaks continuous row lines */
+.users-table td.user-name {
+  display: table-cell;
+  font-weight: 600;
+  color: #1a1f36;
+  white-space: nowrap;
+}
+
+.users-table td.user-name i {
+  color: #fc1268;
+  font-size: 16px;
+  margin-right: 8px;
+  vertical-align: middle;
 }
 
 .user-name {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   font-weight: 600;
   color: #1a1f36;
 }
@@ -446,7 +465,25 @@
 .date-cell { color: #9ca3af; font-size: 12px; white-space: nowrap; }
 
 /* ── Action buttons — subtle, clean ── */
-.actions-cell { display: flex; gap: 6px; flex-wrap: nowrap; }
+.users-table td.actions-cell {
+  display: table-cell;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.actions-cell .btn-edit,
+.actions-cell .btn-suspend,
+.actions-cell .btn-activate,
+.actions-cell .btn-delete {
+  margin-right: 6px;
+}
+
+.actions-cell .btn-edit:last-child,
+.actions-cell .btn-suspend:last-child,
+.actions-cell .btn-activate:last-child,
+.actions-cell .btn-delete:last-child {
+  margin-right: 0;
+}
 
 .btn-edit, .btn-suspend, .btn-activate, .btn-delete {
   padding: 6px 10px;
@@ -458,6 +495,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  vertical-align: middle;
 }
 
 .btn-edit {
@@ -905,13 +943,16 @@
   .tab-label--long { display: none; }
 
   .users-controls {
-    padding: 12px 14px;
+    padding: 0 0 12px;
     flex-direction: column;
     align-items: stretch;
     gap: 10px;
     width: 100%;
     max-width: 100%;
     box-sizing: border-box;
+    background: transparent;
+    border: none;
+    box-shadow: none;
   }
   .search-box { max-width: 100% !important; min-width: 0 !important; width: 100%; box-sizing: border-box; }
   .search-box input { width: 100%; max-width: 100%; box-sizing: border-box; }

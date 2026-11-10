@@ -3,6 +3,8 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { useCloseOnHistoryBack } from '../hooks/useCloseOnHistoryBack';
+import useBodyScrollLock from '../hooks/useBodyScrollLock';
+import { isScrollLocked } from '../utils/scrollLock';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import './Header.css';
@@ -46,10 +48,13 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
   const totalPoints = userPoints?.totalPoints ?? 0;
 
   useEffect(() => {
+    // Never fight an open modal/popup — that was jumping back to the header
+    if (isScrollLocked()) return;
     if (!location.hash) window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [location.pathname]);
 
   useEffect(() => {
+    if (isScrollLocked()) return;
     if (location.hash) {
       const id = location.hash.replace('#', '');
       const element = document.getElementById(id);
@@ -82,9 +87,7 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  useEffect(() => {
-    document.body.style.overflow = showMobileMenu ? 'hidden' : '';
-  }, [showMobileMenu]);
+  useBodyScrollLock(showMobileMenu);
 
   useEffect(() => {
     const scrollTarget = location.state?.scrollTo;

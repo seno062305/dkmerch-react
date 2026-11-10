@@ -2,10 +2,13 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useConfirm } from '../context/ConfirmContext';
-import AdminPager from './AdminPager';
+import AdminPager, { fixedPageStyle } from './AdminPager';
 import { runWithFailover } from '../lib/failoverWrite';
 import { useCatalogOptions } from '../hooks/useCatalogOptions';
+import useBodyScrollLock from '../hooks/useBodyScrollLock';
 import './AdminPromos.css';
+
+const PROMO_PAGE_SIZES = [12, 24, 36, 48, 60];
 
 const validateDiscount = (val) => {
   const num = Number(val);
@@ -75,8 +78,9 @@ const AdminPromos = () => {
   const [errors,       setErrors]       = useState({});
   const [serverMsg,    setServerMsg]    = useState('');
   const [submitting,   setSubmitting]   = useState(false);
-  const [pageSize,     setPageSize]     = useState(5);
+  const [pageSize,     setPageSize]     = useState(12);
   const [page,         setPage]         = useState(0);
+  const [showScheduleExtras, setShowScheduleExtras] = useState(false);
 
   useEffect(() => {
     const id = setInterval(() => setNowMs(Date.now()), 10000);
@@ -87,12 +91,7 @@ const AdminPromos = () => {
 
   const today = new Date(nowMs).toISOString().split('T')[0];
 
-  useEffect(() => {
-    if (!showModal) return;
-    const y = window.scrollY;
-    document.body.style.cssText = `position:fixed;top:-${y}px;width:100%;overflow:hidden`;
-    return () => { document.body.style.cssText = ''; window.scrollTo(0, y); };
-  }, [showModal]);
+  useBodyScrollLock(showModal);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -181,7 +180,10 @@ const AdminPromos = () => {
       endDate:   promo.endDate   || '',
       endTime:   promo.endTime   || '',
     });
-    setErrors({}); setServerMsg(''); setShowModal(true);
+    setErrors({});
+    setServerMsg('');
+    setShowScheduleExtras(!!(promo.startTime || promo.endTime));
+    setShowModal(true);
   };
 
   const handleDelete = async (id) => {
@@ -197,12 +199,12 @@ const AdminPromos = () => {
 
   const openCreate = () => {
     setEditingPromo(null); setFormData(EMPTY_FORM);
-    setErrors({}); setServerMsg(''); setShowModal(true);
+    setErrors({}); setServerMsg(''); setShowScheduleExtras(false); setShowModal(true);
   };
 
   const resetForm = () => {
     setFormData(EMPTY_FORM); setEditingPromo(null);
-    setErrors({}); setServerMsg(''); setShowModal(false);
+    setErrors({}); setServerMsg(''); setShowScheduleExtras(false); setShowModal(false);
   };
 
   const formatPeriod = (p) => {
@@ -256,6 +258,7 @@ const AdminPromos = () => {
             <button type="button" className="create-btn create-btn--ghost" onClick={openCreate}>+ Create Promo</button>
           </div>
         ) : (
+          <div className="dk-fixed-page dk-fixed-page--table" style={fixedPageStyle(pageSize, { '--dk-row-h': '58px' })}>
           <table className="promos-table">
             <thead>
               <tr>
@@ -285,6 +288,7 @@ const AdminPromos = () => {
               })}
             </tbody>
           </table>
+          </div>
         )}
         <AdminPager
           total={sortedPromos.length}
@@ -292,6 +296,7 @@ const AdminPromos = () => {
           pageSize={pageSize}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
+          pageSizeOptions={PROMO_PAGE_SIZES}
         />
       </div>
 
@@ -302,26 +307,30 @@ const AdminPromos = () => {
         </div>
         {sortedPromos.length === 0
           ? <div className="empty-cards-msg">No promos yet.</div>
-          : pagedPromos.map(promo => {
-              const { label, cls } = getStatus(promo);
-              return (
-                <div className="promo-card" key={promo._id}>
-                  <div className="promo-card-header">
-                    <span className="promo-card-code"><TagIcon />{promo.code}</span>
-                    <span className={`status-badge ${cls}`}>{label}</span>
+          : (
+            <div className="dk-fixed-page dk-fixed-page--cards" style={fixedPageStyle(pageSize, { '--dk-row-h': '168px', '--dk-gap': '12px' })}>
+              {pagedPromos.map(promo => {
+                const { label, cls } = getStatus(promo);
+                return (
+                  <div className="promo-card" key={promo._id}>
+                    <div className="promo-card-header">
+                      <span className="promo-card-code"><TagIcon />{promo.code}</span>
+                      <span className={`status-badge ${cls}`}>{label}</span>
+                    </div>
+                    <div className="promo-card-body">
+                      <div className="promo-card-field"><label>K-Pop Group</label><span className="group-chip">{promo.name}</span></div>
+                      <div className="promo-card-field"><label>Discount</label><span>{promo.discount}%</span></div>
+                      <div className="promo-card-field promo-card-period"><label>Period</label><span>{formatPeriod(promo)}</span></div>
+                    </div>
+                    <div className="promo-card-actions">
+                      <button className="edit-btn" onClick={() => handleEdit(promo)}><EditIcon /></button>
+                      <button className="delete-btn" onClick={() => handleDelete(promo._id)}><DeleteIcon /></button>
+                    </div>
                   </div>
-                  <div className="promo-card-body">
-                    <div className="promo-card-field"><label>K-Pop Group</label><span className="group-chip">{promo.name}</span></div>
-                    <div className="promo-card-field"><label>Discount</label><span>{promo.discount}%</span></div>
-                    <div className="promo-card-field promo-card-period"><label>Period</label><span>{formatPeriod(promo)}</span></div>
-                  </div>
-                  <div className="promo-card-actions">
-                    <button className="edit-btn" onClick={() => handleEdit(promo)}><EditIcon /></button>
-                    <button className="delete-btn" onClick={() => handleDelete(promo._id)}><DeleteIcon /></button>
-                  </div>
-                </div>
-              );
-            })
+                );
+              })}
+            </div>
+          )
         }
         <AdminPager
           total={sortedPromos.length}
@@ -329,104 +338,123 @@ const AdminPromos = () => {
           pageSize={pageSize}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
+          pageSizeOptions={PROMO_PAGE_SIZES}
         />
       </div>
 
       {/* ── Modal ── */}
       {showModal && (
-        <div className="modal-overlay" onClick={resetForm}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
+        <div className="modal-overlay promo-modal-overlay" onClick={resetForm}>
+          <div className="modal-content promo-modal" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true">
+            <button type="button" className="promo-modal-handle" onClick={resetForm} aria-label="Close promo form">
+              <span />
+            </button>
             <div className="modal-header">
               <h2>{editingPromo ? 'Edit Promo' : 'Create New Promo'}</h2>
-              <button className="close-btn" onClick={resetForm}>×</button>
+              <button type="button" className="close-btn" onClick={resetForm} aria-label="Close">×</button>
             </div>
-            <form onSubmit={handleSubmit} noValidate>
-              <div className="form-grid">
-                <div className="form-group">
-                  <label>Promo Code <span className="req">*</span></label>
-                  <input type="text" name="code" value={formData.code}
-                    onChange={handleInputChange} placeholder="e.g., SUMMER25"
-                    className={errors.code ? 'input-error' : ''}
-                    style={{ textTransform: 'uppercase' }} maxLength={20} />
-                  {errors.code && <span className="field-error">{errors.code}</span>}
-                </div>
-                <div className="form-group">
-                  <label>K-Pop Group <span className="req">*</span></label>
-                  <select name="name" value={formData.name} onChange={handleInputChange}
-                    className={`group-select ${errors.name ? 'input-error' : ''}`}>
-                    <option value="">— Select a group —</option>
-                    {KPOP_GROUPS.map(g => <option key={g} value={g}>{g}</option>)}
-                  </select>
-                  {errors.name && <span className="field-error">{errors.name}</span>}
-                </div>
-
-                <div className="form-group form-group--full">
-                  <label>Discount (%) <span className="req">*</span></label>
-                  <input type="text" inputMode="numeric" name="discount" value={formData.discount}
-                    onChange={handleInputChange} placeholder="e.g., 25" maxLength={3}
-                    className={errors.discount ? 'input-error' : ''} />
-                  <span className="field-hint">1–100% only</span>
-                  {errors.discount && <span className="field-error">{errors.discount}</span>}
-                </div>
-
-                <div className="form-group">
-                  <label>Start Date <span className="req">*</span></label>
-                  <input type="date" name="startDate" value={formData.startDate}
-                    onChange={handleInputChange} min={today} max="9999-12-31"
-                    className={errors.startDate ? 'input-error' : ''} />
-                  {errors.startDate && <span className="field-error">{errors.startDate}</span>}
-                </div>
-                <div className="form-group">
-                  <label>Start Time <span className="field-optional">(optional)</span></label>
-                  <div className="time-input-wrapper">
-                    <input type="time" name="startTime" value={formData.startTime}
-                      onChange={handleInputChange} className="time-input" />
-                    {formData.startTime && <span className="time-preview">▶ <strong>{fmt12(formData.startTime)}</strong></span>}
+            <form onSubmit={handleSubmit} noValidate className="promo-modal-form">
+              <div className="promo-modal-body">
+                <div className="form-grid">
+                  <div className="form-group">
+                    <label>Promo Code <span className="req" aria-hidden="true">*</span></label>
+                    <input type="text" name="code" value={formData.code}
+                      onChange={handleInputChange} placeholder="e.g., SUMMER25"
+                      className={errors.code ? 'input-error' : ''}
+                      style={{ textTransform: 'uppercase' }} maxLength={20} />
+                    {errors.code && <span className="field-error">{errors.code}</span>}
                   </div>
-                  <span className="field-hint">Blank = 12:00 AM</span>
-                </div>
+                  <div className="form-group">
+                    <label>K-Pop Group <span className="req" aria-hidden="true">*</span></label>
+                    <select name="name" value={formData.name} onChange={handleInputChange}
+                      className={`group-select ${errors.name ? 'input-error' : ''}`}>
+                      <option value="">— Select a group —</option>
+                      {KPOP_GROUPS.map(g => <option key={g} value={g}>{g}</option>)}
+                    </select>
+                    {errors.name && <span className="field-error">{errors.name}</span>}
+                  </div>
 
-                <div className="form-group">
-                  <label>End Date <span className="req">*</span></label>
-                  <input type="date" name="endDate" value={formData.endDate}
-                    onChange={handleInputChange}
-                    min={formData.startDate || today} max="9999-12-31"
-                    className={errors.endDate ? 'input-error' : ''} />
-                  {errors.endDate && <span className="field-error">{errors.endDate}</span>}
-                </div>
-                <div className="form-group">
-                  <label>End Time <span className="field-optional">(optional)</span></label>
-                  <div className="time-input-wrapper">
-                    <input type="time" name="endTime" value={formData.endTime}
+                  <div className="form-group form-group--full">
+                    <label>Discount (%) <span className="req" aria-hidden="true">*</span></label>
+                    <input type="text" inputMode="numeric" name="discount" value={formData.discount}
+                      onChange={handleInputChange} placeholder="e.g., 25" maxLength={3}
+                      className={errors.discount ? 'input-error' : ''} />
+                    <span className="field-hint">1–100% only</span>
+                    {errors.discount && <span className="field-error">{errors.discount}</span>}
+                  </div>
+
+                  <div className="form-group">
+                    <label>Start Date <span className="req" aria-hidden="true">*</span></label>
+                    <input type="date" name="startDate" value={formData.startDate}
+                      onChange={handleInputChange} min={today} max="9999-12-31"
+                      className={errors.startDate ? 'input-error' : ''} />
+                    {errors.startDate && <span className="field-error">{errors.startDate}</span>}
+                  </div>
+                  <div className="form-group">
+                    <label>End Date <span className="req" aria-hidden="true">*</span></label>
+                    <input type="date" name="endDate" value={formData.endDate}
                       onChange={handleInputChange}
-                      className={`time-input ${errors.endTime ? 'input-error' : ''}`} />
-                    {formData.endTime && <span className="time-preview">⏹ <strong>{fmt12(formData.endTime)}</strong></span>}
+                      min={formData.startDate || today} max="9999-12-31"
+                      className={errors.endDate ? 'input-error' : ''} />
+                    {errors.endDate && <span className="field-error">{errors.endDate}</span>}
                   </div>
-                  <span className="field-hint">Blank = 11:59 PM</span>
-                  {errors.endTime && <span className="field-error">{errors.endTime}</span>}
                 </div>
+
+                <button
+                  type="button"
+                  className={`promo-schedule-toggle ${showScheduleExtras ? 'is-open' : ''}`}
+                  onClick={() => setShowScheduleExtras((o) => !o)}
+                  aria-expanded={showScheduleExtras}
+                >
+                  <span>{showScheduleExtras ? 'Hide optional times' : 'Add optional start/end times'}</span>
+                  <i className={`fas fa-chevron-${showScheduleExtras ? 'up' : 'down'}`}></i>
+                </button>
+
+                {showScheduleExtras && (
+                  <div className="form-grid promo-schedule-extras">
+                    <div className="form-group">
+                      <label>Start Time <span className="field-optional">(optional)</span></label>
+                      <div className="time-input-wrapper">
+                        <input type="time" name="startTime" value={formData.startTime}
+                          onChange={handleInputChange} className="time-input" />
+                        {formData.startTime && <span className="time-preview"><strong>{fmt12(formData.startTime)}</strong></span>}
+                      </div>
+                      <span className="field-hint">Blank = 12:00 AM</span>
+                    </div>
+                    <div className="form-group">
+                      <label>End Time <span className="field-optional">(optional)</span></label>
+                      <div className="time-input-wrapper">
+                        <input type="time" name="endTime" value={formData.endTime}
+                          onChange={handleInputChange}
+                          className={`time-input ${errors.endTime ? 'input-error' : ''}`} />
+                        {formData.endTime && <span className="time-preview"><strong>{fmt12(formData.endTime)}</strong></span>}
+                      </div>
+                      <span className="field-hint">Blank = 11:59 PM</span>
+                      {errors.endTime && <span className="field-error">{errors.endTime}</span>}
+                    </div>
+                  </div>
+                )}
+
+                {(formData.startDate || formData.endDate) && (
+                  <div className="schedule-summary">
+                    {formData.startDate && <span>{formData.startDate} · {formData.startTime ? fmt12(formData.startTime) : '12:00 AM'}</span>}
+                    {formData.startDate && formData.endDate && <span className="sched-arrow"> → </span>}
+                    {formData.endDate && <span>{formData.endDate} · {formData.endTime ? fmt12(formData.endTime) : '11:59 PM'}</span>}
+                  </div>
+                )}
+
+                {!editingPromo && (
+                  <p className="email-notice">
+                    Email blast will be sent to registered users when this promo is created.
+                  </p>
+                )}
+
+                {serverMsg && (
+                  <div className={`server-msg ${serverMsg.startsWith('✅') ? 'msg-success' : 'msg-error'}`}>
+                    {serverMsg}
+                  </div>
+                )}
               </div>
-
-              {(formData.startDate || formData.endDate) && (
-                <div className="schedule-summary">
-                  📅{' '}
-                  {formData.startDate && <span>{formData.startDate} • {formData.startTime ? fmt12(formData.startTime) : '12:00 AM'}</span>}
-                  {formData.startDate && formData.endDate && <span className="sched-arrow"> → </span>}
-                  {formData.endDate && <span>{formData.endDate} • {formData.endTime ? fmt12(formData.endTime) : '11:59 PM'}</span>}
-                </div>
-              )}
-
-              {!editingPromo && (
-                <p className="email-notice">
-                  📧 Email blast will be sent automatically to all registered users when this promo is created.
-                </p>
-              )}
-
-              {serverMsg && (
-                <div className={`server-msg ${serverMsg.startsWith('✅') ? 'msg-success' : 'msg-error'}`}>
-                  {serverMsg}
-                </div>
-              )}
 
               <div className="modal-actions">
                 <button type="button" className="cancel-btn" onClick={resetForm}>Cancel</button>

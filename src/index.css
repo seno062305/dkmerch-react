@@ -27,6 +27,26 @@ body {
   overflow-x: hidden;
 }
 
+/* Shared modal/popup scroll lock — freeze in place, never jump to header */
+html.dk-scroll-locked,
+body.dk-scroll-locked {
+  overflow: hidden !important;
+  overscroll-behavior: none !important;
+  touch-action: none;
+}
+
+/* Sibling of <body> — overlays stay viewport-fixed while body scroll is frozen */
+#dk-overlay-root {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  pointer-events: none;
+}
+
+#dk-overlay-root > * {
+  pointer-events: auto;
+}
+
 a {
   text-decoration: none;
   color: inherit;

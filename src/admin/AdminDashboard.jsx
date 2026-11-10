@@ -3,6 +3,7 @@ import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import DkIcon, { DK_ICONS } from '../components/DkIcon';
 import { SalesAnalyticsPanel } from './AdminSalesReports';
+import useBodyScrollLock from '../hooks/useBodyScrollLock';
 import './AdminDashboard.css';
 
 const isSaleOrder = (o) => {
@@ -25,6 +26,7 @@ const isCompleted = (o) =>
   ['completed', 'delivered'].includes((o.status || o.orderStatus || '').toLowerCase());
 
 const StatModal = ({ data, onClose }) => {
+  useBodyScrollLock(!!data);
   if (!data) return null;
   return (
     <div className="stat-modal-overlay" onClick={onClose}>
@@ -185,6 +187,7 @@ const AdminDashboard = () => {
       label: 'Inventory Costing',
       value: productsReady ? `₱${stats.inventoryCosting.toLocaleString()}` : null,
       hint: productsReady ? `${stats.totalProducts} products tracked` : 'Loading…',
+      tooltip: 'Total estimated value of all current stock (stock × price).',
       color: '#22c55e',
       tone: 'sales',
       icon: DK_ICONS.inventoryCosting,
@@ -198,6 +201,7 @@ const AdminDashboard = () => {
       hint: ordersReady
         ? `${stats.outForDelivery} out for delivery · ${stats.pendingConfirm} pending confirm`
         : 'Loading…',
+      tooltip: 'All orders in the system, regardless of status.',
       color: '#14b8a6',
       tone: 'orders',
       icon: DK_ICONS.totalOrders,
@@ -211,6 +215,7 @@ const AdminDashboard = () => {
       hint: usersReady
         ? `${stats.completedOrders} completed orders`
         : 'Loading users…',
+      tooltip: 'Non-admin customer accounts registered in the store.',
       color: '#3b82f6',
       tone: 'users',
       icon: DK_ICONS.registeredUsers,
@@ -222,6 +227,7 @@ const AdminDashboard = () => {
       label: 'Total Products',
       value: productsReady ? String(stats.totalProducts) : null,
       hint: productsReady ? `${stats.lowStockProducts} low stock items` : 'Loading…',
+      tooltip: 'Active catalog products. Low stock = fewer than 10 units.',
       color: '#f59e0b',
       tone: 'products',
       icon: DK_ICONS.totalProducts,
@@ -241,6 +247,7 @@ const AdminDashboard = () => {
           <div
             key={card.key}
             className={`stat-card wave-card ${card.tone} clickable-card`}
+            title={card.tooltip}
             onClick={() => {
               if (card.loading) return;
               openStatModal(card.type);

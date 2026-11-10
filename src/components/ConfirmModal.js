@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useCloseOnHistoryBack } from '../hooks/useCloseOnHistoryBack';
+import useBodyScrollLock from '../hooks/useBodyScrollLock';
+import { getOverlayRoot } from '../utils/scrollLock';
 import './ConfirmModal.css';
 
 const VARIANT_META = {
@@ -25,6 +28,7 @@ const ConfirmModal = ({
   const [dontShow, setDontShow] = useState(false);
   const busyRef = useRef(false);
 
+  useBodyScrollLock(true);
   const { release } = useCloseOnHistoryBack(true, onCancel, 'confirmModal');
 
   const finishCancel = useCallback(async () => {
@@ -64,7 +68,7 @@ const ConfirmModal = ({
     onDontShowChange?.(next);
   };
 
-  return (
+  return createPortal(
     <div className="dk-confirm-overlay" onClick={finishCancel} role="presentation">
       <div
         className={`dk-confirm-modal dk-confirm-${meta.tone}`}
@@ -96,7 +100,8 @@ const ConfirmModal = ({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    getOverlayRoot() || document.body
   );
 };
 

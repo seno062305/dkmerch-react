@@ -1,25 +1,22 @@
+import { forceUnlockBodyScroll, clearScrollLockIfIdle } from './scrollLock';
+
 /** Clear leftover modal/body scroll locks so page scroll works again. */
 export function unlockBodyScroll() {
+  forceUnlockBodyScroll();
+  clearScrollLockIfIdle();
   try {
     document.body.classList.remove(
-      "login-modal-open",
-      "product-modal-open",
-      "cart-modal-open"
+      'login-modal-open',
+      'product-modal-open',
+      'cart-modal-open'
     );
-    document.body.style.position = "";
-    document.body.style.top = "";
-    document.body.style.left = "";
-    document.body.style.right = "";
-    document.body.style.width = "";
-    document.body.style.overflow = "";
-    document.documentElement.style.overflow = "";
   } catch { /* ignore */ }
 }
 
 /** Scroll window (and common app roots) to the top of the current page. */
 export function scrollPageToTop({ smooth = true } = {}) {
   unlockBodyScroll();
-  const behavior = smooth ? "smooth" : "auto";
+  const behavior = smooth ? 'smooth' : 'auto';
   const go = () => {
     try {
       window.scrollTo({ top: 0, left: 0, behavior });
@@ -31,7 +28,7 @@ export function scrollPageToTop({ smooth = true } = {}) {
       document.body.scrollTop = 0;
     } catch { /* ignore */ }
     const roots = document.querySelectorAll(
-      ".app-main, .main-content, [data-scroll-root], .legal-page, .collections-page, .preorder-page, .track-order-page"
+      '.app-main, .main-content, [data-scroll-root], .legal-page, .collections-page, .preorder-page, .track-order-page'
     );
     roots.forEach((el) => {
       try { el.scrollTop = 0; } catch { /* ignore */ }
@@ -49,11 +46,11 @@ export function scrollPageToTop({ smooth = true } = {}) {
  * Same route → just scroll to top.
  */
 export function goToCustomerTab(navigate, locationPath, to) {
-  const path = String(to || "/");
+  const path = String(to || '/');
   unlockBodyScroll();
   if (
     locationPath === path
-    || (path !== "/" && String(locationPath || "").startsWith(`${path}/`))
+    || (path !== '/' && String(locationPath || '').startsWith(`${path}/`))
   ) {
     scrollPageToTop({ smooth: true });
     return;

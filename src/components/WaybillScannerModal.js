@@ -1,4 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import useBodyScrollLock from '../hooks/useBodyScrollLock';
+import { getOverlayRoot } from '../utils/scrollLock';
 import './WaybillScannerModal.css';
 
 function extractOrderId(raw) {
@@ -42,6 +45,7 @@ const normalizeScanResult = (result) => {
 };
 
 const WaybillScannerModal = ({ onClose, onScan, hint }) => {
+  useBodyScrollLock(true);
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const rafRef = useRef(null);
@@ -218,7 +222,7 @@ const WaybillScannerModal = ({ onClose, onScan, hint }) => {
     onClose();
   };
 
-  return (
+  return createPortal(
     <div className="wb-scan-overlay" onClick={handleClose}>
       <div className="wb-scan-modal" onClick={e => e.stopPropagation()}>
         <button type="button" className="wb-scan-close" onClick={handleClose} aria-label="Close">
@@ -282,7 +286,8 @@ const WaybillScannerModal = ({ onClose, onScan, hint }) => {
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    getOverlayRoot() || document.body
   );
 };
 

@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useCloseOnHistoryBack } from '../hooks/useCloseOnHistoryBack';
+import useBodyScrollLock from '../hooks/useBodyScrollLock';
+import { getOverlayRoot } from '../utils/scrollLock';
 import './InstallAppModal.css';
 
 export const PRODUCTION_SITE_URL =
@@ -63,6 +66,7 @@ export default function InstallAppModal({
     setAndroidHint(false);
   }, [open]);
 
+  useBodyScrollLock(!!open);
   useCloseOnHistoryBack(!!open, onClose, 'installAppModal');
 
   if (!open) return null;
@@ -85,7 +89,7 @@ export default function InstallAppModal({
     window.open(liveUrl, '_blank', 'noopener,noreferrer');
   };
 
-  return (
+  return createPortal(
     <div className="iam-overlay" onClick={onClose} role="presentation">
       <div className="iam-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="iam-title">
         <button type="button" className="iam-close" onClick={onClose} aria-label="Close">
@@ -209,6 +213,7 @@ export default function InstallAppModal({
           Done
         </button>
       </div>
-    </div>
+    </div>,
+    getOverlayRoot() || document.body
   );
 }

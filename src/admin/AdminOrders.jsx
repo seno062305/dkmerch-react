@@ -7,9 +7,11 @@ import { QRCodeSVG } from 'qrcode.react';
 import { useConfirm } from '../context/ConfirmContext';
 import { useNotification } from '../context/NotificationContext';
 import DkIcon, { DK_ICONS } from '../components/DkIcon';
-import AdminPager from './AdminPager';
+import AdminPager, { fixedPageStyle } from './AdminPager';
 import { isLbcOrder } from '../utils/deliveryUtils';
 import { formatOrderShortId } from '../utils/orderId';
+import useBodyScrollLock from '../hooks/useBodyScrollLock';
+import { getOverlayRoot } from '../utils/scrollLock';
 import './AdminOrders.css';
 
 const SITE_URL = 'https://dkmerchwebsite.vercel.app';
@@ -421,6 +423,8 @@ const WaybillModal = ({ order, onClose }) => {
 /* ══════════════════════════════════════
    MAIN ADMIN ORDERS
 ══════════════════════════════════════ */
+const ORDER_PAGE_SIZES = [10, 20, 30, 40, 50];
+
 const AdminOrders = () => {
   const { confirm } = useConfirm();
   const { showNotification } = useNotification();
@@ -429,7 +433,7 @@ const AdminOrders = () => {
   const [searchTerm,    setSearchTerm]    = useState('');
   const [startDate,     setStartDate]     = useState('');
   const [endDate,       setEndDate]       = useState('');
-  const [pageSize,      setPageSize]      = useState(5);
+  const [pageSize,      setPageSize]      = useState(10);
   const [page,          setPage]          = useState(0);
 
   const orders = useQuery(api.orders.getAllOrders) || [];
@@ -733,6 +737,7 @@ const AdminOrders = () => {
           </div>
         ) : (
           <div className="orders-table-container">
+            <div className="dk-fixed-page dk-fixed-page--table" style={fixedPageStyle(pageSize)}>
             <table className="orders-table">
               <thead>
                 <tr>
@@ -791,12 +796,14 @@ const AdminOrders = () => {
                 })}
               </tbody>
             </table>
+            </div>
             <AdminPager
               total={filteredOrders.length}
               page={page}
               pageSize={pageSize}
               onPageChange={setPage}
               onPageSizeChange={setPageSize}
+              pageSizeOptions={ORDER_PAGE_SIZES}
             />
           </div>
         )}
@@ -849,6 +856,7 @@ const RejectConfirmDialog = ({ order, adminNote, onConfirm, onCancel }) => {
    ORDER MODAL
 ══════════════════════════════════════ */
 const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDelete, onResolveRefund, onResolveCancelRequest, getStatusColor, getStatusLabel }) => {
+  useBodyScrollLock(true);
   const [showCancelModal,   setShowCancelModal]   = useState(false);
   const [proofExpanded,     setProofExpanded]     = useState(false);
   const [photoExpanded2,    setPhotoExpanded2]    = useState(false);
@@ -1435,11 +1443,12 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
         />
       )}
     </div>,
-    document.body
+    getOverlayRoot() || document.body
   );
 };
 
 const OrderItemsListModal = ({ order, onClose }) => {
+  useBodyScrollLock(true);
   const items = order.items || [];
   const [pageSize, setPageSize] = useState(5);
   const [page, setPage] = useState(1);
@@ -1469,7 +1478,10 @@ const OrderItemsListModal = ({ order, onClose }) => {
           </button>
         </div>
         <div className="order-items-modal-body">
-          <ul className="order-items-modal-list">
+          <ul
+            className="order-items-modal-list dk-fixed-page dk-fixed-page--stack"
+            style={fixedPageStyle(pageSize, { '--dk-row-h': '72px', '--dk-gap': '8px' })}
+          >
             {pageItems.map((item, index) => {
               const absoluteIndex = start + index;
               const lineTotal = (item.quantity || 0) * (item.price || 0);
@@ -1547,6 +1559,7 @@ const CANCEL_PRESETS = [
 ];
 
 const CancelReasonModal = ({ order, onConfirm, onClose }) => {
+  useBodyScrollLock(true);
   const [selectedPreset, setSelectedPreset] = useState('');
   const [customReason,   setCustomReason]   = useState('');
   const [error,          setError]          = useState('');

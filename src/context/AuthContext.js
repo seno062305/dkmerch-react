@@ -467,17 +467,20 @@ export const AuthProvider = ({ children }) => {
             };
           }
 
-          // Customers NEVER fully sign in on password alone —
-          // hand off to LoginModal for PIN entry OR first-time create PIN.
-          if (sessionUser.role === "user" && !result.skipSecondFactor) {
+          // Customers + admin NEVER fully sign in on password alone —
+          // hand off to LoginModal for PIN entry OR first-time Create PIN (no OTP).
+          // Forgot password / Forgot PIN still use email OTP.
+          if (sessionUser.role === "user" || sessionUser.role === "admin") {
             const needsPin = !!result.needsPin;
-            const needsPinSetup = !!result.needsPinSetup || !needsPin;
+            const needsPinSetup = !!result.needsPinSetup && !needsPin;
             return {
               success: true,
-              needsPin,
+              needsPin: needsPin || !needsPinSetup,
               needsPinSetup,
               pendingUser: sessionUser,
-              role: "user",
+              role: sessionUser.role,
+              // Always require second factor — never skip for admin/customer
+              requirePin: true,
             };
           }
 

@@ -10,7 +10,10 @@ import DkIcon, { DK_ICONS } from '../components/DkIcon';
 import { useNotification } from '../context/NotificationContext';
 import DeliveryChatPanel from '../components/DeliveryChatPanel';
 import { useCloseOnHistoryBack } from '../hooks/useCloseOnHistoryBack';
+import { createPortal } from 'react-dom';
 import { formatOrderShortId } from '../utils/orderId';
+import useBodyScrollLock from '../hooks/useBodyScrollLock';
+import { getOverlayRoot } from '../utils/scrollLock';
 import './TrackOrder.css';
 
 /** Cancel request allowed only before admin confirms the order. */
@@ -89,10 +92,7 @@ const CancelOrderModal = ({ order, userEmail, onClose, onSuccess }) => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = ''; };
-  }, []);
+  useBodyScrollLock(true);
 
   const handleSubmit = async () => {
     if (!reasonId) {
@@ -138,7 +138,7 @@ const CancelOrderModal = ({ order, userEmail, onClose, onSuccess }) => {
     }
   };
 
-  return (
+  return createPortal(
     <div className="refund-modal-overlay" onClick={onClose}>
       <div className="refund-modal cancel-order-modal" onClick={(e) => e.stopPropagation()}>
         <button type="button" className="refund-modal-close" onClick={onClose}><i className="fas fa-times"></i></button>
@@ -255,7 +255,8 @@ const CancelOrderModal = ({ order, userEmail, onClose, onSuccess }) => {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    getOverlayRoot() || document.body
   );
 };
 
@@ -279,7 +280,7 @@ const RefundModal = ({ order, onClose, onSuccess }) => {
   const refundAmount = (order.finalTotal ?? order.total ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2 });
   const { canRefund, hoursLeft, minsLeft, expired } = getRefundWindow(order);
 
-  useEffect(() => { document.body.style.overflow = 'hidden'; return () => { document.body.style.overflow = ''; }; }, []);
+  useBodyScrollLock(true);
 
   const handlePhotoChange = (e) => {
     const file = e.target.files[0];
@@ -314,7 +315,7 @@ const RefundModal = ({ order, onClose, onSuccess }) => {
   };
 
   if (expired || !canRefund) {
-    return (
+    return createPortal(
       <div className="refund-modal-overlay" onClick={onClose}>
         <div className="refund-modal" onClick={e => e.stopPropagation()}>
           <button className="refund-modal-close" onClick={onClose}><i className="fas fa-times"></i></button>
@@ -330,11 +331,12 @@ const RefundModal = ({ order, onClose, onSuccess }) => {
           </div>
           <div className="refund-modal-footer"><button className="refund-cancel-btn" onClick={onClose}>Close</button></div>
         </div>
-      </div>
+      </div>,
+      getOverlayRoot() || document.body
     );
   }
 
-  return (
+  return createPortal(
     <div className="refund-modal-overlay" onClick={onClose}>
       <div className="refund-modal" onClick={e => e.stopPropagation()}>
         <button className="refund-modal-close" onClick={onClose}><i className="fas fa-times"></i></button>
@@ -400,7 +402,8 @@ const RefundModal = ({ order, onClose, onSuccess }) => {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    getOverlayRoot() || document.body
   );
 };
 
@@ -1329,10 +1332,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
   const refundAmount     = (order.finalTotal ?? order.total ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2 });
   const { canRefund, hoursLeft, minsLeft, expired } = getRefundWindow(order);
 
-  useEffect(() => {
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = ''; };
-  }, []);
+  useBodyScrollLock(true);
 
   useEffect(() => { if (order.deliveryOtp) setLocalOtp(order.deliveryOtp); }, [order.deliveryOtp]);
 
@@ -1353,7 +1353,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
     } catch { showNotification('Failed. Please try again.', 'error'); setContinuingPayment(false); }
   };
 
-  return (
+  return createPortal(
     <div className="tracking-modal-overlay" onClick={onClose}>
       <div className="tracking-modal" onClick={e => e.stopPropagation()}>
         <div className="tracking-result">
@@ -1617,7 +1617,8 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
 
         </div>
       </div>
-    </div>
+    </div>,
+    getOverlayRoot() || document.body
   );
 };
 

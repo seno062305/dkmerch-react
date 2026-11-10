@@ -1,5 +1,5 @@
 // src/pages/PreOrder.js
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './PreOrder.css';
 import { usePreOrderProducts } from '../utils/productStorage';
 import { useAuth } from '../context/AuthContext';
@@ -10,6 +10,7 @@ import { api } from '../../convex/_generated/api';
 import LoginModal from '../components/LoginModal';
 import { formatSaleEndLabel, formatSaleEndShort, shouldShowSaleBadge, hasDiscountedPrice } from '../utils/saleUtils';
 import { useCloseOnHistoryBack } from '../hooks/useCloseOnHistoryBack';
+import { useCatalogOptions } from '../hooks/useCatalogOptions';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 const fmt12 = (timeStr) => {
@@ -36,10 +37,16 @@ const fmtDateTime = (dateStr, timeStr) => {
 
 // ── Main Component ─────────────────────────────────────────────────────────
 const PreOrder = () => {
+  const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedGroup, setSelectedGroup] = useState('all');
+  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
+  const [groupDropdownOpen, setGroupDropdownOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loadingId, setLoadingId] = useState(null);
+
+  const categoryRef = useRef(null);
+  const groupRef = useRef(null);
 
   const { isAuthenticated, user } = useAuth();
   const { showNotification } = useNotification();
@@ -47,13 +54,29 @@ const PreOrder = () => {
   const placePreOrder = useMutation(api.preOrderRequests.placePreOrder);
 
   const preOrderProducts = usePreOrderProducts();
-  const groups = ['all', ...new Set(preOrderProducts.map(p => p.kpopGroup).filter(Boolean))];
+  const { items: catalogCategories } = useCatalogOptions('category');
+  const { items: catalogGroups } = useCatalogOptions('kpopGroup');
+  const categories = ['all', ...catalogCategories.map((c) => c.value)];
+  const groups = ['all', ...catalogGroups.map((g) => g.value)];
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (categoryRef.current && !categoryRef.current.contains(e.target)) setCategoryDropdownOpen(false);
+      if (groupRef.current && !groupRef.current.contains(e.target)) setGroupDropdownOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // ✅ Sort: latest added first
-  const filteredProducts = (selectedGroup === 'all'
-    ? preOrderProducts
-    : preOrderProducts.filter(p => p.kpopGroup === selectedGroup)
-  ).slice().sort((a, b) => (b._creationTime || 0) - (a._creationTime || 0));
+  const filteredProducts = preOrderProducts
+    .filter((p) => {
+      const categoryMatch = selectedCategory === 'all' || p.category === selectedCategory;
+      const groupMatch = selectedGroup === 'all' || p.kpopGroup === selectedGroup;
+      return categoryMatch && groupMatch;
+    })
+    .slice()
+    .sort((a, b) => (b._creationTime || 0) - (a._creationTime || 0));
 
   const handleRequireLogin = () => {
     setSelectedProduct(null);
@@ -96,17 +119,74 @@ const PreOrder = () => {
     <main className="preorder-main">
       <section className="preorder-page">
         <div className="preorder-filter-bar">
-          <h3>Filter by Group:</h3>
-          <div className="filter-options">
-            {groups.map(group => (
-              <button
-                key={group}
-                className={`filter-btn ${selectedGroup === group ? 'active' : ''}`}
-                onClick={() => setSelectedGroup(group)}
-              >
-                {group === 'all' ? 'All Groups' : group}
-              </button>
-            ))}
+          <div className="preorder-filters-row">
+            <div className="preorder-filter-group">
+              <label>CATEGORY:</label>
+              <div className="preorder-dropdown" ref={categoryRef}>
+                <button
+                  type="button"
+                  className="preorder-dropdown-toggle"
+                  aria-haspopup="listbox"
+                  aria-expanded={categoryDropdownOpen}
+                  onClick={() => { setCategoryDropdownOpen((o) => !o); setGroupDropdownOpen(false); }}
+                >
+                  <span>{selectedCategory === 'all' ? 'All Categories' : selectedCategory}</span>
+                  <i className={`fas fa-chevron-down ${categoryDropdownOpen ? 'open' : ''}`}></i>
+                </button>
+                {categoryDropdownOpen && (
+                  <div className="preorder-dropdown-menu" role="listbox">
+                    {categories.map((cat) => (
+                      <button
+                        key={cat}
+                        type="button"
+                        role="option"
+                        aria-selected={selectedCategory === cat}
+                        className={`preorder-dropdown-item ${selectedCategory === cat ? 'active' : ''}`}
+                        onClick={() => { setSelectedCategory(cat); setCategoryDropdownOpen(false); }}
+                      >
+                        {cat === 'all' ? 'All Categories' : cat}
+                        {selectedCategory === cat && <i className="fas fa-check"></i>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="preorder-filter-divider" />
+
+            <div className="preorder-filter-group">
+              <label>GROUP:</label>
+              <div className="preorder-dropdown" ref={groupRef}>
+                <button
+                  type="button"
+                  className="preorder-dropdown-toggle"
+                  aria-haspopup="listbox"
+                  aria-expanded={groupDropdownOpen}
+                  onClick={() => { setGroupDropdownOpen((o) => !o); setCategoryDropdownOpen(false); }}
+                >
+                  <span>{selectedGroup === 'all' ? 'All Groups' : selectedGroup}</span>
+                  <i className={`fas fa-chevron-down ${groupDropdownOpen ? 'open' : ''}`}></i>
+                </button>
+                {groupDropdownOpen && (
+                  <div className="preorder-dropdown-menu" role="listbox">
+                    {groups.map((group) => (
+                      <button
+                        key={group}
+                        type="button"
+                        role="option"
+                        aria-selected={selectedGroup === group}
+                        className={`preorder-dropdown-item ${selectedGroup === group ? 'active' : ''}`}
+                        onClick={() => { setSelectedGroup(group); setGroupDropdownOpen(false); }}
+                      >
+                        {group === 'all' ? 'All Groups' : group}
+                        {selectedGroup === group && <i className="fas fa-check"></i>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 

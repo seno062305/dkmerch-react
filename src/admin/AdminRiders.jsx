@@ -4,7 +4,8 @@ import './AdminRiders.css';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import DkIcon, { DK_ICONS } from '../components/DkIcon';
-import AdminPager from './AdminPager';
+import AdminPager, { fixedGridPageStyle } from './AdminPager';
+import useBodyScrollLock from '../hooks/useBodyScrollLock';
 const SITE_URL = process.env.REACT_APP_SITE_URL || 'https://dkmerchwebsite.vercel.app';
 
 const toDateStr = (ms) => new Date(ms).toISOString().split('T')[0];
@@ -350,15 +351,12 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
   const orderStatus = (order.orderStatus || order.status || '').toLowerCase();
   const isDelivered = orderStatus === 'completed' || orderStatus === 'delivered';
 
-  // Lock body scroll
+  useBodyScrollLock(true);
+
   useEffect(() => {
-    const scrollY = window.scrollY;
     document.body.classList.add('ar-map-open');
-    document.body.style.top = `-${scrollY}px`;
     return () => {
       document.body.classList.remove('ar-map-open');
-      document.body.style.top = '';
-      window.scrollTo(0, scrollY);
     };
   }, []);
 
@@ -703,6 +701,7 @@ const RemoveConfirmModal = ({ order, onConfirm, onClose }) => (
 // Delivery detail modal (Active)
 // ─────────────────────────────────────────────────────────────
 const ActiveDeliveryDetailModal = ({ order, onClose, onOpenMap }) => {
+  useBodyScrollLock(true);
   const pickupReq = order._pickupReq || {};
   const riderInfo = getRiderInfo(order);
   const hasRiderInfo = !!(riderInfo.name?.trim());
@@ -1028,7 +1027,10 @@ const AdminRiders = () => {
             ? <div className="ar-empty"><div className="ar-empty-icon"><DkIcon name={DK_ICONS.activeDelivery} size={40} /></div><p>No active deliveries{(startDate || endDate) ? ' for selected dates' : ''}.</p><span>Orders claimed by riders after waybill scan appear here.</span></div>
             : (
               <>
-                <div className="ar-orders-list">
+                <div
+                  className="ar-orders-list dk-fixed-page dk-fixed-page--grid"
+                  style={fixedGridPageStyle(activePageSize, 3, { '--dk-row-h': '220px', '--dk-gap': '14px' })}
+                >
                   {pagedActive.map(o => (
                     <ActiveOrderCard key={o._id} order={o} onViewDetails={openActiveDetails} />
                   ))}
@@ -1054,7 +1056,10 @@ const AdminRiders = () => {
             ? <div className="ar-empty"><div className="ar-empty-icon"><DkIcon name={DK_ICONS.completed} size={40} /></div><p>No completed deliveries{(startDate || endDate) ? ' for selected dates' : ''} yet.</p></div>
             : (
               <>
-                <div className="ar-orders-list">
+                <div
+                  className="ar-orders-list dk-fixed-page dk-fixed-page--grid"
+                  style={fixedGridPageStyle(completedPageSize, 3, { '--dk-row-h': '200px', '--dk-gap': '14px' })}
+                >
                   {pagedCompleted.map(o => (
                     <CompletedOrderCard key={o._id} order={o} onViewDetails={openCompletedDetails} />
                   ))}

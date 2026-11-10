@@ -1,11 +1,14 @@
 // src/components/RiderLoginModal.js
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import "./LoginModal.css";
 import "./RiderLoginModal.css";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import useBodyScrollLock from "../hooks/useBodyScrollLock";
+import { getOverlayRoot } from "../utils/scrollLock";
 // ── Rate limit helpers ─────────────────────────────────────────────────────
 const RL_KEY_ATTEMPTS = "dkmerch_rider_login_attempts";
 const RL_KEY_LOCKOUT  = "dkmerch_rider_login_lockout_until";
@@ -108,11 +111,11 @@ const RiderLoginModal = ({ onClose, onLoginSuccess }) => {
   }, [pwCooldown]);
 
   // ── Body scroll lock ──────────────────────────────────────────
+  useBodyScrollLock(true);
+
   useEffect(() => {
-    document.body.style.overflow = "hidden";
     document.body.classList.add("login-modal-open");
     return () => {
-      document.body.style.overflow = "";
       document.body.classList.remove("login-modal-open");
     };
   }, []);
@@ -261,7 +264,7 @@ const RiderLoginModal = ({ onClose, onLoginSuccess }) => {
   // FORGOT PASSWORD VIEW
   // ═══════════════════════════════════════════
   if (view === "forgot") {
-    return (
+    return createPortal(
       <div className="modal-overlay" onClick={onClose}>
         <div className="login-modal-content" onClick={e => e.stopPropagation()}>
           <button className="modal-close-btn" onClick={onClose} aria-label="Close">
@@ -416,14 +419,15 @@ const RiderLoginModal = ({ onClose, onLoginSuccess }) => {
             </div>
           </form>
         </div>
-      </div>
+      </div>,
+      getOverlayRoot() || document.body
     );
   }
 
   // ═══════════════════════════════════════════
   // LOGIN VIEW
   // ═══════════════════════════════════════════
-  return (
+  return createPortal(
     <div className="modal-overlay" onClick={onClose}>
       <div className="login-modal-content" onClick={e => e.stopPropagation()}>
         <button className="modal-close-btn" onClick={onClose} aria-label="Close">
@@ -539,7 +543,7 @@ const RiderLoginModal = ({ onClose, onLoginSuccess }) => {
             ) : isLoading ? (
               <><svg className="spinner" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>Logging in...</>
             ) : (
-              <><svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 3a1 1 0 011 1v12a1 1 0 11-2 0V4a1 1 0 011-1zm7.707 3.293a1 1 0 010 1.414L9.414 9H17a1 1 0 110 2H9.414l1.293 1.293a1 1 0 01-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0z" clipRule="evenodd" /></svg>Log In as Rider</>
+              <>Log In as Rider</>
             )}
           </button>
 
@@ -548,7 +552,8 @@ const RiderLoginModal = ({ onClose, onLoginSuccess }) => {
           </p>
         </form>
       </div>
-    </div>
+    </div>,
+    getOverlayRoot() || document.body
   );
 };
 

@@ -1,3 +1,45 @@
+/* Reserves vertical space for a full page of rows (pageSize-driven). */
+.dk-fixed-page {
+  --dk-page-size: 5;
+  --dk-row-h: 56px;
+  --dk-gap: 0px;
+  --dk-head-h: 0px;
+  box-sizing: border-box;
+  min-height: calc(
+    var(--dk-head-h) +
+    (var(--dk-page-size) * var(--dk-row-h)) +
+    ((var(--dk-page-size) - 1) * var(--dk-gap))
+  );
+}
+.dk-fixed-page--table {
+  --dk-head-h: 44px;
+  --dk-row-h: 57px;
+  --dk-gap: 0px;
+}
+.dk-fixed-page--stack {
+  --dk-row-h: 72px;
+  --dk-gap: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--dk-gap);
+}
+.dk-fixed-page--cards {
+  --dk-row-h: 168px;
+  --dk-gap: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--dk-gap);
+}
+.dk-fixed-page--grid {
+  --dk-page-rows: 2;
+  --dk-row-h: 210px;
+  --dk-gap: 14px;
+  min-height: calc(
+    (var(--dk-page-rows) * var(--dk-row-h)) +
+    ((var(--dk-page-rows) - 1) * var(--dk-gap))
+  );
+}
+
 .dk-pager {
   display: flex;
   align-items: center;
