@@ -190,7 +190,7 @@ const RiderMap = ({ orderId, riderName, orderData }) => {
   const locationData = useQuery(api.riders.getRiderLocation, orderId ? { orderId } : 'skip');
 
   const isLive      = !!(locationData?.isTracking && locationData?.lat && locationData?.lng &&
-                       (Date.now() - locationData.updatedAt) < 30000);
+                       (Date.now() - locationData.updatedAt) < 12000);
   const hasLastKnown = !!(locationData?.lastKnownLat && locationData?.lastKnownLng);
 
   useEffect(() => {
@@ -313,13 +313,21 @@ const RiderMap = ({ orderId, riderName, orderData }) => {
       const { lat, lng, accuracy, updatedAt } = locationData;
       if (lastKnownMarkerRef.current) { try { lastKnownMarkerRef.current.remove(); } catch {} lastKnownMarkerRef.current = null; }
       try { markerRef.current.setLatLng([lat, lng]); markerRef.current.setOpacity(1); } catch {}
-      markerRef.current.getPopup()?.setContent(`<div class="rider-map-popup"><strong>🛵 ${riderName || 'Your Rider'}</strong><br><small>📍 Live</small></div>`);
+      const accLabel = accuracy ? ` · ±${Math.round(accuracy)}m` : '';
+      markerRef.current.getPopup()?.setContent(`<div class="rider-map-popup"><strong>🛵 ${riderName || 'Your Rider'}</strong><br><small>📍 Live${accLabel}</small></div>`);
       if (accuracyCircleRef.current) { try { map.removeLayer(accuracyCircleRef.current); } catch {} accuracyCircleRef.current = null; }
-      if (accuracy && accuracy < 2000) {
-        try { accuracyCircleRef.current = L.circle([lat, lng], { radius: accuracy, color: '#7c3aed', fillColor: '#7c3aed', fillOpacity: 0.08, weight: 1.5 }).addTo(map); } catch {}
+      if (accuracy && accuracy < 120) {
+        try { accuracyCircleRef.current = L.circle([lat, lng], { radius: Math.max(accuracy, 8), color: '#16a34a', fillColor: '#22c55e', fillOpacity: 0.12, weight: 2 }).addTo(map); } catch {}
       }
-      if (destLat && destLng) { drawRoute(lat, lng, destLat, destLng, false); }
-      else { try { map.panTo([lat, lng], { animate: true, duration: 0.8 }); } catch {} }
+      if (destLat && destLng) {
+        drawRoute(lat, lng, destLat, destLng, false);
+        try {
+          const z = Math.max(map.getZoom(), 17);
+          map.setView([lat, lng], z, { animate: true });
+        } catch {}
+      } else {
+        try { map.flyTo([lat, lng], Math.max(map.getZoom(), 18), { animate: true, duration: 0.6 }); } catch {}
+      }
       setLastUpdateTime(new Date(updatedAt));
       return;
     }

@@ -204,7 +204,7 @@ const StatusBadge = ({ order }) => {
 
 const LiveBadge = ({ orderId }) => {
   const loc = useQuery(api.riders.getRiderLocation, { orderId });
-  if (!loc?.isTracking || (Date.now() - loc.updatedAt) >= 60000) return null;
+  if (!loc?.isTracking || (Date.now() - loc.updatedAt) >= 15000) return null;
   return <span className="ar-live-indicator"><span className="ar-gps-live-dot" style={{ width: 7, height: 7 }} />Live</span>;
 };
 
@@ -316,7 +316,7 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
 
   const location = useQuery(api.riders.getRiderLocation, { orderId });
 
-  const isLive       = !!(location?.isTracking && location?.updatedAt && (Date.now() - location.updatedAt) < 30000);
+  const isLive       = !!(location?.isTracking && location?.updatedAt && (Date.now() - location.updatedAt) < 12000);
   const hasLoc       = !!(location?.lat && location?.lng && location.lat !== 0 && location.lng !== 0);
   const hasLastKnown = !!(location?.lastKnownLat && location?.lastKnownLng);
 
@@ -528,21 +528,20 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
     }
 
     if (circleRef.current) { try { circleRef.current.remove(); } catch {} circleRef.current = null; }
-    if (accuracy) {
-      try { circleRef.current = L.circle([lat, lng], { radius: accuracy, color: '#fc1268', fillColor: '#fc1268', fillOpacity: 0.07, weight: 1.5 }).addTo(map); } catch {}
+    if (accuracy && accuracy < 120) {
+      try { circleRef.current = L.circle([lat, lng], { radius: Math.max(accuracy, 8), color: '#16a34a', fillColor: '#22c55e', fillOpacity: 0.12, weight: 2 }).addTo(map); } catch {}
     }
 
     const lastR = lastRoutePlottedRef.current;
     const movedFarFromRoute = !lastR.lat ||
-      Math.abs(lat - lastR.lat) > 0.00015 ||
-      Math.abs(lng - lastR.lng) > 0.00015;
+      Math.abs(lat - lastR.lat) > 0.00008 ||
+      Math.abs(lng - lastR.lng) > 0.00008;
     const noRoute = !routeLineRef.current;
 
     if (destLat && destLng && (noRoute || movedFarFromRoute)) {
       drawRoute(lat, lng, destLat, destLng, false);
-    } else if (!destLat || !destLng) {
-      try { map.flyTo([lat, lng], Math.max(map.getZoom(), 16), { animate: true, duration: 1 }); } catch {}
     }
+    try { map.setView([lat, lng], Math.max(map.getZoom(), 17), { animate: true }); } catch {}
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location, isLive, hasLoc, drawRoute]);
 

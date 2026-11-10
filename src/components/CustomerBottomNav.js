@@ -41,7 +41,7 @@ const CustomerBottomNav = () => {
       </Link>
       <Link to="/preorder" className={`cbn-item ${isActive('/preorder') ? 'active' : ''}`}>
         <i className="fas fa-clock"></i>
-        <span>Pre-Order</span>
+        <span>Preorder</span>
       </Link>
       <Link to="/track-order" className={`cbn-item ${isActive('/track-order') ? 'active' : ''}`}>
         <i className="fas fa-map-marker-alt"></i>

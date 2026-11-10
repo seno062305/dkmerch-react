@@ -22,6 +22,7 @@ const GPS = {
   _sendFn:     null,      // (payload) => Promise — one order
   _sendBatchFn: null,     // ({ orderIds, ...coords }) => Promise — all OFD
   _lastPos:    null,
+  _bestGpsAt:  0,
   _source:     'gps',     // 'gps' | 'ip'
 
   isActive()       { return this._interval !== null; },
@@ -61,19 +62,60 @@ const GPS = {
   },
 
   _applyPos(pos, source = 'gps', address) {
+    const lat = pos.coords ? pos.coords.latitude : pos.lat;
+    const lng = pos.coords ? pos.coords.longitude : pos.lng;
+    const accuracy = pos.coords
+      ? pos.coords.accuracy
+      : (pos.accuracy ?? (source === 'ip' ? 8000 : undefined));
+    const heading = pos.coords ? pos.coords.heading : undefined;
+    const speed = pos.coords ? pos.coords.speed : undefined;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+    // Prefer precise GPS — never overwrite a fresh accurate GPS fix with IP / poor fixes
+    const now = Date.now();
+    const hasFreshGps =
+      this._source === 'gps' &&
+      this._lastPos &&
+      (now - this._bestGpsAt) < 20000 &&
+      Number.isFinite(this._lastPos.accuracy) &&
+      this._lastPos.accuracy <= 45;
+
+    if (source === 'ip' && hasFreshGps) return;
+    if (source === 'gps' && this._lastPos && this._source === 'gps') {
+      const prevAcc = this._lastPos.accuracy;
+      // Ignore much worse GPS blips (keeps pin stable/accurate on customer + admin maps)
+      if (Number.isFinite(prevAcc) && Number.isFinite(accuracy) && accuracy > prevAcc * 2.2 && accuracy > 35) {
+        this._pushNow();
+        return;
+      }
+    }
+
     this._source = source;
+    if (source === 'gps') this._bestGpsAt = now;
     this._lastPos = {
-      lat:      pos.coords ? pos.coords.latitude : pos.lat,
-      lng:      pos.coords ? pos.coords.longitude : pos.lng,
-      accuracy: pos.coords ? pos.coords.accuracy : (pos.accuracy ?? (source === 'ip' ? 5000 : undefined)),
-      heading:  pos.coords ? pos.coords.heading : undefined,
-      speed:    pos.coords ? pos.coords.speed : undefined,
-      address:  address || undefined,
+      lat,
+      lng,
+      accuracy,
+      heading: heading ?? this._lastPos?.heading,
+      speed: speed ?? undefined,
+      address: address || (source === 'gps' ? undefined : this._lastPos?.address),
     };
     this._pushNow();
   },
 
   async _tryIpFallback() {
+    // Only when we have no usable GPS pin
+    const now = Date.now();
+    if (
+      this._source === 'gps' &&
+      this._lastPos &&
+      (now - this._bestGpsAt) < 45000 &&
+      Number.isFinite(this._lastPos.accuracy) &&
+      this._lastPos.accuracy <= 80
+    ) {
+      this._pushNow();
+      return;
+    }
     try {
       const res = await fetch('https://ipapi.co/json/', { cache: 'no-store' });
       if (!res.ok) return;
@@ -97,13 +139,11 @@ const GPS = {
       if (document.visibilityState === 'visible') {
         this._requestFix(true);
       } else {
-        // Tab/app backgrounded — keep pushing last known so maps don't go blank
         this._pushNow();
-        this._requestFix(false);
+        this._requestFix(true);
       }
     };
     document.addEventListener('visibilitychange', this._visHandler);
-    // App swipe-away / tab close: push last pin; do NOT mark GPS off (last known stays live on map)
     if (!this._pageHideHandler) {
       this._pageHideHandler = () => { if (this._interval) this._pushNow(); };
       window.addEventListener('pagehide', this._pageHideHandler);
@@ -111,7 +151,7 @@ const GPS = {
     }
   },
 
-  _requestFix(highAccuracy) {
+  _requestFix(highAccuracy = true) {
     if (!navigator.geolocation) {
       this._tryIpFallback();
       return;
@@ -119,7 +159,11 @@ const GPS = {
     navigator.geolocation.getCurrentPosition(
       (pos) => this._applyPos(pos, 'gps'),
       () => { this._tryIpFallback(); },
-      { enableHighAccuracy: !!highAccuracy, timeout: highAccuracy ? 12000 : 8000, maximumAge: highAccuracy ? 0 : 60000 }
+      {
+        enableHighAccuracy: true,
+        timeout: highAccuracy ? 10000 : 8000,
+        maximumAge: 0,
+      }
     );
   },
 
@@ -150,20 +194,20 @@ const GPS = {
           console.error('GPS watch error:', err);
           this._tryIpFallback();
         },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
       );
       this._requestFix(true);
     } else {
       this._tryIpFallback();
     }
 
+    // High-frequency push so customer/admin maps stay precise after Notify OFD
     this._interval = setInterval(() => {
       this._pushNow();
-      // Soft refresh while backgrounded / foregrounded
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
-        this._requestFix(false);
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+        this._requestFix(true);
       }
-    }, 3000);
+    }, 1500);
   },
 
   updateSendFn(fn) { this._sendFn = fn; },
@@ -186,6 +230,7 @@ const GPS = {
     }
     this._orderIds = [];
     this._lastPos = null;
+    this._bestGpsAt = 0;
     this._source = 'gps';
     this._riderEmail = null;
     this._riderName = null;
