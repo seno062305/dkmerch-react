@@ -24,69 +24,76 @@ const GPS = {
   activeOrderId() { return this._orderId; },
   lastPosition()  { return this._lastPos; },
 
+  _payload() {
+    if (!this._lastPos || !this._orderId) return null;
+    return {
+      orderId:    this._orderId,
+      riderEmail: this._riderEmail,
+      riderName:  this._riderName,
+      lat:        this._lastPos.lat,
+      lng:        this._lastPos.lng,
+      accuracy:   this._lastPos.accuracy,
+      heading:    this._lastPos.heading ?? undefined,
+      speed:      this._lastPos.speed   ?? undefined,
+      isTracking: true,
+      sessionId:  this._sessionId,
+    };
+  },
+
+  _pushNow() {
+    const payload = this._payload();
+    if (!payload || !this._sendFn) return;
+    this._sendFn(payload).catch(err => console.error('Location send failed:', err));
+  },
+
+  _applyPos(pos) {
+    this._lastPos = {
+      lat:      pos.coords.latitude,
+      lng:      pos.coords.longitude,
+      accuracy: pos.coords.accuracy,
+      heading:  pos.coords.heading,
+      speed:    pos.coords.speed,
+    };
+    this._pushNow();
+  },
+
   start({ orderId, riderEmail, riderName, sessionId, sendFn }) {
-    if (this._interval) return;
     if (!navigator.geolocation) return;
+
+    // Same order already live — refresh sender and push immediately for customer/admin maps
+    if (this._interval && this._orderId === orderId) {
+      this._riderEmail = riderEmail;
+      this._riderName  = riderName;
+      this._sessionId  = sessionId;
+      this._sendFn     = sendFn;
+      this._pushNow();
+      navigator.geolocation.getCurrentPosition(
+        (pos) => this._applyPos(pos),
+        (err) => console.error('GPS refresh failed:', err),
+        { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+      );
+      return;
+    }
+
+    // Switching order (or first start) — tear down then start fresh
+    if (this._interval) this.stopLocal();
+
     this._orderId    = orderId;
     this._riderEmail = riderEmail;
     this._riderName  = riderName;
     this._sessionId  = sessionId;
     this._sendFn     = sendFn;
+
     this._watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        this._lastPos = {
-          lat:      pos.coords.latitude,
-          lng:      pos.coords.longitude,
-          accuracy: pos.coords.accuracy,
-          heading:  pos.coords.heading,
-          speed:    pos.coords.speed,
-        };
-      },
+      (pos) => this._applyPos(pos),
       (err) => console.error('GPS watch error:', err),
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
 
-    this._interval = setInterval(() => {
-      if (this._lastPos && this._sendFn) {
-        this._sendFn({
-          orderId:    this._orderId,
-          riderEmail: this._riderEmail,
-          riderName:  this._riderName,
-          lat:        this._lastPos.lat,
-          lng:        this._lastPos.lng,
-          accuracy:   this._lastPos.accuracy,
-          heading:    this._lastPos.heading ?? undefined,
-          speed:      this._lastPos.speed   ?? undefined,
-          isTracking: true,
-          sessionId:  this._sessionId,
-        }).catch(err => console.error('Location send failed:', err));
-      }
-    }, 5000);
+    this._interval = setInterval(() => this._pushNow(), 3000);
 
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        this._lastPos = {
-          lat:      pos.coords.latitude,
-          lng:      pos.coords.longitude,
-          accuracy: pos.coords.accuracy,
-          heading:  pos.coords.heading,
-          speed:    pos.coords.speed,
-        };
-        if (this._sendFn) {
-          this._sendFn({
-            orderId:    this._orderId,
-            riderEmail: this._riderEmail,
-            riderName:  this._riderName,
-            lat:        this._lastPos.lat,
-            lng:        this._lastPos.lng,
-            accuracy:   this._lastPos.accuracy,
-            heading:    this._lastPos.heading ?? undefined,
-            speed:      this._lastPos.speed   ?? undefined,
-            isTracking: true,
-            sessionId:  this._sessionId,
-          }).catch(() => {});
-        }
-      },
+      (pos) => this._applyPos(pos),
       (err) => console.error('GPS initial fix failed:', err),
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
@@ -863,6 +870,7 @@ const RiderDashboard = () => {
       return bTime - aTime;
     });
 
+  // Newest accepted / out-for-delivery first so just-scanned orders land at the top
   const myDeliveries = allPickups
     .filter(p =>
       p.riderEmail === user?.email &&
@@ -870,9 +878,9 @@ const RiderDashboard = () => {
       allOrders.some(o => o.orderId === p.orderId)
     )
     .sort((a, b) => {
-      if (a.status === 'out_for_delivery' && b.status !== 'out_for_delivery') return -1;
-      if (b.status === 'out_for_delivery' && a.status !== 'out_for_delivery') return  1;
-      return (new Date(b.approvedAt || b.requestedAt).getTime()) - (new Date(a.approvedAt || a.requestedAt).getTime());
+      const tb = new Date(b.approvedAt || b.requestedAt || b._creationTime || 0).getTime();
+      const ta = new Date(a.approvedAt || a.requestedAt || a._creationTime || 0).getTime();
+      return tb - ta;
     });
 
   const myPickupHistory = allPickups
@@ -1068,10 +1076,14 @@ const RiderDashboard = () => {
       setShowWaybillScanner(false);
       setScanTargetOrderId(null);
       setTab('deliver');
+      if (result.id) {
+        setExpandedDeliveries(prev => ({ ...prev, [result.id]: true }));
+      }
+      // Force GPS live immediately so customer + admin maps open with rider location
       startTracking(deliveredOrderId);
       alert(result.alreadyClaimed
         ? '✅ This order is already Out for Delivery in Deliver.'
-        : '✅ Waybill matched! Order is Out for Delivery — opened in Deliver.');
+        : '✅ Waybill matched! Order is Out for Delivery at the top of Deliver — location sharing started.');
       return { ok: true };
     } catch (err) {
       console.error(err);
@@ -1139,7 +1151,7 @@ const RiderDashboard = () => {
     const shortId = String(delivery.orderId || '').slice(-8).toUpperCase();
     const ok = await confirm({
       title: 'Start delivery?',
-      message: `Mark order #${shortId} as Out for Delivery and notify the customer?\n\nLive GPS tracking will start for this order.`,
+      message: `Mark order #${shortId} as Out for Delivery and notify the customer?\n\nLive GPS tracking will start immediately for this order.`,
       confirmLabel: 'Start Delivery',
       cancelLabel: 'Cancel',
       variant: 'primary',
@@ -1150,8 +1162,10 @@ const RiderDashboard = () => {
     try {
       await updateOrderFields({ orderId: delivery.orderId, orderStatus: 'out_for_delivery', status: 'Out for Delivery', riderInfo: { name: riderInfo.fullName, phone: riderInfo.phone, vehicle: riderInfo.vehicleType, plate: riderInfo.plateNumber } });
       await updatePickupStatus({ requestId: delivery._id, status: 'out_for_delivery' });
+      setExpandedDeliveries(prev => ({ ...prev, [delivery._id]: true }));
+      // Restart/refresh GPS so customer + admin see location right away (not after 5s wait)
       startTracking(delivery.orderId);
-      alert('📦 Customer notified!\n\n📍 GPS tracking has started automatically.\nThe customer can now see your location in real-time.\n\nAsk the customer for their OTP code when you arrive.');
+      alert('📦 Customer notified!\n\n📍 Live location is sharing now.\nCustomer and admin can track you on the map.\n\nAsk the customer for their OTP code when you arrive.');
     } catch (err) { console.error(err); alert('Failed to notify customer. Please try again.'); }
     finally { setNotifyingId(null); }
   };
