@@ -16,8 +16,8 @@ const LbcTrackPanel = ({ compact = false }) => (
     <div className="lbc-track-panel-body">
       <strong>LBC Express tracking</strong>
       <p>
-        Outside NCR orders ship via LBC. Open the tracker and enter your LBC tracking / waybill number
-        to follow your package.
+        Outside NCR orders ship via LBC. Admin will send you the LBC tracking / order ID —
+        then open the tracker and enter that number to follow your package.
       </p>
       <div className="lbc-track-panel-actions">
         <button type="button" className="lbc-track-btn" onClick={openLbcTracker}>
@@ -581,7 +581,7 @@ const TrackOrder = () => {
         { label: 'Order Placed',      icon: 'fa-shopping-cart', completed: true, time: fmt(order._creationTime), desc: 'Your order has been placed.' },
         { label: 'Payment Confirmed', icon: 'fa-credit-card',   completed: order.paymentStatus === 'paid', time: fmt(order.paidAt), desc: order.paymentStatus === 'paid' ? 'Payment received.' : 'Waiting for payment.' },
         { label: 'Order Confirmed',   icon: 'fa-check-circle',  completed: ['confirmed','shipped','out_for_delivery','delivered','completed'].includes(status), time: fmt(order.confirmedAt), desc: ['confirmed','shipped','out_for_delivery','delivered','completed'].includes(status) ? 'Admin confirmed your order.' : 'Waiting for confirmation.' },
-        { label: 'Shipped via LBC',   icon: 'fa-truck',         completed: ['shipped','out_for_delivery','delivered','completed'].includes(status), time: fmt(order.shippedAt || order.outForDeliveryAt), desc: ['shipped','out_for_delivery','delivered','completed'].includes(status) ? 'Package handed to LBC Express. Use the LBC Tracker button and enter your waybill number.' : 'Waiting to ship via LBC.' },
+        { label: 'Shipped via LBC',   icon: 'fa-truck',         completed: ['shipped','out_for_delivery','delivered','completed'].includes(status), time: fmt(order.shippedAt || order.outForDeliveryAt), desc: ['shipped','out_for_delivery','delivered','completed'].includes(status) ? 'Package handed to LBC Express. Admin will send your LBC tracking / order ID — use it on the LBC Tracker.' : 'Waiting to ship via LBC.' },
         { label: 'Delivered',         icon: 'fa-check-double',  completed: ['delivered','completed'].includes(status), time: fmt(order.deliveryConfirmedAt), desc: ['delivered','completed'].includes(status) ? 'Delivered successfully!' : 'Waiting for LBC delivery.' },
       ];
     }
@@ -866,7 +866,7 @@ const TrackOrder = () => {
                 <button type="submit" className="btn btn-primary"><i className="fas fa-search"></i> Find My Orders</button>
               </form>
             </div>
-            <div className="tracking-info"><h3>How to Track</h3><ul><li><i className="fas fa-check"></i> Enter your email address</li><li><i className="fas fa-check"></i> View all your orders</li><li><i className="fas fa-check"></i> See real-time status</li><li><i className="fas fa-truck"></i> Outside NCR? Use LBC Tracker above</li></ul></div>
+            <div className="tracking-info"><h3>How to Track</h3><ul><li><i className="fas fa-check"></i> Enter your email address</li><li><i className="fas fa-check"></i> View all your orders</li><li><i className="fas fa-check"></i> See real-time status</li><li><i className="fas fa-truck"></i> Outside NCR? Admin sends your LBC ID — use LBC Tracker above</li></ul></div>
           </div>
           {showTrackedOrders && emailOrders.length > 0 && (
             <div className="tracked-orders-section">

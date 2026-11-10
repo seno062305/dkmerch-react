@@ -121,13 +121,14 @@ const Collections = () => {
       return (b._creationTime || 0) - (a._creationTime || 0);
     });
 
-  const handleAddToCart = (product) => {
+  const handleAddToCart = async (product) => {
     if (product.stock === 0 && !product.isPreOrder) {
       showNotification('Product is out of stock', 'error');
       return;
     }
-    addToCartMutation(product);
+    const result = await addToCartMutation(product);
     showNotification(`${product.name} added to cart!`, 'success');
+    return result;
   };
 
   const handleCardWishlist = async (e, product) => {

@@ -217,9 +217,31 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
       icon: 'fa-bolt',
     });
     if (!ok) return;
-    await onAddToCart({ ...product, appliedPromo, finalPrice: discountedPrice });
+    const productId = String(product._id || product.id);
+    const result = await onAddToCart({ ...product, appliedPromo, finalPrice: discountedPrice });
     onClose?.();
-    navigate('/checkout');
+    navigate('/checkout', {
+      state: {
+        selectedCartIds: result?.cartItemId ? [result.cartItemId] : undefined,
+        buyNowProductId: productId,
+        buyNowPromoCode: appliedPromo?.code || null,
+        appliedPromo: appliedPromo || null,
+        buyNowItem: {
+          _id: result?.cartItemId || `buynow-${productId}`,
+          productId,
+          name: product.name,
+          price: product.price,
+          image: product.image,
+          qty: 1,
+          ...(appliedPromo && {
+            finalPrice: discountedPrice,
+            promoCode: appliedPromo.code,
+            promoDiscount: appliedPromo.discount,
+            discountAmount: appliedPromo.discountAmount,
+          }),
+        },
+      },
+    });
   };
 
   const handlePreOrderClick = async () => {

@@ -48,16 +48,16 @@ export const addToCart = mutation({
 
     if (existing) {
       await db.patch(existing._id, { qty: existing.qty + 1 });
-    } else {
-      await db.insert("cart", {
-        userId, productId, name, price, image, qty: 1,
-        ...(finalPrice     !== undefined && { finalPrice }),
-        ...(promoCode      !== undefined && { promoCode }),
-        ...(discountAmount !== undefined && { discountAmount }),
-        ...(promoDiscount  !== undefined && { promoDiscount }),
-      });
+      return { success: true, cartItemId: existing._id };
     }
-    return { success: true };
+    const cartItemId = await db.insert("cart", {
+      userId, productId, name, price, image, qty: 1,
+      ...(finalPrice     !== undefined && { finalPrice }),
+      ...(promoCode      !== undefined && { promoCode }),
+      ...(discountAmount !== undefined && { discountAmount }),
+      ...(promoDiscount  !== undefined && { promoDiscount }),
+    });
+    return { success: true, cartItemId };
   },
 });
 

@@ -520,7 +520,7 @@ const LbcDeliveryBanner = () => (
       <strong>Outside NCR — LBC Express delivery</strong>
       <p>
         This address is outside Metro Manila. Your order will be shipped via <strong>LBC Express</strong>.
-        After we ship, use the <strong>LBC Tracker</strong> button on the Track page and enter your LBC tracking number.
+        Admin will send you the <strong>LBC tracking / order ID</strong>, then use the <strong>LBC Tracker</strong> button on the Track page to follow your package.
       </p>
     </div>
   </div>
@@ -580,13 +580,71 @@ const Checkout = () => {
   // ── Reward order state ────────────────────────────────────────────────────
   const [rewardOrder, setRewardOrder] = useState(location.state?.rewardOrder || null);
 
-  // TikTok-style: only checkout items selected in cart modal
-  const selectedCartIds = location.state?.selectedCartIds || null;
-  const checkoutItems = rewardOrder
-    ? []
-    : (selectedCartIds?.length
-        ? cartItems.filter(i => selectedCartIds.includes(i._id))
-        : cartItems);
+  // Only items explicitly selected (cart multi-pay) or Buy Now — never dump the whole cart
+  const CHECKOUT_SEL_KEY = 'dk_checkout_selected';
+  const CHECKOUT_BUYNOW_KEY = 'dk_checkout_buynow';
+
+  const selectedCartIds = (() => {
+    const fromState = location.state?.selectedCartIds;
+    if (Array.isArray(fromState) && fromState.length) return fromState;
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(CHECKOUT_SEL_KEY) || 'null');
+      return Array.isArray(saved) && saved.length ? saved : null;
+    } catch {
+      return null;
+    }
+  })();
+
+  const buyNowFilter = (() => {
+    const fromState = location.state?.buyNowProductId
+      ? {
+          productId: String(location.state.buyNowProductId),
+          promoCode: location.state.buyNowPromoCode || null,
+          item: location.state.buyNowItem || null,
+        }
+      : null;
+    if (fromState) return fromState;
+    try {
+      return JSON.parse(sessionStorage.getItem(CHECKOUT_BUYNOW_KEY) || 'null');
+    } catch {
+      return null;
+    }
+  })();
+
+  useEffect(() => {
+    if (Array.isArray(location.state?.selectedCartIds) && location.state.selectedCartIds.length) {
+      sessionStorage.setItem(CHECKOUT_SEL_KEY, JSON.stringify(location.state.selectedCartIds));
+      sessionStorage.removeItem(CHECKOUT_BUYNOW_KEY);
+    }
+    if (location.state?.buyNowProductId) {
+      sessionStorage.setItem(CHECKOUT_BUYNOW_KEY, JSON.stringify({
+        productId: String(location.state.buyNowProductId),
+        promoCode: location.state.buyNowPromoCode || null,
+        item: location.state.buyNowItem || null,
+      }));
+      if (!location.state?.selectedCartIds?.length) {
+        sessionStorage.removeItem(CHECKOUT_SEL_KEY);
+      }
+    }
+  }, [location.state]);
+
+  const checkoutItems = (() => {
+    if (rewardOrder) return [];
+    if (selectedCartIds?.length) {
+      const matched = cartItems.filter(i => selectedCartIds.includes(i._id));
+      if (matched.length) return matched;
+    }
+    if (buyNowFilter?.productId) {
+      const matched = cartItems.filter(i => {
+        if (String(i.productId) !== String(buyNowFilter.productId)) return false;
+        if (buyNowFilter.promoCode) return i.promoCode === buyNowFilter.promoCode;
+        return !i.promoCode;
+      });
+      if (matched.length) return matched;
+      if (buyNowFilter.item) return [{ ...buyNowFilter.item, qty: 1 }];
+    }
+    return [];
+  })();
 
   const [loading,           setLoading]           = useState(false);
   const [isEditingContact,  setIsEditingContact]  = useState(false);
@@ -647,18 +705,26 @@ const Checkout = () => {
     }
   }, [isAuthenticated, navigate, showNotification, user, savedProfile]);
 
-  // ── Cart empty guard — skip for reward orders ─────────────────────────────
+  // ── Cart empty guard — skip for reward orders / wait briefly for Buy Now sync ─
   useEffect(() => {
     if (rewardOrder) return;
     if (products.length === 0) return;
-    if (cartItems.length === 0 || checkoutItems.length === 0) {
+    if (checkoutItems.length > 0) return;
+
+    const hasIntent = !!(selectedCartIds?.length || buyNowFilter?.productId || buyNowFilter?.item);
+    const delayMs = hasIntent ? 2500 : 0;
+    const timer = setTimeout(() => {
+      if (checkoutItems.length > 0) return;
       showNotification(
-        cartItems.length === 0 ? 'Your cart is empty' : 'No items selected for checkout',
+        hasIntent
+          ? 'No items selected for checkout'
+          : (cartItems.length === 0 ? 'Your cart is empty' : 'Select items from your cart to checkout'),
         'warning'
       );
-      navigate('/collections');
-    }
-  }, [cartItems.length, checkoutItems.length, products.length, rewardOrder]);
+      navigate(hasIntent || cartItems.length === 0 ? '/collections' : '/collections');
+    }, delayMs);
+    return () => clearTimeout(timer);
+  }, [cartItems.length, checkoutItems.length, products.length, rewardOrder, selectedCartIds, buyNowFilter, navigate, showNotification]);
 
   const getProductById    = (id) => products.find(p => p._id?.toString() === id?.toString() || p.id === id);
   const getQty            = (item) => item.qty ?? item.quantity ?? 1;
@@ -1020,14 +1086,22 @@ const Checkout = () => {
 
       // ── Remove checked-out items only (keep unselected in cart) ────────
       if (!rewardOrder) {
-        if (selectedCartIds?.length) {
-          for (const id of selectedCartIds) {
+        const idsToRemove = selectedCartIds?.length
+          ? selectedCartIds
+          : checkoutItems.map(i => i._id).filter(Boolean);
+        if (idsToRemove.length) {
+          for (const id of idsToRemove) {
             try { await removeFromCartById(id); } catch { /* non-critical */ }
           }
         } else {
           await clearCart();
         }
       }
+
+      try {
+        sessionStorage.removeItem(CHECKOUT_SEL_KEY);
+        sessionStorage.removeItem(CHECKOUT_BUYNOW_KEY);
+      } catch { /* ignore */ }
 
       setLoading(false);
       window.location.href = paymentLinkUrl;
@@ -1090,12 +1164,14 @@ const Checkout = () => {
               {/* ── Contact Information ── */}
               <div className="checkout-section">
                 <div className="section-header">
-                  <h2>
-                    Contact Information
-                    {isContactComplete() && !isEditingContact && (
-                      <span className="section-complete-badge"><i className="fas fa-check-circle"></i> Saved</span>
-                    )}
-                  </h2>
+                  <div className="section-header-main">
+                    <h2>Contact Information</h2>
+                    <div className="section-header-badges">
+                      {isContactComplete() && !isEditingContact && (
+                        <span className="section-complete-badge"><i className="fas fa-check-circle"></i> Saved</span>
+                      )}
+                    </div>
+                  </div>
                   {!isEditingContact
                     ? <button type="button" className="edit-info-btn" onClick={() => setIsEditingContact(true)}><i className="fas fa-pen"></i> Edit</button>
                     : <button type="button" className="save-info-btn" onClick={handleSaveContact}><i className="fas fa-check"></i> Save</button>
@@ -1145,15 +1221,17 @@ const Checkout = () => {
               {/* ── Shipping Address ── */}
               <div className="checkout-section">
                 <div className="section-header">
-                  <h2>
-                    Shipping Address
-                    {isAddressComplete() && !isEditingAddress && (
-                      <span className="section-complete-badge"><i className="fas fa-check-circle"></i> Saved</span>
-                    )}
-                    {isOutsideNCR && (
-                      <span className="section-lbc-badge"><i className="fas fa-box"></i> LBC Express</span>
-                    )}
-                  </h2>
+                  <div className="section-header-main">
+                    <h2>Shipping Address</h2>
+                    <div className="section-header-badges">
+                      {isAddressComplete() && !isEditingAddress && (
+                        <span className="section-complete-badge"><i className="fas fa-check-circle"></i> Saved</span>
+                      )}
+                      {isOutsideNCR && (
+                        <span className="section-lbc-badge"><i className="fas fa-box"></i> LBC Express</span>
+                      )}
+                    </div>
+                  </div>
                   {!isEditingAddress
                     ? <button type="button" className="edit-info-btn" onClick={() => setIsEditingAddress(true)}><i className="fas fa-pen"></i> Edit</button>
                     : <button type="button" className="save-info-btn" onClick={handleSaveAddress}>
@@ -1448,7 +1526,7 @@ const Checkout = () => {
                 {isOutsideNCR && (
                   <div className="lbc-summary-block">
                     <i className="fas fa-truck"></i>
-                    <span>Outside NCR → ships via <strong>LBC Express</strong>. Track it anytime on the Track page with the LBC Tracker button.</span>
+                    <span>Outside NCR → ships via <strong>LBC Express</strong>. Admin will send your LBC tracking / order ID, then track it on the Track page.</span>
                   </div>
                 )}
 

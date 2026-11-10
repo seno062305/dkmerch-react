@@ -147,6 +147,21 @@ export const upsertOrderFromFailover = internalMutation({
 });
 
 // ─── SHARED HELPER ────────────────────────────────────────────────────────────
+const NCR_BOUNDS = { minLat: 14.35, maxLat: 14.80, minLng: 120.86, maxLng: 121.15 };
+
+function isLbcDelivery(order: any): boolean {
+  if (!order) return false;
+  if (order.deliveryMethod === 'lbc') return true;
+  if (order.deliveryMethod === 'rider') return false;
+  const lat = Number(order.addressLat);
+  const lng = Number(order.addressLng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+  return !(
+    lat >= NCR_BOUNDS.minLat && lat <= NCR_BOUNDS.maxLat &&
+    lng >= NCR_BOUNDS.minLng && lng <= NCR_BOUNDS.maxLng
+  );
+}
+
 async function onOrderConfirmed(
   scheduler: any,
   db: any,
@@ -160,6 +175,7 @@ async function onOrderConfirmed(
   const itemCount      = order.items?.length || 0;
   const shippingAddr   = order.shippingAddress || 'N/A';
   const now            = new Date().toISOString();
+  const isLbc          = isLbcDelivery(order);
 
   if (order.email) {
     await scheduler.runAfter(0, internal.sendEmail.sendOrderConfirmedEmail, {
@@ -171,6 +187,9 @@ async function onOrderConfirmed(
       shippingAddress: shippingAddr,
     });
   }
+
+  // Outside NCR → LBC Express only — do not notify motorcycle riders
+  if (isLbc) return;
 
   await scheduler.runAfter(0, internal.sendEmail.sendRiderNewOrderEmail, {
     orderId,

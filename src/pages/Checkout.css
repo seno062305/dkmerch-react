@@ -163,13 +163,53 @@
 /* ── Section header row ── */
 .section-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
+  gap: 10px 12px;
   margin-bottom: 24px;
 }
 
+.section-header-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 auto;
+  position: relative;
+  padding-left: 14px;
+}
+.section-header-main::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 6px;
+  height: 6px;
+  background: var(--primary-pink);
+  border-radius: 50%;
+  box-shadow: 0 0 10px rgba(252, 18, 104, 0.4);
+}
+
+.section-header-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
 .section-header h2 {
-  margin-bottom: 0 !important;
+  margin: 0 !important;
+  display: block;
+}
+.section-header h2::before {
+  display: none;
+}
+
+.section-header .edit-info-btn,
+.section-header .save-info-btn {
+  flex-shrink: 0;
+  align-self: flex-start;
 }
 
 .checkout-section h2 {
@@ -919,7 +959,7 @@ textarea {
 }
 
 @media (max-width: 768px) {
-  .checkout-page { padding: 40px 16px 60px; }
+  .checkout-page { padding: 40px 16px calc(72px + env(safe-area-inset-bottom, 0px) + 24px); }
   .checkout-header h1 { font-size: 36px; }
   .checkout-header p { font-size: 15px; }
 
@@ -933,10 +973,24 @@ textarea {
 
   .checkout-section h2,
   .summary-card h2 { font-size: 20px; }
+
+  .summary-row {
+    gap: 12px;
+    align-items: flex-start;
+  }
+  .summary-row span:first-child {
+    flex: 1 1 auto;
+    min-width: 0;
+    line-height: 1.35;
+  }
+  .summary-row span:last-child {
+    flex-shrink: 0;
+    text-align: right;
+  }
 }
 
 @media (max-width: 480px) {
-  .checkout-page { padding: 30px 12px 50px; }
+  .checkout-page { padding: 30px 12px calc(72px + env(safe-area-inset-bottom, 0px) + 28px); }
   .checkout-header h1 { font-size: 28px; }
   .checkout-header p { font-size: 14px; }
 
@@ -1025,7 +1079,7 @@ html { scroll-behavior: smooth; }
   border: 1px solid #bbf7d0;
   border-radius: 20px;
   padding: 3px 10px;
-  margin-left: 10px;
+  margin-left: 0;
   vertical-align: middle;
 }
 
@@ -2231,8 +2285,9 @@ html { scroll-behavior: smooth; }
   border: 1px solid #fdba74;
   border-radius: 20px;
   padding: 3px 10px;
-  margin-left: 10px;
+  margin-left: 0;
   vertical-align: middle;
+  white-space: nowrap;
 }
 .lbc-summary-block {
   display: flex;

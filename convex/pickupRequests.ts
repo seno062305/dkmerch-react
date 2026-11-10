@@ -44,6 +44,21 @@ export const createPickupRequest = mutation({
   },
 });
 
+const NCR_BOUNDS = { minLat: 14.35, maxLat: 14.80, minLng: 120.86, maxLng: 121.15 };
+
+function isLbcDelivery(order: any): boolean {
+  if (!order) return false;
+  if (order.deliveryMethod === 'lbc') return true;
+  if (order.deliveryMethod === 'rider') return false;
+  const lat = Number(order.addressLat);
+  const lng = Number(order.addressLng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+  return !(
+    lat >= NCR_BOUNDS.minLat && lat <= NCR_BOUNDS.maxLat &&
+    lng >= NCR_BOUNDS.minLng && lng <= NCR_BOUNDS.maxLng
+  );
+}
+
 async function findOrderByIdOrShort(db: any, orderIdRaw: string) {
   const orderId = orderIdRaw.trim();
   const exact = await db.query("orders").withIndex("by_orderId", (q: any) => q.eq("orderId", orderId)).first();
@@ -70,6 +85,10 @@ export const markOrderFromScan = mutation({
     const order = await findOrderByIdOrShort(db, args.orderId);
     if (!order) {
       return { success: false, message: "Order not found. Check the waybill and try again." };
+    }
+
+    if (isLbcDelivery(order)) {
+      return { success: false, message: "This order ships via LBC Express (outside NCR) — not available for riders." };
     }
 
     const status = (order.orderStatus || order.status || "").toLowerCase();
@@ -152,6 +171,10 @@ export const acceptOrder = mutation({
     const order = await findOrderByIdOrShort(db, args.orderId);
     if (!order) {
       return { success: false, message: "Order not found." };
+    }
+
+    if (isLbcDelivery(order)) {
+      return { success: false, message: "This order ships via LBC Express (outside NCR) — not available for riders." };
     }
 
     const status = (order.orderStatus || order.status || "").toLowerCase();

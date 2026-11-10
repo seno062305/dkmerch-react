@@ -13,6 +13,7 @@ import InstallAppModal, {
   isStandaloneApp,
   isInsecureInstallHost,
 } from '../components/InstallAppModal';
+import { isLbcOrder } from '../utils/deliveryUtils';
 import './RiderDashboard.css';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1046,11 +1047,11 @@ const RiderDashboard = () => {
     );
 
   // Newest confirmed orders first — each order stays its own Available card (never grouped by customer)
-  // LBC (outside NCR) orders are courier-shipped — not for motorcycle riders to scan
+  // LBC / outside-NCR orders ship via courier — never show in rider Available
   const availableOrders = allOrders
     .filter(o =>
       (o.orderStatus === 'confirmed' || o.status === 'Confirmed') &&
-      o.deliveryMethod !== 'lbc' &&
+      !isLbcOrder(o) &&
       !isOrderClaimed(o.orderId)
     )
     .sort((a, b) => {

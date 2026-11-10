@@ -8,6 +8,7 @@ import { useConfirm } from '../context/ConfirmContext';
 import { useNotification } from '../context/NotificationContext';
 import DkIcon, { DK_ICONS } from '../components/DkIcon';
 import AdminPager from './AdminPager';
+import { isLbcOrder } from '../utils/deliveryUtils';
 import './AdminOrders.css';
 
 const SITE_URL = 'https://dkmerchwebsite.vercel.app';
@@ -504,9 +505,12 @@ const AdminOrders = () => {
     const customer = order?.customerName || 'the customer';
 
     if (newOrderStatus === 'confirmed') {
+      const lbc = isLbcOrder(order);
       const ok = await confirm({
         title: 'Confirm this order?',
-        message: `Confirm order #${shortId} for ${customer}?\n\nThis marks the order as confirmed and makes it available for riders to scan and accept.`,
+        message: lbc
+          ? `Confirm order #${shortId} for ${customer}?\n\nThis is an outside-NCR (LBC Express) order. It will NOT appear in the rider Available tab — ship via LBC and send the tracking ID to the customer.`
+          : `Confirm order #${shortId} for ${customer}?\n\nThis marks the order as confirmed and makes it available for riders to scan and accept.`,
         confirmLabel: 'Confirm Order',
         cancelLabel: 'Cancel',
         variant: 'primary',
@@ -771,7 +775,8 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
   const paymentStatus  = order.paymentStatus || 'pending';
   const isPaid         = paymentStatus === 'paid';
   const isDone         = currentStatus === 'completed' || currentStatus === 'cancelled';
-  const isRiderManaged = currentStatus === 'shipped' || currentStatus === 'out_for_delivery';
+  const isLbc          = isLbcOrder(order);
+  const isRiderManaged = !isLbc && (currentStatus === 'shipped' || currentStatus === 'out_for_delivery');
   const canConfirm     = isPaid && currentStatus === 'pending';
   const canCancel      = !isDone && !isRiderManaged;
   const hasPromo       = !!(order.promoCode && discount > 0);
@@ -813,8 +818,10 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
 
         <div className="modal-body">
           {!isPaid && <div className="flow-notice warning"><i className="fas fa-exclamation-triangle"></i><div><strong>Payment not yet confirmed</strong><p>Do not confirm until payment is verified via PayMongo.</p></div></div>}
-          {isPaid && currentStatus === 'pending' && <div className="flow-notice success"><i className="fas fa-check-circle"></i><div><strong>Payment received!</strong><p>Confirm order below. Riders can then claim it by scanning the waybill.</p></div></div>}
-          {isPaid && currentStatus === 'confirmed' && <div className="flow-notice info"><i className="fas fa-motorcycle"></i><div><strong>Order confirmed</strong><p>Visible to riders. They claim it by scanning the waybill — no admin approval needed.</p></div></div>}
+          {isPaid && currentStatus === 'pending' && !isLbc && <div className="flow-notice success"><i className="fas fa-check-circle"></i><div><strong>Payment received!</strong><p>Confirm order below. Riders can then claim it by scanning the waybill.</p></div></div>}
+          {isPaid && currentStatus === 'pending' && isLbc && <div className="flow-notice success"><i className="fas fa-box"></i><div><strong>Payment received — LBC Express</strong><p>Confirm below. This outside-NCR order will not go to riders; ship via LBC and send the tracking ID to the customer.</p></div></div>}
+          {isPaid && currentStatus === 'confirmed' && !isLbc && <div className="flow-notice info"><i className="fas fa-motorcycle"></i><div><strong>Order confirmed</strong><p>Visible to riders. They claim it by scanning the waybill — no admin approval needed.</p></div></div>}
+          {isPaid && currentStatus === 'confirmed' && isLbc && <div className="flow-notice info"><i className="fas fa-truck"></i><div><strong>LBC order confirmed</strong><p>Not shown to riders. Ship via LBC Express and send the LBC tracking / order ID to the customer.</p></div></div>}
           {isRiderManaged && <div className="flow-notice purple"><i className="fas fa-shipping-fast"></i><div><strong>Rider is handling delivery</strong><p>Rider confirms via OTP + photo proof.</p></div></div>}
 
           <div className="order-modal-split">
