@@ -9,7 +9,7 @@ body.cart-modal-open {
   left: 0;
 }
 
-/* ── Overlay ── */
+/* ── Overlay — above product modal so header Cart works while product is open ── */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -20,9 +20,13 @@ body.cart-modal-open {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 11000;
+  z-index: 30000;
   padding: 16px;
   box-sizing: border-box;
+}
+
+.cart-modal-overlay {
+  z-index: 30000;
 }
 
 /* ── Modal Content ── */

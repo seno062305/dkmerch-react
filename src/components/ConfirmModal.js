@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useCloseOnHistoryBack } from '../hooks/useCloseOnHistoryBack';
 import './ConfirmModal.css';
 
 const VARIANT_META = {
@@ -22,15 +23,40 @@ const ConfirmModal = ({
 }) => {
   const meta = VARIANT_META[variant] || VARIANT_META.primary;
   const [dontShow, setDontShow] = useState(false);
+  const busyRef = useRef(false);
+
+  const { release } = useCloseOnHistoryBack(true, onCancel, 'confirmModal');
+
+  const finishCancel = useCallback(async () => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    try {
+      await release();
+      onCancel?.();
+    } finally {
+      busyRef.current = false;
+    }
+  }, [onCancel, release]);
+
+  const finishConfirm = useCallback(async () => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    try {
+      await release();
+      onConfirm?.();
+    } finally {
+      busyRef.current = false;
+    }
+  }, [onConfirm, release]);
 
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key === 'Escape') onCancel?.();
-      if (e.key === 'Enter') onConfirm?.();
+      if (e.key === 'Escape') finishCancel();
+      if (e.key === 'Enter') finishConfirm();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [onCancel, onConfirm]);
+  }, [finishCancel, finishConfirm]);
 
   const toggleDontShow = () => {
     const next = !dontShow;
@@ -39,7 +65,7 @@ const ConfirmModal = ({
   };
 
   return (
-    <div className="dk-confirm-overlay" onClick={onCancel} role="presentation">
+    <div className="dk-confirm-overlay" onClick={finishCancel} role="presentation">
       <div
         className={`dk-confirm-modal dk-confirm-${meta.tone}`}
         onClick={(e) => e.stopPropagation()}
@@ -62,10 +88,10 @@ const ConfirmModal = ({
           </label>
         )}
         <div className="dk-confirm-actions">
-          <button type="button" className="dk-confirm-cancel" onClick={onCancel}>
+          <button type="button" className="dk-confirm-cancel" onClick={finishCancel}>
             {cancelLabel}
           </button>
-          <button type="button" className="dk-confirm-proceed" onClick={onConfirm} autoFocus>
+          <button type="button" className="dk-confirm-proceed" onClick={finishConfirm} autoFocus>
             {confirmLabel}
           </button>
         </div>

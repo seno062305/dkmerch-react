@@ -1,10 +1,11 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import './Footer.css';
 
 const Footer = () => {
   const currentYear = new Date().getFullYear();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const socialLinks = [
     { icon: 'facebook-f', url: '#', label: 'Facebook' },
@@ -14,12 +15,25 @@ const Footer = () => {
     { icon: 'tiktok', url: '#', label: 'TikTok' }
   ];
 
+  const scrollTop = () => {
+    try {
+      window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+    } catch {
+      window.scrollTo(0, 0);
+    }
+    // Retry after route paint (mobile bottom-nav pages)
+    setTimeout(() => window.scrollTo({ top: 0, left: 0, behavior: 'smooth' }), 80);
+    setTimeout(() => window.scrollTo(0, 0), 220);
+  };
+
   const handleNavClick = (e, path) => {
     e.preventDefault();
-    navigate(path);
-    setTimeout(() => {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }, 50);
+    if (location.pathname === path) {
+      scrollTop();
+      return;
+    }
+    navigate(path, { state: { scrollToTop: true } });
+    scrollTop();
   };
 
   const quickLinks = [

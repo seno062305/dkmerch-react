@@ -32,6 +32,9 @@ export default defineSchema({
     reactivationOtpExpiresAt: v.optional(v.number()),
     // ── Soft delete ────────────────────────────
     deletedAt:                v.optional(v.number()),
+    // ── Single active session (login on another device kicks the old one) ──
+    activeSessionId:          v.optional(v.string()),
+    activeDeviceAt:           v.optional(v.number()),
   })
     .index("by_email", ["email"])
     .index("by_username", ["username"]),
@@ -191,9 +194,18 @@ export default defineSchema({
     pointsAwarded:         v.optional(v.boolean()),
     isRewardOrder:         v.optional(v.boolean()),
     rewardTicketCode:      v.optional(v.string()),
+    /** Monotonic store-wide order number (1, 2, 3…) — allocated under a Convex lock */
+    orderSeq:              v.optional(v.number()),
   })
     .index("by_orderId", ["orderId"])
-    .index("by_email", ["email"]),
+    .index("by_email", ["email"])
+    .index("by_orderSeq", ["orderSeq"]),
+
+  /** Single-row lock/counter for sequential order numbers */
+  orderCounters: defineTable({
+    name: v.string(), // "orders"
+    nextSeq: v.number(),
+  }).index("by_name", ["name"]),
 
   promos: defineTable({
     code: v.string(),

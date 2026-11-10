@@ -1,6 +1,6 @@
 // src/context/AuthContext.js
-import React, { createContext, useContext, useEffect, useState } from "react";
-import { useMutation } from "convex/react";
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { appendActivityLog } from "../admin/lib/localActivityLog";
 import { saveDeviceUnlock, clearDeviceUnlock, getDeviceUnlock } from "../lib/deviceUnlock";
@@ -80,10 +80,19 @@ export const AuthProvider = ({ children }) => {
   const seedAdminMutation  = useMutation(api.users.seedAdmin);
   const loginRiderMutation = useMutation(api.riders.loginRider);
   const createUserMutation = useMutation(api.users.createUser);
+  const startUserSession   = useMutation(api.users.startUserSession);
+  const kickedRef = useRef(false);
 
   const safeLog = (payload) => {
     try { appendActivityLog(payload); } catch {}
   };
+
+  const sessionCheck = useQuery(
+    api.users.checkUserSession,
+    isAuthenticated && user?._id && user?.sessionId && (user.role === "user" || user.role === "admin")
+      ? { userId: String(user._id), sessionId: String(user.sessionId) }
+      : "skip"
+  );
 
   useEffect(() => {
     seedAdminMutation({}).catch(() => {});
@@ -144,6 +153,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const applySession = (sessionUser) => {
+    kickedRef.current = false;
     writeAuthUser(sessionUser);
     markSessionAlive();
     if (sessionUser.role === "user") saveDeviceUnlock(sessionUser);
@@ -152,6 +162,29 @@ export const AuthProvider = ({ children }) => {
     setIsAuthenticated(true);
     setNeedsDeviceUnlock(false);
   };
+
+  // Another device logged into this account → force logout here
+  useEffect(() => {
+    if (!sessionCheck || sessionCheck.valid !== false) return;
+    if (sessionCheck.reason !== "new_device_logged_in") return;
+    if (kickedRef.current) return;
+    kickedRef.current = true;
+    clearAuthUser();
+    clearSessionAlive();
+    try { sessionStorage.removeItem("dkmerch_push_asked"); } catch { /* ignore */ }
+    setUser(null);
+    setRole(null);
+    setIsAuthenticated(false);
+    setNeedsDeviceUnlock(false);
+    try {
+      window.alert("Signed out — this account was opened on another device.");
+    } catch { /* ignore */ }
+    try {
+      if (window.location.pathname.startsWith("/admin") || window.location.pathname.startsWith("/settings")) {
+        window.location.assign("/");
+      }
+    } catch { /* ignore */ }
+  }, [sessionCheck]);
 
   const login = async (identifier, password, mode) => {
     try {
@@ -214,6 +247,7 @@ export const AuthProvider = ({ children }) => {
             email:    result.user.email,
             phone:    result.user.phone || '',
             role:     result.user.role,
+            ...(result.sessionId ? { sessionId: result.sessionId } : {}),
           };
 
           // Customer-chat (and other customer-only gates) must not accept staff accounts
@@ -232,13 +266,14 @@ export const AuthProvider = ({ children }) => {
           }
 
           // Customers NEVER fully sign in on password alone —
-          // always hand off to LoginModal for PIN (or first-time PIN setup).
+          // hand off to LoginModal for PIN entry OR first-time create PIN.
           if (sessionUser.role === "user" && !result.skipSecondFactor) {
             const needsPin = !!result.needsPin;
+            const needsPinSetup = !!result.needsPinSetup || !needsPin;
             return {
               success: true,
               needsPin,
-              needsPinSetup: !needsPin,
+              needsPinSetup,
               pendingUser: sessionUser,
               role: "user",
             };
@@ -340,8 +375,15 @@ export const AuthProvider = ({ children }) => {
   };
 
   /** Finish login after PIN verify / PIN create (customer accounts). */
-  const completeLogin = (pendingUser, details = "Account login success") => {
+  const completeLogin = async (pendingUser, details = "Account login success") => {
     if (!pendingUser?._id) return { success: false };
+    let sessionId = pendingUser.sessionId;
+    try {
+      const started = await startUserSession({ userId: pendingUser._id });
+      if (started?.sessionId) sessionId = started.sessionId;
+    } catch (err) {
+      console.warn("startUserSession failed:", err);
+    }
     const sessionUser = {
       _id:      pendingUser._id,
       id:       pendingUser._id,
@@ -350,6 +392,7 @@ export const AuthProvider = ({ children }) => {
       email:    pendingUser.email,
       phone:    pendingUser.phone || "",
       role:     pendingUser.role || "user",
+      ...(sessionId ? { sessionId } : {}),
     };
     applySession(sessionUser);
     safeLog({

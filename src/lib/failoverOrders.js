@@ -74,11 +74,17 @@ export async function createOrderWithFailover(mutateFn, args) {
 // Prefer dual-write via saveFailoverOrder when we know it's an order create
 export async function createOrderWithFailoverDual(mutateFn, args) {
   try {
-    const result = await withTimeout(mutateFn(args), 8000);
-    return { ...(result || { success: true, orderId: args.orderId }), failover: false };
+    // Server allocates sequential orderId under lock when Convex is up
+    const { orderId: _omit, ...serverArgs } = args || {};
+    const result = await withTimeout(mutateFn(serverArgs), 8000);
+    return { ...(result || { success: true }), failover: false };
   } catch (err) {
     const msg = String(err?.message || err || "");
     if (!isConvexDownError(err) && !msg.includes("Timeout")) throw err;
-    return saveFailoverOrder(args);
+    // Convex down — provisional unique id (seq assigned when synced back if re-created via createOrder)
+    const orderId =
+      String(args?.orderId || "").trim() ||
+      `DK-F${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    return saveFailoverOrder({ ...args, orderId });
   }
 }

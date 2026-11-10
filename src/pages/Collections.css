@@ -206,29 +206,35 @@
   transform: scale(1.02);
 }
 
-.collection-sale-badge {
+.collection-badge-stack {
   position: absolute;
-  top: 12px; left: 12px;
+  top: 12px;
+  left: 12px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.collection-sale-badge {
   background: var(--primary-color);
   color: white;
   font-size: 11px;
   font-weight: 700;
   padding: 6px 12px;
   border-radius: 3px;
-  z-index: 5;
   text-transform: uppercase;
 }
 
 .collection-preorder-badge {
-  position: absolute;
-  top: 12px; left: 12px;
-  background: var(--info-color);
+  background: var(--info-color, #2563eb);
   color: white;
   font-size: 11px;
   font-weight: 700;
   padding: 6px 12px;
   border-radius: 3px;
-  z-index: 5;
   text-transform: uppercase;
 }
 

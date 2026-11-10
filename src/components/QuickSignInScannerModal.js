@@ -1,6 +1,19 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useQuery } from 'convex/react';
+import { api } from '../../convex/_generated/api';
 import { useConfirm } from '../context/ConfirmContext';
+import { useCloseOnHistoryBack } from '../hooks/useCloseOnHistoryBack';
 import './WaybillScannerModal.css';
+
+/** Format typed code as ABCD-EFGH while typing. */
+function formatQuickSignInInput(raw) {
+  const cleaned = String(raw || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .slice(0, 8);
+  if (cleaned.length <= 4) return cleaned;
+  return `${cleaned.slice(0, 4)}-${cleaned.slice(4)}`;
+}
 
 function extractQuickSignInToken(raw) {
   if (!raw || typeof raw !== 'string') return null;
@@ -47,6 +60,15 @@ const QuickSignInScannerModal = ({ onClose, onScan, accountLabel = 'this account
   const [cameraReady, setCameraReady] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [watchToken, setWatchToken] = useState('');
+  const closedRef = useRef(false);
+
+  useCloseOnHistoryBack(true, onClose, 'quickSignInScanner');
+
+  const watchedSession = useQuery(
+    api.quickSignIn.getSession,
+    success && watchToken ? { token: watchToken } : 'skip'
+  );
 
   const stopCamera = useCallback(() => {
     if (rafRef.current) {
@@ -92,9 +114,9 @@ const QuickSignInScannerModal = ({ onClose, onScan, accountLabel = 'this account
         cooldownRef.current = Date.now() + 1500;
         return;
       }
+      setWatchToken(token);
       setSuccess(true);
       stopCamera();
-      setTimeout(() => onClose?.(), 900);
     } catch (err) {
       setError(err?.message || 'Scan failed. Try again.');
       cooldownRef.current = Date.now() + 1500;
@@ -102,7 +124,31 @@ const QuickSignInScannerModal = ({ onClose, onScan, accountLabel = 'this account
       busyRef.current = false;
       setSubmitting(false);
     }
-  }, [onScan, onClose, stopCamera, success, confirm, accountLabel]);
+  }, [onScan, stopCamera, success, confirm, accountLabel]);
+
+  // Close scanner when desktop finishes login (consumed), or shortly after approve
+  useEffect(() => {
+    if (!success || closedRef.current) return undefined;
+    const status = watchedSession?.status;
+    const desktopDone = status === 'consumed';
+    const approvedFallback = status === 'approved';
+    if (!desktopDone && !approvedFallback) {
+      // Fallback if desktop never updates — still close so phone isn't stuck
+      const t = setTimeout(() => {
+        if (closedRef.current) return;
+        closedRef.current = true;
+        onClose?.();
+      }, 4000);
+      return () => clearTimeout(t);
+    }
+    const delay = desktopDone ? 250 : 900;
+    const t = setTimeout(() => {
+      if (closedRef.current) return;
+      closedRef.current = true;
+      onClose?.();
+    }, delay);
+    return () => clearTimeout(t);
+  }, [success, watchedSession?.status, onClose]);
 
   useEffect(() => {
     let cancelled = false;
@@ -206,7 +252,12 @@ const QuickSignInScannerModal = ({ onClose, onScan, accountLabel = 'this account
         {success ? (
           <div className="wb-scan-error" style={{ background: '#ecfdf5', borderColor: '#a7f3d0', color: '#065f46' }}>
             <i className="fas fa-check-circle"></i>
-            <div><strong>Desktop signed in!</strong><span> Closing…</span></div>
+            <div>
+              <strong>
+                {watchedSession?.status === 'consumed' ? 'Desktop signed in!' : 'Approved — waiting for desktop…'}
+              </strong>
+              <span> Closing…</span>
+            </div>
           </div>
         ) : (
           <>
@@ -231,9 +282,12 @@ const QuickSignInScannerModal = ({ onClose, onScan, accountLabel = 'this account
                 <input
                   id="qsi-manual"
                   value={manualToken}
-                  onChange={(e) => setManualToken(e.target.value.toUpperCase())}
+                  onChange={(e) => setManualToken(formatQuickSignInInput(e.target.value))}
                   placeholder="e.g. ABCD-EFGH"
                   autoComplete="off"
+                  inputMode="text"
+                  maxLength={9}
+                  spellCheck={false}
                   disabled={submitting}
                 />
                 <button type="submit" className="wb-scan-submit" disabled={submitting || !manualToken.trim()}>

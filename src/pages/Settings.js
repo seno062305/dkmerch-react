@@ -5,6 +5,7 @@ import { useMutation, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useNotification } from '../context/NotificationContext';
 import QuickSignInScannerModal from '../components/QuickSignInScannerModal';
+import { useCloseOnHistoryBack } from '../hooks/useCloseOnHistoryBack';
 import './Settings.css';
 
 const DELETE_REASONS = [
@@ -28,7 +29,9 @@ const DeactivateModal = ({
   deactError,
   onConfirm,
   onClose,
-}) => (
+}) => {
+  useCloseOnHistoryBack(true, onClose, 'deactivateModal');
+  return (
   <div className="settings-modal-overlay" onClick={onClose}>
     <div className="settings-modal" onClick={e => e.stopPropagation()}>
 
@@ -144,7 +147,8 @@ const DeactivateModal = ({
 
     </div>
   </div>
-);
+  );
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  DELETE MODAL — also outside Settings
@@ -158,7 +162,9 @@ const DeleteModal = ({
   deleteError,
   onConfirm,
   onClose,
-}) => (
+}) => {
+  useCloseOnHistoryBack(true, onClose, 'deleteAccountModal');
+  return (
   <div className="settings-modal-overlay" onClick={onClose}>
     <div className="settings-modal" onClick={e => e.stopPropagation()}>
 
@@ -261,7 +267,8 @@ const DeleteModal = ({
       )}
     </div>
   </div>
-);
+  );
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  MAIN SETTINGS COMPONENT
@@ -460,7 +467,8 @@ const Settings = () => {
     try {
       const uid = user._id || user.id;
       await deactivateOwnAccount({ id: uid, reason: 'self_deactivated', note: undefined });
-      logout(); navigate('/');
+      logout();
+      navigate('/', { replace: true });
     } catch { setDeactError('Failed to deactivate. Please try again.'); }
     finally { setDeactLoading(false); }
   };
@@ -477,7 +485,8 @@ const Settings = () => {
     setDeleteLoading(true); setDeleteError('');
     try {
       await softDeleteUser({ id: user._id || user.id });
-      logout(); navigate('/');
+      logout();
+      navigate('/', { replace: true });
     } catch { setDeleteError('Failed to delete account. Please try again.'); }
     finally { setDeleteLoading(false); }
   };
@@ -643,7 +652,7 @@ const Settings = () => {
                 <div className="settings-acct-card-icon"><i className="fas fa-qrcode"></i></div>
                 <div className="settings-acct-card-info">
                   <h4>Quick Sign In</h4>
-                  <p>Scan the QR on desktop login to sign that browser into this account — no password on desktop.</p>
+                  <p>Use this on your phone to approve desktop login — scan the desktop QR or type the ABCD-EFGH code. QR is not generated on mobile.</p>
                 </div>
                 <button
                   type="button"

@@ -9,6 +9,7 @@ import { useNotification } from '../context/NotificationContext';
 import DkIcon, { DK_ICONS } from '../components/DkIcon';
 import AdminPager from './AdminPager';
 import { isLbcOrder } from '../utils/deliveryUtils';
+import { formatOrderShortId } from '../utils/orderId';
 import './AdminOrders.css';
 
 const SITE_URL = 'https://dkmerchwebsite.vercel.app';
@@ -63,7 +64,7 @@ const WaybillModal = ({ order, onClose }) => {
 
   // Same scannable link for preview + print (order-accurate; screen scans allowed)
   const trackOrderLink = `${SITE_URL}/track-order?order=${order.orderId}`;
-  const shortId = order.orderId?.slice(-8).toUpperCase();
+  const shortId = formatOrderShortId(order);
 
   const esc = (v) => String(v ?? '')
     .replace(/&/g, '&amp;')
@@ -511,7 +512,7 @@ const AdminOrders = () => {
 
   const handleUpdateStatus = async (orderId, newOrderStatus) => {
     const order = orders.find(o => o.orderId === orderId) || selectedOrder;
-    const shortId = String(orderId || '').slice(-8).toUpperCase();
+    const shortId = formatOrderShortId(orderId);
     const customer = order?.customerName || 'the customer';
 
     if (newOrderStatus === 'confirmed') {
@@ -575,7 +576,7 @@ const AdminOrders = () => {
   };
 
   const handleResolveRefund = async (orderId, refundStatus, adminNote) => {
-    const shortId = String(orderId || '').slice(-8).toUpperCase();
+    const shortId = formatOrderShortId(orderId);
     if (refundStatus === 'approved') {
       const ok = await confirm({
         title: 'Approve this refund?',
@@ -604,7 +605,7 @@ const AdminOrders = () => {
   };
 
   const handleResolveCancelRequest = async (orderId, decision, adminNote, proofPhotoId) => {
-    const shortId = String(orderId || '').slice(-8).toUpperCase();
+    const shortId = formatOrderShortId(orderId);
     if (decision === 'approved') {
       const ok = await confirm({
         title: 'Approve cancel request?',
@@ -747,7 +748,7 @@ const AdminOrders = () => {
                   const pendingRow = order.refundStatus === 'requested' || order.cancelRequestStatus === 'requested';
                   return (
                     <tr key={order.orderId} className={pendingRow ? 'row-refund-pending' : ''}>
-                      <td data-label="Order ID"><strong>#{order.orderId.slice(-8)}</strong></td>
+                      <td data-label="Order ID"><strong>#{formatOrderShortId(order)}</strong></td>
                       <td data-label="Customer"><div className="customer-info"><strong>{order.customerName || 'N/A'}</strong><small>{order.email || 'N/A'}</small></div></td>
                       <td data-label="Items">{order.items.length} item(s)</td>
                       <td data-label="Total">
@@ -819,7 +820,7 @@ const RejectConfirmDialog = ({ order, adminNote, onConfirm, onCancel }) => {
       <div className="reject-confirm-dialog" onClick={e => e.stopPropagation()}>
         <div className="reject-confirm-icon"><i className="fas fa-exclamation-triangle"></i></div>
         <h3>Reject Refund Request?</h3>
-        <p>Are you sure you want to <strong>reject</strong> the refund for Order <strong>#{order.orderId?.slice(-8)}</strong>?</p>
+        <p>Are you sure you want to <strong>reject</strong> the refund for Order <strong>#{formatOrderShortId(order)}</strong>?</p>
         <div className="reject-confirm-details">
           <div className="reject-confirm-row"><span>Customer</span><strong>{order.customerName || 'N/A'}</strong></div>
           <div className="reject-confirm-row"><span>Refund Amount</span><strong>₱{refundAmount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</strong></div>
@@ -954,7 +955,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
         {/* ── HEADER ── */}
         <div className="modal-header">
           <div>
-            <h2>Order #{order.orderId?.slice(-8) || 'N/A'}</h2>
+            <h2>Order #{formatOrderShortId(order)}</h2>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
               <span className="status-badge" style={{ backgroundColor: getStatusColor(order.orderStatus) }}>{getStatusLabel(order.orderStatus)}</span>
               <span className={`payment-badge ${isPaid ? 'paid' : 'pending'}`}>{isPaid ? 'Paid' : 'Payment Pending'}</span>
@@ -1058,7 +1059,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                       <div className="pod-photo-label"><i className="fas fa-camera"></i><strong>Delivery Photo</strong></div>
                       <button className="pod-toggle-btn"><i className={`fas ${proofExpanded ? 'fa-chevron-up' : 'fa-chevron-down'}`}></i>{proofExpanded ? 'Hide' : 'Show'}</button>
                     </div>
-                    {proofExpanded && <div className="pod-photo-wrap"><img src={order.deliveryProofPhoto} alt="Proof" className="pod-photo" /><a href={order.deliveryProofPhoto} download={`proof-${order.orderId?.slice(-8)}.jpg`} className="pod-download-btn"><i className="fas fa-download"></i> Download</a></div>}
+                    {proofExpanded && <div className="pod-photo-wrap"><img src={order.deliveryProofPhoto} alt="Proof" className="pod-photo" /><a href={order.deliveryProofPhoto} download={`proof-${formatOrderShortId(order)}.jpg`} className="pod-download-btn"><i className="fas fa-download"></i> Download</a></div>}
                   </div>
                 )}
               </div>
@@ -1267,7 +1268,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                     </div>
                     {photoExpanded2 && (
                       <div className="admin-refund-photo-wrap">
-                        {refundPhotoUrl ? <><img src={refundPhotoUrl} alt="Damage" className="admin-refund-photo" /><a href={refundPhotoUrl} download={`damage-${order.orderId?.slice(-8)}.jpg`} className="pod-download-btn"><i className="fas fa-download"></i> Download</a></> : <div className="admin-refund-photo-loading"><i className="fas fa-spinner fa-spin"></i> Loading…</div>}
+                        {refundPhotoUrl ? <><img src={refundPhotoUrl} alt="Damage" className="admin-refund-photo" /><a href={refundPhotoUrl} download={`damage-${formatOrderShortId(order)}.jpg`} className="pod-download-btn"><i className="fas fa-download"></i> Download</a></> : <div className="admin-refund-photo-loading"><i className="fas fa-spinner fa-spin"></i> Loading…</div>}
                       </div>
                     )}
                   </div>
@@ -1452,7 +1453,7 @@ const OrderItemsListModal = ({ order, onClose }) => {
         <div className="order-items-modal-header">
           <div>
             <h3><i className="fas fa-box-open"></i> All Order Items</h3>
-            <p>Order #{order.orderId?.slice(-8) || 'N/A'} · {items.length} item{items.length === 1 ? '' : 's'}</p>
+            <p>Order #{formatOrderShortId(order)} · {items.length} item{items.length === 1 ? '' : 's'}</p>
           </div>
           <button type="button" className="close-btn" onClick={onClose} aria-label="Close">
             <i className="fas fa-times"></i>
@@ -1548,7 +1549,7 @@ const CancelReasonModal = ({ order, onConfirm, onClose }) => {
       <div className="cancel-reason-modal" onClick={e => e.stopPropagation()}>
         <div className="cancel-reason-header">
           <div className="cancel-reason-icon"><i className="fas fa-ban"></i></div>
-          <div><h3>Cancel Order</h3><p>Order #{order.orderId?.slice(-8)}</p></div>
+          <div><h3>Cancel Order</h3><p>Order #{formatOrderShortId(order)}</p></div>
           <button className="close-btn" onClick={onClose}><i className="fas fa-times"></i></button>
         </div>
         <div className="cancel-reason-body">

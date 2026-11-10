@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useUserOrders } from '../utils/orderStorage';
 import { useProducts } from '../utils/productStorage';
+import { useCloseOnHistoryBack } from '../hooks/useCloseOnHistoryBack';
+import { formatOrderShortId } from '../utils/orderId';
 import './MyOrders.css';
 
 const MyOrders = () => {
@@ -10,6 +12,7 @@ const MyOrders = () => {
   const { user, isAuthenticated } = useAuth();
   const [filter, setFilter] = useState('all');
   const [lightboxImg, setLightboxImg] = useState(null);
+  useCloseOnHistoryBack(!!lightboxImg, () => setLightboxImg(null), 'ordersLightbox');
 
   const orders   = useUserOrders(user?.email) || [];
   const products = useProducts() || [];
@@ -120,7 +123,7 @@ const MyOrders = () => {
 
                     {/* Info */}
                     <div className="order-card-info">
-                      <p className="order-card-id">Order #{order.orderId?.slice(-8) || 'N/A'}</p>
+                      <p className="order-card-id">Order #{formatOrderShortId(order)}</p>
                       <p className="order-card-name">
                         {itemName}
                         {extraCount > 0 && <span className="order-and-more"> +{extraCount} more</span>}

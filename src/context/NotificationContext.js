@@ -36,18 +36,25 @@ export const NotificationProvider = ({ children }) => {
 
   const showNotification = useCallback((message, type = 'info', options = {}) => {
     const safeType = ICONS[type] ? type : 'info';
-    const id = ++idRef.current;
+    const text = String(message || '');
+    const dedupeKey = options.dedupeKey || `${safeType}:${text}`;
     const duration = options.duration ?? DEFAULT_MS[safeType] ?? 3200;
-    const toast = {
-      id,
-      message: String(message || ''),
-      type: safeType,
-    };
-    setToasts((prev) => [...prev.slice(-4), toast]); // keep max 5
-    if (duration > 0) {
-      window.setTimeout(() => dismiss(id), duration);
+
+    let createdId = null;
+    let skipped = false;
+    setToasts((prev) => {
+      if (prev.some((t) => t.dedupeKey === dedupeKey)) {
+        skipped = true;
+        return prev; // same message already visible — no spam stack
+      }
+      createdId = ++idRef.current;
+      return [...prev.slice(-4), { id: createdId, message: text, type: safeType, dedupeKey }];
+    });
+
+    if (!skipped && createdId != null && duration > 0) {
+      window.setTimeout(() => dismiss(createdId), duration);
     }
-    return id;
+    return createdId;
   }, [dismiss]);
 
   showRef.current = showNotification;

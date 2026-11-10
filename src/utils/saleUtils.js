@@ -41,9 +41,25 @@ export const isSaleActive = (product, now = Date.now()) => {
   return true;
 };
 
+/** True when listed price is lower than original (discounted display). */
+export const hasDiscountedPrice = (product) =>
+  Number(product?.originalPrice) > Number(product?.price);
+
+/**
+ * Show a SALE badge when admin marked sale (active window) OR price is discounted.
+ * Works together with Pre-Order — both can show at once.
+ */
+export const shouldShowSaleBadge = (product, now = Date.now()) => {
+  if (!product) return false;
+  if (isSaleActive(product, now)) return true;
+  return hasDiscountedPrice(product);
+};
+
+export const shouldShowPreOrderBadge = (product) => !!(product?.isPreOrder || product?.status === 'preorder');
+
 export const getDisplaySalePrice = (product) => {
   if (!product) return { price: 0, originalPrice: null, onSale: false };
-  const onSale = isSaleActive(product) && Number(product.originalPrice) > Number(product.price);
+  const onSale = shouldShowSaleBadge(product) && hasDiscountedPrice(product);
   return {
     price: Number(product.price) || 0,
     originalPrice: onSale ? Number(product.originalPrice) : null,

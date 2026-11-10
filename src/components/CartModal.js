@@ -5,12 +5,14 @@ import { useConfirm } from '../context/ConfirmContext';
 import { useProducts, usePreOrderProducts, useCollectionProducts } from '../utils/productStorage';
 import { useUpdateCartQtyById, useRemoveFromCartById, useClearCart } from '../context/cartUtils';
 import { getPointsForPrice } from '../utils/pointsUtils';
+import { useCloseOnHistoryBack } from '../hooks/useCloseOnHistoryBack';
 import './CartModal.css';
 
 const CartModal = ({ cart, onClose }) => {
   const navigate = useNavigate();
   const { showNotification } = useNotification();
   const { confirm } = useConfirm();
+  useCloseOnHistoryBack(true, onClose, 'cartModal');
 
   const regularProducts    = useProducts() || [];
   const preOrderProducts   = usePreOrderProducts() || [];
@@ -332,7 +334,7 @@ const CartModal = ({ cart, onClose }) => {
   const nonPromoCartItems = cart.filter(i => !i.promoCode);
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay cart-modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <h3 className="modal-title">Shopping Cart</h3>

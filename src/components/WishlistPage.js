@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './WishlistPage.css';
 import { useWishlist, useRemoveFromWishlist } from '../context/wishlistUtils';
@@ -6,6 +6,10 @@ import { useAddToCart } from '../context/cartUtils';
 import { useNotification } from '../context/NotificationContext';
 import { useConfirm, addToCartConfirmRememberKey } from '../context/ConfirmContext';
 import { useAuth } from '../context/AuthContext';
+import { useProducts, usePreOrderProducts } from '../utils/productStorage';
+import { shouldShowSaleBadge, shouldShowPreOrderBadge, hasDiscountedPrice } from '../utils/saleUtils';
+import { useCloseOnHistoryBack } from '../hooks/useCloseOnHistoryBack';
+
 const MAX_WISHLIST = 10;
 
 const WishlistPage = ({ onProductClick }) => {
@@ -14,22 +18,48 @@ const WishlistPage = ({ onProductClick }) => {
   const { showNotification } = useNotification();
   const { confirm } = useConfirm();
   const [lightboxImg, setLightboxImg] = useState(null);
+  useCloseOnHistoryBack(!!lightboxImg, () => setLightboxImg(null), 'wishlistLightbox');
+
+  const regularProducts = useProducts() || [];
+  const preOrderProducts = usePreOrderProducts() || [];
+  const catalogById = useMemo(() => {
+    const map = new Map();
+    [...regularProducts, ...preOrderProducts].forEach((p) => {
+      const id = String(p._id || p.id || '');
+      if (id) map.set(id, p);
+    });
+    return map;
+  }, [regularProducts, preOrderProducts]);
+
+  const resolveLive = (item) => {
+    const live = catalogById.get(String(item.productId)) || null;
+    return {
+      ...item,
+      ...(live || {}),
+      productId: item.productId,
+      _id: live?._id || item.productId,
+      id: live?._id || item.productId,
+      name: live?.name || item.name,
+      price: live?.price ?? item.price,
+      image: live?.image || item.image,
+      stock: Number(live?.stock ?? item.stock ?? 0),
+      isPreOrder: !!(live?.isPreOrder ?? item.isPreOrder),
+      isSale: !!(live?.isSale ?? item.isSale),
+      originalPrice: live?.originalPrice ?? item.originalPrice,
+      releaseDate: live?.releaseDate || item.releaseDate,
+      releaseTime: live?.releaseTime || item.releaseTime,
+      status: live?.status || item.status,
+      category: live?.category || item.category,
+      group: live?.group || live?.kpopGroup || item.group,
+      kpopGroup: live?.kpopGroup || item.group,
+      description: live?.description || item.description,
+    };
+  };
 
   const openProduct = (item) => {
     if (!onProductClick || !item) return;
-    onProductClick({
-      _id: item.productId,
-      id: item.productId,
-      name: item.name,
-      price: item.price,
-      image: item.image,
-      stock: item.stock,
-      category: item.category,
-      group: item.group,
-      description: item.description,
-      isPreOrder: item.isPreOrder,
-      releaseDate: item.releaseDate,
-    });
+    const live = resolveLive(item);
+    onProductClick(live);
   };
 
   const wishlistItems = useWishlist();
@@ -37,7 +67,7 @@ const WishlistPage = ({ onProductClick }) => {
   const addToCart = useAddToCart();
 
   // ✅ Convex already returns desc order (latest first) — just limit to 10
-  const displayItems = (wishlistItems || []).slice(0, MAX_WISHLIST);
+  const displayItems = (wishlistItems || []).slice(0, MAX_WISHLIST).map(resolveLive);
   const count = displayItems.length;
 
   const handleRemoveFromWishlist = async (productId, productName) => {
@@ -53,6 +83,10 @@ const WishlistPage = ({ onProductClick }) => {
   };
 
   const handleAddToCart = async (item) => {
+    if (Number(item.stock) <= 0) {
+      showNotification('Out of stock — favorite only for now.', 'warning');
+      return;
+    }
     const ok = await confirm({
       title: 'Add to cart?',
       message: `Add "${item.name}" to cart?\n\nPrice: ₱${item.price?.toLocaleString()}`,
@@ -69,8 +103,48 @@ const WishlistPage = ({ onProductClick }) => {
       name: item.name,
       price: item.price,
       image: item.image,
+      stock: item.stock,
     });
     showNotification('Added to cart successfully', 'success');
+  };
+
+  const handleBuyNow = async (item) => {
+    if (Number(item.stock) <= 0) {
+      showNotification('Out of stock — favorite only for now.', 'warning');
+      return;
+    }
+    const ok = await confirm({
+      title: 'Buy now?',
+      message: `Buy "${item.name}" now?\n\nPrice: ₱${item.price?.toLocaleString()}`,
+      confirmLabel: 'Buy Now',
+      variant: 'primary',
+      icon: 'fa-bolt',
+    });
+    if (!ok) return;
+    const productId = String(item.productId);
+    const result = await addToCart({
+      id: productId,
+      _id: productId,
+      name: item.name,
+      price: item.price,
+      image: item.image,
+      stock: item.stock,
+      qty: 1,
+    });
+    navigate('/checkout', {
+      state: {
+        selectedCartIds: result?.cartItemId ? [result.cartItemId] : undefined,
+        buyNowProductId: productId,
+        buyNowItem: {
+          _id: result?.cartItemId || `buynow-${productId}`,
+          productId,
+          name: item.name,
+          price: item.price,
+          image: item.image,
+          qty: 1,
+        },
+      },
+    });
   };
 
   const handleClearWishlist = async () => {
@@ -122,10 +196,14 @@ const WishlistPage = ({ onProductClick }) => {
               </div>
 
               <div className="orders-grid">
-                {displayItems.map(item => (
+                {displayItems.map(item => {
+                  const oos = Number(item.stock) <= 0;
+                  const showSale = shouldShowSaleBadge(item);
+                  const showPreOrder = shouldShowPreOrderBadge(item);
+                  return (
                   <div
                     key={item.productId}
-                    className="order-card wishlist-card-clickable"
+                    className={`order-card wishlist-card-clickable${oos ? ' wishlist-card-oos' : ''}`}
                     role="button"
                     tabIndex={0}
                     onClick={() => openProduct(item)}
@@ -148,24 +226,46 @@ const WishlistPage = ({ onProductClick }) => {
                         ? <img src={item.image} alt={item.name} />
                         : <i className="fas fa-box order-no-img"></i>
                       }
+                      {(showSale || showPreOrder) && (
+                        <div className="wishlist-badge-stack">
+                          {showSale && <span className="wishlist-sale-badge">SALE</span>}
+                          {showPreOrder && <span className="wishlist-preorder-badge">PRE-ORDER</span>}
+                        </div>
+                      )}
                       <span className="wishlist-star-badge">
                         <i className="fas fa-star" aria-hidden="true"></i>
                       </span>
+                      {oos && <div className="wishlist-oos-overlay">Out of Stock</div>}
                     </div>
 
                     <div className="order-card-info">
                       <p className="order-card-name" style={{ minHeight: 'unset', marginBottom: '6px' }}>
                         {item.name}
                       </p>
-                      <div className="order-card-price-row" style={{ marginBottom: '12px' }}>
-                        <span className="order-card-price">₱{item.price?.toLocaleString()}</span>
+                      <div className="order-card-price-row" style={{ marginBottom: '8px' }}>
+                        <span className={`order-card-price${showSale ? ' sale' : ''}`}>₱{item.price?.toLocaleString()}</span>
+                        {hasDiscountedPrice(item) && (
+                          <span className="order-card-price-original">₱{Number(item.originalPrice).toLocaleString()}</span>
+                        )}
                       </div>
+                      <p className={`wishlist-stock-line ${oos ? 'out' : ''}`}>
+                        {oos ? 'Out of stock' : `${item.stock} in stock`}
+                      </p>
                       <button
                         className="btn btn-primary btn-small order-view-btn"
                         style={{ marginBottom: '8px' }}
+                        disabled={oos}
                         onClick={(e) => { e.stopPropagation(); handleAddToCart(item); }}
                       >
                         <i className="fas fa-shopping-cart"></i> Add to Cart
+                      </button>
+                      <button
+                        className="btn btn-buy-now-wish btn-small order-view-btn"
+                        style={{ marginBottom: '8px' }}
+                        disabled={oos}
+                        onClick={(e) => { e.stopPropagation(); handleBuyNow(item); }}
+                      >
+                        <i className="fas fa-bolt"></i> Buy Now
                       </button>
                       <button
                         className="order-remove-btn"
@@ -175,7 +275,8 @@ const WishlistPage = ({ onProductClick }) => {
                       </button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div className="wishlist-footer-actions">

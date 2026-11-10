@@ -187,6 +187,69 @@
 }
 
 .order-card-price { font-size: 15px; font-weight: 700; color: var(--primary-color); }
+.order-card-price.sale { color: #dc2626; }
+.order-card-price-original {
+  margin-left: 6px;
+  font-size: 12px;
+  color: #9ca3af;
+  text-decoration: line-through;
+}
+
+.wishlist-badge-stack {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  pointer-events: none;
+}
+.wishlist-sale-badge,
+.wishlist-preorder-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  color: #fff;
+}
+.wishlist-sale-badge { background: var(--primary-color, #fc1268); }
+.wishlist-preorder-badge { background: #2563eb; }
+
+.wishlist-oos-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  z-index: 2;
+}
+
+.wishlist-stock-line {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+}
+.wishlist-stock-line.out { color: #c2410c; }
+
+.btn-buy-now-wish {
+  background: linear-gradient(135deg, #f59e0b, #f97316) !important;
+  border: none !important;
+  color: #fff !important;
+}
+.btn-buy-now-wish:disabled,
+.order-view-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
 
 /* Add to Cart button */
 .order-view-btn {
@@ -283,12 +346,12 @@
   color: #c62828;
 }
 
-/* ✅ Lightbox */
+/* ✅ Lightbox — above page chrome so closed image never ghosts on the last view */
 .order-lightbox {
   position: fixed;
   inset: 0;
   background: rgba(0,0,0,0.88);
-  z-index: 3000;
+  z-index: 21000;
   display: flex;
   align-items: center;
   justify-content: center;

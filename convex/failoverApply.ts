@@ -39,8 +39,26 @@ async function upsertOrder(ctx: any, order: any) {
         releaseDate: it?.releaseDate ?? null,
       }))
     : [];
+  // Allocate sequential number under the same counter lock used by orders.createOrder
+  let orderSeq: number | undefined = order.orderSeq != null ? asNum(order.orderSeq) : undefined;
+  if (orderSeq == null) {
+    const counter = await ctx.db
+      .query("orderCounters")
+      .withIndex("by_name", (q: any) => q.eq("name", "orders"))
+      .first();
+    if (!counter) {
+      const existing = await ctx.db.query("orders").collect();
+      orderSeq = existing.length + 1;
+      await ctx.db.insert("orderCounters", { name: "orders", nextSeq: orderSeq + 1 });
+    } else {
+      orderSeq = Number(counter.nextSeq) || 1;
+      await ctx.db.patch(counter._id, { nextSeq: orderSeq + 1 });
+    }
+  }
+
   const convexId = await ctx.db.insert("orders", {
     orderId,
+    orderSeq,
     email: String(order.email || ""),
     customerName: order.customerName ? String(order.customerName) : undefined,
     phone: order.phone ? String(order.phone) : undefined,

@@ -3,6 +3,7 @@ import { Navigate, Link } from 'react-router-dom';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import DkIcon, { DK_ICONS } from '../components/DkIcon';
+import { formatOrderShortId } from '../utils/orderId';
 import './AdminSalesReports.css';
 
 const MiniTrend = ({ values = [], color = '#16a34a', fullWidth = false }) => {
@@ -658,7 +659,7 @@ export const SalesAnalyticsPanel = ({ recentOrders = [] }) => {
                 {recentOrders.map((order) => (
                   <div key={order.orderId} className="bento-recent-item">
                     <div className="bento-recent-main">
-                      <strong>#{order.orderId?.slice(-8)}</strong>
+                      <strong>#{formatOrderShortId(order)}</strong>
                       <span>{order.customerName || order.email || 'Customer'}</span>
                     </div>
                     <div className="bento-recent-meta">

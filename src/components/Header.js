@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../context/ConfirmContext';
+import { useCloseOnHistoryBack } from '../hooks/useCloseOnHistoryBack';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import './Header.css';
@@ -22,6 +23,12 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
   const [showRewardsModal, setShowRewardsModal]       = useState(false);
   const dropdownRef      = useRef(null);
   const lastScrollTarget = useRef(null);
+
+  const { release: releaseAccountMenu } = useCloseOnHistoryBack(
+    showAccountDropdown,
+    () => setShowAccountDropdown(false),
+    'accountMenu'
+  );
 
   const allProductsRaw = useQuery(api.products.getAllProducts);
   const allProducts    = React.useMemo(() => allProductsRaw || [], [allProductsRaw]);
@@ -96,6 +103,10 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
   }, [location.pathname]);
 
   const handleLogout = async () => {
+    if (showAccountDropdown) {
+      await releaseAccountMenu();
+      setShowAccountDropdown(false);
+    }
     const ok = await confirm({
       title: 'Logout?',
       message: 'Are you sure you want to logout of your DKMerch account?',
@@ -106,8 +117,16 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
     });
     if (!ok) return;
     logout();
-    setShowAccountDropdown(false);
-    navigate('/');
+    // replace so confirm/modal history traps cannot bounce back to the previous tab
+    navigate('/', { replace: true });
+  };
+
+  const goProfileLink = async (path) => {
+    if (showAccountDropdown) {
+      await releaseAccountMenu();
+      setShowAccountDropdown(false);
+    }
+    navigate(path);
   };
 
   const handleLoginClick  = () => window.dispatchEvent(new Event('openLoginModal'));
@@ -262,46 +281,61 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
                     <i className={`fas fa-chevron-down dropdown-arrow ${showAccountDropdown ? 'rotate' : ''}`}></i>
                   </button>
                   {showAccountDropdown && (
-                    <div className="account-dropdown-menu">
-                      <div className="dropdown-header">
-                        <i className="fas fa-user-circle user-avatar"></i>
-                        <div className="user-info">
-                          <div className="user-name">{user?.name}</div>
-                          <div className="user-email">{user?.email}</div>
-                        </div>
-                      </div>
-
-                      <Link to="/my-preorders"
-                        className={`dropdown-item preorder-dropdown-item ${hasAvailable ? 'has-available' : ''}`}
-                        onClick={() => setShowAccountDropdown(false)}>
-                        <i className="fas fa-clock"></i>
-                        My Pre-Orders
-                        {hasAvailable && (
-                          <span className="preorder-available-badge">
-                            <i className="fas fa-circle"></i> Available!
-                          </span>
-                        )}
-                      </Link>
-
+                    <>
                       <button
-                        className="dropdown-item rewards-dropdown-item"
-                        onClick={() => { setShowAccountDropdown(false); setShowRewardsModal(true); }}
-                      >
-                        <i className="fas fa-star rewards-star-icon"></i>
-                        My Rewards
-                        <span className="rewards-pts-badge">
-                          ⭐ {totalPoints} pts
-                        </span>
-                      </button>
+                        type="button"
+                        className="account-dropdown-backdrop"
+                        aria-label="Close profile menu"
+                        onClick={() => setShowAccountDropdown(false)}
+                      />
+                      <div className="account-dropdown-menu">
+                        <div className="dropdown-header">
+                          <i className="fas fa-user-circle user-avatar"></i>
+                          <div className="user-info">
+                            <div className="user-name">{user?.name}</div>
+                            <div className="user-email">{user?.email}</div>
+                          </div>
+                        </div>
 
-                      <Link to="/settings" className="dropdown-item" onClick={() => setShowAccountDropdown(false)}>
-                        <i className="fas fa-cog"></i> Settings
-                      </Link>
-                      <div className="dropdown-divider"></div>
-                      <button className="dropdown-item logout-btn" onClick={handleLogout}>
-                        <i className="fas fa-sign-out-alt"></i> Logout
-                      </button>
-                    </div>
+                        <button
+                          type="button"
+                          className={`dropdown-item preorder-dropdown-item ${hasAvailable ? 'has-available' : ''}`}
+                          onClick={() => goProfileLink('/my-preorders')}
+                        >
+                          <i className="fas fa-clock"></i>
+                          My Pre-Orders
+                          {hasAvailable && (
+                            <span className="preorder-available-badge">
+                              <i className="fas fa-circle"></i> Available!
+                            </span>
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          className="dropdown-item rewards-dropdown-item"
+                          onClick={() => { setShowAccountDropdown(false); setShowRewardsModal(true); }}
+                        >
+                          <i className="fas fa-star rewards-star-icon"></i>
+                          My Rewards
+                          <span className="rewards-pts-badge">
+                            ⭐ {totalPoints} pts
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          className="dropdown-item"
+                          onClick={() => goProfileLink('/settings')}
+                        >
+                          <i className="fas fa-cog"></i> Settings
+                        </button>
+                        <div className="dropdown-divider"></div>
+                        <button type="button" className="dropdown-item logout-btn" onClick={handleLogout}>
+                          <i className="fas fa-sign-out-alt"></i> Logout
+                        </button>
+                      </div>
+                    </>
                   )}
                 </div>
               ) : (

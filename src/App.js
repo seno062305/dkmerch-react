@@ -36,6 +36,7 @@ import ProductModal from './components/ProductModal';
 import WishlistPage from './components/WishlistPage';
 import AppUpdateModal from './components/AppUpdateModal';
 import PointsClaimModal from './components/PointsClaimModal';
+import LoginModal from './components/LoginModal';
 
 import AdminLayout from './admin/AdminLayout';
 import AdminDashboard from './admin/AdminDashboard';
@@ -53,9 +54,6 @@ import OrderSuccess from './pages/OrderSuccess';
 
 // 🛵 Rider Dashboard
 import RiderDashboard from './pages/RiderDashboard';
-
-// Lazy LoginModal breaks HMR TDZ with RegisterModal / AuthContext
-const LoginModal = React.lazy(() => import('./components/LoginModal'));
 
 import './App.css';
 
@@ -132,17 +130,15 @@ const ProtectedRoute = ({ children }) => {
     return (
       <>
         {showLoginModal && (
-          <React.Suspense fallback={null}>
-            <LoginModal
-              onClose={() => { setShowLoginModal(false); navigate('/'); }}
-              onLoginSuccess={(loginRole) => {
-                setShowLoginModal(false);
-                const redirect = sessionStorage.getItem('redirectAfterLogin') || '/';
-                sessionStorage.removeItem('redirectAfterLogin');
-                navigate(redirect, { replace: true });
-              }}
-            />
-          </React.Suspense>
+          <LoginModal
+            onClose={() => { setShowLoginModal(false); navigate('/'); }}
+            onLoginSuccess={(loginRole) => {
+              setShowLoginModal(false);
+              const redirect = sessionStorage.getItem('redirectAfterLogin') || '/';
+              sessionStorage.removeItem('redirectAfterLogin');
+              navigate(redirect, { replace: true });
+            }}
+          />
         )}
       </>
     );
@@ -345,20 +341,18 @@ function AppContent() {
           <PointsClaimModal />
 
           {showLoginModal && (
-            <React.Suspense fallback={null}>
-              <LoginModal
-                preferPinUnlock={!!needsDeviceUnlock}
-                onClose={() => {
-                  try { sessionStorage.removeItem('dk_login_customers_only'); } catch { /* ignore */ }
-                  clearDeviceUnlockPrompt?.();
-                  setShowLoginModal(false);
-                }}
-                onLoginSuccess={(loginRole) => {
-                  clearDeviceUnlockPrompt?.();
-                  handleLoginSuccess(loginRole);
-                }}
-              />
-            </React.Suspense>
+            <LoginModal
+              preferPinUnlock={!!needsDeviceUnlock}
+              onClose={() => {
+                try { sessionStorage.removeItem('dk_login_customers_only'); } catch { /* ignore */ }
+                clearDeviceUnlockPrompt?.();
+                setShowLoginModal(false);
+              }}
+              onLoginSuccess={(loginRole) => {
+                clearDeviceUnlockPrompt?.();
+                handleLoginSuccess(loginRole);
+              }}
+            />
           )}
 
           {showCartModal && (
@@ -375,7 +369,7 @@ function AppContent() {
               onClose={() => setShowProductModal(false)}
               onAddToCart={(product) => addToCart(product)}
               onAddToWishlist={(product) => toggleWishlist(product)}
-              onRequireLogin={() => { setShowProductModal(false); setShowLoginModal(true); }}
+              onRequireLogin={() => setShowLoginModal(true)}
             />
           )}
 

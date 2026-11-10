@@ -408,7 +408,7 @@ const RegisterModal = ({ onClose }) => {
           ? "✅ PIN saved on this device! Signing you in…"
           : "✅ PIN saved! Signing you in…"
       );
-      completeLogin(
+      await completeLogin(
         {
           _id: pendingUserId,
           name: pendingName,
@@ -1010,7 +1010,6 @@ const RegisterModal = ({ onClose }) => {
               {/* ── PRIVACY CONSENT ── */}
               <div className="reg-consent-box">
                 <div className="reg-consent-notice">
-                  <div className="reg-consent-notice-icon">🔒</div>
                   <div className="reg-consent-notice-text">
                     <strong>Data Privacy Notice</strong>
                     <p>

@@ -259,8 +259,8 @@ const Home = () => {
   // NOTE: No window.confirm here — ProductModal already handles confirmation.
   // This is only called via ProductModal's onAddToCart prop.
   const handleAddToCart = async (product) => {
-    if (product.stock === 0 && !product.isPreOrder) {
-      showNotification('Product is out of stock', 'error');
+    if (Number(product.stock) <= 0) {
+      showNotification('Product is out of stock — you can still favorite it.', 'warning');
       return;
     }
     const result = await addToCartMutation(product);
@@ -312,6 +312,7 @@ const Home = () => {
           onClose={() => setSelectedProduct(null)}
           onAddToCart={handleAddToCart}
           onAddToWishlist={handleAddToWishlist}
+          onRequireLogin={() => window.dispatchEvent(new Event('openLoginModal'))}
         />
       )}
     </div>

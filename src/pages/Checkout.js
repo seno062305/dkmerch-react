@@ -973,11 +973,11 @@ const Checkout = () => {
       rememberLabel: 'Do not show again',
     });
     if (!payOk) return;
+    if (loading) return; // hard lock — prevent double place-order / duplicate rows
 
     setLoading(true);
 
     try {
-      const orderId  = `DK-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
       const shipping = shippingFee;
 
       // ── Build order items ───────────────────────────────────────────────
@@ -1020,7 +1020,6 @@ const Checkout = () => {
       const shippingAddressStr = addressParts.join(', ');
 
       const createResult = await createOrder({
-        orderId,
         email:           savedContact.email,
         customerName:    savedContact.fullName,
         phone:           savedContact.phone,
@@ -1049,6 +1048,10 @@ const Checkout = () => {
         }),
       });
       const usedFailover = !!createResult?.failover;
+      const orderId = String(createResult?.orderId || '').trim();
+      if (!orderId) {
+        throw new Error('Order was created but no order ID was returned. Please check Track Order.');
+      }
 
       // ── Mark ticket as checked out ─────────────────────────────────────
       if (rewardOrder) {

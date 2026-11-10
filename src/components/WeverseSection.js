@@ -8,7 +8,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { PointsBadge } from '../utils/pointsUtils';
-import { formatSaleRange } from '../utils/saleUtils';
+import { formatSaleRange, shouldShowSaleBadge, shouldShowPreOrderBadge, hasDiscountedPrice } from '../utils/saleUtils';
 import LoginModal from './LoginModal';
 import './WeverseSection.css';
 
@@ -129,10 +129,12 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
         : null;
 
     const stockQty = Number(product.stock ?? 0);
-    const isOutOfStock = !product.isPreOrder && stockQty <= 0;
+    const isOutOfStock = stockQty <= 0;
     const isLowStock = !isOutOfStock && stockQty > 0 && stockQty <= 5;
-    const isOnSale =
-      Number(product.originalPrice) > Number(product.price) || product.isSale === true;
+    const isOnSale = shouldShowSaleBadge(product);
+    const showPreOrder =
+      shouldShowPreOrderBadge(product) &&
+      !(releaseMs !== null && Date.now() >= releaseMs);
 
     return (
       <div
@@ -146,9 +148,16 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
           </div>
         ) : showNewBadge ? (
           <div className="wv-new-badge">NEW</div>
-        ) : (
-          discountPct && <div className="wv-sale-badge">-{discountPct}%</div>
-        )}
+        ) : (isOnSale || showPreOrder) ? (
+          <div className="wv-badge-stack">
+            {isOnSale && (
+              <div className="wv-sale-badge">
+                {discountPct ? `-${discountPct}%` : 'SALE'}
+              </div>
+            )}
+            {showPreOrder && <div className="wv-preorder-badge">PRE-ORDER</div>}
+          </div>
+        ) : null}
 
         {hasPromo && !showReleasedBadge && !showNewBadge && (
           <div className="wv-promo-badge">
@@ -176,14 +185,14 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
             <span className={`wv-card-price-current${isOnSale ? ' sale' : ''}`}>
               ₱{Number(product.price)?.toLocaleString()}
             </span>
-            {Number(product.originalPrice) > Number(product.price) && (
+            {hasDiscountedPrice(product) && (
               <span className="wv-card-price-original">
                 ₱{Number(product.originalPrice)?.toLocaleString()}
               </span>
             )}
             <PointsBadge price={product.price} />
           </div>
-          {formatSaleRange(product) && (
+          {isOnSale && formatSaleRange(product) && (
             <div className="wv-sale-period">
               <i className="fas fa-clock"></i>
               <span>{formatSaleRange(product)}</span>

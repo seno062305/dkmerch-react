@@ -41,7 +41,8 @@ const TermsAndConditions = () => {
             <ul>
               <li>You must provide accurate registration details and consent to the Privacy Policy to create an account.</li>
               <li>Email OTP / verification flows may be required for registration, password reset, or reactivation.</li>
-              <li>You are responsible for keeping your login credentials confidential.</li>
+              <li>You must be <strong>logged in</strong> to add items to cart, use wishlist, place pre-orders, and checkout. Guest checkout is not available.</li>
+              <li>Customer accounts may also use a login PIN (and Quick Sign In QR) after setup; keep credentials confidential.</li>
               <li>In Settings → Account Management you may <strong>deactivate</strong> (temporary; reactivate with email OTP) or <strong>delete</strong> (soft-delete) your account.</li>
               <li>Admins may suspend or manage accounts when policy or security requires it.</li>
             </ul>

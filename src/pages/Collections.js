@@ -9,7 +9,7 @@ import { useNotification } from '../context/NotificationContext';
 import { useConfirm } from '../context/ConfirmContext';
 import ProductModal from '../components/ProductModal';
 import { PointsBadge } from '../utils/pointsUtils';
-import { formatSaleRange } from '../utils/saleUtils';
+import { formatSaleRange, shouldShowSaleBadge, shouldShowPreOrderBadge, hasDiscountedPrice } from '../utils/saleUtils';
 import './Collections.css';
 
 const MAX_WISHLIST = 10;
@@ -125,8 +125,8 @@ const Collections = () => {
     });
 
   const handleAddToCart = async (product) => {
-    if (product.stock === 0 && !product.isPreOrder) {
-      showNotification('Product is out of stock', 'error');
+    if (Number(product.stock) <= 0) {
+      showNotification('Product is out of stock — you can still favorite it.', 'warning');
       return;
     }
     const result = await addToCartMutation(product);
@@ -323,8 +323,10 @@ const Collections = () => {
             const showReleasedBadge = diffMs >= 0 && diffMs < 60 * 60 * 1000;
 
             const stockQty = Number(product.stock ?? 0);
-            const isOutOfStock = !product.isPreOrder && stockQty <= 0;
+            const isOutOfStock = stockQty <= 0;
             const isLowStock = !isOutOfStock && stockQty > 0 && stockQty <= 5;
+            const showSale = shouldShowSaleBadge(product);
+            const showPreOrder = shouldShowPreOrderBadge(product) && !isReleased(product);
 
             return (
               <div
@@ -333,10 +335,14 @@ const Collections = () => {
                 className={`collection-card ${highlightedProductId === pid ? 'highlighted' : ''} ${hasPromo ? 'collection-card-promo' : ''} ${showReleasedBadge ? 'collection-card-released' : ''} ${isOutOfStock ? 'collection-card-oos' : ''}`}
                 onClick={() => setSelectedProduct(product)}
               >
-                {showReleasedBadge
-                  ? <div className="collection-released-badge"><i className="fas fa-bolt"></i> Just Released</div>
-                  : product.isSale && !product.isPreOrder && <div className="collection-sale-badge">SALE</div>
-                }
+                {showReleasedBadge ? (
+                  <div className="collection-released-badge"><i className="fas fa-bolt"></i> Just Released</div>
+                ) : (showSale || showPreOrder) ? (
+                  <div className="collection-badge-stack">
+                    {showSale && <div className="collection-sale-badge">SALE</div>}
+                    {showPreOrder && <div className="collection-preorder-badge">PRE-ORDER</div>}
+                  </div>
+                ) : null}
 
                 {hasPromo && !showReleasedBadge && (
                   <div className="collection-promo-badge">
@@ -363,16 +369,16 @@ const Collections = () => {
                   <div className="collection-card-group">{product.kpopGroup}</div>
                   <div className="collection-card-name">{product.name}</div>
                   <div className="collection-card-price-row">
-                    <span className={`collection-card-price ${product.isSale ? 'sale' : ''}`}>
+                    <span className={`collection-card-price ${showSale ? 'sale' : ''}`}>
                       ₱{product.price?.toLocaleString()}
                     </span>
-                    {product.originalPrice > product.price && (
+                    {hasDiscountedPrice(product) && (
                       <span className="collection-card-price-original">₱{product.originalPrice?.toLocaleString()}</span>
                     )}
                     {/* ✅ Points badge */}
                     <PointsBadge price={product.price} />
                   </div>
-                  {product.isSale && formatSaleRange(product) && (
+                  {showSale && formatSaleRange(product) && (
                     <div className="collection-sale-period">
                       <i className="fas fa-clock"></i>
                       <span>{formatSaleRange(product)}</span>
@@ -410,6 +416,7 @@ const Collections = () => {
           onClose={() => setSelectedProduct(null)}
           onAddToCart={handleAddToCart}
           onAddToWishlist={handleAddToWishlist}
+          onRequireLogin={() => window.dispatchEvent(new Event('openLoginModal'))}
         />
       )}
     </div>

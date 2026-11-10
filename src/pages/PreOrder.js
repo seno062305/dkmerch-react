@@ -8,6 +8,8 @@ import { useConfirm } from '../context/ConfirmContext';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import LoginModal from '../components/LoginModal';
+import { shouldShowSaleBadge, hasDiscountedPrice } from '../utils/saleUtils';
+import { useCloseOnHistoryBack } from '../hooks/useCloseOnHistoryBack';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 const fmt12 = (timeStr) => {
@@ -168,7 +170,10 @@ const PreOrderCard = ({
 
   return (
     <div className="preorder-card" onClick={onOpenModal}>
-      <div className="preorder-badge">PRE-ORDER</div>
+      <div className="preorder-badge-stack">
+        {shouldShowSaleBadge(product) && <div className="preorder-sale-badge">SALE</div>}
+        <div className="preorder-badge">PRE-ORDER</div>
+      </div>
 
       <div className="preorder-image">
         <img src={product.image} alt={product.name} />
@@ -186,8 +191,8 @@ const PreOrderCard = ({
         )}
 
         <div className="product-price">
-          <span className="current-price">₱{product.price?.toLocaleString()}</span>
-          {product.isSale && product.originalPrice > product.price && (
+          <span className={`current-price${shouldShowSaleBadge(product) ? ' sale' : ''}`}>₱{product.price?.toLocaleString()}</span>
+          {hasDiscountedPrice(product) && (
             <>
               <span className="original-price">₱{product.originalPrice?.toLocaleString()}</span>
               <span className="discount">
@@ -227,6 +232,7 @@ const PreOrderModal = ({
   product, userId, isAuthenticated, loadingId,
   onClose, onPreOrder, onRequireLogin, fmtDateTime
 }) => {
+  useCloseOnHistoryBack(true, onClose, 'preOrderModal');
   const isPreOrdered = useQuery(
     api.preOrderRequests.isProductPreOrdered,
     isAuthenticated && userId
@@ -244,6 +250,10 @@ const PreOrderModal = ({
         </button>
 
         <div className="preorder-modal-image">
+          <div className="preorder-badge-stack">
+            {shouldShowSaleBadge(product) && <div className="preorder-sale-badge">SALE</div>}
+            <div className="preorder-badge">PRE-ORDER</div>
+          </div>
           <img src={product.image} alt={product.name} />
         </div>
 
@@ -258,7 +268,12 @@ const PreOrderModal = ({
             </div>
           )}
 
-          <div className="preorder-modal-price">₱{product.price?.toLocaleString()}</div>
+          <div className="preorder-modal-price">
+            <span className={shouldShowSaleBadge(product) ? 'sale' : ''}>₱{product.price?.toLocaleString()}</span>
+            {hasDiscountedPrice(product) && (
+              <span className="original-price" style={{ marginLeft: 8 }}>₱{product.originalPrice?.toLocaleString()}</span>
+            )}
+          </div>
 
           {product.description && (
             <p className="preorder-modal-desc">{product.description}</p>

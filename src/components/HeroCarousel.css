@@ -107,10 +107,12 @@
   color: white;
   text-align: center;
   max-width: 800px;
-  padding: 0 20px;
+  /* Keep copy clear of side arrows */
+  padding: 0 72px;
   display: flex;
   flex-direction: column;
   align-items: center;
+  box-sizing: border-box;
 }
 
 .carousel-content h1 {
@@ -402,9 +404,16 @@
 
 @media (max-width: 768px) {
   .hero-carousel { height: 440px; }
+  .carousel-content { padding: 0 56px; }
   .carousel-content h1 { font-size: 28px; }
   .carousel-content p { font-size: 15px; }
-  .carousel-btn { width: 40px; height: 40px; font-size: 16px; }
+  .carousel-nav {
+    top: auto;
+    bottom: 36px;
+    transform: none;
+    padding: 0 12px;
+  }
+  .carousel-btn { width: 36px; height: 36px; font-size: 14px; }
   .promo-badge { font-size: 11px; padding: 5px 12px; }
   .promo-code-pill { font-size: 14px; padding: 6px 14px; }
   .promo-code-pill strong { font-size: 16px; }
@@ -419,9 +428,11 @@
 
 @media (max-width: 576px) {
   .hero-carousel { height: 420px; }
-  .carousel-content { padding: 0 14px; }
+  .carousel-content { padding: 0 48px; }
   .carousel-content h1 { font-size: 22px; margin-bottom: 10px; }
-  .carousel-content p { font-size: 13px; margin-bottom: 10px; }
+  .carousel-content p { font-size: 13px; margin-bottom: 10px; line-height: 1.45; }
+  .carousel-nav { bottom: 32px; padding: 0 10px; }
+  .carousel-btn { width: 32px; height: 32px; font-size: 12px; }
   .carousel-dots { bottom: 8px; }
   .carousel-dot { width: 10px; height: 10px; }
   .promo-code-pill { padding: 5px 10px; gap: 5px; }

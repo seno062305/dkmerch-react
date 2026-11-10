@@ -49,11 +49,13 @@ const PrivacyPolicy = () => {
             <ul>
               <li>
                 <strong>Customer account data:</strong> Full name, email address, phone number, username,
-                password (stored hashed), and shipping / delivery address.
+                password (stored hashed), optional login PIN (hashed), and shipping / delivery address.
+                Cart, wishlist, pre-orders, and checkout require a logged-in customer account — guest checkout is not supported.
               </li>
               <li>
                 <strong>Checkout &amp; location data:</strong> Delivery address text, map coordinates (latitude/longitude),
-                city, and ZIP used to estimate distance-based shipping fees and to guide riders.
+                city, and ZIP used to estimate distance-based shipping fees and to guide riders
+                (collected during logged-in checkout).
               </li>
               <li>
                 <strong>Order data:</strong> Cart items, order totals, shipping fee, promo code used (if any),
@@ -92,7 +94,8 @@ const PrivacyPolicy = () => {
               </li>
               <li>
                 <strong>Device / session data:</strong> Browser session and preferences stored via browser
-                local storage so you stay signed in and retain cart/wishlist state on that device.
+                local storage so you stay signed in and retain cart/wishlist state on that device
+                (cart/wishlist data is tied to your account after login).
               </li>
             </ul>
           </section>

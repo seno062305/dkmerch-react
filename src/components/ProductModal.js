@@ -1,18 +1,17 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { useConfirm, addToCartConfirmRememberKey } from '../context/ConfirmContext';
 import { useNavigate } from 'react-router-dom';
-import LoginModal from './LoginModal';
 import PromoCodeInput from './PromoCodeInput';
-import { formatSaleRange } from '../utils/saleUtils';
+import { formatSaleRange, shouldShowSaleBadge, shouldShowPreOrderBadge, hasDiscountedPrice } from '../utils/saleUtils';
 import './ProductModal.css';
 
 const REVIEW_CHAR_LIMIT = 120;
 
-const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
+const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequireLogin }) => {
   const { isAuthenticated, user } = useAuth();
   const allPromos = useQuery(api.promos.getAllPromos) ?? [];
   const { showNotification } = useNotification();
@@ -22,8 +21,6 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
   const [rating, setRating]           = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
   const [review, setReview]           = useState('');
-  const [showLoginModal, setShowLoginModal]     = useState(false);
-  const [hideProductModal, setHideProductModal] = useState(false);
   const [appliedPromo, setAppliedPromo]         = useState(null);
   const [showLightbox, setShowLightbox]         = useState(false);
   const [cartToast, setCartToast]               = useState(false);
@@ -31,6 +28,43 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
   const [showBuyNowQty, setShowBuyNowQty]       = useState(false);
   const [buyNowQty, setBuyNowQty]               = useState(1);
   const reviewBoxRef = useRef(null);
+  const showLightboxRef = useRef(false);
+  const showBuyNowQtyRef = useRef(false);
+  const ignorePopRef = useRef(false);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  showLightboxRef.current = showLightbox;
+  showBuyNowQtyRef.current = showBuyNowQty;
+
+  const handleRequestClose = useCallback(() => {
+    showLightboxRef.current = false;
+    showBuyNowQtyRef.current = false;
+    setShowLightbox(false);
+    setShowBuyNowQty(false);
+    onCloseRef.current?.();
+  }, []);
+
+  // App-level login stays on top — do not remount / hide product (spam-safe)
+  const requireLogin = useCallback((message) => {
+    showNotification(message, 'error', { dedupeKey: 'login-required' });
+    if (onRequireLogin) onRequireLogin();
+    else window.dispatchEvent(new Event('openLoginModal'));
+  }, [onRequireLogin, showNotification]);
+
+  const openLightbox = useCallback(() => {
+    showLightboxRef.current = true;
+    setShowLightbox(true);
+  }, []);
+
+  const closeLightbox = useCallback(() => {
+    showLightboxRef.current = false;
+    setShowLightbox(false);
+  }, []);
+
+  const closeBuyNowQty = useCallback(() => {
+    showBuyNowQtyRef.current = false;
+    setShowBuyNowQty(false);
+  }, []);
 
   const productId = product._id || product.id || '';
 
@@ -77,6 +111,8 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
     setReview('');
     setAppliedPromo(null);
     setExpandedReviews({});
+    setShowLightbox(false);
+    setShowBuyNowQty(false);
 
     // ✅ FIX: Read scrollY from body.style.top if already fixed,
     // otherwise read window.scrollY directly.
@@ -100,9 +136,69 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
       document.body.style.width = '';
       document.body.style.overflow = '';
       // ✅ Restore exact scroll position — no jump
-      window.scrollTo({ top: scrollY, behavior: 'instant' });
+      try {
+        window.scrollTo({ top: scrollY, behavior: 'instant' });
+      } catch {
+        window.scrollTo(0, scrollY);
+      }
     };
   }, [productId]);
+
+  // One history trap: Back closes lightbox → buy-now → modal, without leaving the current tab
+  useEffect(() => {
+    try {
+      window.history.pushState({ dkLayer: 'productModal' }, '');
+    } catch { /* ignore */ }
+
+    let closedByBack = false;
+    const reTrap = () => {
+      try {
+        window.history.pushState({ dkLayer: 'productModal' }, '');
+      } catch { /* ignore */ }
+    };
+
+    const onPopState = () => {
+      if (ignorePopRef.current) {
+        ignorePopRef.current = false;
+        return;
+      }
+      // Higher overlays (login/cart/confirm) share the same popstate — don't close product with them
+      if (
+        document.body.classList.contains('login-modal-open')
+        || document.body.classList.contains('cart-modal-open')
+        || document.querySelector('.dk-confirm-overlay')
+      ) {
+        return;
+      }
+      if (showLightboxRef.current) {
+        showLightboxRef.current = false;
+        setShowLightbox(false);
+        reTrap();
+        return;
+      }
+      if (showBuyNowQtyRef.current) {
+        showBuyNowQtyRef.current = false;
+        setShowBuyNowQty(false);
+        reTrap();
+        return;
+      }
+      closedByBack = true;
+      handleRequestClose();
+    };
+
+    window.addEventListener('popstate', onPopState);
+    return () => {
+      window.removeEventListener('popstate', onPopState);
+      showLightboxRef.current = false;
+      showBuyNowQtyRef.current = false;
+      setShowLightbox(false);
+      setShowBuyNowQty(false);
+      if (!closedByBack && window.history.state?.dkLayer === 'productModal') {
+        ignorePopRef.current = true;
+        try { window.history.back(); } catch { ignorePopRef.current = false; }
+      }
+    };
+  }, [productId, handleRequestClose]);
 
   // Keep review box at fixed base height; grow only when text actually overflows
   useEffect(() => {
@@ -141,9 +237,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
 
   const handleSubmitReview = async () => {
     if (!isAuthenticated) {
-      showNotification('Please login to submit a review', 'error');
-      setHideProductModal(true);
-      setShowLoginModal(true);
+      requireLogin('Please login to submit a review');
       return;
     }
     if (!canLeaveReview) {
@@ -179,11 +273,17 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
     setTimeout(() => setCartToast(false), 2200);
   };
 
+  const outOfStock = Number(product.stock) <= 0;
+  const showSaleBadge = shouldShowSaleBadge(product);
+  const showPreOrderBadge = shouldShowPreOrderBadge(product) && !isReleased;
+
   const handleAddToCartClick = async () => {
     if (!isAuthenticated) {
-      showNotification('Please login to add to cart', 'error');
-      setHideProductModal(true);
-      setShowLoginModal(true);
+      requireLogin('Please login to add to cart');
+      return;
+    }
+    if (outOfStock) {
+      showNotification('Product is out of stock — you can still favorite it.', 'warning');
       return;
     }
     if (!onAddToCart) {
@@ -212,13 +312,11 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
 
   const handleBuyNowClick = () => {
     if (!isAuthenticated) {
-      showNotification('Please login to buy now', 'error');
-      setHideProductModal(true);
-      setShowLoginModal(true);
+      requireLogin('Please login to buy now');
       return;
     }
-    if (product.stock === 0) {
-      showNotification('Product is out of stock', 'error');
+    if (outOfStock) {
+      showNotification('Product is out of stock — you can still favorite it.', 'warning');
       return;
     }
     if (!onAddToCart) {
@@ -226,6 +324,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
       return;
     }
     setBuyNowQty(1);
+    showBuyNowQtyRef.current = true;
     setShowBuyNowQty(true);
   };
 
@@ -266,9 +365,11 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
 
   const handlePreOrderClick = async () => {
     if (!isAuthenticated) {
-      showNotification('Please login to pre-order', 'error');
-      setHideProductModal(true);
-      setShowLoginModal(true);
+      requireLogin('Please login to pre-order');
+      return;
+    }
+    if (outOfStock) {
+      showNotification('No pre-order slots left — you can still favorite it.', 'warning');
       return;
     }
     const ok = await confirm({
@@ -285,17 +386,10 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
 
   const handleWishlistClick = () => {
     if (!isAuthenticated) {
-      showNotification('Please login to add to favorites', 'error');
-      setHideProductModal(true);
-      setShowLoginModal(true);
+      requireLogin('Please login to add to favorites');
       return;
     }
     onAddToWishlist(product);
-  };
-
-  const handleLoginModalClose = () => {
-    setShowLoginModal(false);
-    setHideProductModal(false);
   };
 
   const toggleExpand = (id) => {
@@ -307,11 +401,9 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
     return () => document.body.classList.remove('product-modal-open');
   }, []);
 
-  if (hideProductModal) return <>{showLoginModal && <LoginModal onClose={handleLoginModalClose} />}</>;
-
   return (
     <>
-      <div className="product-modal-overlay" onClick={onClose}>
+      <div className="product-modal-overlay" onClick={handleRequestClose}>
         <div className="product-modal-content" onClick={(e) => e.stopPropagation()}>
 
           {cartToast && (
@@ -321,7 +413,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
             </div>
           )}
 
-          <button className="modal-close" onClick={onClose}>
+          <button className="modal-close" onClick={handleRequestClose}>
             <i className="fas fa-times"></i>
           </button>
 
@@ -329,8 +421,12 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
 
             {/* LEFT: Image + Rating + Reviews */}
             <div className="modal-image-section">
-              {product.isPreOrder && !isReleased && <div className="pre-order-badge">PRE-ORDER</div>}
-              {product.isSale && !product.isPreOrder && <div className="sale-badge">SALE</div>}
+              {(showPreOrderBadge || showSaleBadge) && (
+                <div className="modal-badge-stack">
+                  {showSaleBadge && <div className="sale-badge">SALE</div>}
+                  {showPreOrderBadge && <div className="pre-order-badge">PRE-ORDER</div>}
+                </div>
+              )}
               {appliedPromo && (
                 <div className="modal-promo-img-badge">
                   <i className="fas fa-tag"></i> {appliedPromo.discount}% OFF
@@ -340,7 +436,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
                 src={product.image}
                 alt={product.name}
                 className="modal-product-img"
-                onClick={() => setShowLightbox(true)}
+                onClick={openLightbox}
               />
               <div className="modal-img-tap-hint">
                 <i className="fas fa-search-plus"></i> Tap to zoom
@@ -433,15 +529,15 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
                     </>
                   ) : (
                     <>
-                      <div className="current-price">₱{product.price.toLocaleString()}</div>
-                      {product.originalPrice > product.price && (
+                      <div className={`current-price${showSaleBadge ? ' sale' : ''}`}>₱{product.price.toLocaleString()}</div>
+                      {hasDiscountedPrice(product) && (
                         <div className="original-price">₱{product.originalPrice.toLocaleString()}</div>
                       )}
                     </>
                   )}
                 </div>
 
-                {product.isSale && formatSaleRange(product) && (
+                {showSaleBadge && formatSaleRange(product) && (
                   <div className="modal-sale-period">
                     <i className="fas fa-clock"></i>
                     <span>Sale period: {formatSaleRange(product)}</span>
@@ -450,7 +546,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
 
                 <div className="stock-info">
                   <i className="fas fa-box"></i>
-                  <span>{product.stock > 0 ? `${product.stock} items in stock` : 'Out of stock'}</span>
+                  <span>{outOfStock ? 'Out of stock' : `${product.stock} items in stock`}</span>
                 </div>
                 <div className="sold-info">
                   <i className="fas fa-shopping-bag"></i>
@@ -477,7 +573,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
                 <div className="modal-actions">
                   {product.isPreOrder && !isReleased ? (
                     <>
-                      <button className="btn btn-preorder" onClick={handlePreOrderClick} disabled={product.stock === 0}>
+                      <button className="btn btn-preorder" onClick={handlePreOrderClick} disabled={outOfStock}>
                         <i className="fas fa-shopping-cart"></i> Pre-Order Now
                       </button>
                       <button type="button" className="btn-fav-outline" onClick={handleWishlistClick} title="Add to Favorites" aria-label="Add to favorites">
@@ -486,11 +582,11 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
                     </>
                   ) : (
                     <>
-                      <button className="btn btn-add-cart" onClick={handleAddToCartClick} disabled={product.stock === 0}>
+                      <button className="btn btn-add-cart" onClick={handleAddToCartClick} disabled={outOfStock}>
                         <i className="fas fa-shopping-cart"></i> Add to Cart
                       </button>
                       {isAuthenticated && (
-                        <button className="btn btn-buy-now" onClick={handleBuyNowClick} disabled={product.stock === 0}>
+                        <button className="btn btn-buy-now" onClick={handleBuyNowClick} disabled={outOfStock}>
                           <i className="fas fa-bolt"></i> Buy Now
                         </button>
                       )}
@@ -500,6 +596,9 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
                     </>
                   )}
                 </div>
+                {outOfStock && (
+                  <p className="modal-oos-hint">Out of stock — favorite is still available.</p>
+                )}
 
                 {product.isPreOrder && !isReleased && product.preOrderSlots !== undefined && (
                   <div className="preorder-slots">
@@ -581,8 +680,8 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
       </div>
 
       {showLightbox && (
-        <div className="modal-lightbox" onClick={() => setShowLightbox(false)}>
-          <button className="modal-lightbox-close" onClick={() => setShowLightbox(false)}>
+        <div className="modal-lightbox" onClick={closeLightbox}>
+          <button className="modal-lightbox-close" onClick={closeLightbox}>
             <i className="fas fa-times"></i>
           </button>
           <img src={product.image} alt={product.name} onClick={(e) => e.stopPropagation()} />
@@ -590,9 +689,9 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
       )}
 
       {showBuyNowQty && (
-        <div className="buynow-qty-overlay" onClick={() => setShowBuyNowQty(false)} role="presentation">
+        <div className="buynow-qty-overlay" onClick={closeBuyNowQty} role="presentation">
           <div className="buynow-qty-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-            <button type="button" className="buynow-qty-close" onClick={() => setShowBuyNowQty(false)} aria-label="Close">
+            <button type="button" className="buynow-qty-close" onClick={closeBuyNowQty} aria-label="Close">
               <i className="fas fa-times" />
             </button>
             <h3>Buy Now</h3>
@@ -642,7 +741,6 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
         </div>
       )}
 
-      {showLoginModal && <LoginModal onClose={handleLoginModalClose} />}
     </>
   );
 };

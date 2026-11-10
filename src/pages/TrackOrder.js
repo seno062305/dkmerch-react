@@ -9,6 +9,8 @@ import { isLbcOrder, openLbcTracker, LBC_TRACK_URL } from '../utils/deliveryUtil
 import DkIcon, { DK_ICONS } from '../components/DkIcon';
 import { useNotification } from '../context/NotificationContext';
 import DeliveryChatPanel from '../components/DeliveryChatPanel';
+import { useCloseOnHistoryBack } from '../hooks/useCloseOnHistoryBack';
+import { formatOrderShortId } from '../utils/orderId';
 import './TrackOrder.css';
 
 /** Cancel request allowed only before admin confirms the order. */
@@ -73,6 +75,7 @@ const CANCEL_REASON_OPTIONS = [
 
 // ─── CANCEL ORDER MODAL (before admin confirms — request for review) ─────────
 const CancelOrderModal = ({ order, userEmail, onClose, onSuccess }) => {
+  useCloseOnHistoryBack(true, onClose, 'cancelOrderModal');
   const requestCustomerCancel = useMutation(api.orders.requestCustomerCancel);
   const paid = String(order.paymentStatus || '').toLowerCase() === 'paid';
   const amount = Number(order.finalTotal ?? order.total ?? 0);
@@ -146,7 +149,7 @@ const CancelOrderModal = ({ order, userEmail, onClose, onSuccess }) => {
           <div>
             <h3>Request Cancel</h3>
             <p>
-              Order #{order.orderId?.slice(-8)}
+              Order #{formatOrderShortId(order)}
               {paid ? <> · <strong>₱{amount.toLocaleString('en-PH')}</strong></> : null}
             </p>
           </div>
@@ -258,6 +261,7 @@ const CancelOrderModal = ({ order, userEmail, onClose, onSuccess }) => {
 
 // ─── REFUND MODAL ─────────────────────────────────────────────────────────────
 const RefundModal = ({ order, onClose, onSuccess }) => {
+  useCloseOnHistoryBack(true, onClose, 'refundModal');
   const [photo, setPhoto]               = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
   const [refundMethod, setRefundMethod] = useState('');
@@ -316,7 +320,7 @@ const RefundModal = ({ order, onClose, onSuccess }) => {
           <button className="refund-modal-close" onClick={onClose}><i className="fas fa-times"></i></button>
           <div className="refund-modal-header">
             <div className="refund-modal-icon" style={{ background: '#fee2e2' }}><i className="fas fa-clock" style={{ color: '#dc2626' }}></i></div>
-            <div><h3>Refund Window Expired</h3><p>Order #{order.orderId?.slice(-8)}</p></div>
+            <div><h3>Refund Window Expired</h3><p>Order #{formatOrderShortId(order)}</p></div>
           </div>
           <div className="refund-modal-body">
             <div className="refund-expired-notice">
@@ -336,7 +340,7 @@ const RefundModal = ({ order, onClose, onSuccess }) => {
         <button className="refund-modal-close" onClick={onClose}><i className="fas fa-times"></i></button>
         <div className="refund-modal-header">
           <div className="refund-modal-icon"><i className="fas fa-box-open"></i></div>
-          <div><h3>Request a Refund</h3><p>Order #{order.orderId?.slice(-8)} · <strong>₱{refundAmount}</strong></p></div>
+          <div><h3>Request a Refund</h3><p>Order #{formatOrderShortId(order)} · <strong>₱{refundAmount}</strong></p></div>
         </div>
         <div className="refund-window-timer"><i className="fas fa-hourglass-half"></i><span>Closes in <strong>{hoursLeft}h {minsLeft}m</strong></span></div>
         <div className="refund-modal-body">
@@ -770,6 +774,7 @@ const TrackOrder = ({ onProductClick }) => {
   }, [orderIdParam, orders, emailOrders, directOrder, selectedOrderId, qrOrder]);
 
   const handleCloseModal = useCallback(() => {
+    setLightboxData(null);
     setSelectedOrderId(null);
     setQrOrder(null);
     // Clear ?order= so the reopen effect does not immediately pop the modal again
@@ -852,7 +857,9 @@ const TrackOrder = ({ onProductClick }) => {
   };
 
   const openLightbox  = (images, startIndex = 0) => setLightboxData({ images, index: startIndex });
-  const closeLightbox = () => setLightboxData(null);
+  const closeLightbox = useCallback(() => setLightboxData(null), []);
+  useCloseOnHistoryBack(!!lightboxData, closeLightbox, 'orderLightbox');
+  useCloseOnHistoryBack(!!removeConfirm, () => setRemoveConfirm(null), 'removeOrderConfirm');
   const lightboxNext  = () => setLightboxData(prev => ({ ...prev, index: (prev.index + 1) % prev.images.length }));
   const lightboxPrev  = () => setLightboxData(prev => ({ ...prev, index: (prev.index - 1 + prev.images.length) % prev.images.length }));
   const sortByNewest  = (arr) => [...arr].sort((a, b) => (b._creationTime || 0) - (a._creationTime || 0));
@@ -993,7 +1000,7 @@ const TrackOrder = ({ onProductClick }) => {
           ) : <div className="order-no-img-wrap"><i className="fas fa-box order-no-img"></i></div>}
         </div>
         <div className="order-card-info">
-          <p className="order-card-id">Order #{order.orderId?.slice(-8) || 'N/A'}</p>
+          <p className="order-card-id">Order #{formatOrderShortId(order) || 'N/A'}</p>
           {isLbcOrder(order) && (
             <div className="order-card-lbc-badge"><i className="fas fa-truck"></i> LBC Express</div>
           )}
@@ -1087,7 +1094,7 @@ const TrackOrder = ({ onProductClick }) => {
               </button>
             </div>
           )}
-          {isGuest && delivered && !order.refundStatus && canRefund && <div className="guest-login-prompt"><i className="fas fa-lock"></i><span><a href="/login" onClick={e => { e.preventDefault(); navigate('/'); }}>Log in</a> to request a refund</span></div>}
+          {isGuest && delivered && !order.refundStatus && canRefund && <div className="guest-login-prompt"><i className="fas fa-lock"></i><span><a href="/login" onClick={e => { e.preventDefault(); window.dispatchEvent(new Event('openLoginModal')); }}>Log in</a> to request a refund</span></div>}
         </div>
       </div>
     );
@@ -1130,7 +1137,7 @@ const TrackOrder = ({ onProductClick }) => {
         <div className="page-header">
           <div className="container">
             <h1 className="page-title">Order Tracking</h1>
-            <p className="page-description">Scan result — Order #{qrOrder.orderId?.slice(-8)}</p>
+            <p className="page-description">Scan result — Order #{formatOrderShortId(qrOrder)}</p>
           </div>
         </div>
         <TrackingModal
@@ -1259,7 +1266,7 @@ const TrackOrder = ({ onProductClick }) => {
                       <i className="fas fa-info-circle"></i>
                       <span>
                         Viewing as guest.{' '}
-                        <a href="/login" onClick={(e) => { e.preventDefault(); navigate('/'); }}>Log in</a>
+                        <a href="/login" onClick={(e) => { e.preventDefault(); window.dispatchEvent(new Event('openLoginModal')); }}>Log in</a>
                         {' '}for full access.
                       </span>
                     </div>
@@ -1293,6 +1300,7 @@ const TrackOrder = ({ onProductClick }) => {
 
 // ─── TRACKING MODAL ──────────────────────────────────────────────────────────
 const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusClass, getDisplayStatus, isOutForDeliveryStatus, onRequestRefund, onCustomerCancel, cancelling = false, isGuest = false }) => {
+  useCloseOnHistoryBack(true, onClose, 'trackingModal');
   const { showNotification } = useNotification();
   const createPaymentLink = useAction(api.payments.createPaymentLink);
   const [localOtp,          setLocalOtp]          = useState(order.deliveryOtp || null);
@@ -1351,7 +1359,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
         <div className="tracking-result">
 
           <div className="result-header">
-            <h2>Order #{order.orderId?.slice(-8) || 'N/A'}</h2>
+            <h2>Order #{formatOrderShortId(order) || 'N/A'}</h2>
             <div className={`status-badge ${getStatusClass(order.orderStatus || order.status)}`}>{getDisplayStatus(order)}</div>
             <button
               className="modal-close-btn"
@@ -1364,7 +1372,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
           </div>
 
           {isGuest && (
-            <div className="guest-modal-notice"><i className="fas fa-lock"></i><span>Viewing as guest — order timeline only. <a href="/login" onClick={e => { e.preventDefault(); onClose(); }}>Log in</a> for full access.</span></div>
+            <div className="guest-modal-notice"><i className="fas fa-lock"></i><span>Viewing as guest — order timeline only. <a href="/login" onClick={e => { e.preventDefault(); onClose(); window.dispatchEvent(new Event('openLoginModal')); }}>Log in</a> for full access.</span></div>
           )}
 
           {!isGuest && needsPayment && (

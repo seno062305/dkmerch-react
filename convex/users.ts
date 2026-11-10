@@ -7,6 +7,12 @@ import { v } from "convex/values";
 const RATE_LIMIT_WINDOW_MS = 2 * 60 * 1000; // 2 minutes
 const RATE_LIMIT_MAX        = 5;             // max 5 attempts per fingerprint per 2 mins
 
+function genSessionId() {
+  const a = Math.random().toString(36).slice(2, 10);
+  const b = Math.random().toString(36).slice(2, 10);
+  return `us_${Date.now().toString(36)}_${a}${b}`.toUpperCase();
+}
+
 // ── QUERIES ──────────────────────────────────────
 
 export const getAllUsers = query(async ({ db }) => {
@@ -164,9 +170,14 @@ export const loginUser = mutation({
         role: user.role,
       };
 
-      // Admins skip PIN / second factor
+      // Admins skip PIN / second factor — mint session immediately (kick other admin sessions)
       if (user.role === "admin") {
-        return { success: true, user: safeUser, skipSecondFactor: true };
+        const sessionId = genSessionId();
+        await db.patch(user._id, {
+          activeSessionId: sessionId,
+          activeDeviceAt: Date.now(),
+        } as any);
+        return { success: true, user: safeUser, skipSecondFactor: true, sessionId };
       }
 
       const hasPin = !!(user as any).pin && String((user as any).pin).length >= 4;
@@ -201,6 +212,65 @@ const toSafeUser = (user: any) => ({
   email: user.email,
   phone: user.phone || "",
   role: user.role,
+});
+
+/** Whether this customer already has a login PIN (for post-update unlock routing). */
+export const hasLoginPin = query({
+  args: { userId: v.string() },
+  handler: async ({ db }, { userId }) => {
+    const id = String(userId || "").trim();
+    if (!id) return { hasPin: false };
+    try {
+      const user = await db.get(id as any);
+      if (!user || (user as any).role === "admin") return { hasPin: false };
+      const pin = (user as any).pin;
+      return { hasPin: !!(pin && String(pin).length >= 4) };
+    } catch {
+      return { hasPin: false };
+    }
+  },
+});
+
+/** Mint a new active session — logs out any other device for this account. */
+export const startUserSession = mutation({
+  args: { userId: v.id("users") },
+  handler: async ({ db }, { userId }) => {
+    const user = await db.get(userId);
+    if (!user) return { success: false, message: "Account not found." };
+    const sessionId = genSessionId();
+    await db.patch(userId, {
+      activeSessionId: sessionId,
+      activeDeviceAt: Date.now(),
+    } as any);
+    return { success: true, sessionId };
+  },
+});
+
+/** Other devices poll this — invalid means a newer login took over. */
+export const checkUserSession = query({
+  args: {
+    userId: v.string(),
+    sessionId: v.string(),
+  },
+  handler: async ({ db }, { userId, sessionId }) => {
+    const id = String(userId || "").trim();
+    const sid = String(sessionId || "").trim();
+    if (!id || !sid) return { valid: false, reason: "missing" };
+    try {
+      const user = await db.get(id as any) as any;
+      if (!user) return { valid: false, reason: "not_found" };
+      // Legacy sessions (no server token yet) stay valid until next login
+      if (!user.activeSessionId) return { valid: true, reason: "legacy" };
+      const ok = user.activeSessionId === sid;
+      return {
+        valid: ok,
+        reason: ok ? "ok" : "new_device_logged_in",
+        activeDeviceAt: user.activeDeviceAt ?? null,
+      };
+    } catch {
+      return { valid: false, reason: "error" };
+    }
+  },
 });
 
 /** Set / update login PIN after OTP verification (register or first login). */

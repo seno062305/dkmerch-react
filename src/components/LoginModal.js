@@ -1,5 +1,6 @@
 // src/components/LoginModal.js
 import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import "./LoginModal.css";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -10,6 +11,7 @@ import { hasLocalPin, savePinWithFallback, verifyPinWithFallback, clearLocalPin 
 import { getDeviceUnlock, clearDeviceUnlock } from "../lib/deviceUnlock";
 import { PRODUCTION_SITE_URL } from "./InstallAppModal";
 import { useNotification } from "../context/NotificationContext";
+import { useCloseOnHistoryBack } from "../hooks/useCloseOnHistoryBack";
 // Static import — lazy chunk breaks Create Account after HMR / stale builds
 import RegisterModal from "./RegisterModal";
 
@@ -17,6 +19,17 @@ function formatQuickSignInCode(token) {
   const t = String(token || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
   if (t.length === 8) return `${t.slice(0, 4)}-${t.slice(4)}`;
   return t;
+}
+
+/** QR is only for desktop login (phone scans it). Mobile uses the code in Settings. */
+function canGenerateQuickSignInQr() {
+  if (typeof window === "undefined" || typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  if (/iphone|ipod|android.+mobile|windows phone|mobile/i.test(ua)) return false;
+  // iPad / large tablets still count as mobile hosts for this flow
+  if (/ipad|android(?!.*mobile)|tablet/i.test(ua)) return false;
+  if (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1) return false;
+  return true;
 }
 
 // ── Rate limit helpers (per-browser via sessionStorage) ──────────────────────
@@ -128,7 +141,9 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
   const remembered = (() => {
     try { return getDeviceUnlock(); } catch { return null; }
   })();
-  const startWithPin = !!(preferPinUnlock && remembered?._id);
+  const rememberedLocalPin = !!(remembered?._id && hasLocalPin(remembered._id));
+  // Only jump straight to Enter PIN when this device already has a saved PIN
+  const startWithPin = !!(preferPinUnlock && remembered?._id && rememberedLocalPin);
   const [view, setView] = useState(startWithPin ? "pin" : "login");
   const [qsiToken, setQsiToken] = useState("");
   const [qsiExpiresAt, setQsiExpiresAt] = useState(0);
@@ -136,6 +151,8 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
   const [qsiError, setQsiError] = useState("");
   const [qsiDone, setQsiDone] = useState(false);
   const [qsiNonce, setQsiNonce] = useState(0);
+  const qsiFinishingRef = useRef(false);
+  const [qsiDesktopHost] = useState(() => canGenerateQuickSignInQr());
   const [pendingUser, setPendingUser] = useState(startWithPin ? remembered : null);
   const [deviceUnlockMode, setDeviceUnlockMode] = useState(startWithPin);
   const [pinValue, setPinValue] = useState("");
@@ -210,6 +227,12 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
   );
   const verifyLoginPin        = useMutation(api.users.verifyLoginPin);
   const setUserPin            = useMutation(api.users.setUserPin);
+  const unlockPinStatus       = useQuery(
+    api.users.hasLoginPin,
+    preferPinUnlock && remembered?._id && !rememberedLocalPin
+      ? { userId: String(remembered._id) }
+      : "skip"
+  );
   const generateLoginOtp      = useMutation(api.users.generateLoginOtp);
   const verifyLoginOtp        = useMutation(api.users.verifyLoginOtp);
   const clearUserPinAfterOtp  = useMutation(api.users.clearUserPinAfterOtp);
@@ -261,6 +284,24 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
     }
   }, [view, pinStep]);
 
+  // App update / legacy: device unlock remembered but account never created a PIN yet
+  useEffect(() => {
+    if (!preferPinUnlock || !remembered?._id || rememberedLocalPin) return;
+    if (unlockPinStatus === undefined) return;
+    if (unlockPinStatus?.hasPin) {
+      setPendingUser(remembered);
+      setDeviceUnlockMode(true);
+      setAccountHasPin(true);
+      setView("pin");
+      return;
+    }
+    // No PIN on account — require password, then Create PIN
+    setDeviceUnlockMode(false);
+    setAccountHasPin(false);
+    setPendingUser(null);
+    setView("login");
+  }, [preferPinUnlock, remembered, rememberedLocalPin, unlockPinStatus]);
+
   useEffect(() => {
     document.body.style.overflow = "hidden";
     document.body.classList.add('login-modal-open');
@@ -269,6 +310,8 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
       document.body.classList.remove('login-modal-open');
     };
   }, []);
+
+  useCloseOnHistoryBack(true, onClose, "loginModal");
 
   useEffect(() => {
     const p = newPassword;
@@ -289,7 +332,16 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
 
   useEffect(() => {
     if (view !== "quickSignIn") return;
+    // Mobile / tablet: never generate QR (code + Settings scanner only)
+    if (!qsiDesktopHost) {
+      setQsiCreating(false);
+      setQsiToken("");
+      setQsiError("");
+      setQsiDone(false);
+      return undefined;
+    }
     let cancelled = false;
+    qsiFinishingRef.current = false;
     const start = async () => {
       setQsiCreating(true);
       setQsiError("");
@@ -312,35 +364,45 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
     };
     start();
     return () => { cancelled = true; };
-  }, [view, qsiNonce, createQuickSignIn]);
+  }, [view, qsiNonce, createQuickSignIn, qsiDesktopHost]);
 
+  // Auto-login + close QR modal as soon as mobile approves (do not cancel on poll re-renders)
   useEffect(() => {
     if (view !== "quickSignIn" || !qsiToken || qsiDone) return;
     const status = quickSignInSession?.status;
-    if (status !== "approved") return;
-    let cancelled = false;
-    const finish = async () => {
-      const pending = {
-        _id: quickSignInSession.userId,
-        name: quickSignInSession.userName,
-        username: quickSignInSession.username,
-        email: quickSignInSession.userEmail,
-        phone: quickSignInSession.phone || "",
-        role: quickSignInSession.role || "user",
-      };
-      setQsiDone(true);
-      showNotification(
-        `QR scanned — signing in as ${pending.name || pending.email || "your account"}…`,
-        "success"
-      );
-      const result = completeLogin(pending, "Quick Sign In (QR) success");
+    if (status !== "approved" && status !== "consumed") return;
+    if (qsiFinishingRef.current) return;
+    qsiFinishingRef.current = true;
+
+    const pending = {
+      _id: quickSignInSession.userId,
+      name: quickSignInSession.userName,
+      username: quickSignInSession.username,
+      email: quickSignInSession.userEmail,
+      phone: quickSignInSession.phone || "",
+      role: quickSignInSession.role || "user",
+    };
+    if (!pending._id) {
+      qsiFinishingRef.current = false;
+      setQsiError("Approved, but account data was missing. Generate a new QR.");
+      return;
+    }
+
+    setQsiDone(true);
+    showNotification(
+      `QR scanned — signing in as ${pending.name || pending.email || "your account"}…`,
+      "success"
+    );
+
+    (async () => {
+      const result = await completeLogin(pending, "Quick Sign In (QR) success");
       if (!result?.success) {
+        qsiFinishingRef.current = false;
         setQsiDone(false);
         setQsiError("Approved, but desktop login failed. Try again.");
         return;
       }
       try { await consumeQuickSignIn({ token: qsiToken }); } catch { /* ignore */ }
-      if (cancelled) return;
       resetRLState();
       showNotification(
         `Signed in as ${pending.name || pending.email || "customer"}`,
@@ -348,10 +410,24 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
       );
       onLoginSuccess?.(result.role || "user");
       onClose?.();
-    };
-    finish();
-    return () => { cancelled = true; };
-  }, [view, qsiToken, qsiDone, quickSignInSession, completeLogin, consumeQuickSignIn, onLoginSuccess, onClose, showNotification]);
+    })();
+  }, [
+    view,
+    qsiToken,
+    qsiDone,
+    quickSignInSession?.status,
+    quickSignInSession?.userId,
+    quickSignInSession?.userName,
+    quickSignInSession?.username,
+    quickSignInSession?.userEmail,
+    quickSignInSession?.phone,
+    quickSignInSession?.role,
+    completeLogin,
+    consumeQuickSignIn,
+    onLoginSuccess,
+    onClose,
+    showNotification,
+  ]);
 
   useEffect(() => {
     if (view === "forgot") {
@@ -483,16 +559,18 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
       setLoginAttempts(0);
       setLoginCooldown(0);
 
-      // Customer: password OK → ALWAYS Enter PIN next (never jump to Create PIN)
+      // Customer: password OK → Enter PIN if they have one, else Create PIN (legacy / post-update)
       if (result.pendingUser && result.role === "user") {
         setPendingUser(result.pendingUser);
         setIsPinReset(false);
-        setAccountHasPin(!!(result.needsPin || hasLocalPin(result.pendingUser._id)));
+        const hasPin = !!(result.needsPin || hasLocalPin(result.pendingUser._id));
+        const needsSetup = !!(result.needsPinSetup && !hasLocalPin(result.pendingUser._id)) || !hasPin;
+        setAccountHasPin(hasPin && !needsSetup);
         setPinValue("");
         setPinConfirmValue("");
         setPinStep(0);
         setPinError("");
-        setView("pin");
+        setView(needsSetup ? "createPin" : "pin");
         return;
       }
 
@@ -549,7 +627,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
         return;
       }
       setAccountHasPin(true);
-      const done = completeLogin(
+      const done = await completeLogin(
         checked.result?.user || pendingUser,
         checked.source === "local" ? "Login with local PIN" : "Login with PIN"
       );
@@ -737,7 +815,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
         setPinError(saved.message || "Failed to save PIN.");
         return;
       }
-      const done = completeLogin(pendingUser, isPinReset ? "PIN reset" : "Login + PIN created");
+      const done = await completeLogin(pendingUser, isPinReset ? "PIN reset" : "Login + PIN created");
       finishLogin(done.role);
     } catch (err) {
       setPinError(String(err?.message || "Failed to save PIN.").slice(0, 140));
@@ -902,10 +980,10 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
   const isLockedOut = loginCooldown > 0;
 
   // ════════════════════════════════════════════════════════════════════
-  //  RENDER
+  //  RENDER — portal to body so product/header stacking never hides login
   // ════════════════════════════════════════════════════════════════════
-  return (
-    <div className="modal-overlay" onClick={onClose}>
+  return createPortal(
+    <div className="modal-overlay login-modal-overlay" onClick={onClose} role="presentation">
       <div className="login-modal-content" onClick={(e) => e.stopPropagation()}>
         <button className="modal-close-btn" onClick={onClose} aria-label="Close">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1408,7 +1486,9 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
               </h2>
               <p className="login-subtitle">
                 {pinStep === 0
-                  ? "Enter a PIN you’ll use after password on every login"
+                  ? (isPinReset
+                    ? "Choose a new 4–6 digit PIN for faster unlock on this device."
+                    : "This account doesn’t have a PIN yet — create a 4–6 digit PIN to continue after the app update.")
                   : "Re-enter the same PIN to confirm"}
               </p>
             </div>
@@ -1467,7 +1547,7 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
           </>
         )}
 
-        {/* ── QUICK SIGN IN (desktop QR) ───────────────────────────── */}
+        {/* ── QUICK SIGN IN (desktop QR only; mobile uses code in Settings) ── */}
         {view === "quickSignIn" && (
           <>
             <div className="login-modal-header">
@@ -1475,44 +1555,72 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
                 Quick Sign In
               </h2>
               <p className="login-subtitle">
-                Scan this QR with your phone (Settings → Quick Sign In) while logged in on mobile.
+                {qsiDesktopHost
+                  ? "Scan this QR with your phone (Settings → Quick Sign In) while logged in on mobile — or type the code there."
+                  : "QR is only for desktop. On phone, open Settings → Quick Sign In and enter the code shown on your computer."}
               </p>
             </div>
             <div className="login-form qsi-panel">
-              {qsiCreating && (
-                <div className="qsi-status"><i className="fas fa-spinner fa-spin"></i> Generating QR…</div>
-              )}
-              {qsiError && (
-                <div className="error-banner"><span>{qsiError}</span></div>
-              )}
-              {!qsiCreating && qsiToken && (
-                <>
-                  <div className="qsi-qr-wrap">
-                    <QRCodeSVG
-                      value={`${PRODUCTION_SITE_URL.replace(/\/$/, "")}/?qsi=${encodeURIComponent(qsiToken)}`}
-                      size={200}
-                      level="M"
-                      includeMargin
-                    />
-                  </div>
-                  <p className="qsi-code-label">Or enter this code on mobile</p>
-                  <code className="qsi-code">{formatQuickSignInCode(qsiToken)}</code>
-                  <p className="qsi-hint">
-                    {qsiDone || quickSignInSession?.status === "approved"
-                      ? "QR scanned — signing you in…"
-                      : quickSignInSession?.status === "expired" || (qsiExpiresAt && Date.now() > qsiExpiresAt)
-                        ? "QR expired — generate a new one."
-                        : "Waiting for mobile scan…"}
+              {!qsiDesktopHost ? (
+                <div className="qsi-mobile-only">
+                  <p className="qsi-hint" style={{ marginBottom: 12 }}>
+                    Use this phone only to <strong>approve</strong> a desktop login:
                   </p>
-                  {(quickSignInSession?.status === "expired" || (qsiExpiresAt && Date.now() > qsiExpiresAt)) && (
-                    <button
-                      type="button"
-                      className="login-submit-btn"
-                      style={{ background: accentGradient }}
-                      onClick={() => setQsiNonce((n) => n + 1)}
-                    >
-                      Generate new QR
-                    </button>
+                  <ol className="qsi-mobile-steps">
+                    <li>On your <strong>computer</strong>, open Login → Quick Sign In (QR + code appear there).</li>
+                    <li>Stay logged in on this phone → <strong>Settings → Quick Sign In</strong>.</li>
+                    <li>Scan the desktop QR, or type the <strong>ABCD-EFGH</strong> code.</li>
+                  </ol>
+                  <button
+                    type="button"
+                    className="login-submit-btn"
+                    style={{ background: accentGradient, marginTop: 8 }}
+                    onClick={() => {
+                      onClose?.();
+                      navigate("/settings");
+                    }}
+                  >
+                    Open Settings
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {qsiCreating && (
+                    <div className="qsi-status"><i className="fas fa-spinner fa-spin"></i> Generating QR…</div>
+                  )}
+                  {qsiError && (
+                    <div className="error-banner"><span>{qsiError}</span></div>
+                  )}
+                  {!qsiCreating && qsiToken && (
+                    <>
+                      <div className="qsi-qr-wrap">
+                        <QRCodeSVG
+                          value={`${PRODUCTION_SITE_URL.replace(/\/$/, "")}/?qsi=${encodeURIComponent(qsiToken)}`}
+                          size={200}
+                          level="M"
+                          includeMargin
+                        />
+                      </div>
+                      <p className="qsi-code-label">Or enter this code on mobile Settings</p>
+                      <code className="qsi-code">{formatQuickSignInCode(qsiToken)}</code>
+                      <p className="qsi-hint">
+                        {qsiDone || quickSignInSession?.status === "approved"
+                          ? "Approved — signing you in…"
+                          : quickSignInSession?.status === "expired" || (qsiExpiresAt && Date.now() > qsiExpiresAt)
+                            ? "Expired — generate a new one."
+                            : "Waiting for mobile scan / code…"}
+                      </p>
+                      {(quickSignInSession?.status === "expired" || (qsiExpiresAt && Date.now() > qsiExpiresAt)) && (
+                        <button
+                          type="button"
+                          className="login-submit-btn"
+                          style={{ background: accentGradient }}
+                          onClick={() => setQsiNonce((n) => n + 1)}
+                        >
+                          Generate new QR
+                        </button>
+                      )}
+                    </>
                   )}
                 </>
               )}
@@ -1642,7 +1750,8 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

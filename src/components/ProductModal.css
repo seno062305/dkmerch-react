@@ -147,21 +147,36 @@
   gap: 10px;
 }
 
-.pre-order-badge,
-.sale-badge {
+.modal-badge-stack {
   position: absolute;
   top: 14px;
   left: 14px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.pre-order-badge,
+.sale-badge {
   padding: 5px 12px;
   border-radius: 6px;
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
-  z-index: 2;
 }
 
 .pre-order-badge { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
 .sale-badge      { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+
+.modal-oos-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #b45309;
+  font-weight: 600;
+}
 
 .modal-promo-img-badge {
   position: absolute;
@@ -579,7 +594,8 @@ body.product-modal-open .dk-chat-fab-stack {
 .modal-lightbox {
   position: fixed; inset: 0;
   background: rgba(0, 0, 0, 0.92);
-  z-index: 12000;
+  /* Must sit above .product-modal-overlay (20000) or image "sticks" on the page after close */
+  z-index: 21000;
   display: flex; align-items: center; justify-content: center;
   padding: 20px; cursor: pointer;
   animation: fadeIn 0.2s ease;

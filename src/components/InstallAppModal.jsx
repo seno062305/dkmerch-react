@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useCloseOnHistoryBack } from '../hooks/useCloseOnHistoryBack';
 import './InstallAppModal.css';
 
 export const PRODUCTION_SITE_URL =
@@ -27,10 +28,16 @@ export function isInsecureInstallHost() {
   return window.location.protocol === 'http:' && host !== 'localhost';
 }
 
+function isInAppBrowser() {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  return /FBAN|FBAV|Instagram|Line\/|Twitter|TikTok|Snapchat|Messenger/i.test(ua);
+}
+
 /**
  * Install modal with platform options:
- * - Android / Desktop (Chrome) — native install when available
- * - iPhone / iPad — Safari Add to Home Screen steps only
+ * - Android / Desktop — native Install when available + Add to Home Screen
+ * - iPhone / iPad — Add to Home Screen primary action (Safari)
  */
 export default function InstallAppModal({
   open,
@@ -41,20 +48,41 @@ export default function InstallAppModal({
 }) {
   const needsLiveSite = isInsecureInstallHost();
   const liveUrl = PRODUCTION_SITE_URL.replace(/\/$/, '');
-  const defaultTab = isIosDevice() ? 'ios' : 'android';
+  const ios = isIosDevice();
+  const inApp = isInAppBrowser();
+  const defaultTab = ios ? 'ios' : 'android';
   const [tab, setTab] = useState(defaultTab);
   const [installing, setInstalling] = useState(false);
+  const [showIosGuide, setShowIosGuide] = useState(false);
+  const [androidHint, setAndroidHint] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setTab(isIosDevice() ? 'ios' : 'android');
+    setShowIosGuide(false);
+    setAndroidHint(false);
+  }, [open]);
+
+  useCloseOnHistoryBack(!!open, onClose, 'installAppModal');
 
   if (!open) return null;
 
   const handleNative = async () => {
-    if (!onNativeInstall) return;
+    if (!onNativeInstall) {
+      setAndroidHint(true);
+      return;
+    }
     setInstalling(true);
     try {
       await onNativeInstall();
     } finally {
       setInstalling(false);
     }
+  };
+
+  const openLiveInSafariHint = () => {
+    // Best we can do from in-app browsers: open live URL (user then uses Safari Share)
+    window.open(liveUrl, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -68,7 +96,7 @@ export default function InstallAppModal({
           <img src="/images/dklogo2-removebg-preview.png" alt="" />
         </div>
         <h3 id="iam-title">{title}</h3>
-        <p className="iam-lead">Choose your device — install DKMerch like an app.</p>
+        <p className="iam-lead">Install DKMerch on your device — open it like a normal app.</p>
 
         <div className="iam-tabs" role="tablist">
           <button
@@ -76,7 +104,7 @@ export default function InstallAppModal({
             role="tab"
             className={`iam-tab ${tab === 'android' ? 'active' : ''}`}
             aria-selected={tab === 'android'}
-            onClick={() => setTab('android')}
+            onClick={() => { setTab('android'); setShowIosGuide(false); }}
           >
             <i className="fas fa-mobile-alt" aria-hidden="true" /> Android / Desktop
           </button>
@@ -85,7 +113,7 @@ export default function InstallAppModal({
             role="tab"
             className={`iam-tab ${tab === 'ios' ? 'active' : ''}`}
             aria-selected={tab === 'ios'}
-            onClick={() => setTab('ios')}
+            onClick={() => { setTab('ios'); setAndroidHint(false); }}
           >
             <i className="fab fa-apple" aria-hidden="true" /> iPhone / iPad
           </button>
@@ -103,47 +131,82 @@ export default function InstallAppModal({
           </div>
         )}
 
+        {inApp && (
+          <div className="iam-live-warn">
+            <p>
+              Open DKMerch in {ios ? 'Safari' : 'Chrome'} (not Messenger / Instagram) to install properly.
+            </p>
+            <button type="button" className="iam-live-link iam-live-link-btn" onClick={openLiveInSafariHint}>
+              <i className="fas fa-external-link-alt" aria-hidden="true" />
+              Open live site
+            </button>
+          </div>
+        )}
+
         {tab === 'android' ? (
           <div className="iam-panel">
-            <p className="iam-lead">
-              On Chrome (Android or desktop), tap install below. If the button is unavailable, use the browser menu.
-            </p>
-            {canNativeInstall && !needsLiveSite ? (
-              <button type="button" className="iam-install-native" onClick={handleNative} disabled={installing}>
+            <div className="iam-actions">
+              <button
+                type="button"
+                className="iam-install-native"
+                onClick={handleNative}
+                disabled={installing || needsLiveSite}
+              >
                 {installing
                   ? <><i className="fas fa-spinner fa-spin" aria-hidden="true" /> Installing…</>
                   : <><i className="fas fa-download" aria-hidden="true" /> Install DKMerch</>}
               </button>
-            ) : (
-              <ol className="iam-steps">
-                <li>Open this site in <strong>Chrome</strong>.</li>
-                <li>Tap the <strong>☰ menu</strong> (or address-bar install icon).</li>
-                <li>Choose <strong>Install app</strong> / <strong>Add to Home screen</strong>.</li>
-                <li>Confirm — DKMerch opens like a normal app.</li>
-              </ol>
+              <button
+                type="button"
+                className="iam-add-home"
+                onClick={() => setAndroidHint(true)}
+              >
+                <i className="fas fa-plus-square" aria-hidden="true" /> Add to Home Screen
+              </button>
+            </div>
+            {(androidHint || !canNativeInstall) && (
+              <p className="iam-hint">
+                {canNativeInstall
+                  ? 'Or use Chrome menu → Install app / Add to Home screen.'
+                  : 'Tap Install when Chrome offers it, or use the browser menu → Install app / Add to Home screen.'}
+              </p>
             )}
           </div>
         ) : (
           <div className="iam-panel">
-            <p className="iam-lead">
-              iPhone can’t use the Chrome install button — use <strong>Safari</strong> only:
-            </p>
-            <ol className="iam-steps">
-              <li>Open this page in <strong>Safari</strong> (not Chrome / Instagram / Facebook).</li>
-              <li>Tap the <strong>Share</strong> button <span className="iam-share-glyph" aria-hidden="true">⎋</span> at the bottom.</li>
-              <li>Scroll and tap <strong>Add to Home Screen</strong>.</li>
-              <li>Tap <strong>Add</strong> — it opens full-screen with no Safari bar.</li>
-            </ol>
-            <p className="iam-hint">
-              Tip: if you don’t see “Add to Home Screen”, open{' '}
-              <a href={liveUrl}>{liveUrl.replace(/^https?:\/\//, '')}</a>
-              {' '}in Safari first.
-            </p>
+            <div className="iam-actions">
+              <button
+                type="button"
+                className="iam-install-native iam-install-ios"
+                onClick={() => setShowIosGuide(true)}
+              >
+                <i className="fas fa-plus-square" aria-hidden="true" /> Add to Home Screen
+              </button>
+              <a
+                className="iam-add-home"
+                href={liveUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <i className="fab fa-safari" aria-hidden="true" /> Open in Safari
+              </a>
+            </div>
+
+            {showIosGuide && (
+              <div className="iam-ios-guide">
+                <p className="iam-ios-guide-title">Quick steps in Safari</p>
+                <ol className="iam-steps">
+                  <li>Tap <strong>Share</strong> <span className="iam-share-glyph" aria-hidden="true">⎋</span></li>
+                  <li>Tap <strong>Add to Home Screen</strong></li>
+                  <li>Tap <strong>Add</strong></li>
+                </ol>
+              </div>
+            )}
           </div>
         )}
 
         <button type="button" className="iam-done" onClick={onClose}>
-          Got it
+          Done
         </button>
       </div>
     </div>

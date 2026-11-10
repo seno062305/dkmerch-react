@@ -37,19 +37,28 @@ const Help = () => {
             <div className="faq-grid">
               <div className="faq-item">
                 <h3>How do I place an order?</h3>
-                <p>Browse our products, add items to your cart, and proceed to checkout. You'll need to create an account or checkout as a guest.</p>
+                <p>
+                  Log in or create a DKMerch account first — guest checkout is not available.
+                  Then browse products, add items to your cart, and proceed to checkout. Payment is via PayMongo (GCash or Maya).
+                </p>
               </div>
               <div className="faq-item">
-                <h3>Do you ship internationally?</h3>
-                <p>Yes! We ship to most countries worldwide. Shipping fees and delivery times vary by location.</p>
+                <h3>Do I need an account to buy?</h3>
+                <p>
+                  Yes. You must be logged in to add items to cart, use wishlist, place pre-orders, and checkout.
+                  You can still browse the shop without signing in.
+                </p>
               </div>
               <div className="faq-item">
                 <h3>Are all products authentic?</h3>
                 <p>Absolutely! We guarantee that all our K-Pop merchandise is 100% authentic and officially licensed.</p>
               </div>
               <div className="faq-item">
-                <h3>How long does shipping take?</h3>
-                <p>Domestic orders typically arrive within 3-7 business days. International orders may take 10-21 business days.</p>
+                <h3>How long does delivery take?</h3>
+                <p>
+                  After admin confirms your order, NCR deliveries are usually handled by DK Riders with live tracking.
+                  Outside NCR, admin may ship via LBC — timing depends on location and courier schedules.
+                </p>
               </div>
             </div>
           </section>
@@ -59,27 +68,28 @@ const Help = () => {
             <h2><i className="fas fa-shipping-fast"></i> Shipping Information</h2>
             <div className="info-content">
               <div className="info-card">
-                <h3>Domestic Shipping</h3>
+                <h3>NCR / DK Rider delivery</h3>
                 <ul>
-                  <li>Standard Shipping: ₱150 (3-7 business days)</li>
-                  <li>Express Shipping: ₱300 (1-3 business days)</li>
-                  <li>Free shipping on orders over ₱2,500</li>
+                  <li>Shipping fee is calculated from store-to-address distance at checkout</li>
+                  <li>After payment, admin confirms the order before riders can accept it</li>
+                  <li>Once out for delivery, track your rider live on Track Order</li>
+                  <li>Confirm receipt with the 4-digit delivery OTP on your tracking page</li>
                 </ul>
               </div>
               <div className="info-card">
-                <h3>International Shipping</h3>
+                <h3>Outside NCR (LBC)</h3>
                 <ul>
-                  <li>Standard International: Starting at ₱800</li>
-                  <li>Express International: Starting at ₱1,500</li>
-                  <li>Delivery time: 10-21 business days</li>
+                  <li>Admin may ship via LBC Express for addresses outside rider coverage</li>
+                  <li>You’ll receive LBC tracking details when available</li>
+                  <li>Use the LBC tracker on the Track Order page when provided</li>
                 </ul>
               </div>
               <div className="info-card">
                 <h3>Order Processing</h3>
                 <ul>
-                  <li>Orders are processed within 1-2 business days</li>
-                  <li>You'll receive a tracking number via email</li>
-                  <li>Track your order in the Track Order page</li>
+                  <li>Pay with GCash or Maya through PayMongo</li>
+                  <li>Order emails / status updates are sent to your account email</li>
+                  <li>Track anytime on the Track Order page (login recommended for full tools)</li>
                 </ul>
               </div>
             </div>
@@ -110,13 +120,13 @@ const Help = () => {
                 </ul>
               </div>
               <div className="info-card">
-                <h3>How to Return</h3>
+                <h3>Damaged item refunds</h3>
                 <ol>
-                  <li>Contact our support team at support@dkmerch.com</li>
-                  <li>Provide your order number and reason for return</li>
-                  <li>Receive return authorization and instructions</li>
-                  <li>Ship the item back using provided label</li>
-                  <li>Refund processed within 5-7 business days</li>
+                  <li>After delivery, open Track Order / My Orders</li>
+                  <li>Submit a refund request with a clear photo of the damage</li>
+                  <li>Enter your GCash or Maya details for payout if approved</li>
+                  <li>Admin reviews the request and emails you the decision</li>
+                  <li>For other concerns, email dkmerchtest@gmail.com</li>
                 </ol>
               </div>
             </div>
@@ -130,7 +140,7 @@ const Help = () => {
               <div className="contact-option">
                 <i className="fas fa-envelope"></i>
                 <h3>Email Us</h3>
-                <p>support@dkmerch.com</p>
+                <p>dkmerchtest@gmail.com</p>
                 <p className="response-time">Response within 24 hours</p>
               </div>
               <div className="contact-option">

@@ -389,21 +389,12 @@
 
 /* Notice banner at top */
 .reg-consent-notice {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
+  display: block;
   background: #eff6ff;
   border: 1px solid #bfdbfe;
   border-radius: 10px;
   padding: 14px;
   margin-bottom: 14px;
-}
-
-.reg-consent-notice-icon {
-  font-size: 20px;
-  flex-shrink: 0;
-  line-height: 1;
-  margin-top: 1px;
 }
 
 .reg-consent-notice-text strong {

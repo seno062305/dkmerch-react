@@ -3,6 +3,38 @@ import { query, mutation, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 
+/** Atomic sequential order number — concurrent createOrder calls serialize on this doc. */
+async function allocateOrderSeq(db: any): Promise<number> {
+  const counter = await db
+    .query("orderCounters")
+    .withIndex("by_name", (q: any) => q.eq("name", "orders"))
+    .first();
+
+  if (!counter) {
+    const existing = await db.query("orders").collect();
+    let maxSeq = 0;
+    for (const o of existing) {
+      if (typeof o.orderSeq === "number" && o.orderSeq > maxSeq) maxSeq = o.orderSeq;
+      const m = String(o.orderId || "").match(/^DK-(\d+)-/i);
+      if (m) maxSeq = Math.max(maxSeq, parseInt(m[1], 10) || 0);
+    }
+    // Also never go below current order count (legacy timestamp ids)
+    maxSeq = Math.max(maxSeq, existing.length);
+    const seq = maxSeq + 1;
+    await db.insert("orderCounters", { name: "orders", nextSeq: seq + 1 });
+    return seq;
+  }
+
+  const seq = Number(counter.nextSeq) || 1;
+  await db.patch(counter._id, { nextSeq: seq + 1 });
+  return seq;
+}
+
+function buildOrderId(seq: number): string {
+  const suffix = Math.random().toString(36).substring(2, 8).toUpperCase().padEnd(6, "X");
+  return `DK-${String(seq).padStart(4, "0")}-${suffix}`;
+}
+
 export const getAllOrders = query(async ({ db }) => {
   // Newest orders first system-wide
   return await db.query("orders").order("desc").collect();
@@ -39,7 +71,8 @@ export const getOrderById = query({
 
 export const createOrder = mutation({
   args: {
-    orderId: v.string(),
+    /** Optional — ignored for live checkout; server allocates under lock. Kept for failover sync-back. */
+    orderId: v.optional(v.string()),
     email: v.string(),
     customerName: v.optional(v.string()),
     phone: v.optional(v.string()),
@@ -74,8 +107,23 @@ export const createOrder = mutation({
     rewardTicketCode: v.optional(v.string()),
   },
   handler: async ({ db }, args) => {
-    await db.insert("orders", args);
-    return { success: true, orderId: args.orderId };
+    // If client sent a failover/provisional id that already exists, don't mint a duplicate row
+    const clientId = String(args.orderId || "").trim();
+    if (clientId) {
+      const existing = await db
+        .query("orders")
+        .withIndex("by_orderId", (q) => q.eq("orderId", clientId))
+        .first();
+      if (existing) {
+        return { success: true, orderId: existing.orderId, orderSeq: existing.orderSeq, duplicate: true };
+      }
+    }
+
+    const orderSeq = await allocateOrderSeq(db);
+    const orderId = buildOrderId(orderSeq);
+    const { orderId: _ignored, ...rest } = args;
+    await db.insert("orders", { ...rest, orderId, orderSeq });
+    return { success: true, orderId, orderSeq };
   },
 });
 

@@ -215,12 +215,12 @@
 .orders-empty h3 { font-size: 22px; color: var(--dark-color); margin-bottom: 10px; }
 .orders-empty p  { color: var(--gray-color); margin-bottom: 24px; }
 
-/* LIGHTBOX */
+/* LIGHTBOX — above page chrome so closed image never ghosts on the last view */
 .order-lightbox {
   position: fixed;
   inset: 0;
   background: rgba(0,0,0,0.88);
-  z-index: 3000;
+  z-index: 21000;
   display: flex;
   align-items: center;
   justify-content: center;
