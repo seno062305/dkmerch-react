@@ -11,7 +11,7 @@ import { useMutation, useQuery, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { runWithFailover } from '../lib/failoverWrite';
 import { failoverCheckoutAssist, isFailoverPayConfigured } from '../lib/failoverPayEmail';
-import { isWithinNCR, LBC_FLAT_SHIPPING_FEE } from '../utils/deliveryUtils';
+import { isWithinNCR } from '../utils/deliveryUtils';
 import { isAppOutdated } from '../utils/appUpdate';
 import './Checkout.css';
 
@@ -102,27 +102,49 @@ function calcLalamoveShipping(storeLat, storeLng, lat, lng, cartItems = [], prod
   };
 }
 
-// ─── ADDRESS MAP PICKER ───────────────────────────────────────────────────────
-const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords, onNCRViolation }) => {
+// ─── ADDRESS MAP PICKER (manual fields + optional pin w/ search) ─────────────
+const buildFullAddress = ({ address, barangay, city, zipCode }) =>
+  [address, barangay && `Brgy. ${barangay}`, city, zipCode, 'Philippines']
+    .filter(Boolean)
+    .join(', ');
+
+const AddressMapPicker = ({
+  address,
+  barangay,
+  city,
+  zipCode,
+  onFieldsChange,
+  onSelectSuggestion,
+  savedCoords,
+  onNCRViolation,
+}) => {
   const mapRef         = useRef(null);
   const mapInstanceRef = useRef(null);
   const markerRef      = useRef(null);
-  const debounceRef    = useRef(null);
-  const pendingGeocode = useRef(null);
+  const pendingFly     = useRef(null);
+  const suggestRef     = useRef(null);
+  const fieldsRef      = useRef({ address, barangay, city, zipCode });
 
+  const [leafletReady,    setLeafletReady]    = useState(!!window.L);
+  // Never auto-open on load/refresh — only when user taps Add/Edit pin
+  const [mapVisible,      setMapVisible]      = useState(false);
+  const [statusText,      setStatusText]      = useState('Tap the map or drag the pin to set your location');
+  const [pinSet,          setPinSet]          = useState(!!savedCoords);
+  const [geocoding,       setGeocoding]       = useState(false);
+  const [pinQuery,        setPinQuery]        = useState('');
   const [suggestions,     setSuggestions]     = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [geocoding,       setGeocoding]       = useState(false);
-  const [leafletReady,    setLeafletReady]    = useState(!!window.L);
-  const [mapVisible,      setMapVisible]      = useState(false);
-  const [statusText,      setStatusText]      = useState('');
+
+  useEffect(() => {
+    fieldsRef.current = { address, barangay, city, zipCode };
+  }, [address, barangay, city, zipCode]);
 
   useEffect(() => {
     if (window.L) { setLeafletReady(true); return; }
     if (!document.getElementById('leaflet-css')) {
       const link = document.createElement('link');
-      link.id   = 'leaflet-css';
-      link.rel  = 'stylesheet';
+      link.id = 'leaflet-css';
+      link.rel = 'stylesheet';
       link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
       document.head.appendChild(link);
     }
@@ -132,10 +154,10 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords, on
       existing.addEventListener('load', () => setLeafletReady(true));
       return;
     }
-    const script   = document.createElement('script');
-    script.id      = 'leaflet-js';
-    script.src     = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-    script.onload  = () => setLeafletReady(true);
+    const script = document.createElement('script');
+    script.id = 'leaflet-js';
+    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.onload = () => setLeafletReady(true);
     script.onerror = () => console.error('Leaflet failed to load');
     document.head.appendChild(script);
   }, []);
@@ -146,305 +168,339 @@ const AddressMapPicker = ({ value, onChange, onSelectSuggestion, savedCoords, on
     return valid;
   }, [onNCRViolation]);
 
-  const geocodeAddress = useCallback(async (addr) => {
-    if (!addr) return;
-    if (!mapInstanceRef.current || !markerRef.current) {
-      pendingGeocode.current = addr;
-      return;
-    }
-    setGeocoding(true);
-    setStatusText('Locating on map…');
-    try {
-      const encoded = encodeURIComponent(addr + ', Philippines');
-      const res     = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&limit=1`,
-        { headers: { 'Accept-Language': 'en' } }
-      );
-      const data = await res.json();
-      if (data?.length > 0) {
-        const lat = parseFloat(data[0].lat);
-        const lng = parseFloat(data[0].lon);
-        const withinNCR = checkAndNotifyNCR(lat, lng);
-        if (markerRef.current && mapInstanceRef.current) {
-          updateMarkerIcon(lat, lng, withinNCR);
-          markerRef.current.getPopup()?.setContent(
-            `<div style="font-size:12px;max-width:200px"><strong>${withinNCR ? '📍' : '⚠️'} ${withinNCR ? 'Delivery Address' : 'Outside NCR Coverage'}</strong><br><small>${addr}</small></div>`
-          );
-          markerRef.current.openPopup();
-          mapInstanceRef.current.flyTo([lat, lng], 17, { animate: true, duration: 0.8 });
-          onSelectSuggestion({ address: addr, lat, lng, city: '', zipCode: '' });
-        }
-        setStatusText(withinNCR
-          ? 'Pin your exact location — drag the marker to adjust'
-          : '⚠️ This address is outside our NCR delivery area'
-        );
-      } else {
-        setStatusText('Address not found. Drag the pin to set location manually.');
-      }
-    } catch {
-      setStatusText('Could not locate address. Drag the pin to set location.');
-    }
-    setGeocoding(false);
-  }, [onSelectSuggestion, checkAndNotifyNCR]);
-
-  const updateMarkerIcon = (lat, lng, withinNCR) => {
-    if (!markerRef.current || !window.L) return;
-    const L     = window.L;
+  const makeIcon = useCallback((withinNCR) => {
+    const L = window.L;
     const color = withinNCR ? '#fc1268' : '#dc2626';
-    const icon  = L.divIcon({
+    return L.divIcon({
       className: '',
-      html: `<div style="
-        width:36px;height:36px;background:${color};border-radius:50% 50% 50% 0;
-        transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;
-        box-shadow:0 3px 10px ${withinNCR ? 'rgba(252,18,104,0.5)' : 'rgba(220,38,38,0.5)'};border:3px solid white;">
-        <span style="transform:rotate(45deg);font-size:16px">${withinNCR ? '📍' : '⚠️'}</span>
-      </div>`,
+      html: `<div style="width:36px;height:36px;background:${color};border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;box-shadow:0 3px 10px ${withinNCR ? 'rgba(252,18,104,0.5)' : 'rgba(220,38,38,0.5)'};border:3px solid white;"><span style="transform:rotate(45deg);font-size:16px">${withinNCR ? '📍' : '⚠️'}</span></div>`,
       iconSize: [36, 36], iconAnchor: [18, 36], popupAnchor: [0, -40],
     });
-    markerRef.current.setIcon(icon);
-    if (lat && lng) markerRef.current.setLatLng([lat, lng]);
-  };
+  }, []);
 
-  useEffect(() => {
-    if (!mapVisible || mapInstanceRef.current || !mapRef.current || !leafletReady) return;
+  const commitPin = useCallback((lat, lng, { fly = true } = {}) => {
+    const withinNCR = checkAndNotifyNCR(lat, lng);
+    const fields = fieldsRef.current;
+    const label = buildFullAddress(fields);
+    if (markerRef.current && mapInstanceRef.current && window.L) {
+      markerRef.current.setIcon(makeIcon(withinNCR));
+      markerRef.current.setLatLng([lat, lng]);
+      markerRef.current.getPopup()?.setContent(
+        `<div style="font-size:12px;max-width:220px"><strong>${withinNCR ? '📍 Delivery pin' : '⚠️ Outside NCR · LBC'}</strong><br><small>${label || 'Pinned location'}</small></div>`
+      );
+      markerRef.current.openPopup();
+      if (fly) {
+        mapInstanceRef.current.flyTo([lat, lng], withinNCR ? 17 : 14, { animate: true, duration: 0.6 });
+      }
+    } else {
+      pendingFly.current = { lat, lng, withinNCR };
+    }
+    setPinSet(true);
+    onSelectSuggestion({ ...fields, lat, lng });
+    setStatusText(withinNCR
+      ? 'Pin set — drag to fine-tune'
+      : '⚠️ Outside NCR — LBC Express shipping'
+    );
+  }, [checkAndNotifyNCR, makeIcon, onSelectSuggestion]);
+
+  const geocodeFilledAddress = useCallback(async () => {
+    const fields = fieldsRef.current;
+    const street = (fields.address || '').trim();
+    const cty = (fields.city || '').trim();
+    if (!street && !cty) return false;
+    const query = buildFullAddress(fields);
+    setGeocoding(true);
+    setStatusText('Locating your filled address…');
     try {
-      const L        = window.L;
-      const startLat  = savedCoords?.lat ?? 14.5995;
-      const startLng  = savedCoords?.lng ?? 121.0;
-      const startZoom = savedCoords ? 17 : 13;
+      const params = new URLSearchParams({
+        format: 'json',
+        q: query,
+        countrycodes: 'ph',
+        limit: '1',
+        addressdetails: '1',
+      });
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
+        headers: { 'Accept-Language': 'en', 'User-Agent': 'DKMerchCheckout/1.0' },
+      });
+      const data = await res.json();
+      if (data?.length > 0) {
+        commitPin(parseFloat(data[0].lat), parseFloat(data[0].lon));
+        setStatusText('Showing your filled address — drag pin to fine-tune');
+        setGeocoding(false);
+        return true;
+      }
+      setStatusText('Address not found on map — search below or tap to pin');
+    } catch {
+      setStatusText('Could not locate address — search or tap the map');
+    }
+    setGeocoding(false);
+    return false;
+  }, [commitPin]);
+
+  // Init / tear down map when user opens pin panel
+  useEffect(() => {
+    if (!mapVisible) {
+      if (mapInstanceRef.current) {
+        try { mapInstanceRef.current.remove(); } catch { /* ignore */ }
+        mapInstanceRef.current = null;
+        markerRef.current = null;
+      }
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+    if (mapInstanceRef.current || !mapRef.current || !leafletReady) return;
+    try {
+      const L = window.L;
+      const startLat = savedCoords?.lat ?? 14.5995;
+      const startLng = savedCoords?.lng ?? 120.9842;
+      const startZoom = savedCoords ? 16 : 11;
 
       const map = L.map(mapRef.current, {
-        zoomControl    : true,
-        tap            : false,
-        scrollWheelZoom: false,
-        minZoom: 11, maxZoom: 19,
-        maxBounds: [[14.3500, 120.8600], [14.8000, 121.1500]],
-        maxBoundsViscosity: 1.0,
+        zoomControl: true,
+        tap: false,
+        scrollWheelZoom: true,
+        minZoom: 5,
+        maxZoom: 19,
       }).setView([startLat, startLng], startZoom);
-      map.setMaxBounds([[14.3500, 120.8600], [14.8000, 121.1500]]);
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        maxZoom: 19, minZoom: 11,
+        attribution: '© OpenStreetMap',
+        maxZoom: 19,
       }).addTo(map);
 
       const initWithinNCR = savedCoords ? isWithinNCR(savedCoords.lat, savedCoords.lng) : true;
-      const initColor     = initWithinNCR ? '#fc1268' : '#dc2626';
-      const icon = L.divIcon({
-        className: '',
-        html: `<div style="
-          width:36px;height:36px;background:${initColor};border-radius:50% 50% 50% 0;
-          transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;
-          box-shadow:0 3px 10px rgba(252,18,104,0.5);border:3px solid white;">
-          <span style="transform:rotate(45deg);font-size:16px">📍</span>
-        </div>`,
-        iconSize: [36, 36], iconAnchor: [18, 36], popupAnchor: [0, -40],
-      });
-
-      const marker = L.marker([startLat, startLng], { icon, draggable: true })
+      const marker = L.marker([startLat, startLng], {
+        icon: makeIcon(initWithinNCR),
+        draggable: true,
+      })
         .addTo(map)
-        .bindPopup(
-          savedCoords
-            ? `<div style="font-size:12px;max-width:200px"><strong>📍 Last Used Location</strong><br><small>${value || 'Your saved address'}</small></div>`
-            : '<strong>📍 Delivery Address</strong>'
-        );
+        .bindPopup('<strong>📍 Delivery pin</strong>');
 
       if (savedCoords) {
-        marker.openPopup();
         checkAndNotifyNCR(savedCoords.lat, savedCoords.lng);
-        onSelectSuggestion({ address: value || '', lat: startLat, lng: startLng, city: '', zipCode: '' });
+        marker.openPopup();
+        setPinSet(true);
         setStatusText(initWithinNCR
-          ? '📍 Showing your last saved location — drag the pin to adjust'
-          : '⚠️ Your saved location is outside our NCR delivery area'
+          ? 'Showing your saved pin — drag to adjust'
+          : '⚠️ Saved pin is outside NCR (LBC)'
         );
       }
 
-      marker.on('dragend', async () => {
+      marker.on('dragend', () => {
         const { lat, lng } = marker.getLatLng();
-        const withinNCR    = checkAndNotifyNCR(lat, lng);
-        setGeocoding(true);
-        setStatusText(withinNCR ? 'Getting address for this location…' : '⚠️ Location is outside NCR coverage area');
-        updateMarkerIcon(null, null, withinNCR);
-        try {
-          const res  = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`,
-            { headers: { 'Accept-Language': 'en' } }
-          );
-          const data    = await res.json();
-          const addr    = data.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-          const city    = data.address?.city || data.address?.town || data.address?.municipality || data.address?.suburb || '';
-          const zipCode = data.address?.postcode || '';
-          onChange(addr);
-          onSelectSuggestion({ address: addr, lat, lng, city, zipCode });
-          marker.getPopup()?.setContent(
-            `<div style="font-size:12px;max-width:200px"><strong>${withinNCR ? '📍 Delivery Address' : '⚠️ Outside NCR Coverage'}</strong><br><small>${addr}</small></div>`
-          );
-          marker.openPopup();
-          setStatusText(withinNCR
-            ? 'Pin your exact location — drag the marker to adjust'
-            : '⚠️ This location is outside our NCR delivery coverage'
-          );
-        } catch {
-          setStatusText('Could not get address. Try again.');
-        }
-        setGeocoding(false);
+        commitPin(lat, lng, { fly: false });
+      });
+
+      map.on('click', (e) => {
+        commitPin(e.latlng.lat, e.latlng.lng, { fly: false });
       });
 
       mapInstanceRef.current = map;
-      markerRef.current      = marker;
+      markerRef.current = marker;
 
-      setTimeout(() => {
+      setTimeout(async () => {
         map.invalidateSize();
-        if (pendingGeocode.current) {
-          const addr = pendingGeocode.current;
-          pendingGeocode.current = null;
-          geocodeAddress(addr);
-        } else if (!savedCoords && value) {
-          geocodeAddress(value);
-        } else if (!savedCoords) {
-          setStatusText('Select an address suggestion or drag the pin to set location');
+        if (pendingFly.current) {
+          const p = pendingFly.current;
+          pendingFly.current = null;
+          commitPin(p.lat, p.lng);
+          return;
+        }
+        // Prefer plotting the address the user typed
+        const plotted = await geocodeFilledAddress();
+        if (!plotted && savedCoords) {
+          commitPin(savedCoords.lat, savedCoords.lng);
+        } else if (!plotted && !savedCoords) {
+          setStatusText('Search a place below, or tap the map to pin');
         }
       }, 350);
     } catch (err) {
       console.error('Map init error:', err);
+      setStatusText('Map failed to load. Check your connection and try again.');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapVisible, leafletReady]);
 
-  useEffect(() => {
-    return () => {
-      clearTimeout(debounceRef.current);
-      if (mapInstanceRef.current) {
-        try { mapInstanceRef.current.remove(); } catch {}
-        mapInstanceRef.current = null;
-        markerRef.current      = null;
-      }
-    };
+  useEffect(() => () => {
+    clearTimeout(suggestRef.current);
+    if (mapInstanceRef.current) {
+      try { mapInstanceRef.current.remove(); } catch { /* ignore */ }
+      mapInstanceRef.current = null;
+      markerRef.current = null;
+    }
   }, []);
 
-  const fetchSuggestions = useCallback(async (query) => {
-    if (!query || query.length < 4) { setSuggestions([]); return; }
+  // While map is open, keep pin aligned with filled address fields
+  useEffect(() => {
+    if (!mapVisible || !mapInstanceRef.current) return;
+    if (!(address || '').trim() && !(city || '').trim()) return;
+    const t = setTimeout(() => { geocodeFilledAddress(); }, 800);
+    return () => clearTimeout(t);
+  }, [address, barangay, city, zipCode, mapVisible, geocodeFilledAddress]);
+
+  const fetchPinSuggestions = useCallback(async (query) => {
+    if (!query || query.trim().length < 2) {
+      setSuggestions([]);
+      return;
+    }
     try {
-      const encoded = encodeURIComponent(query + ', Philippines');
-      const res     = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&limit=5&addressdetails=1`,
-        { headers: { 'Accept-Language': 'en' } }
-      );
+      const params = new URLSearchParams({
+        format: 'json',
+        q: `${query.trim()}, Philippines`,
+        countrycodes: 'ph',
+        limit: '6',
+        addressdetails: '1',
+      });
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
+        headers: { 'Accept-Language': 'en', 'User-Agent': 'DKMerchCheckout/1.0' },
+      });
       const data = await res.json();
-      setSuggestions(data.map(d => ({
-        label:   d.display_name,
-        lat:     parseFloat(d.lat),
-        lng:     parseFloat(d.lon),
-        address: d.display_name,
-        city:    d.address?.city || d.address?.town || d.address?.municipality || d.address?.suburb || '',
-        zipCode: d.address?.postcode || '',
+      setSuggestions((data || []).map((d) => ({
+        label: d.display_name,
+        lat: parseFloat(d.lat),
+        lng: parseFloat(d.lon),
       })));
       setShowSuggestions(true);
-    } catch { setSuggestions([]); }
+    } catch {
+      setSuggestions([]);
+    }
   }, []);
 
-  const handleInputChange = (e) => {
-    const val = e.target.value;
-    onChange(val);
-    if (onNCRViolation) onNCRViolation(false);
-    clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => fetchSuggestions(val), 500);
+  const handlePinQueryChange = (val) => {
+    setPinQuery(val);
+    clearTimeout(suggestRef.current);
+    suggestRef.current = setTimeout(() => fetchPinSuggestions(val), 400);
   };
 
-  const handleSelectSuggestion = (s) => {
-    onChange(s.address);
+  const handleSelectPinSuggestion = (s) => {
+    setPinQuery(s.label);
     setSuggestions([]);
     setShowSuggestions(false);
-    const withinNCR = checkAndNotifyNCR(s.lat, s.lng);
-    if (!mapVisible) {
-      pendingGeocode.current = s.address;
-      setMapVisible(true);
-    } else {
-      if (mapInstanceRef.current && markerRef.current) {
-        updateMarkerIcon(s.lat, s.lng, withinNCR);
-        markerRef.current.getPopup()?.setContent(
-          `<div style="font-size:12px;max-width:200px"><strong>${withinNCR ? '📍 Delivery Address' : '⚠️ Outside NCR Coverage'}</strong><br><small>${s.address}</small></div>`
-        );
-        markerRef.current.openPopup();
-        mapInstanceRef.current.flyTo([s.lat, s.lng], 17, { animate: true, duration: 0.8 });
-        onSelectSuggestion({ address: s.address, lat: s.lat, lng: s.lng, city: s.city, zipCode: s.zipCode });
-        setStatusText(withinNCR
-          ? 'Pin your exact location — drag the marker to adjust'
-          : '⚠️ This address is outside our NCR delivery area'
-        );
-      } else {
-        pendingGeocode.current = s.address;
-      }
-    }
+    commitPin(s.lat, s.lng);
   };
 
-  const handleToggleMap = () => {
-    if (mapVisible) {
-      setMapVisible(false);
-    } else {
-      setMapVisible(true);
-      setTimeout(() => {
-        if (mapInstanceRef.current) mapInstanceRef.current.invalidateSize();
-      }, 350);
-    }
+  const handleField = (field, val) => {
+    onFieldsChange({ address, barangay, city, zipCode, [field]: val });
+  };
+
+  const handleOpenPin = () => {
+    setMapVisible(true);
+  };
+
+  const handleHidePin = () => {
+    setMapVisible(false);
+    setPinQuery('');
+    setSuggestions([]);
+    setShowSuggestions(false);
   };
 
   return (
     <div className="address-map-picker">
-      <div className="address-autocomplete-wrap" style={{ position: 'relative' }}>
-        <div className="address-input-row">
+      <div className="address-fields-grid">
+        <div className="address-field address-field-full">
+          <label>Street Address <span className="req">*</span></label>
           <input
             type="text"
-            name="address"
-            value={value}
-            onChange={handleInputChange}
-            onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
-            onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-            placeholder="Start typing your address…"
-            autoComplete="off"
+            value={address || ''}
+            onChange={(e) => handleField('address', e.target.value)}
+            placeholder="House no., street name"
+            autoComplete="street-address"
           />
-          <button type="button" className="address-map-toggle-btn" onClick={handleToggleMap} title={mapVisible ? 'Hide map' : 'Show map'}>
-            <i className={`fas fa-map${mapVisible ? '-marked-alt' : ''}`}></i>
-            {mapVisible ? ' Hide Map' : ' View on Map'}
-          </button>
         </div>
-        {savedCoords && !mapVisible && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', fontSize: '12px', color: '#2563eb', fontWeight: 600 }}>
-            <i className="fas fa-map-marker-alt" style={{ color: '#fc1268' }}></i>
-            Saved pin location available — click "View on Map" to see it
-          </div>
-        )}
-        {showSuggestions && suggestions.length > 0 && (
-          <ul className="address-suggestions-list">
-            {suggestions.map((s, i) => {
-              const sInNCR = isWithinNCR(s.lat, s.lng);
-              return (
-                <li key={i} onMouseDown={() => handleSelectSuggestion(s)} style={!sInNCR ? { opacity: 0.65 } : {}}>
-                  <i className="fas fa-map-marker-alt" style={{ color: sInNCR ? '#fc1268' : '#dc2626' }}></i>
-                  <span>
-                    {s.label}
-                    {!sInNCR && (
-                      <span style={{ display: 'block', fontSize: 11, color: '#b45309', fontWeight: 700, marginTop: 2 }}>
-                        📦 Outside NCR — LBC Express delivery
-                      </span>
-                    )}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
+
+        <div className="address-field">
+          <label>Barangay <span className="req">*</span></label>
+          <input
+            type="text"
+            value={barangay || ''}
+            onChange={(e) => handleField('barangay', e.target.value)}
+            placeholder="Barangay"
+            autoComplete="address-level3"
+          />
+        </div>
+
+        <div className="address-field">
+          <label>City / Municipality <span className="req">*</span></label>
+          <input
+            type="text"
+            value={city || ''}
+            onChange={(e) => handleField('city', e.target.value)}
+            placeholder="City"
+            autoComplete="address-level2"
+          />
+        </div>
+
+        <div className="address-field address-field-full">
+          <label>ZIP Code <span className="req">*</span></label>
+          <input
+            type="text"
+            inputMode="numeric"
+            value={zipCode || ''}
+            onChange={(e) => handleField('zipCode', e.target.value.replace(/[^\d]/g, '').slice(0, 4))}
+            placeholder="e.g. 1000"
+            autoComplete="postal-code"
+          />
+        </div>
+      </div>
+
+      <div className="address-pin-optional">
+        {!mapVisible ? (
+          <button type="button" className="address-pin-btn" onClick={handleOpenPin}>
+            <i className="fas fa-map-marker-alt"></i>
+            <span>
+              {pinSet || savedCoords ? 'Edit pin location' : 'Add pin location'}
+              <small>Optional — helps riders find you</small>
+            </span>
+          </button>
+        ) : (
+          <button type="button" className="address-map-toggle-btn" onClick={handleHidePin} style={{ width: '100%', justifyContent: 'center' }}>
+            <i className="fas fa-times"></i> Hide Map
+          </button>
         )}
       </div>
+
       {mapVisible && (
         <div className="address-map-preview-wrap">
           <div className="address-map-preview-header">
             <i className={geocoding ? 'fas fa-spinner fa-spin' : 'fas fa-map-marked-alt'}></i>
-            <span>{geocoding ? 'Locating on map…' : statusText || 'Select an address suggestion or drag the pin'}</span>
+            <span>{geocoding ? 'Locating your address…' : statusText}</span>
           </div>
+
+          <div className="address-pin-search" style={{ position: 'relative' }}>
+            <i className="fas fa-search address-pin-search-icon"></i>
+            <input
+              type="text"
+              value={pinQuery}
+              onChange={(e) => handlePinQueryChange(e.target.value)}
+              onFocus={() => { if (suggestions.length) setShowSuggestions(true); }}
+              onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+              placeholder="Search place to pin (suggestions)"
+              autoComplete="off"
+            />
+            {showSuggestions && suggestions.length > 0 && (
+              <ul className="address-suggestions-list">
+                {suggestions.map((s, i) => (
+                  <li key={i} onMouseDown={() => handleSelectPinSuggestion(s)}>
+                    <i className="fas fa-map-marker-alt" />
+                    <span>
+                      {s.label}
+                      {!isWithinNCR(s.lat, s.lng) && (
+                        <span style={{ display: 'block', fontSize: 11, color: '#b45309', fontWeight: 700, marginTop: 2 }}>
+                          📦 Outside NCR — LBC Express
+                        </span>
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
           <div ref={mapRef} className="address-map-preview-container" />
           <div className="address-map-preview-hint">
-            <i className="fas fa-hand-pointer"></i> Drag the 📍 pin to fine-tune your delivery location
-            <span style={{ marginLeft: 'auto', fontSize: 10, color: '#64748b', fontWeight: 600 }}>📍 NCR rider · Outside = LBC</span>
+            <i className="fas fa-hand-pointer"></i> Tap map or drag 📍 pin
+            <span style={{ marginLeft: 'auto', fontSize: 10, color: '#64748b', fontWeight: 600 }}>Optional</span>
           </div>
         </div>
       )}
@@ -520,8 +576,9 @@ const LbcDeliveryBanner = () => (
     <div className="lbc-delivery-body">
       <strong>Outside NCR — LBC Express delivery</strong>
       <p>
-        This address is outside Metro Manila. Your order will be shipped via <strong>LBC Express</strong>.
-        Admin will send you the <strong>LBC tracking / order ID</strong>, then use the <strong>LBC Tracker</strong> button on the Track page to follow your package.
+        This address is outside Metro Manila. Your order will ship via <strong>LBC Express</strong>.
+        Shipping fee is <strong>not charged here</strong> — you and admin will arrange LBC shipping separately.
+        Admin will send your <strong>LBC tracking / order ID</strong>; track it with the <strong>LBC Tracker</strong> on the Track page.
       </p>
     </div>
   </div>
@@ -562,6 +619,7 @@ const Checkout = () => {
   const saveProfileMut           = useMutation(api.users.saveProfile);
   const sendPaymentReceivedEmail = useAction(api.sendEmail.sendPaymentReceivedEmail);
   const createPaymentLink        = useAction(api.payments.createPaymentLink);
+  const markOrderPaid            = useMutation(api.payments.markOrderPaid);
   const latestAppUpdate          = useQuery(api.appUpdates.getLatestUpdate);
   const markTicketCheckedOutMut  = useMutation(api.rewards.markTicketCheckedOut);
   const saveProfile = (args) =>
@@ -657,9 +715,9 @@ const Checkout = () => {
   const [errors,            setErrors]            = useState({ phone: '' });
   const cartPromo = location.state?.appliedPromo || null;
 
-  const [formData,      setFormData]      = useState({ fullName: '', email: '', phone: '', address: '', city: '', zipCode: '', notes: '' });
+  const [formData,      setFormData]      = useState({ fullName: '', email: '', phone: '', address: '', barangay: '', city: '', zipCode: '', notes: '' });
   const [savedContact,  setSavedContact]  = useState({ fullName: '', email: '', phone: '' });
-  const [savedAddress,  setSavedAddress]  = useState({ address: '', city: '', zipCode: '' });
+  const [savedAddress,  setSavedAddress]  = useState({ address: '', barangay: '', city: '', zipCode: '' });
   const [addressCoords, setAddressCoords] = useState(null);
   const [savedCoords,   setSavedCoords]   = useState(null);
   const [isOutsideNCR,  setIsOutsideNCR]  = useState(false);
@@ -672,12 +730,8 @@ const Checkout = () => {
   const shippingInfo = addressCoords && !isOutsideNCR
     ? calcLalamoveShipping(STORE_LAT, STORE_LNG, addressCoords.lat, addressCoords.lng, shippingCartItems, products)
     : null;
-  const lbcShippingInfo = isOutsideNCR && addressCoords
-    ? { fee: LBC_FLAT_SHIPPING_FEE, km: null, totalQty: shippingCartItems.reduce((n, i) => n + (i.qty ?? i.quantity ?? 1), 0), isLbc: true }
-    : null;
-  const shippingFee = isOutsideNCR
-    ? (lbcShippingInfo?.fee ?? LBC_FLAT_SHIPPING_FEE)
-    : (shippingInfo?.fee ?? 0);
+  // LBC fee is arranged with admin — not charged at checkout payment
+  const shippingFee = isOutsideNCR ? 0 : (shippingInfo?.fee ?? 0);
   const deliveryMethod = isOutsideNCR ? 'lbc' : 'rider';
 
   // ── Init form ─────────────────────────────────────────────────────────────
@@ -693,15 +747,16 @@ const Checkout = () => {
       email:    profile?.email    || user?.email || '',
       phone:    profile?.phone    || '',
       address:  profile?.address  || '',
+      barangay: profile?.barangay || '',
       city:     profile?.city     || '',
       zipCode:  profile?.zipCode  || '',
       notes:    '',
     };
     setFormData(init);
     setSavedContact({ fullName: init.fullName, email: init.email, phone: init.phone });
-    setSavedAddress({ address: init.address, city: init.city, zipCode: init.zipCode });
+    setSavedAddress({ address: init.address, barangay: init.barangay, city: init.city, zipCode: init.zipCode });
     setIsEditingContact(!init.fullName || !init.email || !init.phone);
-    setIsEditingAddress(!init.address);
+    setIsEditingAddress(!init.address || !init.barangay || !init.city || !init.zipCode);
     if (profile?.addressLat && profile?.addressLng) {
       const coords = { lat: profile.addressLat, lng: profile.addressLng };
       setSavedCoords(coords);
@@ -782,27 +837,39 @@ const Checkout = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleAddressChange = (val) => setFormData(prev => ({ ...prev, address: val }));
-
-  const handleAddressSelect = ({ address, lat, lng, city, zipCode }) => {
-    setFormData(prev => ({
-      ...prev, address,
-      city:    city    || prev.city,
-      zipCode: zipCode || prev.zipCode,
+  const handleAddressFieldsChange = (fields) => {
+    setFormData((prev) => ({
+      ...prev,
+      address: fields.address ?? prev.address,
+      barangay: fields.barangay ?? prev.barangay,
+      city: fields.city ?? prev.city,
+      zipCode: fields.zipCode ?? prev.zipCode,
     }));
-    setAddressCoords({ lat, lng });
+  };
+
+  const handleAddressSelect = ({ address, barangay, city, zipCode, lat, lng }) => {
+    setFormData((prev) => ({
+      ...prev,
+      address: address ?? prev.address,
+      barangay: barangay ?? prev.barangay,
+      city: city ?? prev.city,
+      zipCode: zipCode ?? prev.zipCode,
+    }));
+    if (lat != null && lng != null) setAddressCoords({ lat, lng });
   };
 
   const isContactComplete = () =>
     savedContact.fullName.trim() && savedContact.email.trim() &&
     savedContact.phone.trim() && !validatePhone(savedContact.phone);
 
-  const isAddressComplete = () => savedAddress.address.trim();
+  const isAddressComplete = () =>
+    savedAddress.address.trim() &&
+    savedAddress.barangay.trim() &&
+    savedAddress.city.trim() &&
+    savedAddress.zipCode.trim();
 
   const isFormReady = () =>
-    isContactComplete() && isAddressComplete() && !isEditingContact && !isEditingAddress
-    && !!addressCoords
-    && (isOutsideNCR ? !!lbcShippingInfo : !!shippingInfo);
+    isContactComplete() && isAddressComplete() && !isEditingContact && !isEditingAddress;
 
   const handleSaveContact = async () => {
     if (!formData.fullName.trim()) { showNotification('Please enter your full name', 'error'); return; }
@@ -815,7 +882,10 @@ const Checkout = () => {
       await saveProfile({
         userId: user?._id || user?.id,
         fullName: formData.fullName, email: formData.email, phone: formData.phone,
-        address: savedAddress.address, city: savedAddress.city, zipCode: savedAddress.zipCode,
+        address: savedAddress.address,
+        barangay: savedAddress.barangay,
+        city: savedAddress.city,
+        zipCode: savedAddress.zipCode,
       });
       showNotification('Contact information saved!', 'success');
     } catch { showNotification('Contact saved locally', 'success'); }
@@ -823,21 +893,28 @@ const Checkout = () => {
 
   const handleSaveAddress = async () => {
     if (!formData.address.trim()) { showNotification('Please enter your street address', 'error'); return; }
-    if (!addressCoords) {
-      showNotification('Please pin your location on the map.', 'error');
-      return;
-    }
-    setSavedAddress({ address: formData.address, city: formData.city, zipCode: formData.zipCode });
+    if (!formData.barangay.trim()) { showNotification('Please enter your barangay', 'error'); return; }
+    if (!formData.city.trim()) { showNotification('Please enter your city', 'error'); return; }
+    if (!formData.zipCode.trim()) { showNotification('Please enter your ZIP code', 'error'); return; }
+    setSavedAddress({
+      address: formData.address,
+      barangay: formData.barangay,
+      city: formData.city,
+      zipCode: formData.zipCode,
+    });
     setIsEditingAddress(false);
     try {
       await saveProfile({
         userId: user?._id || user?.id,
         fullName: savedContact.fullName, email: savedContact.email, phone: savedContact.phone,
-        address: formData.address, city: formData.city, zipCode: formData.zipCode,
+        address: formData.address,
+        barangay: formData.barangay,
+        city: formData.city,
+        zipCode: formData.zipCode,
         ...(addressCoords ? { addressLat: addressCoords.lat, addressLng: addressCoords.lng } : {}),
       });
       showNotification(
-        isOutsideNCR
+        addressCoords && isOutsideNCR
           ? 'Address saved — this order will ship via LBC Express.'
           : 'Shipping address saved!',
         'success'
@@ -882,13 +959,16 @@ const Checkout = () => {
       }
     }
 
+    const isZeroPay = Number(finalTotal || 0) <= 0;
     const payOk = await confirm({
-      title: 'Proceed to payment?',
-      message: `Place this order and continue to PayMongo (GCash / Maya)?\n\nTotal: ₱${Number(finalTotal || 0).toLocaleString('en-PH')}`,
-      confirmLabel: 'Pay Now',
+      title: isZeroPay ? 'Place free order?' : 'Proceed to payment?',
+      message: isZeroPay
+        ? `Place this order?\n\nTotal: ₱0\n${isOutsideNCR ? 'LBC shipping will be arranged with admin separately.' : ''}`
+        : `Place this order and continue to PayMongo (GCash / Maya)?\n\nTotal: ₱${Number(finalTotal || 0).toLocaleString('en-PH')}${isOutsideNCR ? '\n(LBC shipping not included — arrange with admin)' : ''}`,
+      confirmLabel: isZeroPay ? 'Place Order' : 'Pay Now',
       cancelLabel: 'Cancel',
       variant: 'primary',
-      icon: 'fa-credit-card',
+      icon: isZeroPay ? 'fa-gift' : 'fa-credit-card',
       rememberKey: 'dk_skip_checkout_pay_confirm',
       rememberLabel: 'Do not show again',
     });
@@ -934,6 +1014,7 @@ const Checkout = () => {
       const promoItem = rewardOrder ? null : checkoutItems.find(i => i.promoCode);
 
       const addressParts = [savedAddress.address];
+      if (savedAddress.barangay) addressParts.push(`Brgy. ${savedAddress.barangay}`);
       if (savedAddress.city)    addressParts.push(savedAddress.city);
       if (savedAddress.zipCode) addressParts.push(savedAddress.zipCode);
       const shippingAddressStr = addressParts.join(', ');
@@ -977,6 +1058,24 @@ const Checkout = () => {
             checkedOutOrderId: orderId,
           });
         } catch (e) { console.warn('markTicketCheckedOut failed:', e); }
+      }
+
+      // ── ₱0 total (e.g. free reward + LBC arranged offline) — skip PayMongo ──
+      if (Number(finalTotal || 0) <= 0) {
+        try {
+          await markOrderPaid({ orderId, paymentMethod: 'free' });
+        } catch (e) {
+          console.warn('markOrderPaid failed for free order:', e);
+        }
+        showNotification(
+          isOutsideNCR
+            ? 'Order placed! Arrange LBC shipping with admin.'
+            : 'Order placed successfully!',
+          'success'
+        );
+        setLoading(false);
+        navigate(`/order-success?orderId=${encodeURIComponent(orderId)}`);
+        return;
       }
 
       // ── Payment link — PayMongo hosted checkout (GCash / Maya picker) ───
@@ -1078,6 +1177,7 @@ const Checkout = () => {
             email:    savedContact.email,
             phone:    savedContact.phone,
             address:  savedAddress.address,
+            barangay: savedAddress.barangay,
             city:     savedAddress.city,
             zipCode:  savedAddress.zipCode,
             addressLat: addressCoords.lat,
@@ -1247,9 +1347,6 @@ const Checkout = () => {
                       {isAddressComplete() && !isEditingAddress && (
                         <span className="section-complete-badge"><i className="fas fa-check-circle"></i> Saved</span>
                       )}
-                      {isOutsideNCR && (
-                        <span className="section-lbc-badge"><i className="fas fa-box"></i> LBC Express</span>
-                      )}
                     </div>
                   </div>
                   {!isEditingAddress
@@ -1260,15 +1357,25 @@ const Checkout = () => {
                   }
                 </div>
 
-                {isEditingAddress && isOutsideNCR && <LbcDeliveryBanner />}
-
                 {!isEditingAddress ? (
                   <div className="info-display-grid">
                     <div className="info-display-item info-display-full">
                       <span className="info-label"><i className="fas fa-map-marker-alt"></i> Street Address</span>
                       <span className="info-value">{savedAddress.address || <span className="info-missing">Not set — click Edit</span>}</span>
                     </div>
-                    {isOutsideNCR && (
+                    <div className="info-display-item">
+                      <span className="info-label">Barangay</span>
+                      <span className="info-value">{savedAddress.barangay || <span className="info-missing">—</span>}</span>
+                    </div>
+                    <div className="info-display-item">
+                      <span className="info-label">City</span>
+                      <span className="info-value">{savedAddress.city || <span className="info-missing">—</span>}</span>
+                    </div>
+                    <div className="info-display-item">
+                      <span className="info-label">ZIP Code</span>
+                      <span className="info-value">{savedAddress.zipCode || <span className="info-missing">—</span>}</span>
+                    </div>
+                    {isAddressComplete() && addressCoords && isOutsideNCR && (
                       <div className="info-display-item info-display-full" style={{ padding: 0, background: 'transparent', border: 'none' }}>
                         <LbcDeliveryBanner />
                       </div>
@@ -1276,23 +1383,6 @@ const Checkout = () => {
                     {shippingInfo && !isOutsideNCR && (
                       <div className="info-display-item info-display-full" style={{ padding: 0, background: 'transparent', border: 'none' }}>
                         <ShippingBreakdown shippingInfo={shippingInfo} isEstimate={!hasStoreLocation} />
-                      </div>
-                    )}
-                    {isOutsideNCR && lbcShippingInfo && (
-                      <div className="info-display-item info-display-full" style={{ background: '#fff7ed', borderColor: '#fdba74' }}>
-                        <span className="info-label" style={{ color: '#9a3412' }}><i className="fas fa-truck"></i> LBC Shipping</span>
-                        <span className="info-value" style={{ fontSize: '14px', color: '#9a3412', fontWeight: 700 }}>
-                          ₱{lbcShippingInfo.fee.toLocaleString()} flat rate · courier shipping
-                        </span>
-                      </div>
-                    )}
-                    {!shippingInfo && isAddressComplete() && !isOutsideNCR && (
-                      <div className="info-display-item info-display-full" style={{ background: '#fffbeb', borderColor: '#fde68a' }}>
-                        <span className="info-label" style={{ color: '#92400e' }}><i className="fas fa-motorcycle"></i> Shipping Fee</span>
-                        <span className="info-value" style={{ fontSize: '13px', color: '#78350f' }}>
-                          <i className="fas fa-map-marker-alt" style={{ color: '#f59e0b', marginRight: '6px' }}></i>
-                          Pin your location on the map to compute shipping fee
-                        </span>
                       </div>
                     )}
                     {addressCoords && !isOutsideNCR && (
@@ -1317,10 +1407,13 @@ const Checkout = () => {
                 ) : (
                   <div className="form-grid">
                     <div className="form-group full-width">
-                      <label>Street Address</label>
+                      <label>Delivery Address</label>
                       <AddressMapPicker
-                        value={formData.address}
-                        onChange={handleAddressChange}
+                        address={formData.address}
+                        barangay={formData.barangay}
+                        city={formData.city}
+                        zipCode={formData.zipCode}
+                        onFieldsChange={handleAddressFieldsChange}
                         onSelectSuggestion={handleAddressSelect}
                         savedCoords={savedCoords}
                         onNCRViolation={setIsOutsideNCR}
@@ -1336,12 +1429,7 @@ const Checkout = () => {
                     })()}
                     {addressCoords && isOutsideNCR && (
                       <div className="form-group full-width">
-                        <div className="info-display-item info-display-full" style={{ background: '#fff7ed', borderColor: '#fdba74' }}>
-                          <span className="info-label" style={{ color: '#9a3412' }}><i className="fas fa-truck"></i> LBC Shipping</span>
-                          <span className="info-value" style={{ fontSize: '14px', color: '#9a3412', fontWeight: 700 }}>
-                            ₱{LBC_FLAT_SHIPPING_FEE.toLocaleString()} flat rate
-                          </span>
-                        </div>
+                        <LbcDeliveryBanner />
                       </div>
                     )}
                   </div>
@@ -1375,7 +1463,10 @@ const Checkout = () => {
                   <div className="reward-payment-notice">
                     <i className="fas fa-gift"></i>
                     <span>
-                      Your reward item is <strong>FREE</strong> — you only pay for the shipping fee.
+                      {isOutsideNCR
+                        ? <>Your reward item is <strong>FREE</strong> — LBC shipping will be arranged with admin (not charged here).</>
+                        : <>Your reward item is <strong>FREE</strong> — you only pay for the shipping fee.</>
+                      }
                     </span>
                   </div>
                 )}
@@ -1431,7 +1522,11 @@ const Checkout = () => {
                         <div className="reward-order-banner-icon">🎁</div>
                         <div>
                           <strong>Reward Redemption</strong>
-                          <p>This item is free — you only pay for shipping.</p>
+                          <p>
+                            {isOutsideNCR
+                              ? 'Item is free — LBC shipping arranged with admin.'
+                              : 'This item is free — you only pay for shipping.'}
+                          </p>
                         </div>
                       </div>
                       <div className="summary-item summary-item-reward">
@@ -1511,17 +1606,17 @@ const Checkout = () => {
                       )}
                       {isOutsideNCR && (
                         <span style={{ fontSize: '11px', color: '#ea580c', fontWeight: 700, marginLeft: '4px' }}>
-                          · LBC Express
+                          · LBC (arrange with admin)
                         </span>
                       )}
                     </span>
                     <span>
                       {isOutsideNCR
-                        ? <strong style={{ color: '#9a3412' }}>₱{(lbcShippingInfo?.fee ?? LBC_FLAT_SHIPPING_FEE).toLocaleString()}</strong>
+                        ? <strong style={{ color: '#9a3412' }}>Not included</strong>
                         : shippingInfo
                           ? <strong style={{ color: '#1e293b' }}>₱{shippingInfo.fee.toLocaleString()}</strong>
-                          : <span style={{ fontSize: '12px', color: '#f59e0b', fontWeight: 600 }}>
-                              <i className="fas fa-map-marker-alt" style={{ marginRight: '4px' }}></i>Set address first
+                          : <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600 }}>
+                              Add pin to estimate
                             </span>
                       }
                     </span>
@@ -1536,18 +1631,20 @@ const Checkout = () => {
 
                   <div className="summary-row total">
                     <span>Total</span>
-                    <span>
-                      {(isOutsideNCR ? lbcShippingInfo : shippingInfo)
-                        ? `₱${finalTotal.toLocaleString()}`
-                        : <span style={{ fontSize: '15px', color: '#f59e0b' }}>Set address to see total</span>
-                      }
-                    </span>
+                    <span>₱{finalTotal.toLocaleString()}</span>
                   </div>
 
-                  {rewardOrder && (shippingInfo || lbcShippingInfo) && (
+                  {rewardOrder && shippingInfo && !isOutsideNCR && (
                     <div className="reward-shipping-note">
                       <i className="fas fa-info-circle"></i>
                       Item is free — total is shipping only.
+                    </div>
+                  )}
+
+                  {rewardOrder && isOutsideNCR && addressCoords && (
+                    <div className="reward-shipping-note">
+                      <i className="fas fa-info-circle"></i>
+                      Item is free — LBC shipping fee will be arranged with admin.
                     </div>
                   )}
 
@@ -1562,7 +1659,10 @@ const Checkout = () => {
                 {isOutsideNCR && (
                   <div className="lbc-summary-block">
                     <i className="fas fa-truck"></i>
-                    <span>Outside NCR → ships via <strong>LBC Express</strong>. Admin will send your LBC tracking / order ID, then track it on the Track page.</span>
+                    <span>
+                      Outside NCR → <strong>LBC Express</strong>. Shipping fee is not in this payment —
+                      arrange with admin. Tracking ID will be sent after shipping.
+                    </span>
                   </div>
                 )}
 
@@ -1575,9 +1675,11 @@ const Checkout = () => {
                     ? <><i className="fas fa-spinner fa-spin"></i> Processing...</>
                     : !isFormReady()
                       ? <><i className="fas fa-lock"></i> Complete Your Info First</>
-                      : isOutsideNCR
-                        ? <><i className="fas fa-truck"></i> Pay · LBC Shipping</>
-                        : <>Pay</>
+                      : Number(finalTotal || 0) <= 0
+                        ? <><i className="fas fa-gift"></i> Place Free Order</>
+                        : isOutsideNCR
+                          ? <><i className="fas fa-truck"></i> Pay Order</>
+                          : <>Pay</>
                   }
                 </button>
 
@@ -1586,7 +1688,6 @@ const Checkout = () => {
                     <i className="fas fa-exclamation-circle"></i>{' '}
                     {isEditingContact ? 'Click "Save" on Contact Information to continue.'
                       : isEditingAddress ? 'Click "Save" on Shipping Address to continue.'
-                      : !addressCoords ? 'Pin your delivery location on the map to continue.'
                       : 'Fill in and save your contact and address info above.'}
                   </p>
                 )}

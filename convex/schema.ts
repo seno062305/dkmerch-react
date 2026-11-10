@@ -18,6 +18,7 @@ export default defineSchema({
     fullName: v.optional(v.string()),
     phone: v.optional(v.string()),
     address: v.optional(v.string()),
+    barangay: v.optional(v.string()),
     city: v.optional(v.string()),
     zipCode: v.optional(v.string()),
     addressLat: v.optional(v.number()),

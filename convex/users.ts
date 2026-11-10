@@ -49,6 +49,7 @@ export const getProfile = query({
         email: user.email || '',
         phone: user.phone || '',
         address: user.address || '',
+        barangay: user.barangay || '',
         city: user.city || '',
         zipCode: user.zipCode || '',
         addressLat: user.addressLat || null,
@@ -717,6 +718,7 @@ export const saveProfile = mutation({
     email: v.optional(v.string()),
     phone: v.optional(v.string()),
     address: v.optional(v.string()),
+    barangay: v.optional(v.string()),
     city: v.optional(v.string()),
     zipCode: v.optional(v.string()),
     addressLat: v.optional(v.number()),
@@ -730,6 +732,7 @@ export const saveProfile = mutation({
       if (fields.fullName !== undefined) updates.fullName = fields.fullName;
       if (fields.phone !== undefined) updates.phone = fields.phone;
       if (fields.address !== undefined) updates.address = fields.address;
+      if (fields.barangay !== undefined) updates.barangay = fields.barangay;
       if (fields.city !== undefined) updates.city = fields.city;
       if (fields.zipCode !== undefined) updates.zipCode = fields.zipCode;
       if (fields.addressLat !== undefined) updates.addressLat = fields.addressLat;

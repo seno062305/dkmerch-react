@@ -291,7 +291,7 @@ const WaybillModal = ({ order, onClose }) => {
   </div>
   <div class="wb-totals">
     <div class="wb-totals-row"><span>Subtotal</span><strong>₱${Number(subtotal).toLocaleString('en-PH')}</strong></div>
-    <div class="wb-totals-row"><span>Shipping</span><strong>${shippingFee === 0 ? 'FREE' : `₱${Number(shippingFee).toLocaleString('en-PH')}`}</strong></div>
+    <div class="wb-totals-row"><span>Shipping</span><strong>${isLbcOrder(order) ? 'LBC · arrange with customer' : shippingFee === 0 ? 'FREE' : `₱${Number(shippingFee).toLocaleString('en-PH')}`}</strong></div>
     ${promoHtml}
     <div class="wb-totals-row wb-grand"><span>${hasPromo ? 'Total Charged' : 'Total'}</span><strong>₱${Number(finalTotal).toLocaleString('en-PH')}</strong></div>
   </div>
@@ -403,7 +403,7 @@ const WaybillModal = ({ order, onClose }) => {
             </div>
             <div className="wb-totals">
               <div className="wb-totals-row"><span>Subtotal</span><strong>₱{subtotal.toLocaleString('en-PH')}</strong></div>
-              <div className="wb-totals-row"><span>Shipping</span><strong>{shippingFee === 0 ? 'FREE' : `₱${shippingFee.toLocaleString('en-PH')}`}</strong></div>
+              <div className="wb-totals-row"><span>Shipping</span><strong>{isLbcOrder(order) ? 'LBC · arrange with customer' : shippingFee === 0 ? 'FREE' : `₱${shippingFee.toLocaleString('en-PH')}`}</strong></div>
               {hasPromo && <div className="wb-totals-row wb-promo-row"><span>Promo ({order.promoCode})</span><strong>−₱{discount.toLocaleString('en-PH')}</strong></div>}
               <div className="wb-totals-row wb-grand"><span>{hasPromo ? 'Total Charged' : 'Total'}</span><strong>₱{finalTotal.toLocaleString('en-PH')}</strong></div>
             </div>
@@ -991,7 +991,14 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
             <h3><i className="fas fa-calculator"></i> Order Summary</h3>
             <div className="order-totals">
               <div className="total-row"><span>Subtotal:</span><strong>₱{subtotal.toLocaleString('en-PH')}</strong></div>
-              <div className="total-row"><span>Shipping:</span><strong>₱{shippingFee.toLocaleString('en-PH')}</strong></div>
+              <div className="total-row">
+                <span>Shipping:</span>
+                <strong>
+                  {isLbc
+                    ? 'LBC · arrange with customer'
+                    : `₱${shippingFee.toLocaleString('en-PH')}`}
+                </strong>
+              </div>
               {hasPromo && <>
                 <div className="total-row promo-discount-admin-row"><span><i className="fas fa-tag" style={{ marginRight: '6px', color: '#ec4899' }}></i>Promo ({order.promoCode}):</span><strong>−₱{discount.toLocaleString('en-PH')}</strong></div>
                 <div className="total-row"><span style={{ color: '#6b7280' }}>Original:</span><strong style={{ color: '#6b7280', textDecoration: 'line-through' }}>₱{originalTotal.toLocaleString('en-PH')}</strong></div>

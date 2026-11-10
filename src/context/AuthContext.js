@@ -43,6 +43,17 @@ function isSessionAlive() {
   }
 }
 
+/** True when this load is a refresh/reload (not a cold app open). */
+function isPageReload() {
+  try {
+    const nav = performance.getEntriesByType?.("navigation")?.[0];
+    if (nav?.type === "reload") return true;
+    // Legacy Safari / older WebKit
+    if (typeof performance !== "undefined" && performance.navigation?.type === 1) return true;
+  } catch { /* ignore */ }
+  return false;
+}
+
 /** PIN unlock after close is for installed app only — not regular Brave/Chrome tabs. */
 function isStandalonePwa() {
   try {
@@ -84,7 +95,14 @@ export const AuthProvider = ({ children }) => {
     const pwa = isStandalonePwa();
 
     if (storedUser && alive) {
-      // Reload / same tab — stay logged in, no PIN
+      // Same session — stay logged in, no PIN; keep current route/tab
+      setUser(storedUser);
+      setRole(storedUser.role);
+      setIsAuthenticated(true);
+      setNeedsDeviceUnlock(false);
+    } else if (storedUser && !alive && isPageReload()) {
+      // Pull-to-refresh / reload — stay on this page, never show PIN
+      markSessionAlive();
       setUser(storedUser);
       setRole(storedUser.role);
       setIsAuthenticated(true);
