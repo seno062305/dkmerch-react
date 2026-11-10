@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useAuth } from '../context/AuthContext';
@@ -28,6 +28,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
   const [showLightbox, setShowLightbox]         = useState(false);
   const [cartToast, setCartToast]               = useState(false);
   const [expandedReviews, setExpandedReviews]   = useState({});
+  const reviewBoxRef = useRef(null);
 
   const productId = product._id || product.id || '';
 
@@ -100,6 +101,15 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
       window.scrollTo({ top: scrollY, behavior: 'instant' });
     };
   }, [productId]);
+
+  // Keep review box at fixed base height; grow only when text actually overflows
+  useEffect(() => {
+    const el = reviewBoxRef.current;
+    if (!el) return;
+    el.style.height = '72px';
+    const next = Math.min(Math.max(el.scrollHeight, 72), 180);
+    if (next > 72) el.style.height = `${next}px`;
+  }, [review, canLeaveReview]);
 
   const handleDeleteReview = async (reviewId) => {
     const ok = await confirm({
@@ -495,7 +505,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
 
               {/* Review Form only — list is on the left */}
               <div className="review-section">
-                <h3><i className="fas fa-star"></i> {canLeaveReview && hasUserReviewed ? 'Review again' : 'Rate & Review'}</h3>
+                <h3><i className="fas fa-star"></i> Rate & Review</h3>
 
                 {!isAuthenticated ? (
                   <div className="login-to-review">
@@ -535,6 +545,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
                     <div className="review-input">
                       <label>Your Review: ({review.length}/250)</label>
                       <textarea
+                        ref={reviewBoxRef}
                         className="review-comment-box"
                         value={review}
                         rows={3}
@@ -543,11 +554,6 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
                         onChange={(e) => {
                           if (e.target.value.length > 250) return;
                           setReview(e.target.value);
-                          const el = e.target;
-                          el.style.height = '72px';
-                          if (el.scrollHeight > 72) {
-                            el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
-                          }
                         }}
                       />
                     </div>
@@ -556,8 +562,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist }) => {
                       onClick={handleSubmitReview}
                       disabled={rating === 0 || review.trim() === ''}
                     >
-                      <i className="fas fa-paper-plane"></i>{' '}
-                      {hasUserReviewed ? 'Submit new review' : 'Submit Review'}
+                      <i className="fas fa-paper-plane"></i> Submit Review
                     </button>
                   </>
                 )}
