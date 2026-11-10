@@ -101,6 +101,7 @@ const AdminSidebar = ({ onLinkClick, onClose, onToggleCollapse }) => {
   // ✅ Rewards pending redemptions badge
   const allRedemptions  = useQuery(api.rewards.getAllRedemptions) ?? [];
   const pendingRedemptions = allRedemptions.filter(r => r.status === 'pending').length;
+  const chatUnreadCount = useQuery(api.supportChat.getAdminUnreadCount) ?? 0;
 
   const doLogout = () => {
     logout();
@@ -181,7 +182,7 @@ const AdminSidebar = ({ onLinkClick, onClose, onToggleCollapse }) => {
       <div className="admin-logo-container">
         <div className="admin-logo-info">
           <div className="admin-logo">
-            <i className="fas fa-store"></i>
+            <img src="/images/dkmerch-logo-clear.jpg" alt="DKMerch" className="admin-logo-img" />
             <span>DKMerch</span>
           </div>
           <div className="admin-tagline">Admin Dashboard</div>
@@ -239,6 +240,10 @@ const AdminSidebar = ({ onLinkClick, onClose, onToggleCollapse }) => {
         <NavLink to="/admin/rewards" className="admin-nav-link" onClick={handleNavClick}>
           <i className="fas fa-star"></i><span>Rewards</span>
           {pendingRedemptions > 0 && <span className="order-badge">{pendingRedemptions}</span>}
+        </NavLink>
+        <NavLink to="/admin/chat" className="admin-nav-link" onClick={handleNavClick}>
+          <i className="fas fa-comments"></i><span>Chat</span>
+          {chatUnreadCount > 0 && <span className="order-badge">{chatUnreadCount}</span>}
         </NavLink>
         <NavLink to="/admin/settings" className="admin-nav-link" onClick={handleNavClick}>
           <i className="fas fa-tools"></i><span>System Maintenance</span>

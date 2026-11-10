@@ -32,6 +32,14 @@ header {
 }
 
 .logo img { height: 50px; width: auto; border-radius: 8px; }
+.logo-img-clear {
+  height: 48px;
+  width: auto;
+  max-width: 140px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: #fff;
+}
 
 .logo-text { display: flex; flex-direction: column; }
 
@@ -509,6 +517,7 @@ header {
   }
 
   .logo img { height: 38px; border-radius: 8px; }
+  .logo-img-clear { height: 36px; max-width: 110px; }
   .logo-text { display: none; }
 
   .search-container { width: 95%; padding: 0 1rem; }

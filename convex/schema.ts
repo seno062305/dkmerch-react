@@ -383,4 +383,30 @@ export default defineSchema({
   })
     .index("by_email", ["email"])
     .index("by_status", ["status"]),
+
+  // Customer ↔ Admin support chat
+  supportThreads: defineTable({
+    customerEmail: v.string(),
+    customerName: v.string(),
+    customerUserId: v.optional(v.string()),
+    lastMessageAt: v.number(),
+    lastMessagePreview: v.optional(v.string()),
+    unreadByAdmin: v.number(),
+    unreadByCustomer: v.number(),
+    status: v.string(), // open | closed
+    updatedAt: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_customerEmail", ["customerEmail"])
+    .index("by_lastMessageAt", ["lastMessageAt"]),
+
+  supportMessages: defineTable({
+    threadId: v.id("supportThreads"),
+    senderRole: v.string(), // customer | admin
+    senderName: v.string(),
+    senderEmail: v.optional(v.string()),
+    body: v.optional(v.string()),
+    imageStorageId: v.optional(v.id("_storage")),
+    createdAt: v.number(),
+  }).index("by_threadId", ["threadId"]),
 });

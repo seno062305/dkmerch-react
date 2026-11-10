@@ -19,6 +19,8 @@ import TrackOrder from './pages/TrackOrder';
 import Help from './pages/Help';
 import Settings from './pages/Settings';
 import MoreSettings from './pages/MoreSettings';
+import CustomerChat from './pages/CustomerChat';
+import AdminChat from './admin/AdminChat';
 import PromoRedirect from './pages/PromoRedirect';
 import MyPreOrders from './pages/MyPreOrders';
 import RiderTrack from './pages/RiderTrack';
@@ -228,6 +230,7 @@ function AppContent() {
             <Route path="/checkout"      element={<Checkout />} />
             <Route path="/settings"      element={<Settings />} />
             <Route path="/more"          element={<MoreSettings />} />
+            <Route path="/chat"          element={<CustomerChat />} />
             <Route path="/my-orders"     element={<Navigate to="/track-order" replace />} />
             <Route path="/order-success" element={<OrderSuccess />} />
             <Route path="/promo/:code"   element={<PromoRedirect />} />
@@ -260,6 +263,7 @@ function AppContent() {
               <Route path="users"         element={<AdminUsers />} />
               <Route path="riders"        element={<AdminRiders />} />
               <Route path="rewards"       element={<AdminRewards />} />
+              <Route path="chat"          element={<AdminChat />} />
               <Route path="settings"      element={<AdminBackup />} />
               <Route path="backup"        element={<AdminBackup />} />
             </Route>

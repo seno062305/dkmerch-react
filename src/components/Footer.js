@@ -33,7 +33,10 @@ const Footer = () => {
       <div className="container">
         <div className="footer-content">
           <div className="footer-section footer-about">
-            <h3>DKMerch</h3>
+              <div className="footer-brand-row">
+                <img src="/images/dkmerch-logo-clear.jpg" alt="DKMerch" className="footer-logo-img" />
+                <h3>DKMerch</h3>
+              </div>
             <p>Your trusted source for authentic K-Pop merchandise from your favorite groups.</p>
             <div className="social-links">
               {socialLinks.map((social, index) => (

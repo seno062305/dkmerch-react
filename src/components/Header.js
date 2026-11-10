@@ -168,10 +168,10 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
 
             {/* LEFT: Logo */}
             <Link to="/" className="logo">
-              <img src="/images/dklogo.jpg" alt="DKMerch Logo" />
+              <img src="/images/dkmerch-logo-clear.jpg" alt="DKMerch Logo" className="logo-img-clear" />
               <div className="logo-text">
                 <div className="logo-brand">DKMerch</div>
-                <div className="logo-tagline">K-Pop Paradise</div>
+                <div className="logo-tagline">Online Shop</div>
               </div>
             </Link>
 

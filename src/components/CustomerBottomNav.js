@@ -1,11 +1,19 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useQuery } from 'convex/react';
+import { api } from '../../convex/_generated/api';
+import { useAuth } from '../context/AuthContext';
 import './CustomerBottomNav.css';
 
 const CustomerBottomNav = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const path = location.pathname;
+  const { user, isAuthenticated } = useAuth();
+  const unread = useQuery(
+    api.supportChat.getCustomerUnreadCount,
+    isAuthenticated && user?.email ? { customerEmail: user.email } : 'skip'
+  ) || 0;
 
   const isActive = (to) => {
     if (to === '/') return path === '/';
@@ -22,7 +30,7 @@ const CustomerBottomNav = () => {
   };
 
   return (
-    <nav className="customer-bottom-nav" aria-label="Customer navigation">
+    <nav className="customer-bottom-nav customer-bottom-nav--6" aria-label="Customer navigation">
       <a href="/" className={`cbn-item ${isActive('/') ? 'active' : ''}`} onClick={goHome}>
         <i className="fas fa-home"></i>
         <span>Home</span>
@@ -38,6 +46,13 @@ const CustomerBottomNav = () => {
       <Link to="/track-order" className={`cbn-item ${isActive('/track-order') ? 'active' : ''}`}>
         <i className="fas fa-map-marker-alt"></i>
         <span>Track</span>
+      </Link>
+      <Link to="/chat" className={`cbn-item ${isActive('/chat') ? 'active' : ''}`}>
+        <span className="cbn-icon-wrap">
+          <i className="fas fa-comments"></i>
+          {unread > 0 && <em className="cbn-badge">{unread > 9 ? '9+' : unread}</em>}
+        </span>
+        <span>Chat</span>
       </Link>
       <Link to="/more" className={`cbn-item ${isActive('/more') ? 'active' : ''}`}>
         <i className="fas fa-cog"></i>

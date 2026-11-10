@@ -49,6 +49,15 @@
   margin: 0;
 }
 
+.admin-logo-img {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid #fce7f3;
+  flex-shrink: 0;
+}
 .admin-logo i {
   font-size: 22px;
   color: var(--primary-color, #fc1268);
