@@ -131,23 +131,22 @@ export const AuthProvider = ({ children }) => {
     try { appendActivityLog(payload); } catch {}
   };
 
+  // Customers only — admin uses immediate session replace (no Yes/No / false logout)
   const sessionCheck = useQuery(
     api.users.checkUserSession,
-    isAuthenticated && user?._id && user?.sessionId && (user.role === "user" || user.role === "admin")
+    isAuthenticated && user?._id && user?.sessionId && user.role === "user"
       ? { userId: String(user._id), sessionId: String(user.sessionId) }
       : "skip"
   );
 
   /**
    * Pending new-device login while THIS device is still the active session.
-   * Also runs during PIN gate so a tapped push (`?open=loginAlert`) can show
-   * the Yes/No modal on top immediately.
+   * Customers only. Also runs during PIN gate so a tapped push (`?open=loginAlert`)
+   * can show the Yes/No modal on top immediately.
    */
   const pendingLoginAlert = useQuery(
     api.users.getPendingLoginAlert,
-    isAuthenticated
-      && user?._id
-      && (user.role === "user" || user.role === "admin")
+    isAuthenticated && user?._id && user.role === "user"
       ? { userId: String(user._id) }
       : "skip"
   );

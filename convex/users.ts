@@ -177,6 +177,8 @@ export const loginUser = mutation({
         await db.patch(user._id, {
           activeSessionId: sessionId,
           activeDeviceAt: Date.now(),
+          // Never leave a customer-style loginAlert on admin accounts
+          loginAlert: undefined,
         } as any);
         return { success: true, user: safeUser, skipSecondFactor: true, sessionId };
       }
@@ -264,19 +266,20 @@ export const startUserSession = mutation({
       ? String(user.activeSessionId)
       : undefined;
 
-    // First session on this account → activate immediately
-    if (!previousSessionId) {
+    // Admin / first session → activate immediately (no Yes/No gate)
+    if (user.role === "admin" || !previousSessionId) {
       await db.patch(args.userId, {
         activeSessionId: sessionId,
         activeDeviceAt: now,
         activeDeviceName: deviceName,
         activeDeviceLocation: location,
         activeDevicePlatform: platform || undefined,
+        loginAlert: undefined,
       } as any);
       return { success: true, sessionId, pendingApproval: false };
     }
 
-    // Another device is active → pending until that device taps Yes
+    // Customer: another device is active → pending until that device taps Yes
     const alert = {
       sessionId,
       previousSessionId,
@@ -346,10 +349,12 @@ export const getPendingLoginAlert = query({
     if (!id) return null;
     try {
       const user = await db.get(id as any) as any;
-      if (!user?.loginAlert) return null;
+      // Admin never uses the FB-style Yes/No gate
+      if (!user?.loginAlert || user.role === "admin") return null;
       const alert = user.loginAlert;
+      // Only brand-new pending requests (ignore legacy alerts without status)
       if (alert.resolved) return null;
-      if (alert.status && alert.status !== "pending") return null;
+      if (alert.status !== "pending") return null;
       return alert;
     } catch {
       return null;

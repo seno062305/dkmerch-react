@@ -19,6 +19,7 @@ import { useNotification } from "../context/NotificationContext";
 import { useCloseOnHistoryBack } from "../hooks/useCloseOnHistoryBack";
 // Static import — lazy chunk breaks Create Account after HMR / stale builds
 import RegisterModal from "./RegisterModal";
+import { WaitingApprovalModal, LoginDeniedModal } from "./LoginApprovalModals";
 
 function formatQuickSignInCode(token) {
   const t = String(token || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -1175,77 +1176,46 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
       finishLogin(userPayload?.role || "user");
       return;
     }
-    if (status === "denied" || status === "expired") {
+    if (status === "denied") {
       clearPendingLogin();
       setLoginDenied(true);
+      return;
     }
-  }, [loginApprovalStatus, awaitingApproval, loginDenied, finalizePendingLogin]);
+    if (status === "expired" || status === "missing") {
+      clearPendingLogin();
+      setAwaitingApproval(null);
+      setLoginDenied(false);
+      setMustAuthenticate(false);
+      try { onClose?.(); } catch { /* ignore */ }
+    }
+  }, [loginApprovalStatus, awaitingApproval, loginDenied, finalizePendingLogin, onClose]);
 
   if (showRegister) {
     return <RegisterModal onClose={handleRegisterSuccess} />;
   }
 
   // ════════════════════════════════════════════════════════════════════
-  //  WAITING / DENIED — new device until other device taps Yes / No
+  //  WAITING / DENIED — popup modal only on the device trying to log in
   // ════════════════════════════════════════════════════════════════════
   if (awaitingApproval && !loginDenied) {
-    return createPortal(
-      <div className="pin-unlock-screen pin-switch-login" role="dialog" aria-modal="true" aria-label="Waiting for approval">
-        <div className="pin-unlock-top">
-          <div className="pin-unlock-brand">
-            <img src="/images/dklogo2-removebg-preview.png" alt="" className="pin-unlock-logo" />
-            <span>DKMERCH</span>
-          </div>
-          <div className="pin-await-icon" aria-hidden="true">
-            <i className="fas fa-mobile-alt" />
-          </div>
-          <h2 className="pin-unlock-title">Waiting for approval</h2>
-          <p className="pin-unlock-hint">
-            Confirm this login on your other device. You won’t get into DKMerch until they tap Yes, it’s me.
-          </p>
-        </div>
-        <div className="pin-await-pulse" aria-hidden="true" />
-        <p className="pin-await-note">Keep this screen open — we’ll continue automatically.</p>
-      </div>,
-      document.body
-    );
+    return <WaitingApprovalModal />;
   }
 
   if (loginDenied) {
-    return createPortal(
-      <div className="pin-unlock-screen pin-switch-login" role="dialog" aria-modal="true" aria-label="Login denied">
-        <div className="pin-unlock-top">
-          <div className="pin-unlock-brand">
-            <img src="/images/dklogo2-removebg-preview.png" alt="" className="pin-unlock-logo" />
-            <span>DKMERCH</span>
-          </div>
-          <div className="pin-await-icon pin-await-icon--deny" aria-hidden="true">
-            <i className="fas fa-user-slash" />
-          </div>
-          <h2 className="pin-unlock-title">It’s not your account</h2>
-          <p className="pin-unlock-hint">
-            The owner of this account blocked this login. You were not signed in.
-          </p>
-        </div>
-        <button
-          type="button"
-          className="pin-switch-submit"
-          onClick={() => {
-            setLoginDenied(false);
-            setAwaitingApproval(null);
-            clearPendingLogin();
-            setMustAuthenticate(false);
-            setDeviceUnlockMode(false);
-            setPendingUser(null);
-            setPinValue("");
-            setView("login");
-            try { onClose?.(); } catch { /* ignore */ }
-          }}
-        >
-          Close
-        </button>
-      </div>,
-      document.body
+    return (
+      <LoginDeniedModal
+        onClose={() => {
+          setLoginDenied(false);
+          setAwaitingApproval(null);
+          clearPendingLogin();
+          setMustAuthenticate(false);
+          setDeviceUnlockMode(false);
+          setPendingUser(null);
+          setPinValue("");
+          setView("login");
+          try { onClose?.(); } catch { /* ignore */ }
+        }}
+      />
     );
   }
 

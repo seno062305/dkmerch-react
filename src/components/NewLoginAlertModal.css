@@ -142,3 +142,17 @@
   line-height: 1.4;
   color: #6b7280;
 }
+
+.nla-wait-spinner {
+  width: 36px;
+  height: 36px;
+  margin: 8px auto 4px;
+  border-radius: 50%;
+  border: 3px solid #fce7f3;
+  border-top-color: #fc1268;
+  animation: nla-spin 0.85s linear infinite;
+}
+
+@keyframes nla-spin {
+  to { transform: rotate(360deg); }
+}
