@@ -486,10 +486,26 @@
 }
 
 @media (max-width: 768px) {
-  .collections-header { padding: 40px 20px; }
-  .collections-header h1 { font-size: 28px; }
-  .collections-filters { padding: 16px; }
-  .results-count { padding: 15px 20px; }
+  .collections-page { padding-bottom: 72px; }
+  .collections-header {
+    padding: 10px 16px 6px;
+  }
+  .collections-header h1 {
+    font-size: 22px;
+    margin-bottom: 4px;
+    line-height: 1.2;
+  }
+  .collections-header p {
+    font-size: 13px;
+    margin: 0;
+    line-height: 1.35;
+  }
+  .collections-search-wrap {
+    margin: 8px auto 12px;
+    padding: 0 12px;
+  }
+  .collections-filters { padding: 12px; }
+  .results-count { padding: 10px 12px; }
   .collections-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     padding-bottom: 88px;
@@ -558,8 +574,16 @@
 }
 
 @media (max-width: 576px) {
-  .collections-header h1 { font-size: 24px; }
-  .collections-header p { font-size: 14px; }
+  .collections-header {
+    padding: 8px 12px 4px;
+  }
+  .collections-header h1 { font-size: 20px; margin-bottom: 2px; }
+  .collections-header p { font-size: 12px; }
+  .collections-search-wrap {
+    margin: 6px auto 10px;
+    padding: 0 10px;
+  }
+  .collections-filters { padding: 10px; }
   .collections-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     padding-bottom: 96px;

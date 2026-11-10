@@ -366,37 +366,37 @@ const AdminDashboard = () => {
             <h3>Store / Pickup Location</h3>
           </div>
         </div>
-        <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <div className="dash-store-form" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>
             Used as the starting point for shipping fees in Checkout and rider pickup.
           </p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <div className="dash-store-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
               <label style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>Store Name</label>
               <input type="text" name="storeName" value={storeForm.storeName} onChange={handleStoreFormChange}
                 placeholder="DKMerch Store"
-                style={{ padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '13px' }} />
+                style={{ padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '13px', width: '100%', boxSizing: 'border-box' }} />
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
               <label style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>Store Address</label>
               <input type="text" name="storeAddress" value={storeForm.storeAddress} onChange={handleStoreFormChange}
                 placeholder="Full store address"
-                style={{ padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '13px' }} />
+                style={{ padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '13px', width: '100%', boxSizing: 'border-box' }} />
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
               <label style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>Latitude</label>
               <input type="number" name="storeLat" value={storeForm.storeLat} onChange={handleStoreFormChange}
                 placeholder="e.g. 14.5995" step="0.00001"
-                style={{ padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '13px' }} />
+                style={{ padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '13px', width: '100%', boxSizing: 'border-box' }} />
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
               <label style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>Longitude</label>
               <input type="number" name="storeLng" value={storeForm.storeLng} onChange={handleStoreFormChange}
                 placeholder="e.g. 120.9842" step="0.00001"
-                style={{ padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '13px' }} />
+                style={{ padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '13px', width: '100%', boxSizing: 'border-box' }} />
             </div>
           </div>
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div className="dash-store-actions" style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
             <button onClick={handleDetectLocation} disabled={storeLocating}
               style={{ padding: '9px 16px', borderRadius: '8px', border: '1.5px solid #3b82f6', background: '#eff6ff', color: '#2563eb', fontWeight: 600, fontSize: '13px', cursor: storeLocating ? 'not-allowed' : 'pointer' }}>
               <i className={storeLocating ? 'fas fa-spinner fa-spin' : 'fas fa-crosshairs'}></i>{' '}

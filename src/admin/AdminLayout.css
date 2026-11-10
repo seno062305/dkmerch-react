@@ -307,31 +307,40 @@
   }
   .mobile-overlay { display: none !important; }
 
+  .admin-layout.admin-layout--bnav {
+    overflow-x: hidden;
+  }
+
   .admin-content {
     margin-left: 0 !important;
-    padding: 16px 12px calc(84px + env(safe-area-inset-bottom, 0px)) 12px !important;
+    padding: 12px 10px calc(88px + env(safe-area-inset-bottom, 0px)) 10px !important;
     z-index: 1;
     min-height: 100vh;
     max-width: 100vw;
     width: 100%;
     overflow-x: hidden;
     box-sizing: border-box;
+    position: relative;
   }
 
-  /* Children never wider than viewport */
+  /* Children never wider than viewport — prevent cut-off/overlap */
   .admin-content > *,
   .admin-content section,
+  .admin-content .admin-dashboard,
   .admin-content .admin-orders-page,
   .admin-content .admin-products-page,
   .admin-content .admin-users-page {
     max-width: 100%;
     min-width: 0;
+    width: 100%;
     box-sizing: border-box;
+    position: relative;
+    z-index: auto;
   }
 
   .admin-layout.sidebar-collapsed .admin-content {
     margin-left: 0 !important;
-    padding-top: 16px !important;
+    padding-top: 12px !important;
   }
 
   .admin-content button,
