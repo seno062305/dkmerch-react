@@ -50,7 +50,13 @@ export const getAllUserPoints = query({
   },
 });
 
-/** Shared DB helper — also used from payments.markOrderPaid when order becomes paid. */
+function isOrderDelivered(order: any): boolean {
+  const st = String(order?.orderStatus || order?.status || "").toLowerCase().trim();
+  if (order?.deliveryConfirmedAt || order?.deliveryOtpVerified) return true;
+  return st === "completed" || st === "delivered";
+}
+
+/** Shared DB helper — called when customer claims points after delivery. */
 export async function awardPointsForOrderDb(
   db: any,
   {
@@ -110,6 +116,78 @@ export const awardPointsForOrder = mutation({
     orderTotal: v.number(),
   },
   handler: async ({ db }, args) => awardPointsForOrderDb(db, args),
+});
+
+/** Delivered orders that still have unclaimed loyalty points. */
+export const getPendingPointsClaims = query({
+  args: { email: v.string() },
+  handler: async ({ db }, { email }) => {
+    const normalized = String(email || "").trim().toLowerCase();
+    if (!normalized) return [];
+
+    // Scan recent orders — email casing in DB may not match auth email
+    const recent = await db.query("orders").order("desc").take(400);
+    const pending: {
+      orderId: string;
+      orderTotal: number;
+      points: number;
+      deliveredAt?: string;
+      customerName?: string;
+    }[] = [];
+
+    for (const order of recent) {
+      if (!order?.orderId) continue;
+      if (String(order.email || "").trim().toLowerCase() !== normalized) continue;
+      if (order.pointsAwarded || order.isRewardOrder) continue;
+      if (!isOrderDelivered(order)) continue;
+      const orderTotal = Number(order.finalTotal ?? order.total ?? 0);
+      const points = getPointsForTotal(orderTotal);
+      if (points <= 0) continue;
+      pending.push({
+        orderId: order.orderId,
+        orderTotal,
+        points,
+        deliveredAt: order.deliveryConfirmedAt,
+        customerName: order.customerName,
+      });
+    }
+
+    return pending;
+  },
+});
+
+/** Customer taps Claim after delivery verification. */
+export const claimOrderPoints = mutation({
+  args: {
+    email: v.string(),
+    userName: v.optional(v.string()),
+    orderId: v.string(),
+  },
+  handler: async ({ db }, { email, userName, orderId }) => {
+    const normalized = String(email || "").trim().toLowerCase();
+    const order = await db
+      .query("orders")
+      .withIndex("by_orderId", (q) => q.eq("orderId", orderId))
+      .first();
+
+    if (!order) return { success: false, reason: "not_found" as const };
+    if (order.pointsAwarded) return { success: false, reason: "already_awarded" as const };
+    if (order.isRewardOrder) return { success: false, reason: "reward_order" as const };
+    if (!isOrderDelivered(order)) return { success: false, reason: "not_delivered" as const };
+
+    const orderEmail = String(order.email || "").trim().toLowerCase();
+    if (!orderEmail || orderEmail !== normalized) {
+      return { success: false, reason: "unauthorized" as const };
+    }
+
+    const orderTotal = Number(order.finalTotal ?? order.total ?? 0);
+    return await awardPointsForOrderDb(db, {
+      email: normalized,
+      userName: userName || order.customerName || "Customer",
+      orderId,
+      orderTotal,
+    });
+  },
 });
 
 export const redeemPoints = mutation({

@@ -329,6 +329,27 @@ export const updateOrderFields = mutation({
       });
     }
 
+    // Delivery verified → notify customer they can claim loyalty points
+    const becameDelivered =
+      (filtered.orderStatus === 'completed' || filtered.deliveryOtpVerified === true) &&
+      !order.pointsAwarded &&
+      !order.isRewardOrder &&
+      !!order.email;
+    if (becameDelivered) {
+      const orderTotal = Number(order.finalTotal ?? order.total ?? 0);
+      let pts = 5;
+      if (orderTotal >= 5000) pts = 25;
+      else if (orderTotal >= 3000) pts = 20;
+      else if (orderTotal >= 2000) pts = 15;
+      else if (orderTotal >= 1000) pts = 10;
+      await scheduler.runAfter(0, internal.webPush.sendToEmail, {
+        email: order.email,
+        title: `You earned ${pts} pts! ⭐`,
+        body: `Order #${orderId.slice(-8).toUpperCase()} delivered — open DKMerch to claim your points.`,
+        url: `/?claimPoints=${encodeURIComponent(orderId)}`,
+      });
+    }
+
     await db.patch(order._id, filtered);
     return { success: true };
   },

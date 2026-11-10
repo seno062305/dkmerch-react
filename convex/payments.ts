@@ -2,7 +2,6 @@
 import { action, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { api } from "./_generated/api";
-import { awardPointsForOrderDb } from "./rewards";
 
 // ✅ Works in both Node.js and Convex edge runtime (no Buffer dependency)
 function toBase64(str: string): string {
@@ -164,10 +163,6 @@ export const checkPaymentStatus = action({
   handler: async (ctx, { orderId }) => {
     const order = await ctx.runQuery(api.orders.getOrderById, { orderId });
     if (order?.paymentStatus === "paid") {
-      // Backfill points for older paid orders that never received them
-      if (!order.pointsAwarded) {
-        await ctx.runMutation(api.payments.markOrderPaid, { orderId });
-      }
       return { status: "paid", paymentMethod: order.paymentMethod || "" };
     }
 
@@ -234,17 +229,7 @@ export const markOrderPaid = mutation({
       await db.patch(order._id, { paymentMethod });
     }
 
-    // Award loyalty points once payment succeeds (idempotent via pointsAwarded)
-    if (order.email && !order.pointsAwarded) {
-      const orderTotal = Number(order.finalTotal ?? order.total ?? 0);
-      await awardPointsForOrderDb(db, {
-        email: order.email,
-        userName: order.customerName || "Customer",
-        orderId,
-        orderTotal,
-      });
-    }
-
+    // Points are claimable only after delivery is verified (see rewards.claimOrderPoints)
     return { success: true };
   },
 });

@@ -472,7 +472,7 @@ const CartModal = ({ cart, onClose }) => {
                     <div className="cart-points-banner">
                       <span className="cart-points-icon">⭐</span>
                       <span>
-                        Complete this order to earn <strong>{pointsToEarn} pts</strong>
+                        After delivery you can claim <strong>{pointsToEarn} pts</strong>
                         {' '}toward a free reward!
                       </span>
                     </div>

@@ -35,6 +35,7 @@ import CartModal from './components/CartModal';
 import ProductModal from './components/ProductModal';
 import WishlistPage from './components/WishlistPage';
 import AppUpdateModal from './components/AppUpdateModal';
+import PointsClaimModal from './components/PointsClaimModal';
 
 import AdminLayout from './admin/AdminLayout';
 import AdminDashboard from './admin/AdminDashboard';
@@ -341,6 +342,7 @@ function AppContent() {
           {!hideHeaderFooter && !hideFooterOnly && <Footer />}
           {showCustomerNav && <CustomerBottomNav />}
           {showChatBot && <DKMerchChatBot />}
+          <PointsClaimModal />
 
           {showLoginModal && (
             <React.Suspense fallback={null}>
