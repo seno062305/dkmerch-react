@@ -500,6 +500,95 @@ export const sendOrderConfirmation = action({
   },
 });
 
+// ── WELCOME PROMO — send active promos to a newly registered user ─────────────
+
+export const sendWelcomePromosToUser = internalAction({
+  args: {
+    email: v.string(),
+    name: v.string(),
+  },
+  handler: async (ctx, args): Promise<{ success: boolean; sent: boolean; count: number }> => {
+    const email = String(args.email || "").trim().toLowerCase();
+    if (!email) return { success: false, sent: false, count: 0 };
+
+    const promos: {
+      code: string;
+      name: string;
+      discount: number;
+      maxDiscount: number;
+      startDate?: string;
+      startTime?: string;
+      endDate?: string;
+      endTime?: string;
+    }[] = await ctx.runQuery(internal.promos.getActivePromosInternal, {});
+
+    if (!promos?.length) return { success: true, sent: false, count: 0 };
+
+    const name = args.name || "K-Pop fan";
+    const cards = promos
+      .slice(0, 5)
+      .map((p) => {
+        const endBit = p.endDate
+          ? `<div style="font-size:12px;color:#6b7280;margin-top:8px;">Valid until ${p.endDate}${p.endTime ? ` • ${p.endTime}` : ""}</div>`
+          : "";
+        return `
+          <div style="background:linear-gradient(135deg,#fdf2f8,#f5f3ff);border:2px dashed #ec4899;border-radius:14px;padding:18px;margin:0 0 14px;text-align:center;">
+            <div style="font-size:12px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">${p.name}</div>
+            <div style="font-family:'Courier New',monospace;font-size:28px;font-weight:900;color:#ec4899;letter-spacing:3px;margin-bottom:8px;">${p.code}</div>
+            <div style="display:inline-block;background:linear-gradient(135deg,#9333ea,#ec4899);color:white;border-radius:8px;padding:8px 14px;font-size:14px;font-weight:700;">
+              ${p.discount}% OFF${p.maxDiscount ? ` · up to ₱${Number(p.maxDiscount).toLocaleString()}` : ""}
+            </div>
+            ${endBit}
+          </div>
+        `;
+      })
+      .join("");
+
+    const html = `
+      <div style="font-family:'Segoe UI',sans-serif;max-width:580px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.12);">
+        <div style="background:linear-gradient(135deg,#fc1268,#9c27b0);padding:36px 28px;text-align:center;">
+          <div style="font-size:42px;margin-bottom:8px;">🎉</div>
+          <h1 style="color:white;margin:0 0 6px;font-size:26px;font-weight:900;">Welcome to DKMerch!</h1>
+          <p style="color:rgba(255,255,255,0.9);margin:0;font-size:15px;">Your account is ready — here are live promos for you</p>
+        </div>
+        <div style="padding:28px 28px 20px;">
+          <p style="color:#374151;font-size:15px;margin:0 0 18px;">Hi <strong>${name}</strong>! We have <strong>${promos.length}</strong> active promo${promos.length > 1 ? "s" : ""} right now. Use a code at checkout:</p>
+          ${cards}
+          <div style="text-align:center;margin-top:8px;">
+            <a href="${SITE_URL}/collections" style="display:inline-block;background:linear-gradient(135deg,#fc1268,#e0105a);color:white;text-decoration:none;padding:14px 32px;border-radius:10px;font-size:15px;font-weight:700;">
+              Shop now
+            </a>
+          </div>
+        </div>
+        <div style="background:#f8f9fa;padding:14px;text-align:center;border-top:1px solid #e9ecef;">
+          <p style="color:#aaa;font-size:12px;margin:0;">© 2026 DKMerch · K-Pop Paradise</p>
+        </div>
+      </div>
+    `;
+
+    await ctx.runAction(internal.sendEmail.sendEmail, {
+      to: email,
+      subject: `🎉 Welcome to DKMerch — ${promos.length} promo${promos.length > 1 ? "s" : ""} waiting for you!`,
+      html,
+    });
+
+    // Best-effort phone push if they already subscribed (usually after first login)
+    try {
+      const top = promos[0];
+      await ctx.runAction(internal.webPush.sendToEmail, {
+        email,
+        title: "Welcome! Active promos 🎉",
+        body: top
+          ? `Use code ${top.code} for ${top.discount}% off — and more inside DKMerch.`
+          : "Check DKMerch for live promo codes.",
+        url: "/collections",
+      });
+    } catch { /* ignore */ }
+
+    return { success: true, sent: true, count: promos.length };
+  },
+});
+
 // ── PROMO NOTIFICATION — blast to all registered users ────────────────────────
 
 export const sendPromoNotificationToAllUsers = internalAction({

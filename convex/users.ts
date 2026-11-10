@@ -388,12 +388,27 @@ export const registerPendingUser = mutation({
   },
 });
 
+async function scheduleWelcomePromoNotif(
+  scheduler: { runAfter: (ms: number, fn: any, args: any) => Promise<any> },
+  email: string,
+  name: string
+) {
+  try {
+    await scheduler.runAfter(0, internal.sendEmail.sendWelcomePromosToUser, {
+      email: String(email || "").trim().toLowerCase(),
+      name: name || "Customer",
+    });
+  } catch (err) {
+    console.error("Failed to schedule welcome promo notification:", err);
+  }
+}
+
 export const verifyOtpAndCreateUser = mutation({
   args: {
     email: v.string(),
     otp: v.string(),
   },
-  handler: async ({ db }, { email, otp }) => {
+  handler: async ({ db, scheduler }, { email, otp }) => {
     const pending = await db
       .query("pendingUsers")
       .withIndex("by_email", q => q.eq("email", email))
@@ -435,6 +450,7 @@ export const verifyOtpAndCreateUser = mutation({
     });
 
     await db.delete(pending._id);
+    await scheduleWelcomePromoNotif(scheduler, pending.email, pending.name);
 
     return { success: true, userId };
   },
@@ -464,7 +480,7 @@ export const resendOtp = mutation({
 
 export const verifyEmailAndCreateUser = mutation({
   args: { token: v.string() },
-  handler: async ({ db }, { token }) => {
+  handler: async ({ db, scheduler }, { token }) => {
     const pending = await db
       .query("pendingUsers")
       .withIndex("by_token", q => q.eq("token", token))
@@ -499,6 +515,7 @@ export const verifyEmailAndCreateUser = mutation({
     });
 
     await db.delete(pending._id);
+    await scheduleWelcomePromoNotif(scheduler, pending.email, pending.name);
 
     return { success: true, userId };
   },
@@ -561,7 +578,7 @@ export const createUser = mutation({
     role: v.optional(v.string()),
     fingerprint: v.optional(v.string()),
   },
-  handler: async ({ db }, args) => {
+  handler: async ({ db, scheduler }, args) => {
     const existingEmail = await db
       .query("users")
       .withIndex("by_email", q => q.eq("email", args.email))
@@ -617,14 +634,19 @@ export const createUser = mutation({
       };
     }
 
+    await scheduleWelcomePromoNotif(scheduler, args.email, args.name);
     return { success: true, id };
   },
 });
 
 export const activateUser = mutation({
   args: { id: v.id("users") },
-  handler: async ({ db }, { id }) => {
+  handler: async ({ db, scheduler }, { id }) => {
+    const user = await db.get(id);
     await db.patch(id, { status: "active", suspendReason: undefined });
+    if (user?.email) {
+      await scheduleWelcomePromoNotif(scheduler, user.email, user.name || user.username || "Customer");
+    }
     return { success: true };
   },
 });

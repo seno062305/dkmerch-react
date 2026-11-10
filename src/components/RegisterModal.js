@@ -2,14 +2,17 @@
 import React, { useState, useEffect, useRef } from "react";
 import "./RegisterModal.css";
 import { useAuth } from "../context/AuthContext";
-import { useMutation, useAction } from "convex/react";
+import { useMutation, useAction, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { appendActivityLog } from "../admin/lib/localActivityLog";
 import { savePinWithFallback } from "../lib/localPin";
 import { runWithFailover } from "../lib/failoverWrite";
+import { useNotification } from "../context/NotificationContext";
 
 const RegisterModal = ({ onClose }) => {
   const { register, completeLogin } = useAuth();
+  const { showNotification } = useNotification();
+  const activePromos = useQuery(api.promos.getActivePromos) ?? [];
 
   const [view, setView] = useState("register"); // "register" | "otp" | "createPin" | "forgot"
 
@@ -294,6 +297,14 @@ const RegisterModal = ({ onClose }) => {
         } catch {}
         setPendingUserId(result.userId);
         setOtpSuccess("✅ Email verified! Create your login PIN next.");
+        if (activePromos.length > 0) {
+          const top = activePromos[0];
+          const more = activePromos.length > 1 ? ` (+${activePromos.length - 1} more)` : "";
+          showNotification(
+            `Promo available: use ${top.code} for ${top.discount}% off${more}. Check your email too!`,
+            "success"
+          );
+        }
         setPinDigits(["", "", "", "", "", ""]);
         setPinConfirmDigits(["", "", "", "", "", ""]);
         setPinStep(0);

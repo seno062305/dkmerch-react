@@ -1,5 +1,5 @@
 // convex/promos.ts
-import { query, mutation } from "./_generated/server";
+import { query, mutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 
@@ -59,6 +59,26 @@ export const getActivePromos = query(async ({ db }) => {
   const nowMs = Date.now();
   const promos = await db.query("promos").order("desc").collect();
   return promos.filter((p) => isPromoValid(p, nowMs).valid);
+});
+
+/** Internal: active promos for welcome emails to newly registered users */
+export const getActivePromosInternal = internalQuery({
+  handler: async ({ db }) => {
+    const nowMs = Date.now();
+    const promos = await db.query("promos").order("desc").collect();
+    return promos
+      .filter((p) => isPromoValid(p, nowMs).valid)
+      .map((p) => ({
+        code: p.code,
+        name: p.name,
+        discount: p.discount,
+        maxDiscount: p.maxDiscount ?? 0,
+        startDate: p.startDate,
+        startTime: p.startTime,
+        endDate: p.endDate,
+        endTime: p.endTime,
+      }));
+  },
 });
 
 // ── Validate promo code ──
