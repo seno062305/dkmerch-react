@@ -981,7 +981,6 @@ const RiderDashboard = () => {
   const updateRiderLocation = useMutation(api.riders.updateRiderLocation);
   const updateRiderLocationsBatch = useMutation(api.riders.updateRiderLocationsBatch);
   const stopRiderTracking   = useMutation(api.riders.stopRiderTracking);
-  const stopRiderTrackingWithAlert = useMutation(api.riders.stopRiderTrackingWithAlert);
   const setRiderKickedAt    = useMutation(api.riders.setRiderKickedAt);
   const resetPasswordByEmail  = useMutation(api.riders.resetRiderPasswordByEmail);
   const sendPasswordResetCode = useAction(api.sendEmail.sendPasswordResetCode);
@@ -1193,24 +1192,6 @@ const RiderDashboard = () => {
     });
     setTrackingOrderId(orderId || ids[0] || null);
   }, [riderInfo, user, updateRiderLocation, updateRiderLocationsBatch, myDeliveries]);
-
-  const stopTrackingLocal = useCallback(async () => {
-    const ids = GPS.activeOrderIds();
-    const name = riderInfo?.fullName || 'Rider';
-    GPS.stopLocal();
-    setTrackingOrderId(null);
-    setCurrentPosition(null);
-    if (ids.length) {
-      try {
-        await stopRiderTrackingWithAlert({
-          orderIds: ids,
-          riderName: name,
-          riderEmail: user?.email,
-          reason: 'Live GPS was turned off in the rider app',
-        });
-      } catch (e) { console.error(e); }
-    }
-  }, [riderInfo, user, stopRiderTrackingWithAlert]);
 
   const stopTrackingOnDelivery = useCallback(async (orderId) => {
     // Completing one delivery — stop that order quietly; keep GPS for other OFD jobs
@@ -1824,32 +1805,15 @@ const RiderDashboard = () => {
                                   <div className="rider-gps-status-row">
                                     <span className="rider-gps-dot"></span>
                                     <span>
-                                      Live for customer &amp; admin
+                                      Live for customer &amp; admin — stays on until delivery is confirmed
                                       {currentPosition && <> · <strong>±{Math.round(currentPosition.accuracy || 0)}m</strong></>}
                                       {GPS.locationSource() === 'ip' && <> · <strong>approx (network)</strong></>}
                                     </span>
                                   </div>
                                   {currentPosition && <div className="rider-gps-coords"><i className="fas fa-crosshairs"></i>{currentPosition.lat.toFixed(6)}, {currentPosition.lng.toFixed(6)}</div>}
-                                  <button
-                                    type="button"
-                                    className="rider-gps-stop-btn"
-                                    onClick={async () => {
-                                      const ok = await confirm({
-                                        title: 'Turn off GPS?',
-                                        message: 'Customer and admin will be notified that you turned off live location. Last known pin stays on the map.',
-                                        confirmLabel: 'Turn Off GPS',
-                                        cancelLabel: 'Keep On',
-                                        variant: 'danger',
-                                        icon: 'fa-map-marker-alt',
-                                      });
-                                      if (ok) await stopTrackingLocal();
-                                    }}
-                                  >
-                                    <i className="fas fa-map-marker-slash"></i> Turn Off GPS
-                                  </button>
                                 </>
                               ) : (
-                                <p className="rider-gps-desc">Location sharing starts automatically after you notify the customer. GPS On shows on every On the Way delivery.</p>
+                                <p className="rider-gps-desc">Location sharing starts automatically after you notify the customer and stays on until delivery is confirmed.</p>
                               )}
                             </div>
                           )}

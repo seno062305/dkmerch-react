@@ -233,6 +233,59 @@ export const acceptOrder = mutation({
   },
 });
 
+async function resetClaimedOrderToAvailable(db: any, order: any, orderId: string, pickups: any[]) {
+  for (const p of pickups.filter((x: any) => x.orderId === orderId || (order && x.orderId === order.orderId))) {
+    await db.delete(p._id);
+  }
+
+  const locs = await db
+    .query("riderLocations")
+    .withIndex("by_orderId", (q) => q.eq("orderId", orderId))
+    .collect();
+  for (const loc of locs) {
+    await db.delete(loc._id);
+  }
+  if (order?.orderId && order.orderId !== orderId) {
+    const locs2 = await db
+      .query("riderLocations")
+      .withIndex("by_orderId", (q) => q.eq("orderId", order.orderId))
+      .collect();
+    for (const loc of locs2) {
+      await db.delete(loc._id);
+    }
+  }
+
+  if (order) {
+    const {
+      riderId: _r,
+      riderInfo: _ri,
+      outForDeliveryAt: _ofd,
+      riderGpsLink: _link,
+      riderLinkSessionId: _sid,
+      riderLinkSessionAt: _sat,
+      riderLinkDeviceInfo: _dev,
+      deliveryOtp: _otp,
+      deliveryOtpVerified: _otpv,
+      deliveryConfirmedAt: _dca,
+      deliveryProofUrl: _dpu,
+      ...rest
+    } = order as any;
+    await db.replace(order._id, {
+      ...rest,
+      orderStatus: "confirmed",
+      status: "Confirmed",
+    });
+  }
+
+  return {
+    success: true,
+    orderId: order?.orderId || orderId,
+    shortId: String(order?.orderId || orderId).slice(-8).toUpperCase(),
+    total: order?.finalTotal ?? order?.total ?? null,
+    message: `Order #${String(order?.orderId || orderId).slice(-8).toUpperCase()} is back on Available.`,
+  };
+}
+
 /** Dev/test helper: put the latest claimed delivery back to Available (confirmed). */
 export const resetLatestClaimedToAvailable = mutation({
   args: {},
@@ -247,46 +300,42 @@ export const resetLatestClaimedToAvailable = mutation({
 
     const order = await findOrderByIdOrShort(db, claimed.orderId);
     const orderId = order?.orderId || claimed.orderId;
+    return await resetClaimedOrderToAvailable(db, order, orderId, pickups);
+  },
+});
 
-    // Remove all pickups for this order
-    for (const p of pickups.filter((x: any) => x.orderId === orderId)) {
-      await db.delete(p._id);
-    }
+/** Dev/test helper: reset a claimed/completed order matching a total amount back to Available. */
+export const resetOrderByTotalToAvailable = mutation({
+  args: { total: v.number() },
+  handler: async ({ db }, { total }) => {
+    const target = Number(total);
+    const pickups = await db.query("pickupRequests").order("desc").collect();
+    const orders = await db.query("orders").order("desc").collect();
 
-    // Clear live GPS so customer/admin maps stop showing this rider
-    const locs = await db
-      .query("riderLocations")
-      .withIndex("by_orderId", (q) => q.eq("orderId", orderId))
-      .collect();
-    for (const loc of locs) {
-      await db.delete(loc._id);
-    }
+    // Prefer active claimed pickups with this total, then any order with this total
+    const claimedPickup = pickups.find((p: any) => {
+      const t = Number(p.total ?? 0);
+      return Math.abs(t - target) < 0.01 && ["approved", "out_for_delivery", "completed", "scanned"].includes(p.status);
+    });
 
-    if (order) {
-      // Rebuild doc without rider/delivery fields so admin + customer maps clear
-      const {
-        riderId: _r,
-        riderInfo: _ri,
-        outForDeliveryAt: _ofd,
-        riderGpsLink: _link,
-        riderLinkSessionId: _sid,
-        riderLinkSessionAt: _sat,
-        riderLinkDeviceInfo: _dev,
-        ...rest
-      } = order as any;
-      await db.replace(order._id, {
-        ...rest,
-        orderStatus: "confirmed",
-        status: "Confirmed",
+    let order: any = null;
+    let orderId = "";
+
+    if (claimedPickup) {
+      order = await findOrderByIdOrShort(db, claimedPickup.orderId);
+      orderId = order?.orderId || claimedPickup.orderId;
+    } else {
+      order = orders.find((o: any) => {
+        const t = Number(o.finalTotal ?? o.total ?? 0);
+        return Math.abs(t - target) < 0.01;
       });
+      if (!order) {
+        return { success: false, message: `No order found with total ₱${target.toLocaleString()}.` };
+      }
+      orderId = order.orderId;
     }
 
-    return {
-      success: true,
-      orderId,
-      shortId: String(orderId).slice(-8).toUpperCase(),
-      message: `Order #${String(orderId).slice(-8).toUpperCase()} is back on Available.`,
-    };
+    return await resetClaimedOrderToAvailable(db, order, orderId, pickups);
   },
 });
 
