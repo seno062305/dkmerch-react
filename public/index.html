@@ -27,15 +27,23 @@
   <link rel="icon" href="/images/dklogo2-removebg-preview.png" type="image/png">
 
   <style>
-    /* First paint = pink (avoids white + black-logo flash before splash) */
+    /* First paint = pink under splash only; app-ready restores white page bg */
     html, body {
       margin: 0;
-      background: #fc1268 !important;
+      background: #fc1268;
       min-height: 100%;
+    }
+    html.app-ready,
+    body.app-ready {
+      background: #ffffff !important;
     }
     #root:empty {
       min-height: 100vh;
       background: #fc1268;
+    }
+    html.app-ready #root,
+    body.app-ready #root {
+      background: #ffffff;
     }
 
     /* ── Splash Screen ── */
@@ -233,21 +241,26 @@
       var startTime = Date.now();
       var splashHidden = false;
 
+      function markAppReady() {
+        try {
+          document.documentElement.classList.add('app-ready');
+          document.body.classList.add('app-ready');
+        } catch (e) { /* ignore */ }
+      }
+
       function hideSplash() {
         if (splashHidden) return;
         splashHidden = true;
         var elapsed = Date.now() - startTime;
         var remaining = Math.max(0, minShow - elapsed);
         setTimeout(function () {
+          // White page bg under fading splash (never leave pink stuck)
+          markAppReady();
           var splash = document.getElementById('splash');
           if (splash) {
             splash.classList.add('hide');
             setTimeout(function () {
               if (splash.parentNode) splash.parentNode.removeChild(splash);
-              try {
-                document.documentElement.classList.add('app-ready');
-                document.body.classList.add('app-ready');
-              } catch (e) { /* ignore */ }
             }, 280);
           }
         }, remaining);
