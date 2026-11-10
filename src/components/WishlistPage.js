@@ -57,6 +57,8 @@ const WishlistPage = ({ onProductClick }) => {
       confirmLabel: 'Add to Cart',
       variant: 'primary',
       icon: 'fa-shopping-cart',
+      rememberKey: 'dk_skip_add_to_cart_confirm',
+      rememberLabel: 'Do not show again',
     });
     if (!ok) return;
     addToCart({

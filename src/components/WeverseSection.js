@@ -70,7 +70,10 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
     api.productStats.getLatestReviewsForProducts,
     saleProductIds.length ? { productIds: saleProductIds } : 'skip'
   ) || {};
-  const [expandedReviewIds, setExpandedReviewIds] = useState({});
+  const soldMap = useQuery(
+    api.productStats.getSoldCountsForProducts,
+    saleProductIds.length ? { productIds: saleProductIds } : 'skip'
+  ) || {};
 
   const handleWishlistClick = async (e, product) => {
     e.stopPropagation();
@@ -218,14 +221,16 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
                           : `${stockQty} in stock`}
                     </span>
                   </div>
+                  <div className="wv-card-sold">
+                    <i className="fas fa-shopping-bag"></i>
+                    <span>
+                      {typeof soldMap[pid] === 'number'
+                        ? `${soldMap[pid].toLocaleString()} sold`
+                        : '… sold'}
+                    </span>
+                  </div>
                   {reviewMap[pid] && (
-                    <div
-                      className="wv-card-review"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setExpandedReviewIds((prev) => ({ ...prev, [pid]: !prev[pid] }));
-                      }}
-                    >
+                    <div className="wv-card-review">
                       <div className="wv-card-review-top">
                         <span className="wv-card-review-stars">
                           {[1, 2, 3, 4, 5].map((s) => (
@@ -238,20 +243,20 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
                         <span className="wv-card-review-count">{reviewMap[pid].count} review{reviewMap[pid].count === 1 ? '' : 's'}</span>
                       </div>
                       <p className="wv-card-review-text">
-                        {expandedReviewIds[pid] || reviewMap[pid].review.length <= 72
-                          ? reviewMap[pid].review
-                          : `${reviewMap[pid].review.slice(0, 72)}…`}
+                        {reviewMap[pid].review.length > 42
+                          ? `${reviewMap[pid].review.slice(0, 42).trim()}…`
+                          : reviewMap[pid].review}
                       </p>
-                      {reviewMap[pid].review.length > 72 && (
+                      {reviewMap[pid].review.length > 42 && (
                         <button
                           type="button"
                           className="wv-card-review-more"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setExpandedReviewIds((prev) => ({ ...prev, [pid]: !prev[pid] }));
+                            onProductClick?.(product);
                           }}
                         >
-                          {expandedReviewIds[pid] ? 'See less' : 'See more'}
+                          See more
                         </button>
                       )}
                     </div>

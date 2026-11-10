@@ -232,9 +232,16 @@
 .wv-card-review-text {
     margin: 0;
     font-size: 11px;
-    line-height: 1.4;
+    line-height: 1.35;
     color: #475569;
     word-break: break-word;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+    min-height: 0;
+    max-height: 2.7em;
 }
 .wv-card-review-more {
     border: none;
@@ -300,11 +307,12 @@
 
 .wv-card-sold {
     font-size: 11px;
-    color: #999;
-    display: flex;
+    color: #64748b;
+    display: inline-flex;
     align-items: center;
     gap: 4px;
-    margin-top: 2px;
+    margin: 0 0 4px;
+    font-weight: 600;
 }
 .wv-card-sold i { font-size: 10px; color: #fc1268; }
 
@@ -469,7 +477,9 @@
     .wv-card-price-original { font-size: 10px; }
     .wv-card-info { padding: 6px 7px 10px; }
     .wv-card-img { padding: 6px; }
-    .wv-card-sold { display: none; }
+    .wv-card-sold { font-size: 10px; margin-bottom: 3px; }
+    .wv-card-review { padding: 6px 7px; margin-top: 4px; }
+    .wv-card-review-text { font-size: 10px; max-height: 2.6em; }
     .wv-promo-banner { font-size: 12px; padding: 8px 12px; }
     .wv-promo-badge { font-size: 9px; padding: 2px 7px; }
 }

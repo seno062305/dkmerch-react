@@ -38,6 +38,29 @@ export const getProductSoldCount = query({
   },
 });
 
+/** Batch sold counts for home / shop product cards. */
+export const getSoldCountsForProducts = query({
+  args: { productIds: v.array(v.string()) },
+  handler: async ({ db }, { productIds }) => {
+    const ids = (productIds || []).map((id) => String(id)).filter(Boolean).slice(0, 40);
+    const out: Record<string, number> = {};
+    for (const id of ids) out[id] = 0;
+    if (!ids.length) return out;
+
+    const wanted = new Set(ids);
+    const orders = await db.query("orders").collect();
+    for (const order of orders) {
+      if (!countsTowardSold(order)) continue;
+      for (const item of order.items || []) {
+        const id = String(item.id || item.productId || "");
+        if (!wanted.has(id)) continue;
+        out[id] = (out[id] || 0) + (Number(item.quantity || item.qty || 1) || 0);
+      }
+    }
+    return out;
+  },
+});
+
 /** Latest reviews for many products (home / shop teasers). */
 export const getLatestReviewsForProducts = query({
   args: { productIds: v.array(v.string()) },
