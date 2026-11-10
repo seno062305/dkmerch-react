@@ -1,10 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
-import { useQuery, useMutation } from 'convex/react';
+import React, { useState, useMemo } from 'react';
+import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import DkIcon, { DK_ICONS } from '../components/DkIcon';
-import { useNotification } from '../context/NotificationContext';
-import AdminPager from './AdminPager';
+import { SalesAnalyticsPanel } from './AdminSalesReports';
 import './AdminDashboard.css';
 
 const isSaleOrder = (o) => {
@@ -64,95 +62,21 @@ const StatModal = ({ data, onClose }) => {
 };
 
 const AdminDashboard = () => {
-  const { showNotification } = useNotification();
   const [statModal, setStatModal] = useState(null);
-  const [ordersPageSize, setOrdersPageSize] = useState(5);
-  const [ordersPage, setOrdersPage]         = useState(0);
-
-  const storeSettings  = useQuery(api.settings.getSettings);
-  const updateSettings = useMutation(api.settings.updateSettings);
-  const [storeForm, setStoreForm]           = useState({ storeName: '', storeAddress: '', storeLat: '', storeLng: '' });
-  const [storeFormSaved, setStoreFormSaved] = useState(false);
-  const [storeLocating, setStoreLocating]   = useState(false);
 
   const allOrdersRaw   = useQuery(api.orders.getAllOrders);
-  const allUsers       = useQuery(api.users.getAllUsers) || [];
-  const allProducts    = useQuery(api.products.getAllProductsAdmin) || [];
+  const allUsersRaw    = useQuery(api.users.getAllUsers);
+  const allProductsRaw = useQuery(api.products.getAllProductsAdmin);
+  const ordersReady    = allOrdersRaw !== undefined;
+  const usersReady     = allUsersRaw !== undefined;
+  const productsReady  = allProductsRaw !== undefined;
+  const allUsers       = allUsersRaw || [];
+  const allProducts    = allProductsRaw || [];
   const allOrders      = allOrdersRaw || [];
   const validOrders    = useMemo(
     () => allOrders.filter(o => o.orderId && o.items?.length > 0),
     [allOrders]
   );
-
-  useEffect(() => {
-    if (storeSettings) {
-      setStoreForm({
-        storeName:    storeSettings.storeName    ?? 'DKMerch Store',
-        storeAddress: storeSettings.storeAddress ?? '',
-        storeLat:     storeSettings.storeLat     != null ? String(storeSettings.storeLat) : '',
-        storeLng:     storeSettings.storeLng     != null ? String(storeSettings.storeLng) : '',
-      });
-    }
-  }, [storeSettings]);
-
-  const handleStoreFormChange = (e) => {
-    const { name, value } = e.target;
-    setStoreForm(prev => ({ ...prev, [name]: value }));
-    setStoreFormSaved(false);
-  };
-
-  const handleDetectLocation = () => {
-    if (!navigator.geolocation) { showNotification('Geolocation is not supported by your browser.', 'error'); return; }
-    setStoreLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        try {
-          const res  = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`,
-            { headers: { 'Accept-Language': 'en' } }
-          );
-          const data = await res.json();
-          setStoreForm(prev => ({
-            ...prev,
-            storeLat: String(lat),
-            storeLng: String(lng),
-            storeAddress: data.display_name || prev.storeAddress,
-          }));
-          setStoreFormSaved(false);
-        } catch {
-          setStoreForm(prev => ({ ...prev, storeLat: String(lat), storeLng: String(lng) }));
-        } finally {
-          setStoreLocating(false);
-        }
-      },
-      () => { showNotification('Unable to detect location.', 'error'); setStoreLocating(false); },
-      { enableHighAccuracy: true, timeout: 15000 }
-    );
-  };
-
-  const handleSaveStoreSettings = async () => {
-    const lat = parseFloat(storeForm.storeLat);
-    const lng = parseFloat(storeForm.storeLng);
-    if (isNaN(lat) || isNaN(lng)) {
-      showNotification('Please enter valid coordinates or use Detect Location.', 'warning');
-      return;
-    }
-    try {
-      await updateSettings({
-        storeName: storeForm.storeName || undefined,
-        storeAddress: storeForm.storeAddress || undefined,
-        storeLat: lat,
-        storeLng: lng,
-      });
-      setStoreFormSaved(true);
-      showNotification('Store location saved.', 'success');
-    } catch (err) {
-      console.error(err);
-      showNotification('Failed to save store location.', 'error');
-    }
-  };
 
   const stats = useMemo(() => {
     const saleOrders = validOrders.filter(isSaleOrder);
@@ -248,171 +172,97 @@ const AdminDashboard = () => {
   };
 
   const recentOrders = useMemo(() =>
-    [...validOrders].sort((a, b) => b._creationTime - a._creationTime),
+    [...validOrders]
+      .sort((a, b) => b._creationTime - a._creationTime)
+      .slice(0, 5),
     [validOrders]
   );
 
-  useEffect(() => { setOrdersPage(0); }, [ordersPageSize, recentOrders.length]);
-
-  const pagedRecentOrders = useMemo(() => {
-    const start = ordersPage * ordersPageSize;
-    return recentOrders.slice(start, start + ordersPageSize);
-  }, [recentOrders, ordersPage, ordersPageSize]);
-
-  const getStatusBadgeClass = (status) => {
-    const s = (status || '').toLowerCase();
-    if (s === 'completed' || s === 'delivered') return 'status-completed';
-    if (s === 'paid') return 'status-confirmed';
-    if (s === 'confirmed' || s === 'processing') return 'status-confirmed';
-    if (s === 'cancelled') return 'status-cancelled';
-    return 'status-pending';
-  };
+  const kpiCards = [
+    {
+      key: 'inventory',
+      type: 'inventory',
+      label: 'Inventory Costing',
+      value: productsReady ? `₱${stats.inventoryCosting.toLocaleString()}` : null,
+      hint: productsReady ? `${stats.totalProducts} products tracked` : 'Loading…',
+      color: '#22c55e',
+      tone: 'sales',
+      icon: DK_ICONS.inventoryCosting,
+      loading: !productsReady,
+    },
+    {
+      key: 'orders',
+      type: 'orders',
+      label: 'Total Orders',
+      value: ordersReady ? String(stats.totalOrders) : null,
+      hint: ordersReady
+        ? `${stats.outForDelivery} out for delivery · ${stats.pendingConfirm} pending confirm`
+        : 'Loading…',
+      color: '#14b8a6',
+      tone: 'orders',
+      icon: DK_ICONS.totalOrders,
+      loading: !ordersReady,
+    },
+    {
+      key: 'users',
+      type: 'users',
+      label: 'Registered Users',
+      value: usersReady ? String(stats.totalUsers) : null,
+      hint: usersReady
+        ? `${stats.completedOrders} completed orders`
+        : 'Loading users…',
+      color: '#3b82f6',
+      tone: 'users',
+      icon: DK_ICONS.registeredUsers,
+      loading: !usersReady,
+    },
+    {
+      key: 'products',
+      type: 'products',
+      label: 'Total Products',
+      value: productsReady ? String(stats.totalProducts) : null,
+      hint: productsReady ? `${stats.lowStockProducts} low stock items` : 'Loading…',
+      color: '#f59e0b',
+      tone: 'products',
+      icon: DK_ICONS.totalProducts,
+      warn: productsReady && stats.lowStockProducts > 0,
+      loading: !productsReady,
+    },
+  ];
 
   return (
     <div className="admin-dashboard">
       <div className="dash-page-intro">
-        <div>
-          <h2>Operations Dashboard</h2>
-        </div>
-        <Link to="/admin/sales-reports" className="dash-sales-link">
-          <i className="fas fa-chart-bar"></i> Open Sales Reports
-        </Link>
+        <h2>Dashboard</h2>
       </div>
 
       <div className="stats-grid">
-        <div className="stat-card sales clickable-card" onClick={() => openStatModal('inventory')}>
-          <div className="stat-icon"><DkIcon name={DK_ICONS.inventoryCosting} size={28} /></div>
-          <div className="stat-details">
-            <h3>Inventory Costing</h3>
-            <p className="stat-value">₱{stats.inventoryCosting.toLocaleString()}</p>
-            <span className="stat-label">{stats.totalProducts} products tracked</span>
+        {kpiCards.map((card) => (
+          <div
+            key={card.key}
+            className={`stat-card wave-card ${card.tone} clickable-card`}
+            onClick={() => {
+              if (card.loading) return;
+              openStatModal(card.type);
+            }}
+          >
+            <div className="stat-card-top">
+              <div className="stat-card-copy">
+                <h3>{card.label}</h3>
+                <p className={`stat-value ${card.loading ? 'is-loading' : ''}`}>
+                  {card.loading ? '—' : card.value}
+                </p>
+                <span className={`stat-label ${card.warn ? 'warn' : ''}`}>{card.hint}</span>
+              </div>
+              <div className="stat-icon-chip" style={{ background: `${card.color}18`, color: card.color }}>
+                <DkIcon name={card.icon} size={22} />
+              </div>
+            </div>
           </div>
-          <div className="card-click-hint"><i className="fas fa-info-circle"></i></div>
-        </div>
-
-        <div className="stat-card orders clickable-card" onClick={() => openStatModal('orders')}>
-          <div className="stat-icon"><DkIcon name={DK_ICONS.totalOrders} size={28} /></div>
-          <div className="stat-details">
-            <h3>Total Orders</h3>
-            <p className="stat-value">{stats.totalOrders}</p>
-            <span className="stat-label">{stats.outForDelivery} out for delivery · {stats.pendingConfirm} pending confirm</span>
-          </div>
-          <div className="card-click-hint"><i className="fas fa-info-circle"></i></div>
-        </div>
-
-        <div className="stat-card users clickable-card" onClick={() => openStatModal('users')}>
-          <div className="stat-icon"><DkIcon name={DK_ICONS.registeredUsers} size={28} /></div>
-          <div className="stat-details">
-            <h3>Registered Users</h3>
-            <p className="stat-value">{stats.totalUsers}</p>
-            <span className="stat-label">{stats.completedOrders} completed orders</span>
-          </div>
-          <div className="card-click-hint"><i className="fas fa-info-circle"></i></div>
-        </div>
-
-        <div className="stat-card products clickable-card" onClick={() => openStatModal('products')}>
-          <div className="stat-icon"><DkIcon name={DK_ICONS.totalProducts} size={28} /></div>
-          <div className="stat-details">
-            <h3>Total Products</h3>
-            <p className="stat-value">{stats.totalProducts}</p>
-            <span className="stat-label warn">{stats.lowStockProducts} low stock items</span>
-          </div>
-          <div className="card-click-hint"><i className="fas fa-info-circle"></i></div>
-        </div>
+        ))}
       </div>
 
-      <div className="bottom-grid">
-        <div className="data-card recent-orders" style={{ gridColumn: '1 / -1' }}>
-          <div className="card-header">
-            <i className="fas fa-clock"></i>
-            <h3>Recent Orders</h3>
-            <Link to="/admin/orders" className="dash-inline-link">View all</Link>
-          </div>
-          <div className="card-body">
-            {recentOrders.length > 0 ? (
-              <>
-                <div className="orders-list">
-                  {pagedRecentOrders.map(order => (
-                    <div key={order.orderId} className="order-item">
-                      <div className="order-info">
-                        <div className="order-id"><i className="fas fa-receipt"></i> #{order.orderId?.slice(-8)}</div>
-                        <div className="order-customer">{order.customerName || order.email || 'Customer'}</div>
-                      </div>
-                      <div className="order-details">
-                        <div className="order-total">₱{(order.finalTotal ?? order.total ?? 0).toLocaleString()}</div>
-                        <span className={`order-status ${getStatusBadgeClass(order.paymentStatus || order.orderStatus || order.status)}`}>
-                          {(order.orderStatus || order.paymentStatus || order.status || 'pending').toUpperCase()}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <AdminPager
-                  total={recentOrders.length}
-                  page={ordersPage}
-                  pageSize={ordersPageSize}
-                  onPageChange={setOrdersPage}
-                  onPageSizeChange={setOrdersPageSize}
-                />
-              </>
-            ) : (
-              <div className="no-data"><i className="fas fa-shopping-cart"></i><p>No orders yet</p></div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="chart-card full-width" style={{ marginTop: '24px' }}>
-        <div className="chart-header">
-          <div className="chart-title">
-            <i className="fas fa-map-marker-alt" style={{ color: '#fc1268' }}></i>
-            <h3>Store / Pickup Location</h3>
-          </div>
-        </div>
-        <div className="dash-store-form" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>
-            Used as the starting point for shipping fees in Checkout and rider pickup.
-          </p>
-          <div className="dash-store-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
-              <label style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>Store Name</label>
-              <input type="text" name="storeName" value={storeForm.storeName} onChange={handleStoreFormChange}
-                placeholder="DKMerch Store"
-                style={{ padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '13px', width: '100%', boxSizing: 'border-box' }} />
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
-              <label style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>Store Address</label>
-              <input type="text" name="storeAddress" value={storeForm.storeAddress} onChange={handleStoreFormChange}
-                placeholder="Full store address"
-                style={{ padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '13px', width: '100%', boxSizing: 'border-box' }} />
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
-              <label style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>Latitude</label>
-              <input type="number" name="storeLat" value={storeForm.storeLat} onChange={handleStoreFormChange}
-                placeholder="e.g. 14.5995" step="0.00001"
-                style={{ padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '13px', width: '100%', boxSizing: 'border-box' }} />
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
-              <label style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>Longitude</label>
-              <input type="number" name="storeLng" value={storeForm.storeLng} onChange={handleStoreFormChange}
-                placeholder="e.g. 120.9842" step="0.00001"
-                style={{ padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '13px', width: '100%', boxSizing: 'border-box' }} />
-            </div>
-          </div>
-          <div className="dash-store-actions" style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <button onClick={handleDetectLocation} disabled={storeLocating}
-              style={{ padding: '9px 16px', borderRadius: '8px', border: '1.5px solid #3b82f6', background: '#eff6ff', color: '#2563eb', fontWeight: 600, fontSize: '13px', cursor: storeLocating ? 'not-allowed' : 'pointer' }}>
-              <i className={storeLocating ? 'fas fa-spinner fa-spin' : 'fas fa-crosshairs'}></i>{' '}
-              {storeLocating ? 'Detecting…' : 'Detect My Location'}
-            </button>
-            <button onClick={handleSaveStoreSettings}
-              style={{ padding: '9px 20px', borderRadius: '8px', border: 'none', background: storeFormSaved ? '#16a34a' : '#fc1268', color: '#fff', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>
-              <i className={storeFormSaved ? 'fas fa-check' : 'fas fa-save'}></i>{' '}
-              {storeFormSaved ? 'Saved!' : 'Save Location'}
-            </button>
-          </div>
-        </div>
-      </div>
+      <SalesAnalyticsPanel recentOrders={recentOrders} />
 
       <StatModal data={statModal} onClose={() => setStatModal(null)} />
     </div>

@@ -1,9 +1,51 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { Navigate, Link } from 'react-router-dom';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import DkIcon, { DK_ICONS } from '../components/DkIcon';
-import AdminPager from './AdminPager';
 import './AdminSalesReports.css';
+
+const MiniTrend = ({ values = [], color = '#16a34a', fullWidth = false }) => {
+  const uid = React.useId().replace(/:/g, '');
+  const pts = values.length >= 2 ? values : [1, 2, 1.5, 2.5, 2, 3];
+  const w = fullWidth ? 280 : 72;
+  const h = fullWidth ? 48 : 28;
+  const max = Math.max(...pts, 0.01);
+  const coords = pts.map((v, i) => {
+    const x = (i / (pts.length - 1)) * w;
+    const y = h - 2 - (Math.max(0, v) / max) * (h - 4);
+    return [x, y];
+  });
+  let d = `M ${coords[0][0]} ${coords[0][1]}`;
+  for (let i = 0; i < coords.length - 1; i++) {
+    const [x0, y0] = coords[i];
+    const [x1, y1] = coords[i + 1];
+    const cx = (x0 + x1) / 2;
+    d += ` C ${cx} ${y0}, ${cx} ${y1}, ${x1} ${y1}`;
+  }
+  const area = `${d} L ${w} ${h} L 0 ${h} Z`;
+  const id = `mt-${uid}`;
+  const stroke = fullWidth ? 2.4 : 1.8;
+  return (
+    <svg
+      className={`bento-mini-trend${fullWidth ? ' is-full' : ''}`}
+      viewBox={`0 0 ${w} ${h}`}
+      width={fullWidth ? '100%' : 72}
+      height={fullWidth ? 48 : 28}
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <defs>
+        <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.35" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={area} fill={`url(#${id})`} />
+      <path d={d} fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+};
 
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const fmt    = (n) => `₱${Number(n).toLocaleString('en-PH', { minimumFractionDigits: 0 })}`;
@@ -116,9 +158,11 @@ const SummaryModal = ({ data, onClose }) => {
 // ══════════════════════════════════════════════════════════════════════════
 //  MAIN
 // ══════════════════════════════════════════════════════════════════════════
-const AdminSalesReports = () => {
+/** Sales analytics block — embedded in Dashboard bento layout. */
+export const SalesAnalyticsPanel = ({ recentOrders = [] }) => {
   const serverTime = useQuery(api.orders.getServerTime);
-  const allOrders   = useQuery(api.orders.getAllOrders) || [];
+  const allOrdersRaw = useQuery(api.orders.getAllOrders);
+  const allOrders   = allOrdersRaw || [];
   const allProducts = useQuery(api.products.getAllProductsAdmin) || [];
 
   const serverOffsetRef = useRef(0);
@@ -143,17 +187,14 @@ const AdminSalesReports = () => {
 
   const [startDate, setStartDate] = useState('');
   const [endDate,   setEndDate]   = useState('');
-  const [topPageSize, setTopPageSize] = useState(5);
-  const [topPage, setTopPage]         = useState(0);
 
   const effectiveStart = startDate || defaultStart;
   const effectiveEnd   = endDate   || defaultEnd;
   const maxDate        = toDateStr(nowMs);
 
-  const [salesFilter,  setSalesFilter]  = useState('last_week');
+  const [salesFilter, setSalesFilter] = useState('last_week');
   const [volumeFilter, setVolumeFilter] = useState('last_week');
-
-  const [salesTooltip,  setSalesTooltip]  = useState({ visible: false, x: 0, y: 0, lines: [] });
+  const [salesTooltip, setSalesTooltip] = useState({ visible: false, x: 0, y: 0, lines: [] });
   const [volumeTooltip, setVolumeTooltip] = useState({ visible: false, x: 0, y: 0, lines: [] });
 
   const isPaid = (o) =>
@@ -201,31 +242,63 @@ const AdminSalesReports = () => {
   const topProducts = useMemo(() => {
     const paid = filtered.filter(isPaid);
     const map = {};
+    const dayMs = 24 * 60 * 60 * 1000;
+    const trendDays = 7;
     paid.forEach(order => {
+      const t = Number(order._creationTime || order.createdAt || order.date || 0);
+      const dayIdx = t ? Math.min(trendDays - 1, Math.max(0, trendDays - 1 - Math.floor((nowMs - t) / dayMs))) : trendDays - 1;
       (order.items || []).forEach(item => {
         const pid = item.id || item.name;
         if (!map[pid]) {
           const full = allProducts.find(p => p._id === pid || p.id === pid);
           map[pid] = {
+            id: pid,
             name: item.name || full?.name || 'Unknown',
+            category: full?.category || item.category || 'Product',
             image: item.image || full?.image || '',
             quantity: 0,
             revenue: 0,
+            trend: Array.from({ length: trendDays }, () => 0),
           };
         }
-        map[pid].quantity += item.quantity || 1;
-        map[pid].revenue += (item.price || 0) * (item.quantity || 1);
+        const qty = item.quantity || 1;
+        map[pid].quantity += qty;
+        map[pid].revenue += (item.price || 0) * qty;
+        map[pid].trend[dayIdx] += qty;
       });
     });
     return Object.values(map).sort((a, b) => b.revenue - a.revenue);
-  }, [filtered, allProducts]);
+  }, [filtered, allProducts, nowMs]);
 
-  useEffect(() => { setTopPage(0); }, [topPageSize, effectiveStart, effectiveEnd]);
+  const topFiveProducts = useMemo(() => topProducts.slice(0, 5), [topProducts]);
 
-  const pagedTopProducts = useMemo(() => {
-    const start = topPage * topPageSize;
-    return topProducts.slice(start, start + topPageSize);
-  }, [topProducts, topPage, topPageSize]);
+  const salesByCategory = useMemo(() => {
+    const map = {};
+    topProducts.forEach((p) => {
+      const key = p.category || 'Other';
+      if (!map[key]) map[key] = { name: key, revenue: 0, quantity: 0 };
+      map[key].revenue += p.revenue;
+      map[key].quantity += p.quantity;
+    });
+    return Object.values(map).sort((a, b) => b.revenue - a.revenue).slice(0, 6);
+  }, [topProducts]);
+
+  const orderStatus = useMemo(() => {
+    const buckets = [
+      { key: 'completed', label: 'Completed', color: '#16a34a', count: 0 },
+      { key: 'processing', label: 'Processing', color: '#14b8a6', count: 0 },
+      { key: 'pending', label: 'Pending', color: '#3b82f6', count: 0 },
+      { key: 'cancelled', label: 'Cancelled', color: '#f97316', count: 0 },
+    ];
+    filtered.forEach((o) => {
+      const s = (o.orderStatus || o.status || '').toLowerCase();
+      if (s === 'cancelled' || s === 'canceled') buckets[3].count += 1;
+      else if (s === 'completed' || s === 'delivered') buckets[0].count += 1;
+      else if (['processing', 'confirmed', 'out_for_delivery', 'paid'].includes(s)) buckets[1].count += 1;
+      else buckets[2].count += 1;
+    });
+    return buckets;
+  }, [filtered]);
 
   const buildChartData = useCallback((mode, type) => {
     if (mode === 'today' || mode === 'last_week' || mode === 'last_month') {
@@ -260,8 +333,10 @@ const AdminSalesReports = () => {
     });
   }, [allOrders, nowMs]);
 
-  const salesData  = useMemo(() => buildChartData(salesFilter,  'sales'),  [buildChartData, salesFilter]);
+  const salesData  = useMemo(() => buildChartData(salesFilter, 'sales'),  [buildChartData, salesFilter]);
   const volumeData = useMemo(() => buildChartData(volumeFilter, 'volume'), [buildChartData, volumeFilter]);
+  const kpiTrend = useMemo(() => salesData.map((d) => d.value), [salesData]);
+  const volumeTrend = useMemo(() => volumeData.map((d) => d.value), [volumeData]);
 
   const openSummaryModal = (type) => {
     if (type === 'totalSales') {
@@ -316,8 +391,8 @@ const AdminSalesReports = () => {
   };
 
   const maxVal = (arr) => Math.max(...arr.map(i => i.value), 1);
-  const CHART_W = 600, CHART_H = 210, PAD_LEFT = 52, PAD_TOP = 15, PLOT_H = 170;
-  const PLOT_W  = CHART_W - PAD_LEFT - 10;
+  const CHART_W = 720, CHART_H = 240, PAD_LEFT = 44, PAD_TOP = 12, PLOT_H = 200;
+  const PLOT_W  = CHART_W - PAD_LEFT - 8;
 
   const ChartY = ({ max, steps = 4, isRevenue }) => (
     <>
@@ -360,211 +435,310 @@ const AdminSalesReports = () => {
     return { x, y, barW, barH };
   };
 
-  if (allOrders === undefined) {
+  if (allOrdersRaw === undefined) {
     return (
-      <div className="admin-sales-reports">
-        <div className="loading"><i className="fas fa-spinner fa-spin"></i> Loading...</div>
+      <div className="sales-bento">
+        <div className="loading"><i className="fas fa-spinner fa-spin"></i> Loading sales…</div>
       </div>
     );
   }
 
   const linePoints = getLinePoints(salesData);
+  const areaPath = linePoints.length > 1
+    ? `M ${linePoints[0].x} ${PAD_TOP + PLOT_H} L ${linePoints.map(p => `${p.x},${p.y}`).join(' L ')} L ${linePoints[linePoints.length - 1].x} ${PAD_TOP + PLOT_H} Z`
+    : '';
+
+  const statusTotal = orderStatus.reduce((s, b) => s + b.count, 0) || 1;
+  const donutR = 54;
+  const donutC = 2 * Math.PI * donutR;
+  const donutArcs = (() => {
+    let offsetDeg = 0;
+    return orderStatus.map((b) => {
+      const frac = b.count / statusTotal;
+      const arc = {
+        ...b,
+        dash: `${frac * donutC} ${donutC - frac * donutC}`,
+        rot: offsetDeg - 90,
+      };
+      offsetDeg += frac * 360;
+      return arc;
+    });
+  })();
+  const maxCategoryRev = Math.max(...salesByCategory.map((c) => c.revenue), 1);
+  const refundRate = summary.totalOrders
+    ? `${((summary.refundCount / summary.totalOrders) * 100).toFixed(1)}%`
+    : '0%';
+
+  const getStatusBadgeClass = (status) => {
+    const s = (status || '').toLowerCase();
+    if (s === 'completed' || s === 'delivered') return 'status-completed';
+    if (s === 'paid' || s === 'confirmed' || s === 'processing') return 'status-confirmed';
+    if (s === 'cancelled' || s === 'canceled') return 'status-cancelled';
+    return 'status-pending';
+  };
+
+  const salesKpis = [
+    { key: 'totalSales', label: 'Total Sales', value: fmt(summary.totalSales), icon: DK_ICONS.totalSales, color: '#16a34a', trend: kpiTrend },
+    { key: 'avgOrderValue', label: 'Avg Order Value', value: fmt(summary.avgOrderValue), icon: DK_ICONS.avgOrderValue, color: '#14b8a6', trend: kpiTrend },
+    { key: 'refundItems', label: 'Refund Items', value: fmtNum(summary.refundCount), icon: DK_ICONS.refundItems, color: '#3b82f6', trend: volumeTrend, hint: `Rate ${refundRate}` },
+    { key: 'totalRefundValue', label: 'Refund Value', value: fmt(summary.totalRefundValue), icon: DK_ICONS.totalRefundValue, color: '#f97316', trend: kpiTrend },
+  ];
 
   return (
-    <div className="admin-sales-reports">
-
-      {/* ── Date Filter ── */}
-      <div className="filter-section">
-        <div className="date-inputs">
+    <div className="sales-bento">
+      <div className="bento-toolbar">
+        <div>
+          <h3 className="bento-section-title">Sales Analytics</h3>
+        </div>
+        <div className="date-inputs bento-dates">
           <div className="date-input-group">
-            <label htmlFor="startDate">
-              <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" /></svg>
-            </label>
-            <input type="date" id="startDate" value={effectiveStart} min="2020-01-01" max={effectiveEnd} onChange={e => setStartDate(e.target.value)} />
+            <input type="date" value={effectiveStart} min="2020-01-01" max={effectiveEnd} onChange={e => setStartDate(e.target.value)} />
           </div>
           <span className="date-separator">to</span>
           <div className="date-input-group">
-            <label htmlFor="endDate">
-              <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" /></svg>
-            </label>
-            <input type="date" id="endDate" value={effectiveEnd} min={effectiveStart} max={maxDate} onChange={e => setEndDate(e.target.value)} />
+            <input type="date" value={effectiveEnd} min={effectiveStart} max={maxDate} onChange={e => setEndDate(e.target.value)} />
           </div>
-          <button className="reset-date-btn" onClick={() => { setStartDate(''); setEndDate(''); }}>Reset</button>
-        </div>
-        <div className="server-time-badge">
-          <i className="fas fa-server"></i>
-          {serverTime
-            ? <>Server time (PH): {new Date(nowMs).toLocaleString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}</>
-            : 'Syncing...'
-          }
+          <button type="button" className="reset-date-btn" onClick={() => { setStartDate(''); setEndDate(''); }}>Reset</button>
         </div>
       </div>
 
-      {/* ── Summary Cards ── */}
-      <div className="summary-cards">
-        <div className="summary-card clickable-summary" onClick={() => openSummaryModal('totalSales')}>
-          <div className="card-icon revenue-icon">
-            <DkIcon name={DK_ICONS.totalSales} size={26} />
-          </div>
-          <div className="card-content">
-            <div className="card-value">{fmt(summary.totalSales)}</div>
-            <div className="card-label">Total Sales</div>
-          </div>
-          <div className="summary-card-hint"><i className="fas fa-info-circle"></i></div>
-        </div>
-
-        <div className="summary-card clickable-summary" onClick={() => openSummaryModal('refundItems')}>
-          <div className="card-icon orders-icon">
-            <DkIcon name={DK_ICONS.refundItems} size={26} />
-          </div>
-          <div className="card-content">
-            <div className="card-value">{fmtNum(summary.refundCount)}</div>
-            <div className="card-label">Refund Items</div>
-          </div>
-          <div className="summary-card-hint"><i className="fas fa-info-circle"></i></div>
-        </div>
-
-        <div className="summary-card clickable-summary" onClick={() => openSummaryModal('totalRefundValue')}>
-          <div className="card-icon completed-icon">
-            <DkIcon name={DK_ICONS.totalRefundValue} size={26} />
-          </div>
-          <div className="card-content">
-            <div className="card-value">{fmt(summary.totalRefundValue)}</div>
-            <div className="card-label">Total Value of Refund Items</div>
-          </div>
-          <div className="summary-card-hint"><i className="fas fa-info-circle"></i></div>
-        </div>
-
-        <div className="summary-card clickable-summary" onClick={() => openSummaryModal('avgOrderValue')}>
-          <div className="card-icon average-icon">
-            <DkIcon name={DK_ICONS.avgOrderValue} size={26} />
-          </div>
-          <div className="card-content">
-            <div className="card-value">{fmt(summary.avgOrderValue)}</div>
-            <div className="card-label">Avg Order Value</div>
-          </div>
-          <div className="summary-card-hint"><i className="fas fa-info-circle"></i></div>
-        </div>
+      <div className="bento-kpi-row">
+        {salesKpis.map((m) => (
+          <button key={m.key} type="button" className="bento-kpi-card" onClick={() => openSummaryModal(m.key)}>
+            <div className="bento-kpi-top">
+              <div>
+                <div className="bento-kpi-label">{m.label}</div>
+                <div className="bento-kpi-value">{m.value}</div>
+                {m.hint && <div className="bento-kpi-hint">{m.hint}</div>}
+              </div>
+              <div className="bento-kpi-icon" style={{ background: `${m.color}18`, color: m.color }}>
+                <DkIcon name={m.icon} size={18} />
+              </div>
+            </div>
+            <MiniTrend values={m.trend} color={m.color} fullWidth />
+          </button>
+        ))}
       </div>
 
-      {/* ── Charts ── */}
-      <div className="charts-grid">
-        <div className="chart-container">
-          <div className="chart-header">
-            <h3>Sales Trend</h3>
-            <div className="chart-filter-pills">
-              {CHART_FILTERS.map(f => (
-                <button key={f.key} className={`chart-pill ${salesFilter === f.key ? 'active' : ''}`}
-                  onClick={() => { setSalesFilter(f.key); setSalesTooltip({ visible: false }); }}>
-                  {f.label}
-                </button>
-              ))}
+      <div className="bento-layout">
+        <div className="bento-charts">
+          <div className="bento-card bento-overview">
+            <div className="bento-card-head">
+              <div>
+                <h3>Sales Trend</h3>
+                <p>Revenue performance for the selected range</p>
+              </div>
+              <div className="bento-head-controls">
+                <div className="chart-filter-pills">
+                  {CHART_FILTERS.map(f => (
+                    <button key={f.key} type="button" className={`chart-pill ${salesFilter === f.key ? 'active' : ''}`}
+                      onClick={() => { setSalesFilter(f.key); setSalesTooltip({ visible: false }); }}>
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
-          </div>
-          <div className="line-chart">
-            <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} className="chart-svg" onMouseLeave={() => setSalesTooltip({ visible: false })}>
-              <ChartY max={maxVal(salesData)} steps={4} isRevenue />
-              <GridLines />
-              {linePoints.length > 1 && (
-                <polyline points={linePoints.map(p => `${p.x},${p.y}`).join(' ')} fill="none" stroke="#ec4899" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-              )}
-              {linePoints.map((pt, i) => (
-                <g key={i}>
-                  <circle cx={pt.x} cy={pt.y} r="14" fill="transparent" style={{ cursor: 'pointer' }}
-                    onMouseEnter={() => setSalesTooltip({ visible: true, x: pt.x, y: pt.y, lines: [pt.label, fmt(pt.value)] })}
-                    onMouseLeave={() => setSalesTooltip({ visible: false })}
-                  />
-                  <circle cx={pt.x} cy={pt.y} r="5" fill={salesTooltip.visible && salesTooltip.x === pt.x ? '#fff' : '#ec4899'} stroke="#ec4899" strokeWidth="2.5" style={{ pointerEvents: 'none' }} />
-                  {(salesData.length <= 10 || i % Math.ceil(salesData.length / 8) === 0 || i === salesData.length - 1) && (
-                    <text x={pt.x} y={CHART_H - 5} className="x-axis-label" textAnchor="middle" style={{ pointerEvents: 'none' }}>{pt.label}</text>
-                  )}
-                </g>
-              ))}
-              <ChartTooltip {...salesTooltip} chartWidth={CHART_W} />
-            </svg>
-          </div>
-        </div>
-
-        <div className="chart-container">
-          <div className="chart-header">
-            <h3>Order Volume</h3>
-            <div className="chart-filter-pills">
-              {CHART_FILTERS.map(f => (
-                <button key={f.key} className={`chart-pill ${volumeFilter === f.key ? 'active' : ''}`}
-                  onClick={() => { setVolumeFilter(f.key); setVolumeTooltip({ visible: false }); }}>
-                  {f.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="bar-chart">
-            <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} className="chart-svg" onMouseLeave={() => setVolumeTooltip({ visible: false })}>
-              <ChartY max={maxVal(volumeData)} steps={4} />
-              <GridLines />
-              {volumeData.map((item, i) => {
-                const { x, y, barW, barH } = getBarProps(volumeData, i);
-                const isHovered = volumeTooltip.visible && volumeTooltip.barIdx === i;
-                return (
+            <div className="line-chart bento-chart-box">
+              <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} className="chart-svg" onMouseLeave={() => setSalesTooltip({ visible: false })}>
+                <defs>
+                  <linearGradient id="salesAreaFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#16a34a" stopOpacity="0.28" />
+                    <stop offset="100%" stopColor="#16a34a" stopOpacity="0" />
+                  </linearGradient>
+                </defs>
+                <ChartY max={maxVal(salesData)} steps={4} isRevenue />
+                <GridLines />
+                {areaPath && <path d={areaPath} fill="url(#salesAreaFill)" />}
+                {linePoints.length > 1 && (
+                  <polyline points={linePoints.map(p => `${p.x},${p.y}`).join(' ')} fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                )}
+                {linePoints.map((pt, i) => (
                   <g key={i}>
-                    <rect x={x} y={y} width={barW} height={Math.max(barH, 1)} fill={isHovered ? '#7c3aed' : '#8b5cf6'} rx={Math.min(4, barW / 2)}
-                      style={{ cursor: 'pointer', transition: 'fill 0.15s' }}
-                      onMouseEnter={() => setVolumeTooltip({ visible: true, x: x + barW / 2, y, barIdx: i, lines: [item.label || '—', `${fmtNum(item.value)} orders`] })}
-                      onMouseLeave={() => setVolumeTooltip({ visible: false })}
+                    <circle cx={pt.x} cy={pt.y} r="14" fill="transparent" style={{ cursor: 'pointer' }}
+                      onMouseEnter={() => setSalesTooltip({ visible: true, x: pt.x, y: pt.y, lines: [pt.label, fmt(pt.value)] })}
+                      onMouseLeave={() => setSalesTooltip({ visible: false })}
                     />
-                    {item.label && (volumeData.length <= 10 || i % Math.ceil(volumeData.length / 8) === 0 || i === volumeData.length - 1) && (
-                      <text x={x + barW / 2} y={CHART_H - 5} className="x-axis-label" textAnchor="middle" style={{ pointerEvents: 'none' }}>{item.label}</text>
+                    <circle cx={pt.x} cy={pt.y} r="4.5" fill={salesTooltip.visible && salesTooltip.x === pt.x ? '#fff' : '#16a34a'} stroke="#16a34a" strokeWidth="2.5" style={{ pointerEvents: 'none' }} />
+                    {(salesData.length <= 10 || i % Math.ceil(salesData.length / 8) === 0 || i === salesData.length - 1) && (
+                      <text x={pt.x} y={CHART_H - 5} className="x-axis-label" textAnchor="middle" style={{ pointerEvents: 'none' }}>{pt.label}</text>
                     )}
                   </g>
-                );
-              })}
-              <ChartTooltip {...volumeTooltip} chartWidth={CHART_W} />
-            </svg>
+                ))}
+                <ChartTooltip {...salesTooltip} chartWidth={CHART_W} />
+              </svg>
+            </div>
+          </div>
+
+          <div className="bento-card bento-volume">
+            <div className="bento-card-head">
+              <div>
+                <h3>Order Volume</h3>
+                <p>Number of orders over time</p>
+              </div>
+              <div className="bento-head-controls">
+                <div className="chart-filter-pills">
+                  {CHART_FILTERS.map(f => (
+                    <button key={f.key} type="button" className={`chart-pill ${volumeFilter === f.key ? 'active' : ''}`}
+                      onClick={() => { setVolumeFilter(f.key); setVolumeTooltip({ visible: false }); }}>
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="bar-chart bento-chart-box">
+              <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} className="chart-svg" onMouseLeave={() => setVolumeTooltip({ visible: false })}>
+                <ChartY max={maxVal(volumeData)} steps={4} />
+                <GridLines />
+                {volumeData.map((item, i) => {
+                  const { x, y, barW, barH } = getBarProps(volumeData, i);
+                  const isHovered = volumeTooltip.visible && volumeTooltip.barIdx === i;
+                  return (
+                    <g key={i}>
+                      <rect x={x} y={y} width={barW} height={Math.max(barH, 1)} fill={isHovered ? '#be185d' : '#fc1268'} rx={Math.min(4, barW / 2)}
+                        style={{ cursor: 'pointer', transition: 'fill 0.15s' }}
+                        onMouseEnter={() => setVolumeTooltip({ visible: true, x: x + barW / 2, y, barIdx: i, lines: [item.label || '—', `${fmtNum(item.value)} orders`] })}
+                        onMouseLeave={() => setVolumeTooltip({ visible: false })}
+                      />
+                      {item.label && (volumeData.length <= 10 || i % Math.ceil(volumeData.length / 8) === 0 || i === volumeData.length - 1) && (
+                        <text x={x + barW / 2} y={CHART_H - 5} className="x-axis-label" textAnchor="middle" style={{ pointerEvents: 'none' }}>{item.label}</text>
+                      )}
+                    </g>
+                  );
+                })}
+                <ChartTooltip {...volumeTooltip} chartWidth={CHART_W} />
+              </svg>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="sales-top-products">
-        <div className="sales-top-header">
-          <h3><i className="fas fa-trophy"></i> Top Selling Products</h3>
-          <span>Based on paid orders in the selected date range</span>
-        </div>
-        {topProducts.length === 0 ? (
-          <div className="sales-top-empty">No paid product sales in this range.</div>
-        ) : (
-          <>
-            <div className="sales-top-list">
-              {pagedTopProducts.map((p, i) => (
-                <div key={`${p.name}-${topPage * topPageSize + i}`} className="sales-top-item">
-                  <div className="sales-top-rank">#{topPage * topPageSize + i + 1}</div>
-                  {p.image
-                    ? <img src={p.image} alt="" className="sales-top-thumb" />
-                    : <div className="sales-top-thumb placeholder">📦</div>}
-                  <div className="sales-top-meta">
-                    <strong>{p.name}</strong>
-                    <span>{p.quantity} sold</span>
+        <div className="bento-side">
+          <div className="bento-card bento-status">
+            <div className="bento-card-head">
+              <div>
+                <h3>Order Status</h3>
+                <p>Distribution in selected range</p>
+              </div>
+            </div>
+            <div className="bento-donut-wrap">
+              <svg viewBox="0 0 140 140" className="bento-donut" aria-hidden="true">
+                {donutArcs.map((b) => (
+                  <circle key={b.key} cx="70" cy="70" r={donutR} fill="none" stroke={b.color}
+                    strokeWidth="16" strokeDasharray={b.dash} strokeDashoffset="0"
+                    transform={`rotate(${b.rot} 70 70)`} strokeLinecap="butt" />
+                ))}
+                <text x="70" y="66" textAnchor="middle" className="bento-donut-value">{fmtNum(filtered.length)}</text>
+                <text x="70" y="84" textAnchor="middle" className="bento-donut-label">Orders</text>
+              </svg>
+              <div className="bento-status-legend">
+                {orderStatus.map((b) => (
+                  <div key={b.key} className="bento-status-row">
+                    <span className="bento-status-dot" style={{ background: b.color }} />
+                    <span className="bento-status-name">{b.label}</span>
+                    <span className="bento-status-count">{fmtNum(b.count)}</span>
                   </div>
-                  <div className="sales-top-rev">{fmt(p.revenue)}</div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="bento-card bento-recent">
+            <div className="bento-card-head">
+              <div>
+                <h3>Recent Orders</h3>
+                <p>Latest 5 orders</p>
+              </div>
+              <Link to="/admin/orders" className="bento-view-all">View all →</Link>
+            </div>
+            {recentOrders.length === 0 ? (
+              <div className="sales-top-empty">No orders yet</div>
+            ) : (
+              <div className="bento-recent-list">
+                {recentOrders.map((order) => (
+                  <div key={order.orderId} className="bento-recent-item">
+                    <div className="bento-recent-main">
+                      <strong>#{order.orderId?.slice(-8)}</strong>
+                      <span>{order.customerName || order.email || 'Customer'}</span>
+                    </div>
+                    <div className="bento-recent-meta">
+                      <strong>{fmt(order.finalTotal ?? order.total ?? 0)}</strong>
+                      <span className={`order-status ${getStatusBadgeClass(order.paymentStatus || order.orderStatus || order.status)}`}>
+                        {(order.orderStatus || order.paymentStatus || order.status || 'pending').toUpperCase()}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="bento-card bento-top-products">
+          <div className="bento-card-head">
+            <div>
+              <h3>Top Selling Products</h3>
+              <p>Best performers in selected range</p>
+            </div>
+            <Link to="/admin/products" className="bento-view-all">View all →</Link>
+          </div>
+          {topFiveProducts.length === 0 ? (
+            <div className="sales-top-empty">No paid product sales in this range.</div>
+          ) : (
+            <div className="bento-top-table">
+              <div className="bento-top-row bento-top-row--head">
+                <span>#</span>
+                <span>Product</span>
+                <span className="bento-col-num">Sold</span>
+                <span className="bento-col-num">Revenue</span>
+                <span className="bento-col-trend">Trend</span>
+              </div>
+              {topFiveProducts.map((p, i) => (
+                <div key={`${p.id || p.name}-${i}`} className="bento-top-row">
+                  <span className="bento-top-num">{i + 1}</span>
+                  <div className="bento-top-product">
+                    {p.image
+                      ? <img src={p.image} alt="" className="bento-top-thumb" />
+                      : <div className="bento-top-thumb placeholder"><i className="fas fa-box"></i></div>}
+                    <div>
+                      <strong>{p.name}</strong>
+                      <span>{p.category}</span>
+                    </div>
+                  </div>
+                  <span className="bento-top-sold bento-col-num">{fmtNum(p.quantity)}</span>
+                  <span className="bento-top-rev bento-col-num">{fmt(p.revenue)}</span>
+                  <span className="bento-top-trend bento-col-trend"><MiniTrend values={p.trend} color="#16a34a" /></span>
                 </div>
               ))}
             </div>
-            <AdminPager
-              total={topProducts.length}
-              page={topPage}
-              pageSize={topPageSize}
-              onPageChange={setTopPage}
-              onPageSizeChange={setTopPageSize}
-            />
-          </>
-        )}
-      </div>
+          )}
+        </div>
 
-      {/* ── Info Note ── */}
-      <div className="sales-info-note">
-        <i className="fas fa-info-circle"></i>
-        <span>
-          <strong>Sales Reports</strong> focuses on revenue only: net sales, refunds, trends, order volume, and top products.{' '}
-          Store ops (inventory, users, pickup location) are on the <strong>Dashboard</strong>.
-        </span>
+        <div className="bento-card bento-category">
+          <div className="bento-card-head">
+            <div>
+              <h3>Sales by Category</h3>
+              <p>Revenue distribution across product types</p>
+            </div>
+          </div>
+          {salesByCategory.length === 0 ? (
+            <div className="sales-top-empty">No category sales yet.</div>
+          ) : (
+            <div className="bento-cat-list">
+              {salesByCategory.map((c) => (
+                <div key={c.name} className="bento-cat-row">
+                  <div className="bento-cat-label">
+                    <span>{c.name}</span>
+                    <strong>{fmt(c.revenue)}</strong>
+                  </div>
+                  <div className="bento-cat-track">
+                    <div className="bento-cat-fill" style={{ width: `${Math.max(6, (c.revenue / maxCategoryRev) * 100)}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <SummaryModal data={summaryModal} onClose={() => setSummaryModal(null)} />
@@ -572,4 +746,6 @@ const AdminSalesReports = () => {
   );
 };
 
-export default AdminSalesReports;
+export default function AdminSalesReports() {
+  return <Navigate to="/admin" replace />;
+}

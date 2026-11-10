@@ -226,9 +226,6 @@ const AdminSidebar = ({ onLinkClick, onClose, onToggleCollapse }) => {
         <NavLink to="/admin/promos" className="admin-nav-link" onClick={handleNavClick}>
           <i className="fas fa-tags"></i><span>Promos</span>
         </NavLink>
-        <NavLink to="/admin/sales-reports" className="admin-nav-link" onClick={handleNavClick}>
-          <i className="fas fa-chart-bar"></i><span>Sales Reports</span>
-        </NavLink>
         <NavLink to="/admin/users" className="admin-nav-link" onClick={handleNavClick}>
           <i className="fas fa-users"></i><span>User Management</span>
         </NavLink>

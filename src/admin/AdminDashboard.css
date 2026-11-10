@@ -1,7 +1,7 @@
 /* AdminDashboard.css */
 
 .admin-dashboard {
-  padding: 30px;
+  padding: 0;
   max-width: 100%;
   width: 100%;
   margin: 0 auto;
@@ -11,14 +11,14 @@
 .dash-page-intro {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 20px;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
   flex-wrap: wrap;
 }
 .dash-page-intro h2 {
-  margin: 0 0 4px;
-  font-size: 22px;
+  margin: 0;
+  font-size: 20px;
   color: #1a1f36;
 }
 .dash-page-intro p {
@@ -51,27 +51,66 @@
 /* Stats Grid */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
-  gap: 24px;
-  margin-bottom: 30px;
+  grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
-/* Stat Cards — plain white, icon-only colored */
+/* Stat Cards — compact KPI only */
 .stat-card {
   background: white;
   border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  padding: 0;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.05);
   display: flex;
-  gap: 20px;
-  align-items: flex-start;
-  transition: all 0.3s ease;
-  border: 1px solid #f0f0f0;
+  flex-direction: column;
+  transition: all 0.2s ease;
+  border: 1px solid #eef2f7;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.stat-card.wave-card {
+  cursor: pointer;
+  position: relative;
 }
 
 .stat-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.08);
+}
+
+.stat-card-top {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+}
+
+.stat-card-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.stat-card-copy h3 {
+  font-size: 10px;
+  color: #94a3b8;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  margin: 0 0 4px;
+}
+
+.stat-icon-chip {
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  align-self: center;
 }
 
 .stat-icon {
@@ -86,15 +125,6 @@
   flex-shrink: 0;
 }
 
-/* No colored icon plates — graphic only */
-.stat-card.sales .stat-icon,
-.stat-card.orders .stat-icon,
-.stat-card.users .stat-icon,
-.stat-card.products .stat-icon {
-  background: transparent !important;
-  color: inherit;
-}
-
 .stat-details { flex: 1; }
 
 .stat-details h3 {
@@ -107,15 +137,21 @@
 }
 
 .stat-value {
-  font-size: 34px;
-  font-weight: 700;
-  color: #1a1f36;
-  margin: 0 0 6px 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 3px 0;
   line-height: 1;
+  letter-spacing: -0.02em;
+  min-height: 1em;
+}
+.stat-value.is-loading {
+  color: #cbd5e1;
+  letter-spacing: 0;
 }
 
 .stat-label {
-  font-size: 13px;
+  font-size: 11px;
   color: #94a3b8;
   display: block;
   margin-top: 4px;
@@ -383,9 +419,11 @@
     gap: 10px;
     margin-bottom: 14px;
   }
-  .stat-card { padding: 14px; gap: 12px; }
+  .stat-card.wave-card { padding: 0; }
+  .stat-card-top { padding: 10px; }
+  .stat-icon-chip { width: 38px; height: 38px; }
   .stat-icon { width: 40px; height: 40px; font-size: 20px; }
-  .stat-value { font-size: 24px; }
+  .stat-value { font-size: 18px; }
   .stat-details h3 { font-size: 11px; }
   .stat-label { font-size: 12px; }
   .chart-card,
@@ -437,9 +475,11 @@
 @media (max-width: 576px) {
   .admin-dashboard { padding: 0; }
   .dash-page-intro h2 { font-size: 17px; }
-  .stat-card { padding: 12px; gap: 10px; }
+  .stat-card.wave-card { padding: 0; }
+  .stat-card-top { padding: 10px; }
+  .stat-icon-chip { width: 36px; height: 36px; }
   .stat-icon { width: 36px; height: 36px; font-size: 18px; }
-  .stat-value { font-size: 22px; }
+  .stat-value { font-size: 17px; }
   .chart-card,
   .data-card { padding: 12px; }
   .chart-title h3,

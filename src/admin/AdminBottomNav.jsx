@@ -8,7 +8,6 @@ import './AdminBottomNav.css';
 
 const MORE_LINKS = [
   { to: '/admin/promos', icon: 'fa-tags', label: 'Promos' },
-  { to: '/admin/sales-reports', icon: 'fa-chart-bar', label: 'Sales Reports' },
   { to: '/admin/users', icon: 'fa-users', label: 'User Management' },
   { to: '/admin/rewards', icon: 'fa-star', label: 'Rewards' },
   { to: '/admin/settings', icon: 'fa-cog', label: 'Settings' },

@@ -1283,6 +1283,92 @@ const AdminBackup = () => {
   const publishAppUpdate = useMutation(api.appUpdates.publishUpdate);
   const appUpdateList = useQuery(api.appUpdates.listUpdates) || [];
 
+  const storeSettings = useQuery(api.settings.getSettings);
+  const updateSettings = useMutation(api.settings.updateSettings);
+  const [storeForm, setStoreForm] = useState({
+    storeName: '',
+    storeAddress: '',
+    storeLat: '',
+    storeLng: '',
+  });
+  const [storeFormSaved, setStoreFormSaved] = useState(false);
+  const [storeLocating, setStoreLocating] = useState(false);
+
+  useEffect(() => {
+    if (!storeSettings) return;
+    setStoreForm({
+      storeName: storeSettings.storeName ?? 'DKMerch Store',
+      storeAddress: storeSettings.storeAddress ?? '',
+      storeLat: storeSettings.storeLat != null ? String(storeSettings.storeLat) : '',
+      storeLng: storeSettings.storeLng != null ? String(storeSettings.storeLng) : '',
+    });
+  }, [storeSettings]);
+
+  const handleStoreFormChange = (e) => {
+    const { name, value } = e.target;
+    setStoreForm((prev) => ({ ...prev, [name]: value }));
+    setStoreFormSaved(false);
+  };
+
+  const handleDetectLocation = () => {
+    if (!navigator.geolocation) {
+      showNotification('Geolocation is not supported by your browser.', 'error');
+      return;
+    }
+    setStoreLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`,
+            { headers: { 'Accept-Language': 'en' } }
+          );
+          const data = await res.json();
+          setStoreForm((prev) => ({
+            ...prev,
+            storeLat: String(lat),
+            storeLng: String(lng),
+            storeAddress: data.display_name || prev.storeAddress,
+          }));
+          setStoreFormSaved(false);
+        } catch {
+          setStoreForm((prev) => ({ ...prev, storeLat: String(lat), storeLng: String(lng) }));
+        } finally {
+          setStoreLocating(false);
+        }
+      },
+      () => {
+        showNotification('Unable to detect location.', 'error');
+        setStoreLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000 }
+    );
+  };
+
+  const handleSaveStoreSettings = async () => {
+    const lat = parseFloat(storeForm.storeLat);
+    const lng = parseFloat(storeForm.storeLng);
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      showNotification('Please enter valid coordinates or use Detect Location.', 'warning');
+      return;
+    }
+    try {
+      await updateSettings({
+        storeName: storeForm.storeName || undefined,
+        storeAddress: storeForm.storeAddress || undefined,
+        storeLat: lat,
+        storeLng: lng,
+      });
+      setStoreFormSaved(true);
+      showNotification('Store location saved.', 'success');
+    } catch (err) {
+      console.error(err);
+      showNotification('Failed to save store location.', 'error');
+    }
+  };
+
   const refreshOverview = async () => {
     setBusy('refresh');
     try {
@@ -1743,6 +1829,7 @@ const AdminBackup = () => {
           <h2>Maintenance</h2>
         </div>
         <div className="ab-maint-grid">
+          <div className="ab-maint-col">
           <div className="ab-card">
             <div className="ab-card-title">
               <i className="fas fa-mobile-alt" style={{ background: '#fff1f5', color: '#fc1268' }}></i>
@@ -1822,60 +1909,6 @@ const AdminBackup = () => {
                 Latest: <strong>v{appUpdateList[0].version}</strong> — {appUpdateList[0].title}
               </p>
             )}
-          </div>
-
-          <div className="ab-card ab-card--danger">
-            <div className="ab-card-title">
-              <i className="fas fa-exclamation-triangle" style={{ background: '#fff1f5', color: '#e11d48' }}></i>
-              <h3>Danger zone</h3>
-            </div>
-            <div className="ab-danger-tools">
-              <button type="button" className="ab-btn-cache" onClick={() => setTypeAction({ type: 'clear-cache' })}>
-                Clear Cache
-              </button>
-            </div>
-            <label className="ab-password-label" htmlFor="ab-danger-table">Table scope</label>
-            <select
-              id="ab-danger-table"
-              className="ab-oracle-input"
-              style={{ marginBottom: 10 }}
-              value={dangerTableKey}
-              onChange={(e) => setDangerTableKey(e.target.value)}
-            >
-              {TABLES.map((t) => {
-                const count = Array.isArray(allData[t.key]) ? allData[t.key].length : null;
-                return (
-                  <option key={t.key} value={t.key}>
-                    {t.label}{typeof count === 'number' ? ` (${count})` : ''}
-                  </option>
-                );
-              })}
-            </select>
-            <div className="ab-dp-actions">
-              <button
-                type="button"
-                className="ab-btn-outline"
-                disabled={!!busy}
-                onClick={() => {
-                  const table = TABLES.find((t) => t.key === dangerTableKey);
-                  if (table) setPasswordAction({ type: 'archive', table });
-                }}
-              >
-                <i className="fas fa-archive"></i> Archive instead
-              </button>
-              <button
-                type="button"
-                className="ab-btn-primary"
-                style={{ background: 'linear-gradient(135deg,#be123c,#e11d48)' }}
-                disabled={!!busy}
-                onClick={() => {
-                  const table = TABLES.find((t) => t.key === dangerTableKey);
-                  if (table) setPasswordAction({ type: 'wipe', table });
-                }}
-              >
-                <i className="fas fa-trash-alt"></i> Permanent delete
-              </button>
-            </div>
           </div>
 
           <div className="ab-card" style={{ display: 'flex', flexDirection: 'column', minHeight: 420 }}>
@@ -1972,6 +2005,145 @@ const AdminBackup = () => {
                 </button>
               </nav>
             )}
+          </div>
+          </div>
+
+          <div className="ab-maint-col">
+          <div className="ab-card ab-card--danger">
+            <div className="ab-card-title">
+              <i className="fas fa-exclamation-triangle" style={{ background: '#fff1f5', color: '#e11d48' }}></i>
+              <h3>Danger zone</h3>
+            </div>
+            <div className="ab-danger-tools">
+              <button type="button" className="ab-btn-cache" onClick={() => setTypeAction({ type: 'clear-cache' })}>
+                Clear Cache
+              </button>
+            </div>
+            <label className="ab-password-label" htmlFor="ab-danger-table">Table scope</label>
+            <select
+              id="ab-danger-table"
+              className="ab-oracle-input"
+              style={{ marginBottom: 10 }}
+              value={dangerTableKey}
+              onChange={(e) => setDangerTableKey(e.target.value)}
+            >
+              {TABLES.map((t) => {
+                const count = Array.isArray(allData[t.key]) ? allData[t.key].length : null;
+                return (
+                  <option key={t.key} value={t.key}>
+                    {t.label}{typeof count === 'number' ? ` (${count})` : ''}
+                  </option>
+                );
+              })}
+            </select>
+            <div className="ab-dp-actions">
+              <button
+                type="button"
+                className="ab-btn-outline"
+                disabled={!!busy}
+                onClick={() => {
+                  const table = TABLES.find((t) => t.key === dangerTableKey);
+                  if (table) setPasswordAction({ type: 'archive', table });
+                }}
+              >
+                <i className="fas fa-archive"></i> Archive instead
+              </button>
+              <button
+                type="button"
+                className="ab-btn-primary"
+                style={{ background: 'linear-gradient(135deg,#be123c,#e11d48)' }}
+                disabled={!!busy}
+                onClick={() => {
+                  const table = TABLES.find((t) => t.key === dangerTableKey);
+                  if (table) setPasswordAction({ type: 'wipe', table });
+                }}
+              >
+                <i className="fas fa-trash-alt"></i> Permanent delete
+              </button>
+            </div>
+          </div>
+
+          <div className="ab-card">
+            <div className="ab-card-title">
+              <i className="fas fa-map-marker-alt" style={{ background: '#fff1f5', color: '#fc1268' }}></i>
+              <h3>Store / Pickup Location</h3>
+            </div>
+            <p className="ab-card-hint">
+              Used as the starting point for shipping fees in Checkout and rider pickup.
+            </p>
+            <div className="ab-store-grid">
+              <div className="ab-store-field">
+                <label className="ab-password-label" htmlFor="ab-store-name">Store Name</label>
+                <input
+                  id="ab-store-name"
+                  className="ab-oracle-input"
+                  type="text"
+                  name="storeName"
+                  value={storeForm.storeName}
+                  onChange={handleStoreFormChange}
+                  placeholder="DKMerch Store"
+                />
+              </div>
+              <div className="ab-store-field">
+                <label className="ab-password-label" htmlFor="ab-store-address">Store Address</label>
+                <input
+                  id="ab-store-address"
+                  className="ab-oracle-input"
+                  type="text"
+                  name="storeAddress"
+                  value={storeForm.storeAddress}
+                  onChange={handleStoreFormChange}
+                  placeholder="Full store address"
+                />
+              </div>
+              <div className="ab-store-field">
+                <label className="ab-password-label" htmlFor="ab-store-lat">Latitude</label>
+                <input
+                  id="ab-store-lat"
+                  className="ab-oracle-input"
+                  type="number"
+                  name="storeLat"
+                  value={storeForm.storeLat}
+                  onChange={handleStoreFormChange}
+                  placeholder="e.g. 14.5995"
+                  step="0.00001"
+                />
+              </div>
+              <div className="ab-store-field">
+                <label className="ab-password-label" htmlFor="ab-store-lng">Longitude</label>
+                <input
+                  id="ab-store-lng"
+                  className="ab-oracle-input"
+                  type="number"
+                  name="storeLng"
+                  value={storeForm.storeLng}
+                  onChange={handleStoreFormChange}
+                  placeholder="e.g. 120.9842"
+                  step="0.00001"
+                />
+              </div>
+            </div>
+            <div className="ab-store-actions">
+              <button
+                type="button"
+                className="ab-btn-outline"
+                onClick={handleDetectLocation}
+                disabled={storeLocating}
+              >
+                <i className={storeLocating ? 'fas fa-spinner fa-spin' : 'fas fa-crosshairs'}></i>{' '}
+                {storeLocating ? 'Detecting…' : 'Detect My Location'}
+              </button>
+              <button
+                type="button"
+                className="ab-btn-primary"
+                onClick={handleSaveStoreSettings}
+                style={storeFormSaved ? { background: '#16a34a' } : undefined}
+              >
+                <i className={storeFormSaved ? 'fas fa-check' : 'fas fa-save'}></i>{' '}
+                {storeFormSaved ? 'Saved!' : 'Save Location'}
+              </button>
+            </div>
+          </div>
           </div>
         </div>
       </section>
