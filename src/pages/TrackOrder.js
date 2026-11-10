@@ -849,10 +849,14 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
 
           {order.riderInfo && !isCancelled && (
             <div className="rider-info-banner">
-              <div className="rider-info-icon"><i className="fas fa-motorcycle"></i></div>
+              {order.riderInfo.photo ? (
+                <img src={order.riderInfo.photo} alt={order.riderInfo.name || 'Rider'} className="rider-info-photo" />
+              ) : (
+                <div className="rider-info-icon"><i className="fas fa-motorcycle"></i></div>
+              )}
               <div className="rider-info-details">
                 <strong>Your Rider: {order.riderInfo.name || '—'}</strong>
-                <span>🏍️ Motorcycle{order.riderInfo.plate ? ` • ${order.riderInfo.plate}` : ''}</span>
+                <span>🏍️ Motorcycle{order.riderInfo.plate ? ` • Plate Number: ${order.riderInfo.plate}` : ''}</span>
                 {order.riderInfo.phone && <span><i className="fas fa-phone"></i> {order.riderInfo.phone}</span>}
               </div>
             </div>

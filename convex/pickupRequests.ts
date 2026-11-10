@@ -146,6 +146,7 @@ export const acceptOrder = mutation({
     riderPhone: v.optional(v.string()),
     riderVehicle: v.optional(v.string()),
     riderPlate: v.optional(v.string()),
+    riderPhoto: v.optional(v.union(v.string(), v.null())),
   },
   handler: async ({ db }, args) => {
     const order = await findOrderByIdOrShort(db, args.orderId);
@@ -174,6 +175,7 @@ export const acceptOrder = mutation({
       vehicle: args.riderVehicle || "motorcycle",
       plate: args.riderPlate || "",
       email: args.riderEmail,
+      photo: args.riderPhoto || "",
     };
 
     if (claimed) {

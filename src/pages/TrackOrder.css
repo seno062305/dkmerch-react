@@ -669,6 +669,15 @@
 
 .timeline-timestamp i { font-size: 11px; }
 
+.rider-info-photo {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 2px solid #bbf7d0;
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.2);
+}
 .rider-info-banner {
   display: flex; align-items: center; gap: 14px; padding: 14px 18px;
   background: linear-gradient(135deg, #f0fdf4, #dcfce7);

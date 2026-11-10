@@ -1151,7 +1151,7 @@ export const sendPickupApprovedEmail = internalAction({
   },
   handler: async (ctx, args): Promise<{ success: boolean; message?: string; id?: string }> => {
     const shortId  = args.orderId.slice(-8).toUpperCase();
-    const riderUrl = `${SITE_URL}/rider?tab=my-pickups`;
+    const riderUrl = `${SITE_URL}/rider?tab=deliver`;
 
     const html = `<!DOCTYPE html>
 <html>
@@ -1185,12 +1185,13 @@ export const sendPickupApprovedEmail = internalAction({
           </table>
           <div style="background:#eff6ff;border-radius:12px;border:1.5px solid #bfdbfe;padding:16px 20px;margin-bottom:24px;">
             <div style="font-size:13px;color:#1e40af;line-height:1.7;">
-              📦 Go to <strong>My Pickups</strong> tab → Click <strong>Notify Customer</strong> when you're ready to deliver.<br/>
+              📦 Go to the <strong>Deliver</strong> tab → tap <strong>Notify Customer</strong> when you're on the way.<br/>
+              📋 Use <strong>My Orders</strong> to quickly check which jobs are still out or already completed.<br/>
               🔐 Ask the customer for their <strong>OTP code</strong> upon arrival to confirm delivery.
             </div>
           </div>
           <div style="text-align:center;margin-bottom:24px;">
-            <a href="${riderUrl}" style="display:inline-block;background:linear-gradient(135deg,#fc1268,#ff4d94);color:white;text-decoration:none;padding:14px 36px;border-radius:10px;font-size:15px;font-weight:700;">Go to My Pickups</a>
+            <a href="${riderUrl}" style="display:inline-block;background:linear-gradient(135deg,#fc1268,#ff4d94);color:white;text-decoration:none;padding:14px 36px;border-radius:10px;font-size:15px;font-weight:700;">Open Deliver</a>
           </div>
         </td></tr>
         <tr><td style="background:#fafafa;border-top:1px solid #e5e7eb;padding:20px 36px;text-align:center;">

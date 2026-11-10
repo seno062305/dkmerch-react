@@ -37,8 +37,26 @@ function useUserArchivesSafe(enabled) {
   return { userArchives: rows, archivesDeployNeeded: deployNeeded, refreshArchives: refresh };
 }
 
-const RiderViewModal = ({ rider, onClose }) => {
+const fileToDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+const RiderViewModal = ({ rider, onClose, onPhotoUpdated }) => {
   const cardRef = useRef();
+  const photoInputRef = useRef();
+  const updateRiderPhoto = useMutation(api.riders.updateRiderPhoto);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [localPhoto, setLocalPhoto] = useState(rider.riderPhoto || null);
+  const [photoMsg, setPhotoMsg] = useState('');
+
+  useEffect(() => {
+    setLocalPhoto(rider.riderPhoto || null);
+  }, [rider._id, rider.riderPhoto]);
+
   const handlePrint = () => {
     if (!cardRef.current) return;
     const win = window.open('', '_blank', 'width=500,height=320');
@@ -48,6 +66,34 @@ const RiderViewModal = ({ rider, onClose }) => {
     win.focus();
     win.print();
     win.close();
+  };
+
+  const handlePhotoPick = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setPhotoMsg('Please choose an image file (JPG/PNG).');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setPhotoMsg('Photo must be under 5MB.');
+      return;
+    }
+    setPhotoBusy(true);
+    setPhotoMsg('');
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      await updateRiderPhoto({ id: rider._id, riderPhoto: dataUrl });
+      setLocalPhoto(dataUrl);
+      onPhotoUpdated?.({ ...rider, riderPhoto: dataUrl });
+      setPhotoMsg('Face photo saved. Customers will see this on Track Order.');
+    } catch (err) {
+      console.error(err);
+      setPhotoMsg('Failed to save photo. Try again.');
+    } finally {
+      setPhotoBusy(false);
+    }
   };
 
   return (
@@ -67,8 +113,8 @@ const RiderViewModal = ({ rider, onClose }) => {
               </div>
             </div>
             <div className="au-dk-id-body">
-              {rider.riderPhoto
-                ? <img src={rider.riderPhoto} alt={rider.fullName} className="au-dk-id-photo" />
+              {localPhoto
+                ? <img src={localPhoto} alt={rider.fullName} className="au-dk-id-photo" />
                 : <div className="au-dk-id-photo-placeholder">👤</div>}
               <div className="au-dk-id-info">
                 <div className="au-dk-id-name">{rider.fullName}</div>
@@ -76,7 +122,7 @@ const RiderViewModal = ({ rider, onClose }) => {
                 <div className="au-dk-id-details">
                   <div>📞 {rider.phone || '—'}</div>
                   <div>✉️ {rider.email || '—'}</div>
-                  {rider.plateNumber && <div>🔢 Plate: {rider.plateNumber}</div>}
+                  {rider.plateNumber && <div>🔢 Plate Number: {rider.plateNumber}</div>}
                   {rider.licenseNumber && <div>🪪 License: {rider.licenseNumber}</div>}
                   {rider.address && <div>📍 {rider.address}</div>}
                 </div>
@@ -96,6 +142,33 @@ const RiderViewModal = ({ rider, onClose }) => {
           </div>
         </div>
 
+        <div className="au-rider-photo-upload">
+          <div className="au-rider-photo-upload-title">
+            <i className="fas fa-camera"></i> Rider face photo
+          </div>
+          <p className="au-rider-photo-upload-hint">
+            Customers see this photo on Track Order so they can recognize the rider.
+          </p>
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            hidden
+            onChange={handlePhotoPick}
+          />
+          <button
+            type="button"
+            className="au-btn-secondary"
+            disabled={photoBusy}
+            onClick={() => photoInputRef.current?.click()}
+          >
+            {photoBusy
+              ? <><i className="fas fa-spinner fa-spin"></i> Saving…</>
+              : <><i className="fas fa-upload"></i> {localPhoto ? 'Change Photo' : 'Upload Photo'}</>}
+          </button>
+          {photoMsg && <div className="au-rider-photo-msg">{photoMsg}</div>}
+        </div>
+
         <div className="au-rider-view-meta">
           <span className={`au-rider-view-status status-${rider.status}`}>{rider.status}</span>
           {rider.vehicleType && <span>Vehicle: Motorcycle</span>}
@@ -109,6 +182,58 @@ const RiderViewModal = ({ rider, onClose }) => {
           )}
           <button type="button" className="au-btn-primary" onClick={onClose}>Done</button>
         </div>
+      </div>
+    </div>
+  );
+};
+
+const PendingAppDetailModal = ({ app, onClose, onApprove, onReject }) => {
+  const [viewImg, setViewImg] = useState(null);
+  return (
+    <div className="au-rider-view-overlay" onClick={onClose}>
+      <div className="au-rider-view-modal au-pending-app-modal" onClick={e => e.stopPropagation()}>
+        <button className="au-rider-view-close" onClick={onClose}>&times;</button>
+        <h3 className="au-rider-view-title"><i className="fas fa-clipboard-list"></i> Application Details</h3>
+        <p className="au-rider-view-sub">Review rider info and submitted face / ID photos</p>
+
+        <div className="au-pending-app-grid">
+          <div><span className="au-pending-label">Full Name</span><strong>{app.fullName}</strong></div>
+          <div><span className="au-pending-label">Email</span><strong>{app.email}</strong></div>
+          <div><span className="au-pending-label">Phone</span><strong>{app.phone || '—'}</strong></div>
+          <div><span className="au-pending-label">Plate Number</span><strong>{app.plateNumber || '—'}</strong></div>
+          <div><span className="au-pending-label">License No.</span><strong>{app.licenseNumber || '—'}</strong></div>
+          <div><span className="au-pending-label">Address</span><strong>{app.address || '—'}</strong></div>
+        </div>
+
+        <div className="au-pending-photos">
+          {[
+            { key: 'riderPhoto', label: 'Face / Selfie' },
+            { key: 'validId1', label: 'Valid ID #1' },
+            { key: 'validId2', label: 'Valid ID #2' },
+          ].map(({ key, label }) => (
+            <div key={key} className="au-pending-photo-box">
+              <div className="au-pending-photo-label">{label}</div>
+              {app[key]
+                ? <img src={app[key]} alt={label} onClick={() => setViewImg(app[key])} />
+                : <div className="au-pending-photo-missing">No photo</div>}
+            </div>
+          ))}
+        </div>
+
+        <div className="au-rider-view-actions">
+          <button type="button" className="au-btn-primary" onClick={() => { onClose(); onApprove(app); }}>
+            <i className="fas fa-check-circle"></i> Approve
+          </button>
+          <button type="button" className="au-btn-secondary" style={{ color: '#b91c1c' }} onClick={() => { onClose(); onReject(app); }}>
+            <i className="fas fa-times-circle"></i> Reject
+          </button>
+        </div>
+        {viewImg && (
+          <div className="au-img-viewer" onClick={() => setViewImg(null)}>
+            <img src={viewImg} alt="Preview" />
+            <span>Tap to close</span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -158,6 +283,7 @@ const EMPTY_RIDER_FORM = {
   licenseNumber: '',
   password: '',
   confirmPassword: '',
+  riderPhoto: null,
 };
 
 const AdminUsers = () => {
@@ -221,6 +347,7 @@ const AdminUsers = () => {
   const [riderForm, setRiderForm]         = useState(EMPTY_RIDER_FORM);
   const [riderFormError, setRiderFormError] = useState('');
   const [riderFormLoading, setRiderFormLoading] = useState(false);
+  const [pendingAppDetail, setPendingAppDetail] = useState(null);
   const [showRiderPw, setShowRiderPw]     = useState(false);
   const [viewingRider, setViewingRider]   = useState(null);
 
@@ -291,9 +418,13 @@ const AdminUsers = () => {
   const handleAdminCreateRider = async (e) => {
     e.preventDefault();
     setRiderFormError('');
-    const { fullName, email, phone, address, plateNumber, licenseNumber, password, confirmPassword } = riderForm;
+    const { fullName, email, phone, address, plateNumber, licenseNumber, password, confirmPassword, riderPhoto } = riderForm;
     if (!fullName.trim() || !email.trim() || !phone.trim() || !password) {
       setRiderFormError('Full name, email, phone, and password are required.');
+      return;
+    }
+    if (!riderPhoto) {
+      setRiderFormError('Please upload a rider face photo so customers can recognize them.');
       return;
     }
     if (!/\S+@\S+\.\S+/.test(email.trim())) {
@@ -320,6 +451,7 @@ const AdminUsers = () => {
         plateNumber: plateNumber.trim() || undefined,
         licenseNumber: licenseNumber.trim() || undefined,
         password,
+        riderPhoto,
       });
       if (!result.success) {
         setRiderFormError(result.message || 'Failed to create rider.');
@@ -1037,7 +1169,14 @@ const AdminUsers = () => {
                 <tbody>
                   {filteredRiders.map(rider => (
                     <tr key={rider._id}>
-                      <td className="user-name"><i className="fas fa-motorcycle" style={{ color: '#7c3aed' }}></i>{rider.fullName}</td>
+                      <td className="user-name">
+                        <span className="au-pending-name-cell">
+                          {rider.riderPhoto
+                            ? <img src={rider.riderPhoto} alt="" className="au-pending-thumb" />
+                            : <span className="au-pending-thumb-fallback"><i className="fas fa-motorcycle"></i></span>}
+                          {rider.fullName}
+                        </span>
+                      </td>
                       <td>{rider.email}</td>
                       <td>{rider.phone}</td>
                       <td>Motorcycle</td>
@@ -1108,7 +1247,7 @@ const AdminUsers = () => {
                 </div>
                 <div className="form-group">
                   <label>Plate Number</label>
-                  <input name="plateNumber" value={riderForm.plateNumber} onChange={handleRiderFormChange} placeholder="ABC 1234" />
+                  <input name="plateNumber" value={riderForm.plateNumber} onChange={handleRiderFormChange} placeholder="PRO 1234" />
                 </div>
                 <div className="form-group">
                   <label>License Number</label>
@@ -1117,6 +1256,55 @@ const AdminUsers = () => {
                 <div className="form-group au-rider-form-span2">
                   <label>Address</label>
                   <input name="address" value={riderForm.address} onChange={handleRiderFormChange} placeholder="Delivery area / home address" />
+                </div>
+                <div className="form-group au-rider-form-span2">
+                  <label>Rider Face Photo * <span className="au-field-hint">shown to customers on Track Order</span></label>
+                  <div className="au-rider-form-photo">
+                    {riderForm.riderPhoto ? (
+                      <img src={riderForm.riderPhoto} alt="Rider preview" className="au-rider-form-photo-preview" />
+                    ) : (
+                      <div className="au-rider-form-photo-placeholder"><i className="fas fa-user-circle"></i></div>
+                    )}
+                    <div className="au-rider-form-photo-actions">
+                      <label className="au-btn-secondary au-file-label">
+                        <i className="fas fa-camera"></i> {riderForm.riderPhoto ? 'Change Photo' : 'Upload Photo'}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          hidden
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            e.target.value = '';
+                            if (!file) return;
+                            if (!file.type.startsWith('image/')) {
+                              setRiderFormError('Please choose a JPG or PNG image.');
+                              return;
+                            }
+                            if (file.size > 5 * 1024 * 1024) {
+                              setRiderFormError('Photo must be under 5MB.');
+                              return;
+                            }
+                            try {
+                              const dataUrl = await fileToDataUrl(file);
+                              setRiderForm(prev => ({ ...prev, riderPhoto: dataUrl }));
+                              setRiderFormError('');
+                            } catch {
+                              setRiderFormError('Failed to read photo.');
+                            }
+                          }}
+                        />
+                      </label>
+                      {riderForm.riderPhoto && (
+                        <button
+                          type="button"
+                          className="au-btn-secondary"
+                          onClick={() => setRiderForm(prev => ({ ...prev, riderPhoto: null }))}
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
                 <div className="form-group">
                   <label>Password * <span className="au-field-hint">must start with @rider</span></label>
@@ -1176,12 +1364,22 @@ const AdminUsers = () => {
                   <tbody>
                     {pendingApplications.map(app => (
                       <tr key={app._id}>
-                        <td className="user-name">{app.fullName}</td>
+                        <td className="user-name">
+                          <span className="au-pending-name-cell">
+                            {app.riderPhoto
+                              ? <img src={app.riderPhoto} alt="" className="au-pending-thumb" />
+                              : <span className="au-pending-thumb-fallback"><i className="fas fa-user"></i></span>}
+                            {app.fullName}
+                          </span>
+                        </td>
                         <td>{app.email}</td>
                         <td>{app.phone}</td>
                         <td>Motorcycle</td>
                         <td className="date-cell">{formatDate(app.appliedAt)}</td>
                         <td className="actions-cell">
+                          <button className="btn-suspend btn-activate" title="View photos & details" onClick={() => setPendingAppDetail(app)}>
+                            <i className="fas fa-eye"></i>
+                          </button>
                           <button className="btn-suspend btn-activate" title="Approve" onClick={() => handleApprovePendingRider(app)}>
                             <i className="fas fa-check-circle"></i>
                           </button>
@@ -1450,7 +1648,19 @@ const AdminUsers = () => {
       )}
 
       {viewingRider && (
-        <RiderViewModal rider={viewingRider} onClose={() => setViewingRider(null)} />
+        <RiderViewModal
+          rider={viewingRider}
+          onClose={() => setViewingRider(null)}
+          onPhotoUpdated={(updated) => setViewingRider(updated)}
+        />
+      )}
+      {pendingAppDetail && (
+        <PendingAppDetailModal
+          app={pendingAppDetail}
+          onClose={() => setPendingAppDetail(null)}
+          onApprove={handleApprovePendingRider}
+          onReject={handleRejectPendingRider}
+        />
       )}
 
       {/* ══ RIDER DELETE MODAL ════════════════════════════════════════════════ */}

@@ -317,11 +317,15 @@ const Collections = () => {
             const diffMs    = releaseMs !== null ? Date.now() - releaseMs : -1;
             const showReleasedBadge = diffMs >= 0 && diffMs < 60 * 60 * 1000;
 
+            const stockQty = Number(product.stock ?? 0);
+            const isOutOfStock = !product.isPreOrder && stockQty <= 0;
+            const isLowStock = !isOutOfStock && stockQty > 0 && stockQty <= 5;
+
             return (
               <div
                 key={pid}
                 data-product-id={pid}
-                className={`collection-card ${highlightedProductId === pid ? 'highlighted' : ''} ${hasPromo ? 'collection-card-promo' : ''} ${showReleasedBadge ? 'collection-card-released' : ''}`}
+                className={`collection-card ${highlightedProductId === pid ? 'highlighted' : ''} ${hasPromo ? 'collection-card-promo' : ''} ${showReleasedBadge ? 'collection-card-released' : ''} ${isOutOfStock ? 'collection-card-oos' : ''}`}
                 onClick={() => setSelectedProduct(product)}
               >
                 {showReleasedBadge
@@ -345,6 +349,9 @@ const Collections = () => {
 
                 <div className="collection-card-img">
                   <img src={product.image} alt={product.name} />
+                  {isOutOfStock && (
+                    <div className="collection-oos-overlay">Out of Stock</div>
+                  )}
                 </div>
 
                 <div className="collection-card-info">
@@ -359,6 +366,20 @@ const Collections = () => {
                     )}
                     {/* ✅ Points badge */}
                     <PointsBadge price={product.price} />
+                  </div>
+                  <div
+                    className={`collection-stock-badge ${
+                      isOutOfStock ? 'stock-out' : isLowStock ? 'stock-low' : 'stock-in'
+                    }`}
+                  >
+                    <i className="fas fa-box"></i>
+                    <span>
+                      {isOutOfStock
+                        ? 'Out of stock'
+                        : isLowStock
+                          ? `Only ${stockQty} left`
+                          : `${stockQty} in stock`}
+                    </span>
                   </div>
                   {hasPromo && (
                     <div className="collection-promo-hint">

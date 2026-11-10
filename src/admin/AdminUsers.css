@@ -1081,6 +1081,155 @@
   gap: 8px;
 }
 .au-rider-pending-block h4 i { color: #d97706; }
+
+.au-rider-form-photo {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.au-rider-form-photo-preview,
+.au-rider-form-photo-placeholder {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #ffd6e7;
+  background: #fff0f5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fc1268;
+  font-size: 28px;
+  flex-shrink: 0;
+}
+.au-rider-form-photo-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.au-file-label {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.au-rider-photo-upload {
+  margin: 14px 0 8px;
+  padding: 12px 14px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 12px;
+}
+.au-rider-photo-upload-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: #9a3412;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.au-rider-photo-upload-hint {
+  font-size: 12px;
+  color: #9a3412;
+  margin: 0 0 10px;
+  line-height: 1.4;
+}
+.au-rider-photo-msg {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #166534;
+  font-weight: 600;
+}
+.au-pending-name-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.au-pending-thumb,
+.au-pending-thumb-fallback {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #f3e8ff;
+  color: #7c3aed;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+}
+.au-pending-app-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 14px;
+  margin: 12px 0 16px;
+}
+.au-pending-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 2px;
+}
+.au-pending-photos {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.au-pending-photo-box {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #f8fafc;
+}
+.au-pending-photo-label {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 8px;
+  color: #475569;
+  border-bottom: 1px solid #e5e7eb;
+}
+.au-pending-photo-box img {
+  width: 100%;
+  height: 110px;
+  object-fit: cover;
+  cursor: zoom-in;
+  display: block;
+}
+.au-pending-photo-missing {
+  height: 110px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 600;
+}
+.au-img-viewer {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.75);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  z-index: 10000;
+}
+.au-img-viewer img {
+  max-width: min(92vw, 520px);
+  max-height: 80vh;
+  border-radius: 12px;
+  object-fit: contain;
+}
+.au-img-viewer span { color: #fff; font-size: 13px; }
+
 @media (max-width: 720px) {
   .au-rider-form-grid { grid-template-columns: 1fr; }
   .au-rider-form-span2 { grid-column: auto; }

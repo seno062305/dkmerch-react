@@ -134,10 +134,14 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
                   )
                 : null;
 
+            const stockQty = Number(product.stock ?? 0);
+            const isOutOfStock = !product.isPreOrder && stockQty <= 0;
+            const isLowStock = !isOutOfStock && stockQty > 0 && stockQty <= 5;
+
             return (
               <div
                 key={pid}
-                className={`wv-card ${hasPromo ? 'wv-card-promo' : ''} ${showReleasedBadge ? 'wv-card-released' : ''}`}
+                className={`wv-card ${hasPromo ? 'wv-card-promo' : ''} ${showReleasedBadge ? 'wv-card-released' : ''} ${isOutOfStock ? 'wv-card-oos' : ''}`}
                 onClick={() => onProductClick && onProductClick(product)}
               >
                 {showReleasedBadge
@@ -161,6 +165,9 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
 
                 <div className="wv-card-img">
                   <img src={product.image} alt={product.name} />
+                  {isOutOfStock && (
+                    <div className="wv-oos-overlay">Out of Stock</div>
+                  )}
                 </div>
 
                 <div className="wv-card-info">
@@ -177,6 +184,20 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
                     )}
                     {/* ✅ Points badge */}
                     <PointsBadge price={product.price} />
+                  </div>
+                  <div
+                    className={`wv-stock-badge ${
+                      isOutOfStock ? 'stock-out' : isLowStock ? 'stock-low' : 'stock-in'
+                    }`}
+                  >
+                    <i className="fas fa-box"></i>
+                    <span>
+                      {isOutOfStock
+                        ? 'Out of stock'
+                        : isLowStock
+                          ? `Only ${stockQty} left`
+                          : `${stockQty} in stock`}
+                    </span>
                   </div>
                   {hasPromo && (
                     <div className="wv-card-promo-hint">

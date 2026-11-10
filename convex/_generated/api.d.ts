@@ -9,6 +9,7 @@
  */
 
 import type * as activityLogs from "../activityLogs.js";
+import type * as adminCleanup from "../adminCleanup.js";
 import type * as backup from "../backup.js";
 import type * as cart from "../cart.js";
 import type * as crons from "../crons.js";
@@ -36,6 +37,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   activityLogs: typeof activityLogs;
+  adminCleanup: typeof adminCleanup;
   backup: typeof backup;
   cart: typeof cart;
   crons: typeof crons;

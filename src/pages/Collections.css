@@ -330,6 +330,41 @@
 .collection-card-price.sale { color: #dc3545; }
 .collection-card-price-original { font-size: 12px; color: #999; text-decoration: line-through; }
 
+.collection-stock-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  line-height: 1.2;
+  color: #f59e0b;
+}
+.collection-stock-badge i { font-size: 12px; color: #f59e0b; }
+.collection-stock-badge.stock-in,
+.collection-stock-badge.stock-low,
+.collection-stock-badge.stock-out { color: #f59e0b; }
+
+.collection-oos-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.45);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  pointer-events: none;
+  z-index: 2;
+}
+.collection-card-oos .collection-card-img img {
+  filter: grayscale(0.55);
+  opacity: 0.85;
+}
+
 /* No Results */
 .no-results { text-align: center; padding: 80px 20px; }
 .no-results i { font-size: 64px; color: #ddd; margin-bottom: 20px; }

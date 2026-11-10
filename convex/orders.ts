@@ -406,6 +406,7 @@ export const notifyCustomerOutForDelivery = mutation({
     riderPlate:    v.optional(v.string()),
     riderVehicle:  v.optional(v.string()),
     riderEmail:    v.optional(v.string()),
+    riderPhoto:    v.optional(v.union(v.string(), v.null())),
     customerEmail: v.optional(v.string()),
     customerPhone: v.optional(v.string()),
   },
@@ -428,6 +429,7 @@ export const notifyCustomerOutForDelivery = mutation({
       vehicle: args.riderVehicle || "motorcycle",
       plate: args.riderPlate || "",
       email: args.riderEmail || "",
+      photo: args.riderPhoto || (order as any).riderInfo?.photo || "",
     };
 
     await db.patch(order._id, {

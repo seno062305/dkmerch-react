@@ -107,6 +107,7 @@ export const adminCreateRider = mutation({
     plateNumber: v.optional(v.string()),
     licenseNumber: v.optional(v.string()),
     password: v.string(),
+    riderPhoto: v.optional(v.union(v.string(), v.null())),
   },
   handler: async ({ db }, args) => {
     const email = args.email.trim().toLowerCase();
@@ -131,6 +132,7 @@ export const adminCreateRider = mutation({
       plateNumber: args.plateNumber?.trim() || undefined,
       licenseNumber: args.licenseNumber?.trim() || undefined,
       password: args.password,
+      riderPhoto: args.riderPhoto || undefined,
       status: "approved",
       appliedAt: new Date().toISOString(),
       dkRiderId,
@@ -138,6 +140,20 @@ export const adminCreateRider = mutation({
     });
 
     return { success: true, id, dkRiderId, email, fullName: args.fullName.trim() };
+  },
+});
+
+/** Admin (or rider profile) — set/replace the face photo customers see. */
+export const updateRiderPhoto = mutation({
+  args: {
+    id: v.id("riderApplications"),
+    riderPhoto: v.union(v.string(), v.null()),
+  },
+  handler: async ({ db }, { id, riderPhoto }) => {
+    const rider = await db.get(id);
+    if (!rider) return { success: false, message: "Rider not found." };
+    await db.patch(id, { riderPhoto: riderPhoto || null });
+    return { success: true };
   },
 });
 
@@ -397,21 +413,171 @@ export const getAllRiderLastLocations = query({
 });
 
 export const stopRiderTracking = mutation({
-  args: { orderId: v.string() },
-  handler: async ({ db }, { orderId }) => {
-    const existing = await db
-      .query("riderLocations")
-      .withIndex("by_orderId", q => q.eq("orderId", orderId))
-      .first();
+  args: {
+    orderId: v.optional(v.string()),
+    orderIds: v.optional(v.array(v.string())),
+  },
+  handler: async ({ db }, { orderId, orderIds }) => {
+    const ids = [...new Set([...(orderIds || []), orderId].filter(Boolean).map(String))];
+    const now = Date.now();
+    for (const id of ids) {
+      const existing = await db
+        .query("riderLocations")
+        .withIndex("by_orderId", q => q.eq("orderId", id))
+        .first();
+      if (existing) {
+        await db.patch(existing._id, { isTracking: false, updatedAt: now });
+      }
+    }
+    return { success: true, count: ids.length };
+  },
+});
 
-    if (existing) {
-      await db.patch(existing._id, {
-        isTracking: false,
-        updatedAt: Date.now(),
+/** Push the same GPS fix to every active Out-for-Delivery order for this rider. */
+export const updateRiderLocationsBatch = mutation({
+  args: {
+    orderIds: v.array(v.string()),
+    riderEmail: v.string(),
+    riderName: v.string(),
+    lat: v.number(),
+    lng: v.number(),
+    accuracy: v.optional(v.number()),
+    heading: v.optional(v.number()),
+    speed: v.optional(v.number()),
+    isTracking: v.boolean(),
+    sessionId: v.optional(v.string()),
+    lastKnownAddress: v.optional(v.string()),
+  },
+  handler: async ({ db }, args) => {
+    const now = Date.now();
+    const isRealPosition = args.lat !== 0 && args.lng !== 0;
+    for (const orderId of args.orderIds) {
+      const existing = await db
+        .query("riderLocations")
+        .withIndex("by_orderId", q => q.eq("orderId", orderId))
+        .first();
+      const patch: any = {
+        lat: args.lat,
+        lng: args.lng,
+        accuracy: args.accuracy,
+        heading: args.heading,
+        speed: args.speed,
+        isTracking: args.isTracking,
+        updatedAt: now,
+        sessionId: args.sessionId,
+        riderEmail: args.riderEmail,
+        riderName: args.riderName,
+      };
+      if (isRealPosition) {
+        patch.lastKnownLat = args.lat;
+        patch.lastKnownLng = args.lng;
+        patch.lastKnownAt = now;
+        patch.lastKnownAddress = args.lastKnownAddress ?? null;
+      }
+      if (existing) await db.patch(existing._id, patch);
+      else {
+        await db.insert("riderLocations", {
+          orderId,
+          riderEmail: args.riderEmail,
+          riderName: args.riderName,
+          ...patch,
+        });
+      }
+    }
+    return { success: true, count: args.orderIds.length };
+  },
+});
+
+/**
+ * Rider GPS turned off (manual or stop) — mark locations offline and alert
+ * admin + each affected customer by email.
+ */
+export const stopRiderTrackingWithAlert = mutation({
+  args: {
+    orderIds: v.array(v.string()),
+    riderName: v.string(),
+    riderEmail: v.optional(v.string()),
+    reason: v.optional(v.string()),
+  },
+  handler: async ({ db, scheduler }, { orderIds, riderName, riderEmail, reason }) => {
+    const ids = [...new Set(orderIds.filter(Boolean))];
+    const now = Date.now();
+    const reasonText = reason || "Rider turned off live location sharing";
+
+    const admins = await db
+      .query("users")
+      .filter((q) => q.eq(q.field("role"), "admin"))
+      .collect();
+    const adminEmails = [
+      ...new Set(
+        admins
+          .map((u) => String(u.email || "").trim())
+          .filter((e) => e && e.includes("@"))
+      ),
+    ];
+
+    for (const orderId of ids) {
+      const loc = await db
+        .query("riderLocations")
+        .withIndex("by_orderId", q => q.eq("orderId", orderId))
+        .first();
+      if (loc) {
+        await db.patch(loc._id, { isTracking: false, updatedAt: now });
+      }
+
+      const order = await db
+        .query("orders")
+        .withIndex("by_orderId", q => q.eq("orderId", orderId))
+        .first();
+
+      const shortId = String(orderId).slice(-8).toUpperCase();
+      const adminMsg = `📴 ${riderName} turned off GPS for order #${shortId}. ${reasonText}. Last known pin stays on the map.`;
+
+      await db.insert("riderNotifications", {
+        type: "rider_gps_off",
+        orderId,
+        customerName: order?.customerName || "Customer",
+        total: order?.finalTotal ?? order?.total ?? 0,
+        message: adminMsg,
+        createdAt: new Date(now).toISOString(),
+        read: false,
       });
+
+      const customerTo = order?.email;
+      if (customerTo) {
+        await scheduler.runAfter(0, internal.sendEmail.sendEmail, {
+          to: customerTo,
+          subject: `📴 Rider location paused — Order #${shortId} | DKMerch`,
+          html: `<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;background:#f4f4f5;padding:24px;">
+            <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:12px;padding:24px;">
+              <h2 style="color:#fc1268;margin:0 0 12px;">DKMerch</h2>
+              <p>Hi <strong>${order?.customerName || "Customer"}</strong>,</p>
+              <p>Your rider <strong>${riderName}</strong> turned off live location for order <strong>#${shortId}</strong>.</p>
+              <p style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px;color:#9a3412;">
+                ${reasonText}. The map will keep showing their <strong>last known location</strong> until they share again or delivery is completed.
+              </p>
+              <p><a href="https://dkmerchwebsite.vercel.app/track-order?order=${encodeURIComponent(orderId)}" style="color:#fc1268;font-weight:700;">Open Track Order</a></p>
+            </div></body></html>`,
+        });
+      }
+
+      for (const adminTo of adminEmails) {
+        await scheduler.runAfter(0, internal.sendEmail.sendEmail, {
+          to: adminTo,
+          subject: `⚠️ Rider GPS OFF — #${shortId} · ${riderName}`,
+          html: `<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;background:#f4f4f5;padding:24px;">
+            <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:12px;padding:24px;">
+              <h2 style="color:#fc1268;margin:0 0 12px;">DKMerch Admin</h2>
+              <p><strong>${riderName}</strong>${riderEmail ? ` (${riderEmail})` : ""} turned off live GPS.</p>
+              <p>Order: <strong>#${shortId}</strong> · Customer: <strong>${order?.customerName || "—"}</strong></p>
+              <p style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px;color:#9a3412;">${reasonText}</p>
+              <p>Last known location remains on the admin / track maps.</p>
+            </div></body></html>`,
+        });
+      }
     }
 
-    return { success: true };
+    return { success: true, count: ids.length, riderEmail: riderEmail || null };
   },
 });
 
