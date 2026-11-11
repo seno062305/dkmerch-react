@@ -120,7 +120,10 @@ const PrivacyPolicy = () => {
               <li>Allow riders to scan waybill / QR codes to accept parcels, share GPS while delivering, and verify customer delivery OTP (with optional proof photo).</li>
               <li>Show customers live rider location and delivery OTP on the order tracking page.</li>
               <li>Manage wishlist, pre-orders, promos, and rewards points.</li>
-              <li>Process refund requests submitted after delivery (photo + e-wallet refund details).</li>
+              <li>
+                Process damaged-item refund requests submitted within 24 hours of delivery confirmation
+                (photo proof + GCash/Maya refund account details), and pre-confirmation cancellation requests.
+              </li>
               <li>Support account deactivation (reactivation via email OTP) and soft-deletion from Settings.</li>
               <li>Comply with legal obligations and resolve disputes.</li>
             </ul>

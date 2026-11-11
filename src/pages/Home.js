@@ -212,21 +212,21 @@ const Home = () => {
 
   const staticSlides = [
     {
-      image: 'https://images.unsplash.com/photo-1540039155733-5bb30b53aa14?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80',
+      image: '/images/BLACKPINK – BORN PINK Album (Black Version).jpg',
       title: 'Welcome to DKMerch',
       description: 'Your one-stop shop for authentic K-Pop merchandise',
       buttonText: 'Shop Now',
       buttonIcon: 'arrow-right',
     },
     {
-      image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80',
+      image: '/images/BTS – Proof (Standard Edition Album).webp',
       title: 'New Album Releases',
       description: 'Pre-order the latest albums from your favorite groups',
       buttonText: 'Pre-Order Now',
       buttonIcon: 'shopping-bag',
     },
     {
-      image: 'https://images.unsplash.com/photo-1506157786151-b8491531f063?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80',
+      image: '/images/NewJeans - NJ Get Up PHOTOCARD SET.png',
       title: 'Exclusive Photocards',
       description: 'Complete your collection with rare photocards',
       buttonText: 'Browse Collection',
@@ -236,8 +236,8 @@ const Home = () => {
 
   const promoSlide = activePromo
     ? {
-        image: 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80',
-        title: `🎉 ${activePromo.name} Promo`,
+        image: '/images/SEVENTEEN - SECTOR 17 [4th Album Repackage].png',
+        title: `${activePromo.name} Promo`,
         description: activePromo._carouselPhase === 'upcoming'
           ? `Coming soon · Use code: ${activePromo.code} · ${activePromo.discount}% off${activePromo.maxDiscount != null ? ` · Max ₱${Number(activePromo.maxDiscount).toLocaleString()}` : ''}`
           : `Use code: ${activePromo.code} · ${activePromo.discount}% off${activePromo.maxDiscount != null ? ` · Max ₱${Number(activePromo.maxDiscount).toLocaleString()}` : ''}`,

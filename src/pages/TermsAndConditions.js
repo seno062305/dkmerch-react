@@ -104,13 +104,26 @@ const TermsAndConditions = () => {
           <section className="legal-section">
             <h2><i className="fas fa-undo"></i> 8. Refunds</h2>
             <p>
-              After an order is completed / delivered, customers may submit a refund request for damaged items
-              through My Orders, including a photo and GCash or Maya account details for payout if approved.
+              DKMerch accepts <strong>damaged-item refund requests only</strong> after delivery is confirmed
+              in the system. Change-of-mind returns for unused / unopened goods are not a general feature of
+              the current platform.
             </p>
             <ul>
-              <li>Admin reviews each request and may approve or reject it.</li>
-              <li>Approved refunds are processed to the GCash/Maya details you provided; timing after approval can take up to about 24 hours as handled by the admin process.</li>
-              <li>Rejected requests may include a reason; you may resubmit with clearer evidence when allowed by the system.</li>
+              <li>
+                You must submit the refund request from Track Order / My Orders within
+                <strong> 24 hours of delivery confirmation</strong>, with a clear photo of the damage and
+                your GCash or Maya account name and mobile number for payout if approved.
+              </li>
+              <li>Requests filed after the 24-hour window are automatically blocked by the system.</li>
+              <li>Admin reviews each request and may approve or reject it (with a reason when rejected).</li>
+              <li>
+                Approved refunds are sent to the GCash/Maya details you provided; payout after approval
+                is typically completed within about 24 hours, subject to admin processing and e-wallet timing.
+              </li>
+              <li>
+                Before admin confirms an order, you may request cancellation from Track Order (subject to
+                review). Paid cancellations may require GCash/Maya details for a refund if approved.
+              </li>
             </ul>
           </section>
 

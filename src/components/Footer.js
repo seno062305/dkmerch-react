@@ -29,6 +29,7 @@ const Footer = () => {
   ];
 
   const serviceLinks = [
+    { label: 'Help Center', path: '/help' },
     { label: 'Track Order', path: '/track-order' },
     { label: 'Terms and Conditions', path: '/terms-and-conditions' },
     { label: 'Privacy Policy', path: '/privacy-policy' },

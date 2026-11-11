@@ -7,7 +7,7 @@ const genSessionId = () =>
   `${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${Math.random().toString(36).slice(2, 10)}`;
 
 /** Give the owner time to open the app and confirm */
-const RIDER_LOGIN_ALERT_TTL_MS = 5 * 60 * 1000;
+const RIDER_LOGIN_ALERT_TTL_MS = 10 * 60 * 1000;
 
 function isRiderLoginAlertExpired(alert: any, now = Date.now()) {
   if (!alert) return true;
@@ -249,7 +249,6 @@ export const rejectRiderApplication = mutation({
   },
 });
 
-const RIDER_SESSION_ACTIVE_MS = 90 * 1000;
 
 function getRiderSessionIds(rider: any): string[] {
   const fromArr = Array.isArray(rider?.activeSessionIds)
@@ -377,11 +376,7 @@ export const loginRider = mutation({
     }
 
     const sessionId = genSessionId();
-    const lastActive = Number(rider.activeDeviceAt) || 0;
-    const otherStillActive =
-      existingIds.length > 0
-      && lastActive > 0
-      && (now - lastActive) <= RIDER_SESSION_ACTIVE_MS;
+    const hasOtherSession = existingIds.length > 0;
     const STUCK_PENDING_MS = 15 * 60 * 1000;
     const pendingAlert = (rider as any).loginAlert;
     const pendingAge = pendingAlert?.at ? now - Number(pendingAlert.at) : 0;
@@ -389,23 +384,34 @@ export const loginRider = mutation({
       pendingAlert
       && pendingAlert.status === "pending"
       && !pendingAlert.resolved
-      && !isRiderLoginAlertExpired(pendingAlert, now)
       && pendingAge > STUCK_PENDING_MS;
 
-    // Active pending → keep waiting (PIN unlock uses currentSessionId above)
+    // First login / stuck pending → take over
+    if (!hasOtherSession || stuckPending) {
+      await db.patch(
+        rider._id,
+        activateRiderSessionPatch(sessionId, now, deviceName, location, platform) as any,
+      );
+      return {
+        success: true,
+        riderExists: true,
+        rider: safeRider,
+        sessionId,
+        pendingApproval: false,
+      };
+    }
+
+    // Active pending → keep waiting
     if (
-      previousSessionId
-      && otherStillActive
-      && pendingAlert
+      pendingAlert
       && pendingAlert.status === "pending"
       && !pendingAlert.resolved
-      && !stuckPending
       && !isRiderLoginAlertExpired(pendingAlert, now)
     ) {
       const expiresAt = Number(pendingAlert.expiresAt) || now + RIDER_LOGIN_ALERT_TTL_MS;
       const alert = {
         sessionId: String(pendingAlert.sessionId || sessionId),
-        previousSessionId,
+        previousSessionId: previousSessionId || String(pendingAlert.previousSessionId || ""),
         deviceName: deviceName || pendingAlert.deviceName,
         location: location || pendingAlert.location,
         platform: platform || pendingAlert.platform || undefined,
@@ -425,20 +431,7 @@ export const loginRider = mutation({
       };
     }
 
-    if (!previousSessionId || !otherStillActive || stuckPending) {
-      await db.patch(
-        rider._id,
-        activateRiderSessionPatch(sessionId, now, deviceName, location, platform) as any,
-      );
-      return {
-        success: true,
-        riderExists: true,
-        rider: safeRider,
-        sessionId,
-        pendingApproval: false,
-      };
-    }
-
+    // Another device still has a session → ALWAYS require Yes/No
     const expiresAt = now + RIDER_LOGIN_ALERT_TTL_MS;
     const alert = {
       sessionId,
@@ -684,7 +677,7 @@ export const cancelPendingRiderLogin = mutation({
 export const touchRiderSession = mutation({
   args: {
     email: v.string(),
-    sessionId: v.string(),
+    sessionId: v.optional(v.string()),
   },
   handler: async ({ db }, { email, sessionId }) => {
     const rider = await db
@@ -693,9 +686,22 @@ export const touchRiderSession = mutation({
       .first();
     if (!rider) return { success: false };
     const sid = String(sessionId || "").trim();
-    if (!getRiderSessionIds(rider).includes(sid)) return { success: false };
-    await db.patch(rider._id, { activeDeviceAt: Date.now() } as any);
-    return { success: true };
+    const ids = getRiderSessionIds(rider);
+    const now = Date.now();
+    if (sid && ids.includes(sid)) {
+      await db.patch(rider._id, { activeDeviceAt: now } as any);
+      return { success: true, sessionId: sid };
+    }
+    if (ids.length > 0) {
+      const primary = ids[0];
+      await db.patch(rider._id, {
+        activeDeviceAt: now,
+        activeSessionId: primary,
+        activeSessionIds: ids,
+      } as any);
+      return { success: true, sessionId: primary, rebound: true };
+    }
+    return { success: false };
   },
 });
 

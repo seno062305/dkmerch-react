@@ -6,6 +6,22 @@ import { useConfirm } from '../context/ConfirmContext';
 import './AdminChat.css';
 
 const LONG_PRESS_MS = 520;
+const MOBILE_CHAT_MQ = '(max-width: 900px)';
+
+const formatThreadTime = (ms) => {
+  if (!ms) return '';
+  const d = new Date(ms);
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) {
+    return d.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' });
+  }
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+  const weekAgo = now.getTime() - 6 * 24 * 60 * 60 * 1000;
+  if (ms >= weekAgo) return d.toLocaleDateString('en-PH', { weekday: 'short' });
+  return d.toLocaleDateString('en-PH', { month: '2-digit', day: '2-digit' });
+};
 
 const AdminChat = () => {
   const { user } = useAuth();
@@ -17,9 +33,12 @@ const AdminChat = () => {
   const [sending, setSending] = useState(false);
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState('');
-  const [listOpen, setListOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [holdMenu, setHoldMenu] = useState(null); // { thread, x, y }
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return false;
+    return window.matchMedia(MOBILE_CHAT_MQ).matches;
+  });
   const fileRef = useRef(null);
   const bottomRef = useRef(null);
   const holdTimerRef = useRef(null);
@@ -36,6 +55,9 @@ const AdminChat = () => {
     [threads]
   );
 
+  const showMobileList = isMobile && !activeId;
+  const showMobileChat = isMobile && !!activeId;
+
   const messages = useQuery(
     api.supportChat.listMessages,
     activeId ? { threadId: activeId } : 'skip'
@@ -48,11 +70,31 @@ const AdminChat = () => {
   const unarchiveThread = useMutation(api.supportChat.unarchiveThread);
 
   useEffect(() => {
-    if (!activeId && threads.length) setActiveId(threads[0]._id);
-    if (activeId && threads.length && !threads.some((t) => t._id === activeId)) {
-      setActiveId(threads[0]?._id || null);
+    if (typeof window === 'undefined' || !window.matchMedia) return undefined;
+    const mq = window.matchMedia(MOBILE_CHAT_MQ);
+    const onChange = () => setIsMobile(mq.matches);
+    onChange();
+    if (mq.addEventListener) mq.addEventListener('change', onChange);
+    else mq.addListener(onChange);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener('change', onChange);
+      else mq.removeListener(onChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    // Desktop: keep a conversation selected. Mobile: list-first (no auto-open).
+    if (!isMobile) {
+      if (!activeId && threads.length) setActiveId(threads[0]._id);
+      if (activeId && threads.length && !threads.some((t) => t._id === activeId)) {
+        setActiveId(threads[0]?._id || null);
+      }
+      return;
     }
-  }, [threads, activeId]);
+    if (activeId && threads.length && !threads.some((t) => t._id === activeId)) {
+      setActiveId(null);
+    }
+  }, [threads, activeId, isMobile]);
 
   useEffect(() => {
     if (!activeId) return;
@@ -115,8 +157,17 @@ const AdminChat = () => {
 
   const selectThread = (id) => {
     setActiveId(id);
-    setListOpen(false);
+    setArchiveOpen(false);
     setHoldMenu(null);
+  };
+
+  const backToMobileList = () => {
+    setActiveId(null);
+    setHoldMenu(null);
+    setText('');
+    setError('');
+    if (preview?.url) URL.revokeObjectURL(preview.url);
+    setPreview(null);
   };
 
   const handleArchive = async (thread) => {
@@ -217,51 +268,65 @@ const AdminChat = () => {
     }
   };
 
-  const renderThreadButton = (t, { compact } = {}) => (
-    <button
-      key={t._id}
-      type="button"
-      className={`admin-chat-thread ${activeId === t._id ? 'active' : ''} ${compact ? 'compact' : ''}`}
-      onClick={() => {
-        if (holdMenu || didLongPressRef.current) {
-          didLongPressRef.current = false;
-          return;
-        }
-        selectThread(t._id);
-      }}
-      onContextMenu={(e) => {
-        e.preventDefault();
-        openHoldMenu(t, e.clientX, e.clientY);
-      }}
-      onTouchStart={(e) => onThreadPointerDown(t, e)}
-      onTouchMove={() => { holdMovedRef.current = true; clearHoldTimer(); }}
-      onTouchEnd={onThreadPointerUp}
-      onTouchCancel={onThreadPointerUp}
-      onMouseDown={(e) => {
-        if (e.button !== 0) return;
-        onThreadPointerDown(t, e);
-      }}
-      onMouseUp={onThreadPointerUp}
-      onMouseLeave={onThreadPointerUp}
-      onMouseMove={onThreadPointerMove}
-    >
-      <div className="admin-chat-avatar">{(t.customerName || 'C').charAt(0).toUpperCase()}</div>
-      <div className="admin-chat-thread-main">
-        <div className="admin-chat-thread-top">
-          <strong>{t.customerName || 'Customer'}</strong>
-          {(t.unreadByAdmin || 0) > 0 && (
-            <span className="admin-chat-unread">{t.unreadByAdmin}</span>
+  const renderThreadButton = (t, { compact } = {}) => {
+    const unread = t.unreadByAdmin || 0;
+    return (
+      <button
+        key={t._id}
+        type="button"
+        className={`admin-chat-thread ${activeId === t._id ? 'active' : ''} ${compact ? 'compact' : ''} ${unread > 0 ? 'has-unread' : ''}`}
+        onClick={() => {
+          if (holdMenu || didLongPressRef.current) {
+            didLongPressRef.current = false;
+            return;
+          }
+          selectThread(t._id);
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          openHoldMenu(t, e.clientX, e.clientY);
+        }}
+        onTouchStart={(e) => onThreadPointerDown(t, e)}
+        onTouchMove={() => { holdMovedRef.current = true; clearHoldTimer(); }}
+        onTouchEnd={onThreadPointerUp}
+        onTouchCancel={onThreadPointerUp}
+        onMouseDown={(e) => {
+          if (e.button !== 0) return;
+          onThreadPointerDown(t, e);
+        }}
+        onMouseUp={onThreadPointerUp}
+        onMouseLeave={onThreadPointerUp}
+        onMouseMove={onThreadPointerMove}
+      >
+        <div className="admin-chat-avatar">{(t.customerName || 'C').charAt(0).toUpperCase()}</div>
+        <div className="admin-chat-thread-main">
+          <div className="admin-chat-thread-top">
+            <strong>{t.customerName || 'Customer'}</strong>
+            {!compact ? (
+              <span className="admin-chat-thread-time">{formatThreadTime(t.lastMessageAt)}</span>
+            ) : (
+              unread > 0 && <span className="admin-chat-unread">{unread > 9 ? '9+' : unread}</span>
+            )}
+          </div>
+          {!compact ? (
+            <div className="admin-chat-thread-bottom">
+              <div className="admin-chat-thread-preview">
+                {t.lastMessagePreview || t.customerEmail || 'No messages yet'}
+              </div>
+              {unread > 0 && (
+                <span className="admin-chat-unread">{unread > 9 ? '9+' : unread}</span>
+              )}
+            </div>
+          ) : (
+            <div className="admin-chat-thread-email">{t.customerEmail}</div>
+          )}
+          {!compact && (
+            <div className="admin-chat-thread-email desktop-email">{t.customerEmail}</div>
           )}
         </div>
-        <div className="admin-chat-thread-email">{t.customerEmail}</div>
-        {!compact && (
-          <div className="admin-chat-thread-preview">
-            {t.lastMessagePreview || 'No messages yet'}
-          </div>
-        )}
-      </div>
-    </button>
-  );
+      </button>
+    );
+  };
 
   return (
     <div className="admin-chat-page">
@@ -274,20 +339,23 @@ const AdminChat = () => {
         </div>
 
         <div className="admin-chat-header-actions">
-          <button
-            type="button"
-            className={`admin-chat-icon-btn ${listOpen ? 'active' : ''} ${unreadTotal > 0 ? 'has-new' : ''}`}
-            onClick={() => { setListOpen((v) => !v); setArchiveOpen(false); setHoldMenu(null); }}
-            aria-label="Conversations"
-            title="Conversations"
-          >
-            <i className="fas fa-comments"></i>
-            {unreadTotal > 0 && <em className="admin-chat-icon-badge">{unreadTotal > 9 ? '9+' : unreadTotal}</em>}
-          </button>
+          {/* Conversations icon only when already inside a mobile chat */}
+          {showMobileChat && (
+            <button
+              type="button"
+              className={`admin-chat-icon-btn ${unreadTotal > 0 ? 'has-new' : ''}`}
+              onClick={backToMobileList}
+              aria-label="Back to conversations"
+              title="Conversations"
+            >
+              <i className="fas fa-comments"></i>
+              {unreadTotal > 0 && <em className="admin-chat-icon-badge">{unreadTotal > 9 ? '9+' : unreadTotal}</em>}
+            </button>
+          )}
           <button
             type="button"
             className={`admin-chat-icon-btn ${archiveOpen ? 'active' : ''}`}
-            onClick={() => { setArchiveOpen((v) => !v); setListOpen(false); setHoldMenu(null); }}
+            onClick={() => { setArchiveOpen((v) => !v); setHoldMenu(null); }}
             aria-label="Archived chats"
             title="Archived chats"
           >
@@ -299,30 +367,13 @@ const AdminChat = () => {
         </div>
       </div>
 
-      {(listOpen || archiveOpen) && (
+      {archiveOpen && (
         <button
           type="button"
           className="admin-chat-dropdown-backdrop"
           aria-label="Close"
-          onClick={() => { setListOpen(false); setArchiveOpen(false); }}
+          onClick={() => setArchiveOpen(false)}
         />
-      )}
-
-      {listOpen && (
-        <div className="admin-chat-dropdown" role="dialog" aria-label="Conversations">
-          <div className="admin-chat-dropdown-head">
-            <strong>Conversations</strong>
-            <span>{threads.length}</span>
-          </div>
-          <div className="admin-chat-dropdown-hint">Hold a profile to archive</div>
-          <div className="admin-chat-dropdown-list">
-            {threads.length === 0 ? (
-              <div className="admin-chat-list-empty">No customer chats yet.</div>
-            ) : (
-              threads.map((t) => renderThreadButton(t, { compact: true }))
-            )}
-          </div>
-        </div>
       )}
 
       {archiveOpen && (
@@ -353,10 +404,12 @@ const AdminChat = () => {
         </div>
       )}
 
-      <div className="admin-chat-layout">
-        <aside className="admin-chat-list desktop-only">
+      <div
+        className={`admin-chat-layout ${showMobileList ? 'is-mobile-list' : ''} ${showMobileChat ? 'is-mobile-chat' : ''}`}
+      >
+        <aside className={`admin-chat-list ${isMobile ? 'mobile-pane' : 'desktop-only'} ${showMobileList || !isMobile ? 'is-visible' : ''}`}>
           <div className="admin-chat-list-head">
-            <span>Conversations</span>
+            <span>Chats{unreadTotal > 0 ? ` · ${unreadTotal} new` : ''}</span>
             <button
               type="button"
               className="admin-chat-list-archive-link"
@@ -372,14 +425,11 @@ const AdminChat = () => {
           )}
         </aside>
 
-        <section className="admin-chat-convo">
+        <section className={`admin-chat-convo ${showMobileList ? 'is-hidden-mobile' : ''}`}>
           {!activeThread ? (
             <div className="admin-chat-convo-empty">
               <i className="fas fa-comments"></i>
               <p>Select a customer conversation</p>
-              <button type="button" className="admin-chat-open-list-btn" onClick={() => setListOpen(true)}>
-                Open conversations
-              </button>
             </div>
           ) : (
             <>
@@ -387,8 +437,8 @@ const AdminChat = () => {
                 <button
                   type="button"
                   className="admin-chat-mobile-back"
-                  onClick={() => setListOpen(true)}
-                  aria-label="Conversations"
+                  onClick={backToMobileList}
+                  aria-label="Back to chats"
                 >
                   <i className="fas fa-chevron-left"></i>
                 </button>

@@ -269,11 +269,9 @@ export const hasLoginPin = query({
   },
 });
 
-/** Treat another device as "online" if it heartbeated within this window. */
-const SESSION_ACTIVE_MS = 10 * 60 * 1000;
 /** Pending Yes/No login request auto-denies after this. */
 /** Give the owner time to open the app, enter PIN, then tap Yes */
-const LOGIN_ALERT_TTL_MS = 5 * 60 * 1000;
+const LOGIN_ALERT_TTL_MS = 10 * 60 * 1000;
 
 function isLoginAlertExpired(alert: any, now = Date.now()) {
   if (!alert) return true;
@@ -363,11 +361,7 @@ export const startUserSession = mutation({
     }
 
     const sessionId = genSessionId();
-    const lastActive = Number(user.activeDeviceAt) || 0;
-    const otherStillActive =
-      existingIds.length > 0
-      && lastActive > 0
-      && (now - lastActive) <= SESSION_ACTIVE_MS;
+    const hasOtherSession = existingIds.length > 0;
     // Only treat pending as abandoned after 15m — never skip Yes/No on a fresh retry
     const STUCK_PENDING_MS = 15 * 60 * 1000;
     const pendingAlert = user.loginAlert;
@@ -376,23 +370,28 @@ export const startUserSession = mutation({
       pendingAlert
       && pendingAlert.status === "pending"
       && !pendingAlert.resolved
-      && !isLoginAlertExpired(pendingAlert, now)
       && pendingAge > STUCK_PENDING_MS;
 
-    // Active pending request (not stuck) → keep waiting; refresh alert details
+    // First login on this account, or a stuck pending that never got answered → take over
+    if (!hasOtherSession || stuckPending) {
+      await db.patch(
+        args.userId,
+        activateSessionPatch(sessionId, now, deviceName, location, platform) as any,
+      );
+      return { success: true, sessionId, pendingApproval: false };
+    }
+
+    // Active pending request → keep waiting; refresh alert details for the new attempt UI
     if (
-      previousSessionId
-      && otherStillActive
-      && pendingAlert
+      pendingAlert
       && pendingAlert.status === "pending"
       && !pendingAlert.resolved
-      && !stuckPending
       && !isLoginAlertExpired(pendingAlert, now)
     ) {
       const expiresAt = Number(pendingAlert.expiresAt) || now + LOGIN_ALERT_TTL_MS;
       const alert = {
         sessionId: String(pendingAlert.sessionId || sessionId),
-        previousSessionId,
+        previousSessionId: previousSessionId || String(pendingAlert.previousSessionId || ""),
         deviceName: deviceName || pendingAlert.deviceName,
         location: location || pendingAlert.location,
         platform: platform || pendingAlert.platform || undefined,
@@ -407,24 +406,11 @@ export const startUserSession = mutation({
         sessionId: String(alert.sessionId),
         pendingApproval: true,
         replacedSession: true,
+        expiresAt,
       };
     }
 
-    // First login / stale / truly stuck pending → take over now
-    // (PIN unlock uses currentSessionId match above — do not skip Yes/No via device name.)
-    if (
-      !previousSessionId
-      || !otherStillActive
-      || stuckPending
-    ) {
-      await db.patch(
-        args.userId,
-        activateSessionPatch(sessionId, now, deviceName, location, platform) as any,
-      );
-      return { success: true, sessionId, pendingApproval: false };
-    }
-
-    // Another device is recently active → wait for Yes on that device
+    // Another device still has a session → ALWAYS require Yes/No (all roles)
     const expiresAt = now + LOGIN_ALERT_TTL_MS;
     const alert = {
       sessionId,
@@ -437,6 +423,7 @@ export const startUserSession = mutation({
       status: "pending" as const,
       resolved: false,
     };
+    // Keep owner sessions intact — only store the pending request
     await db.patch(args.userId, { loginAlert: alert } as any);
 
     try {
@@ -498,19 +485,56 @@ export const expireLoginAlert = internalMutation({
 export const touchUserSession = mutation({
   args: {
     userId: v.string(),
-    sessionId: v.string(),
+    sessionId: v.optional(v.string()),
   },
   handler: async ({ db }, { userId, sessionId }) => {
     const id = String(userId || "").trim();
     const sid = String(sessionId || "").trim();
-    if (!id || !sid) return { success: false };
+    if (!id) return { success: false };
     try {
       const user = await db.get(id as any) as any;
       if (!user) return { success: false };
       const ids = getActiveSessionIds(user);
-      if (!ids.includes(sid)) return { success: false };
-      await db.patch(user._id, { activeDeviceAt: Date.now() } as any);
-      return { success: true };
+      const now = Date.now();
+
+      if (sid && ids.includes(sid)) {
+        await db.patch(user._id, { activeDeviceAt: now } as any);
+        return { success: true, sessionId: sid };
+      }
+
+      // Local sessionId missing/stale but account still has sessions — rebind
+      // so this signed-in tab keeps heartbeating and can receive Yes/No alerts.
+      if (ids.length > 0) {
+        const primary = ids[0];
+        await db.patch(user._id, {
+          activeDeviceAt: now,
+          activeSessionId: primary,
+          activeSessionIds: ids,
+        } as any);
+        return { success: true, sessionId: primary, rebound: true };
+      }
+
+      // No server sessions left — quietly create one for this already-signed-in device.
+      // Preserve any pending loginAlert so Yes/No is not wiped by a heartbeat.
+      const newSid = sid || genSessionId();
+      const patch = activateSessionPatch(
+        newSid,
+        now,
+        String(user.activeDeviceName || "This device").slice(0, 120),
+        String(user.activeDeviceLocation || "Unknown location").slice(0, 160),
+        String(user.activeDevicePlatform || "").slice(0, 80),
+      ) as any;
+      const pending = user.loginAlert;
+      if (
+        pending
+        && pending.status === "pending"
+        && !pending.resolved
+        && !isLoginAlertExpired(pending, now)
+      ) {
+        delete patch.loginAlert;
+      }
+      await db.patch(user._id, patch);
+      return { success: true, sessionId: newSid, created: true };
     } catch {
       return { success: false };
     }
@@ -579,18 +603,9 @@ export const cancelPendingLogin = mutation({
       const user = await db.get(id as any) as any;
       if (!user) return { success: false };
       const alert = user.loginAlert;
-      if (alert && String(alert.sessionId) === sid) {
-        await db.patch(user._id, {
-          loginAlert: undefined,
-          // Allow immediate re-login without another Yes/No wait
-          activeDeviceAt: 0,
-        } as any);
-      } else {
-        await db.patch(user._id, {
-          loginAlert: undefined,
-          activeDeviceAt: 0,
-        } as any);
-      }
+      // Drop only the pending request — keep owner sessions so the next
+      // login from another device still triggers Yes/No.
+      await db.patch(user._id, { loginAlert: undefined } as any);
       return { success: true };
     } catch {
       return { success: false };

@@ -1330,7 +1330,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
             <div className="order-items-list">
               {(order.items?.length ? [order.items[0]] : []).map((item, index) => (
                 <div key={index} className="order-item-card">
-                  <div className="item-image"><img src={item.image} alt={item.name || 'Product'} onError={e => { e.target.onerror = null; e.target.src = 'https://via.placeholder.com/80x80?text=No+Image'; }} /></div>
+                  <div className="item-image"><img src={item.image} alt={item.name || 'Product'} onError={e => { e.target.onerror = null; e.target.src = '/images/dklogo.jpg'; }} /></div>
                   <div className="item-details"><strong>{item.name || 'N/A'}</strong><p className="item-price">₱{(item.price || 0).toLocaleString('en-PH')} x {item.quantity || 0}</p></div>
                   <div className="item-subtotal">₱{((item.quantity || 0) * (item.price || 0)).toLocaleString('en-PH')}</div>
                 </div>
@@ -1492,7 +1492,7 @@ const OrderItemsListModal = ({ order, onClose }) => {
                     <img
                       src={item.image}
                       alt={item.name || 'Product'}
-                      onError={e => { e.target.onerror = null; e.target.src = 'https://via.placeholder.com/64x64?text=No+Image'; }}
+                      onError={e => { e.target.onerror = null; e.target.src = '/images/dklogo.jpg'; }}
                     />
                   </div>
                   <div className="order-items-modal-info">

@@ -76,7 +76,7 @@ const CountdownTimer = ({
   if (t.expired) {
     return (
       <div className="promo-countdown expired">
-        {upcoming ? '🎉 Promo is live — refresh to redeem' : '⏰ Promo has ended'}
+        {upcoming ? 'Promo is live — refresh to redeem' : 'Promo has ended'}
       </div>
     );
   }

@@ -275,6 +275,7 @@ export const AuthProvider = ({ children }) => {
 
   // Keep last-active + server heartbeat while this account is signed in.
   // Also run during PIN gate so another-device login still triggers Yes/No.
+  // Rebind sessionId if local auth lost it — otherwise server skips the notice.
   useEffect(() => {
     if (!isAuthenticated) return;
     const touchLocal = () => {
@@ -282,22 +283,42 @@ export const AuthProvider = ({ children }) => {
       // Don't mark session alive while PIN gate is up (cold start still needs PIN)
       if (!needsDeviceUnlock) markSessionAlive();
     };
+    const applySessionId = (nextId) => {
+      const sid = String(nextId || "").trim();
+      if (!sid) return;
+      const u = userRef.current;
+      if (!u || String(u.sessionId || "") === sid) return;
+      const next = { ...u, sessionId: sid };
+      userRef.current = next;
+      writeAuthUser(next);
+      setUser(next);
+      if (next.role === "user" || next.role === "admin") {
+        try { saveDeviceUnlock(next); } catch { /* ignore */ }
+      }
+    };
     const touchServer = () => {
       const u = userRef.current;
-      if (!u?.sessionId) return;
       if (u.role === "rider" && u.email) {
         touchRiderSession({
           email: String(u.email),
-          sessionId: String(u.sessionId),
-        }).catch(() => {});
+          sessionId: u.sessionId ? String(u.sessionId) : undefined,
+        })
+          .then((res) => {
+            if (res?.success && res.sessionId) applySessionId(res.sessionId);
+          })
+          .catch(() => {});
         return;
       }
       if (!u?._id) return;
       if (u.role !== "user" && u.role !== "admin") return;
       touchUserSession({
         userId: String(u._id),
-        sessionId: String(u.sessionId),
-      }).catch(() => {});
+        sessionId: u.sessionId ? String(u.sessionId) : undefined,
+      })
+        .then((res) => {
+          if (res?.success && res.sessionId) applySessionId(res.sessionId);
+        })
+        .catch(() => {});
     };
     const touch = () => {
       touchLocal();
@@ -374,6 +395,19 @@ export const AuthProvider = ({ children }) => {
 
   // Show FB-style alert after PIN unlock only — never interrupt the PIN page
   useEffect(() => {
+    const current = userRef.current;
+    const customerLoading =
+      isAuthenticated
+      && current?._id
+      && (current.role === "user" || current.role === "admin")
+      && pendingLoginAlert === undefined;
+    const riderLoading =
+      isAuthenticated
+      && current?.role === "rider"
+      && pendingRiderLoginAlert === undefined;
+    // Query still loading — don't clear / skip the notice
+    if (customerLoading || riderLoading) return;
+
     const pending = pendingLoginAlert || pendingRiderLoginAlert || null;
     if (!pending) {
       // Don't wipe a held confirmation; only clear live pending UI
@@ -381,24 +415,35 @@ export const AuthProvider = ({ children }) => {
       return;
     }
     if (holdLogoutConfirmRef.current) return;
-    // Wait until PIN gate is closed (push → PIN → then Yes/No)
-    if (needsDeviceUnlock) return;
-    const current = userRef.current;
+    // Show above PIN too (modal z-index is higher) so the notice never "disappears"
     if (!current) return;
     try { clearAuthGate(); } catch { /* ignore */ }
-    setSecurityAlert({
-      alert: pending,
-      previousUser: current,
-      mode: "pending",
+    setSecurityAlert((prev) => {
+      const same =
+        prev?.mode === "pending"
+        && String(prev?.alert?.sessionId || "") === String(pending.sessionId || "");
+      if (!same) {
+        try {
+          showNotification(
+            `New login request from ${pending.deviceName || "another device"}. Confirm if this was you.`,
+            "warning",
+            { duration: 8000, dedupeKey: "login-alert-pending" }
+          );
+        } catch { /* ignore */ }
+      }
+      return {
+        alert: pending,
+        previousUser: current,
+        mode: "pending",
+      };
     });
     clearLoginAlertDeepLink();
-  }, [pendingLoginAlert, pendingRiderLoginAlert, needsDeviceUnlock, isAuthenticated]);
+  }, [pendingLoginAlert, pendingRiderLoginAlert, isAuthenticated, showNotification]);
 
-  // Push tap — mark intent; show after unlock (re-fires when PIN closes)
+  // Push tap — open Yes/No as soon as pending alert is available (even over PIN)
   useEffect(() => {
     const bump = () => {
       try { sessionStorage.setItem("dkmerch_open_login_alert", "1"); } catch { /* ignore */ }
-      if (needsDeviceUnlock) return;
       const current = userRef.current;
       const pending = pendingLoginAlert || pendingRiderLoginAlert;
       if (!current || !pending) return;
@@ -412,14 +457,11 @@ export const AuthProvider = ({ children }) => {
       clearLoginAlertDeepLink();
     };
     window.addEventListener("dkOpenLoginAlert", bump);
-    // If we landed from a notif while PIN was up, retry once unlock clears
-    if (!needsDeviceUnlock) {
-      try {
-        if (sessionStorage.getItem("dkmerch_open_login_alert") === "1") bump();
-      } catch { /* ignore */ }
-    }
+    try {
+      if (sessionStorage.getItem("dkmerch_open_login_alert") === "1") bump();
+    } catch { /* ignore */ }
     return () => window.removeEventListener("dkOpenLoginAlert", bump);
-  }, [pendingLoginAlert, pendingRiderLoginAlert, needsDeviceUnlock]);
+  }, [pendingLoginAlert, pendingRiderLoginAlert]);
 
   // Only sign out if THIS session was removed (stale takeover) — not after Yes
   useEffect(() => {

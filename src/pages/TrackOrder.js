@@ -274,9 +274,20 @@ const RefundModal = ({ order, onClose, onSuccess }) => {
   const requestRefund     = useMutation(api.orders.requestRefund);
 
   const refundAmount = (order.finalTotal ?? order.total ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2 });
-  const { canRefund, hoursLeft, minsLeft, expired } = getRefundWindow(order);
+  const { canRefund, expired } = getRefundWindow(order);
 
   useBodyScrollLock(true);
+
+  useEffect(() => {
+    if (!refundMethod) return;
+    const id = window.setTimeout(() => {
+      document.querySelector('.refund-account-fields')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+      });
+    }, 50);
+    return () => window.clearTimeout(id);
+  }, [refundMethod]);
 
   const handlePhotoChange = (e) => {
     const file = e.target.files[0];
@@ -340,11 +351,10 @@ const RefundModal = ({ order, onClose, onSuccess }) => {
           <div className="refund-modal-icon"><i className="fas fa-box-open"></i></div>
           <div><h3>Request a Refund</h3><p>Order #{formatOrderShortId(order)} · <strong>₱{refundAmount}</strong></p></div>
         </div>
-        <div className="refund-window-timer"><i className="fas fa-hourglass-half"></i><span>Closes in <strong>{hoursLeft}h {minsLeft}m</strong></span></div>
         <div className="refund-modal-body">
           <div className="refund-reason-fixed">
             <div className="refund-reason-fixed-icon"><i className="fas fa-box"></i></div>
-            <div><span className="refund-reason-fixed-label">📦 Item arrived damaged</span><span className="refund-reason-fixed-desc">Provide photo proof below.</span></div>
+            <div><span className="refund-reason-fixed-label">📦 Item arrived damaged</span><span className="refund-reason-fixed-desc">Provide photo proof below. Damaged-item refunds are accepted within 24 hours of delivery.</span></div>
           </div>
           <div className="refund-field-group">
             <label className="refund-modal-label"><i className="fas fa-camera"></i> Photo Proof <span className="refund-required">*</span></label>
@@ -367,7 +377,7 @@ const RefundModal = ({ order, onClose, onSuccess }) => {
             <div className="refund-field-group refund-account-fields">
               <label className="refund-modal-label"><i className="fas fa-id-card"></i> Account Details <span className="refund-required">*</span></label>
               <input type="text" className="refund-input" placeholder="Account Name" value={accountName} onChange={e => { setAccountName(e.target.value); setError(''); }} maxLength={60} />
-              <input type="tel" className="refund-input" placeholder="Mobile Number (09XXXXXXXXX)" value={accountNumber} onChange={e => { setAccountNumber(e.target.value); setError(''); }} maxLength={13} />
+              <input type="tel" className="refund-input" placeholder="Mobile Number (09XXXXXXXXX)" value={accountNumber} onChange={e => { setAccountNumber(e.target.value); setError(''); }} maxLength={13} inputMode="numeric" autoComplete="tel" />
             </div>
           )}
           <div className="refund-field-group">

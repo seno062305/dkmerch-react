@@ -124,6 +124,12 @@
   align-self: center;
 }
 
+/* Dark AI-pack icons → brand pink so they stay visible on light cards */
+.stat-icon-chip .dk-icon,
+.stat-modal-icon .dk-icon {
+  filter: invert(28%) sepia(98%) saturate(3200%) hue-rotate(320deg) brightness(100%) contrast(105%);
+}
+
 .stat-icon {
   width: 48px;
   height: 48px;

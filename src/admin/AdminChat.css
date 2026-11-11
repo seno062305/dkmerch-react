@@ -360,6 +360,34 @@
   font-size: 13px;
   color: #111827;
   display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-chat-thread.has-unread .admin-chat-thread-top strong {
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.admin-chat-thread-time {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.admin-chat-thread.has-unread .admin-chat-thread-time {
+  color: #fc1268;
+}
+
+.admin-chat-thread-bottom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 3px;
+  min-width: 0;
 }
 
 .admin-chat-unread {
@@ -374,6 +402,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 .admin-chat-thread-email,
@@ -386,8 +415,19 @@
 }
 
 .admin-chat-thread-preview {
-  margin-top: 2px;
+  margin-top: 0;
   color: #94a3b8;
+  flex: 1;
+  min-width: 0;
+}
+
+.admin-chat-thread.has-unread .admin-chat-thread-preview {
+  color: #475569;
+  font-weight: 600;
+}
+
+.admin-chat-thread-email.desktop-email {
+  margin-top: 2px;
 }
 
 .admin-chat-convo-head {
@@ -606,6 +646,49 @@
 
   .admin-chat-list.desktop-only {
     display: none;
+  }
+
+  /* Telegram-style: full chat list until a thread is opened */
+  .admin-chat-list.mobile-pane {
+    display: none;
+    min-height: calc(100dvh - 168px);
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+
+  .admin-chat-layout.is-mobile-list .admin-chat-list.mobile-pane.is-visible {
+    display: flex;
+  }
+
+  .admin-chat-layout.is-mobile-list .admin-chat-convo.is-hidden-mobile {
+    display: none;
+  }
+
+  .admin-chat-layout.is-mobile-chat .admin-chat-list.mobile-pane {
+    display: none;
+  }
+
+  .admin-chat-list.mobile-pane .admin-chat-thread-email.desktop-email {
+    display: none;
+  }
+
+  .admin-chat-list.mobile-pane .admin-chat-avatar {
+    width: 48px;
+    height: 48px;
+    font-size: 16px;
+  }
+
+  .admin-chat-list.mobile-pane .admin-chat-thread {
+    padding: 14px 12px;
+  }
+
+  .admin-chat-list.mobile-pane .admin-chat-thread-top strong {
+    font-size: 15px;
+  }
+
+  .admin-chat-list.mobile-pane .admin-chat-thread-preview {
+    font-size: 13px;
   }
 
   .admin-chat-convo {

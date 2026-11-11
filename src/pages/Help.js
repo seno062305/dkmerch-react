@@ -95,39 +95,38 @@ const Help = () => {
             </div>
           </section>
 
-          {/* Returns */}
+          {/* Returns / Refunds */}
           <section id="returns" className="help-section">
-            <h2><i className="fas fa-undo"></i> Return Policy</h2>
+            <h2><i className="fas fa-undo"></i> Refund Policy</h2>
             <div className="info-content">
               <div className="info-card">
-                <h3>Return Window</h3>
-                <p>You have 14 days from the date of delivery to initiate a return for most items.</p>
+                <h3>24-hour damaged-item window</h3>
+                <p>
+                  After your order is marked delivered, you may request a refund for
+                  <strong> damaged items only</strong> within <strong>24 hours</strong>.
+                  Change-of-mind returns for unused goods are not supported in the current system.
+                </p>
               </div>
               <div className="info-card">
-                <h3>Eligible Items</h3>
-                <ul>
-                  <li>Items must be unused and in original packaging</li>
-                  <li>Albums must have intact shrink wrap</li>
-                  <li>Photocards and collectibles must be in mint condition</li>
-                </ul>
-              </div>
-              <div className="info-card">
-                <h3>Non-Returnable Items</h3>
-                <ul>
-                  <li>Opened albums or damaged packaging</li>
-                  <li>Pre-order items (special circumstances only)</li>
-                  <li>Sale or clearance items</li>
-                </ul>
-              </div>
-              <div className="info-card">
-                <h3>Damaged item refunds</h3>
+                <h3>How to request</h3>
                 <ol>
-                  <li>After delivery, open Track Order / My Orders</li>
+                  <li>Open Track Order / My Orders and find the delivered order</li>
                   <li>Submit a refund request with a clear photo of the damage</li>
-                  <li>Enter your GCash or Maya details for payout if approved</li>
+                  <li>Choose GCash or Maya and enter account name + mobile number</li>
                   <li>Admin reviews the request and emails you the decision</li>
-                  <li>For other concerns, email dkmerchtest@gmail.com</li>
+                  <li>Approved payouts usually process within about 24 hours after approval</li>
                 </ol>
+              </div>
+              <div className="info-card">
+                <h3>Before confirmation</h3>
+                <p>
+                  If admin has not confirmed your order yet, you can request cancellation from Track Order.
+                  Paid orders may need GCash/Maya details so an approved refund can be sent.
+                </p>
+              </div>
+              <div className="info-card">
+                <h3>Other concerns</h3>
+                <p>Email <a href="mailto:dkmerchtest@gmail.com">dkmerchtest@gmail.com</a> or use Live Chat (login required).</p>
               </div>
             </div>
           </section>
