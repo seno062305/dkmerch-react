@@ -123,6 +123,7 @@ header {
   gap: 1.25rem;
   flex-shrink: 0;
   justify-self: end;
+  overflow: visible;
 }
 
 .header-action-item {

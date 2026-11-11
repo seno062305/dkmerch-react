@@ -269,9 +269,8 @@ export const hasLoginPin = query({
   },
 });
 
-/** Pending Yes/No login request auto-denies after this. */
-/** Give the owner time to open the app, enter PIN, then tap Yes */
-const LOGIN_ALERT_TTL_MS = 10 * 60 * 1000;
+/** Pending Yes/No login request auto-denies after this (always 60s, even on re-request). */
+const LOGIN_ALERT_TTL_MS = 60 * 1000;
 
 function isLoginAlertExpired(alert: any, now = Date.now()) {
   if (!alert) return true;
@@ -381,26 +380,32 @@ export const startUserSession = mutation({
       return { success: true, sessionId, pendingApproval: false };
     }
 
-    // Active pending request → keep waiting; refresh alert details for the new attempt UI
+    // Active pending request → keep waiting; refresh details + always reset 60s countdown
     if (
       pendingAlert
       && pendingAlert.status === "pending"
       && !pendingAlert.resolved
       && !isLoginAlertExpired(pendingAlert, now)
     ) {
-      const expiresAt = Number(pendingAlert.expiresAt) || now + LOGIN_ALERT_TTL_MS;
+      const expiresAt = now + LOGIN_ALERT_TTL_MS;
       const alert = {
-        sessionId: String(pendingAlert.sessionId || sessionId),
+        sessionId: String(sessionId),
         previousSessionId: previousSessionId || String(pendingAlert.previousSessionId || ""),
         deviceName: deviceName || pendingAlert.deviceName,
         location: location || pendingAlert.location,
         platform: platform || pendingAlert.platform || undefined,
-        at: pendingAlert.at || now,
+        at: now,
         expiresAt,
         status: "pending" as const,
         resolved: false,
       };
       await db.patch(args.userId, { loginAlert: alert } as any);
+      try {
+        await scheduler.runAfter(LOGIN_ALERT_TTL_MS, internal.users.expireLoginAlert, {
+          userId: String(args.userId),
+          sessionId: String(alert.sessionId),
+        });
+      } catch { /* optional */ }
       return {
         success: true,
         sessionId: String(alert.sessionId),

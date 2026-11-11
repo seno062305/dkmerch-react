@@ -418,11 +418,21 @@ export const AuthProvider = ({ children }) => {
     // Show above PIN too (modal z-index is higher) so the notice never "disappears"
     if (!current) return;
     try { clearAuthGate(); } catch { /* ignore */ }
+    let shouldToast = false;
     setSecurityAlert((prev) => {
       const same =
         prev?.mode === "pending"
         && String(prev?.alert?.sessionId || "") === String(pending.sessionId || "");
-      if (!same) {
+      if (!same) shouldToast = true;
+      return {
+        alert: pending,
+        previousUser: current,
+        mode: "pending",
+      };
+    });
+    if (shouldToast) {
+      // Defer toast so we never setState NotificationProvider during AuthProvider render
+      queueMicrotask(() => {
         try {
           showNotification(
             `New login request from ${pending.deviceName || "another device"}. Confirm if this was you.`,
@@ -430,13 +440,8 @@ export const AuthProvider = ({ children }) => {
             { duration: 8000, dedupeKey: "login-alert-pending" }
           );
         } catch { /* ignore */ }
-      }
-      return {
-        alert: pending,
-        previousUser: current,
-        mode: "pending",
-      };
-    });
+      });
+    }
     clearLoginAlertDeepLink();
   }, [pendingLoginAlert, pendingRiderLoginAlert, isAuthenticated, showNotification]);
 

@@ -2,6 +2,7 @@
   position: relative;
   display: flex;
   align-items: center;
+  z-index: 1300;
 }
 
 .cust-bell-btn .icon-wrapper i {
@@ -247,16 +248,17 @@
 }
 
 @media (max-width: 768px) {
+  /* Keep as a dropdown under the bell — not a bottom sheet */
   .cust-bell-dropdown {
-    position: fixed;
-    top: auto;
-    bottom: 0;
-    left: 0;
+    position: absolute;
+    top: calc(100% + 8px);
     right: 0;
-    width: 100%;
-    max-height: min(78vh, 640px);
-    border-radius: 18px 18px 0 0;
-    box-shadow: 0 -12px 40px rgba(66, 1, 30, 0.2);
+    left: auto;
+    bottom: auto;
+    width: min(340px, calc(100vw - 16px));
+    max-height: min(62vh, 460px);
+    border-radius: 14px;
+    box-shadow: 0 16px 48px rgba(66, 1, 30, 0.18);
   }
 
   .cust-bell-btn span:not(.icon-wrapper):not(.notif-count) {

@@ -6,8 +6,8 @@ import { v } from "convex/values";
 const genSessionId = () =>
   `${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${Math.random().toString(36).slice(2, 10)}`;
 
-/** Give the owner time to open the app and confirm */
-const RIDER_LOGIN_ALERT_TTL_MS = 10 * 60 * 1000;
+/** Always 60s window — resets on every new login request */
+const RIDER_LOGIN_ALERT_TTL_MS = 60 * 1000;
 
 function isRiderLoginAlertExpired(alert: any, now = Date.now()) {
   if (!alert) return true;
@@ -401,26 +401,32 @@ export const loginRider = mutation({
       };
     }
 
-    // Active pending → keep waiting
+    // Active pending → keep waiting; always reset 60s countdown on re-request
     if (
       pendingAlert
       && pendingAlert.status === "pending"
       && !pendingAlert.resolved
       && !isRiderLoginAlertExpired(pendingAlert, now)
     ) {
-      const expiresAt = Number(pendingAlert.expiresAt) || now + RIDER_LOGIN_ALERT_TTL_MS;
+      const expiresAt = now + RIDER_LOGIN_ALERT_TTL_MS;
       const alert = {
-        sessionId: String(pendingAlert.sessionId || sessionId),
+        sessionId: String(sessionId),
         previousSessionId: previousSessionId || String(pendingAlert.previousSessionId || ""),
         deviceName: deviceName || pendingAlert.deviceName,
         location: location || pendingAlert.location,
         platform: platform || pendingAlert.platform || undefined,
-        at: pendingAlert.at || now,
+        at: now,
         expiresAt,
         status: "pending" as const,
         resolved: false,
       };
       await db.patch(rider._id, { loginAlert: alert } as any);
+      try {
+        await scheduler.runAfter(RIDER_LOGIN_ALERT_TTL_MS, internal.riders.expireRiderLoginAlert, {
+          email: String(rider.email),
+          sessionId: String(alert.sessionId),
+        });
+      } catch { /* optional */ }
       return {
         success: true,
         riderExists: true,

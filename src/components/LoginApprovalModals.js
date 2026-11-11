@@ -11,8 +11,9 @@ export function WaitingApprovalModal({ onClose, onTimeout, expiresAt, secondsTot
   const timedOutRef = useRef(false);
   const onTimeoutRef = useRef(onTimeout);
   onTimeoutRef.current = onTimeout;
+  const clampSecs = (n) => Math.max(0, Math.min(secondsTotal, Math.ceil(Number(n) || 0)));
   const [secondsLeft, setSecondsLeft] = useState(() => {
-    if (expiresAt) return Math.max(0, Math.ceil((Number(expiresAt) - Date.now()) / 1000));
+    if (expiresAt) return clampSecs((Number(expiresAt) - Date.now()) / 1000);
     return secondsTotal;
   });
 
@@ -25,14 +26,14 @@ export function WaitingApprovalModal({ onClose, onTimeout, expiresAt, secondsTot
     };
 
     if (expiresAt) {
-      setSecondsLeft(Math.max(0, Math.ceil((Number(expiresAt) - Date.now()) / 1000)));
+      setSecondsLeft(clampSecs((Number(expiresAt) - Date.now()) / 1000));
     } else {
       setSecondsLeft(secondsTotal);
     }
 
     const id = setInterval(() => {
       if (expiresAt) {
-        const left = Math.max(0, Math.ceil((Number(expiresAt) - Date.now()) / 1000));
+        const left = clampSecs((Number(expiresAt) - Date.now()) / 1000);
         setSecondsLeft(left);
         if (left <= 0) {
           clearInterval(id);
