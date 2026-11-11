@@ -1,0 +1,23 @@
+[
+  {
+    "_creationTime": 1794357722596.568,
+    "_id": "kn7218bfd8rhscgz9g74nd1qad8j1xhz",
+    "createdAt": "2026-11-11T00:42:02.596Z",
+    "customerName": "Estela ",
+    "orderId": "DK-0003-CKWCF4",
+    "read": true,
+    "total": 279,
+    "type": "new_order"
+  },
+  {
+    "_creationTime": 1794362877717.1511,
+    "_id": "kn70c0phkps83nhksv56cars6s8j11h0",
+    "createdAt": "2026-11-11T02:07:57.717Z",
+    "customerName": "Jay quilang ",
+    "message": "Jay quilang  requested cancel for #2-R6RUEY (₱574). Reason: Changed my mind",
+    "orderId": "DK-0002-R6RUEY",
+    "read": false,
+    "total": 574,
+    "type": "customer_cancel_request"
+  }
+]

@@ -1,0 +1,21 @@
+[
+  {
+    "_creationTime": 1794357810671.8997,
+    "_id": "kh77d9tmdk184q8w64w2vkeye18j19jr",
+    "accuracy": 13.395999908447266,
+    "heading": 113.37736511230469,
+    "isTracking": true,
+    "lastKnownAddress": null,
+    "lastKnownAt": 1794357974271,
+    "lastKnownLat": 14.7347893,
+    "lastKnownLng": 120.954151,
+    "lat": 14.7347893,
+    "lng": 120.954151,
+    "orderId": "DK-0003-CKWCF4",
+    "riderEmail": "nabel.leal04@gmail.com",
+    "riderName": "samantha",
+    "sessionId": "1794357774546-uabi9z37-g57ah2o8",
+    "speed": 0.11575569957494736,
+    "updatedAt": 1794357974271
+  }
+]
