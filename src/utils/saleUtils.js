@@ -40,17 +40,11 @@ export const formatSaleEndLabel = (product) => {
   return end ? `Ends ${end}` : null;
 };
 
-/** Compact badge line: "Until Nov 15" */
+/** Compact badge line: "Until Nov 15, 11:59 PM" (admin-set end) */
 export const formatSaleEndShort = (product) => {
   if (!product?.saleEndDate || Number(product?.stock ?? 0) <= 0) return null;
-  const endMs = toPhtMs(product.saleEndDate, product.saleEndTime || '23:59');
-  if (endMs == null) return null;
-  const datePart = new Date(endMs).toLocaleString('en-PH', {
-    timeZone: 'Asia/Manila',
-    month: 'short',
-    day: 'numeric',
-  });
-  return `Until ${datePart}`;
+  const end = formatSaleDateTime(product.saleEndDate, product.saleEndTime || '23:59');
+  return end ? `Until ${end}` : null;
 };
 
 /** True when product is marked on sale and current time is within sale window (if set). */

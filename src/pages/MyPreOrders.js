@@ -6,7 +6,7 @@ import { useNotification } from '../context/NotificationContext';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useAddToCart } from '../context/cartUtils';
-import { useConfirm, addToCartConfirmRememberKey } from '../context/ConfirmContext';
+import { useConfirm, shopActionConfirmRememberKey } from '../context/ConfirmContext';
 import LoginModal from '../components/LoginModal';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -133,8 +133,8 @@ const MyPreOrders = () => {
       confirmLabel: 'Add to Cart',
       variant: 'primary',
       icon: 'fa-shopping-cart',
-      rememberKey: addToCartConfirmRememberKey(user?.email),
-      rememberLabel: 'Do not show again',
+      rememberKey: shopActionConfirmRememberKey(),
+      rememberLabel: "Don't show again",
     });
     if (!ok) return;
 

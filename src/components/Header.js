@@ -47,6 +47,24 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
   );
   const totalPoints = userPoints?.totalPoints ?? 0;
 
+  const chatUnread = useQuery(
+    api.supportChat.getCustomerUnreadCount,
+    isAuthenticated && user?.email ? { customerEmail: user.email } : 'skip'
+  ) || 0;
+
+  const openLiveChat = (e) => {
+    try { e?.preventDefault?.(); e?.stopPropagation?.(); } catch { /* ignore */ }
+    if (!isAuthenticated) {
+      try {
+        sessionStorage.setItem('redirectAfterLogin', '/chat');
+        sessionStorage.setItem('dk_login_customers_only', '1');
+      } catch { /* ignore */ }
+      window.dispatchEvent(new CustomEvent('openLoginModal', { detail: { customersOnly: true } }));
+      return;
+    }
+    navigate('/chat');
+  };
+
   useEffect(() => {
     // Never fight an open modal/popup — that was jumping back to the header
     if (isScrollLocked()) return;
@@ -263,6 +281,22 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
                 </span>
                 <span>Favorites</span>
               </Link>
+
+              <button
+                type="button"
+                className="header-action-item header-live-chat-btn"
+                onClick={openLiveChat}
+                title="Live Chat"
+                aria-label="Live Chat with admin"
+              >
+                <span className="icon-wrapper">
+                  <i className="fas fa-comments" aria-hidden="true"></i>
+                  {isAuthenticated && chatUnread > 0 && (
+                    <span className="chat-count">{chatUnread > 9 ? '9+' : chatUnread}</span>
+                  )}
+                </span>
+                <span>Chat</span>
+              </button>
 
               <button className="header-action-item"
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); onCartClick(); }}>

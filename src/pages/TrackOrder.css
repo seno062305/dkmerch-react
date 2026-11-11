@@ -1236,7 +1236,21 @@
 }
 
 .cancel-reason-other {
+  display: block;
+  width: 100%;
+  max-width: 100%;
   margin-top: 10px;
+  min-height: 64px;
+  max-height: 64px;
+  height: 64px;
+  resize: none !important;
+  overflow-x: hidden;
+  overflow-y: auto;
+  field-sizing: fixed;
+  -webkit-appearance: none;
+  appearance: none;
+  touch-action: manipulation;
+  box-sizing: border-box;
 }
 
 .cancel-order-submit {
@@ -1435,10 +1449,27 @@
 .refund-input:focus { border-color: #f59e0b; outline: none; box-shadow: 0 0 0 3px rgba(245,158,11,0.12); }
 
 .refund-comment-box {
-  width: 100%; padding: 10px 12px; border: 1.5px solid #e5e7eb; border-radius: 8px;
-  font-size: 13px; font-family: inherit; resize: none !important; min-height: 64px; max-height: 180px;
-  height: 64px; overflow-y: auto; line-height: 1.45; transition: border-color 0.2s; box-sizing: border-box;
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  padding: 10px 12px;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: none !important;
+  min-height: 64px;
+  max-height: 64px;
+  height: 64px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  line-height: 1.45;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
   field-sizing: fixed;
+  -webkit-appearance: none;
+  appearance: none;
+  touch-action: manipulation;
 }
 .refund-comment-box:focus {
   border-color: #f59e0b; outline: none; box-shadow: 0 0 0 3px rgba(245,158,11,0.12);

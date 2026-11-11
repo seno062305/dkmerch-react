@@ -4,7 +4,7 @@ import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
-import { useConfirm, addToCartConfirmRememberKey } from '../context/ConfirmContext';
+import { useConfirm, shopActionConfirmRememberKey } from '../context/ConfirmContext';
 import { useNavigate } from 'react-router-dom';
 import PromoCodeInput from './PromoCodeInput';
 import { formatSaleEndLabel, formatSaleEndShort, formatSaleRange, shouldShowSaleBadge, shouldShowPreOrderBadge, hasDiscountedPrice } from '../utils/saleUtils';
@@ -12,7 +12,8 @@ import useBodyScrollLock from '../hooks/useBodyScrollLock';
 import { getOverlayRoot } from '../utils/scrollLock';
 import './ProductModal.css';
 
-const REVIEW_CHAR_LIMIT = 120;
+/* Preview in modal — full text only after See more */
+const REVIEW_CHAR_LIMIT = 80;
 
 const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequireLogin }) => {
   const { isAuthenticated, user } = useAuth();
@@ -47,9 +48,10 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
     onCloseRef.current?.();
   }, []);
 
-  // App-level login stays on top — do not remount / hide product (spam-safe)
+  // Close the product first so the app login modal sits in front
   const requireLogin = useCallback((message) => {
     showNotification(message, 'error', { dedupeKey: 'login-required' });
+    onCloseRef.current?.();
     if (onRequireLogin) onRequireLogin();
     else window.dispatchEvent(new Event('openLoginModal'));
   }, [onRequireLogin, showNotification]);
@@ -274,7 +276,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
     const priceDisplay = appliedPromo
       ? `₱${discountedPrice.toLocaleString()} (${appliedPromo.discount}% off)`
       : `₱${product.price.toLocaleString()}`;
-    const rememberKey = addToCartConfirmRememberKey(user?.email);
+    const rememberKey = shopActionConfirmRememberKey();
     const ok = await confirm({
       title: 'Add to cart?',
       message: `Add "${product.name}" to cart?\n\nPrice: ${priceDisplay}`,
@@ -282,7 +284,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
       variant: 'primary',
       icon: 'fa-shopping-cart',
       rememberKey,
-      rememberLabel: 'Do not show again',
+      rememberLabel: "Don't show again",
     });
     if (!ok) return;
     onAddToCart({ ...product, appliedPromo, finalPrice: discountedPrice });
@@ -291,7 +293,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
 
   const maxBuyQty = Math.max(1, Math.min(99, Number(product.stock) > 0 ? Number(product.stock) : 99));
 
-  const handleBuyNowClick = () => {
+  const handleBuyNowClick = async () => {
     if (!isAuthenticated) {
       requireLogin('Please login to buy now');
       return;
@@ -304,6 +306,19 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
       showNotification('Unable to checkout right now.', 'error');
       return;
     }
+    const priceDisplay = appliedPromo
+      ? `₱${discountedPrice.toLocaleString()} (${appliedPromo.discount}% off)`
+      : `₱${product.price.toLocaleString()}`;
+    const ok = await confirm({
+      title: 'Buy now?',
+      message: `Buy "${product.name}" now?\n\nPrice: ${priceDisplay}`,
+      confirmLabel: 'Buy Now',
+      variant: 'primary',
+      icon: 'fa-bolt',
+      rememberKey: shopActionConfirmRememberKey(),
+      rememberLabel: "Don't show again",
+    });
+    if (!ok) return;
     setBuyNowQty(1);
     showBuyNowQtyRef.current = true;
     setShowBuyNowQty(true);
@@ -494,10 +509,11 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
                         </p>
                         {isLong && (
                           <button
+                            type="button"
                             className="modal-left-review-toggle"
                             onClick={() => toggleExpand(rev._id)}
                           >
-                            {isExpanded ? 'See less ▲' : 'See more ▼'}
+                            {isExpanded ? 'See less' : 'See more'}
                           </button>
                         )}
                         <small className="modal-left-review-date">

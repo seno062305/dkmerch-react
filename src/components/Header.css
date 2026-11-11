@@ -159,7 +159,7 @@ header {
   height: 1.6rem;
 }
 
-.cart-count, .wishlist-count {
+.cart-count, .wishlist-count, .chat-count {
   position: absolute;
   top: -6px;
   right: -8px;
@@ -180,6 +180,11 @@ header {
 }
 
 .cart-count { background: #9c27b0; }
+.chat-count { background: #fc1268; }
+
+.header-live-chat-btn .icon-wrapper i {
+  color: #fc1268;
+}
 
 /* ── 🛵 Rider icon-only button — desktop header ── */
 .header-rider-icon-btn {
@@ -536,6 +541,9 @@ header {
   .header-action-item > span:not(.icon-wrapper) { display: none; }
   .header-action-item i { font-size: 1.2rem; }
 
+  /* Chat lives in CustomerBottomNav on mobile */
+  .header-live-chat-btn { display: none !important; }
+
   /* Show rider icon on mobile — icon only, no label */
   .header-rider-icon-btn {
     display: flex;
@@ -546,7 +554,7 @@ header {
 
   .icon-wrapper { width: 1.8rem; height: 1.8rem; overflow: visible; }
 
-  .cart-count, .wishlist-count { top: -7px; right: -9px; font-size: 0.6rem; min-width: 17px; height: 17px; }
+  .cart-count, .wishlist-count, .chat-count { top: -7px; right: -9px; font-size: 0.6rem; min-width: 17px; height: 17px; }
 
   .account-btn { padding: 0.25rem; flex-direction: column; gap: 0; background: none; border: none; }
   .account-btn span { display: none; }

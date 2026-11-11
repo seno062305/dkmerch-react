@@ -19,7 +19,7 @@ const ConfirmModal = ({
   cancelLabel = 'Cancel',
   variant = 'primary',
   rememberKey = null,
-  rememberLabel = 'Do not show again',
+  rememberLabel = "Don't show again",
   onDontShowChange,
   onConfirm,
   onCancel,

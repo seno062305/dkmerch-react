@@ -6,7 +6,8 @@ import { useCatalogOptions } from '../hooks/useCatalogOptions';
 import { useAddToCart } from '../context/cartUtils';
 import { useWishlist, useToggleWishlist } from '../context/wishlistUtils';
 import { useNotification } from '../context/NotificationContext';
-import { useConfirm } from '../context/ConfirmContext';
+import { useConfirm, shopActionConfirmRememberKey } from '../context/ConfirmContext';
+import { useAuth } from '../context/AuthContext';
 import ProductModal from '../components/ProductModal';
 import { PointsBadge } from '../utils/pointsUtils';
 import {
@@ -22,7 +23,6 @@ import {
 import './Collections.css';
 
 const MAX_WISHLIST = 10;
-const JUST_RELEASED_MS = 24 * 60 * 60 * 1000;
 const PRODUCTS_PER_PAGE = 20;
 
 function buildShopPageList(page, totalPages) {
@@ -55,6 +55,7 @@ const Collections = () => {
   const [searchParams] = useSearchParams();
   const { showNotification } = useNotification();
   const { confirm } = useConfirm();
+  const { isAuthenticated } = useAuth();
 
   const [selectedCategory, setSelectedCategory]         = useState('all');
   const [selectedGroup, setSelectedGroup]               = useState('all');
@@ -185,6 +186,11 @@ const Collections = () => {
 
   const handleCardWishlist = async (e, product) => {
     e.stopPropagation();
+    if (!isAuthenticated) {
+      showNotification('Please login to add to favorites', 'error', { dedupeKey: 'login-required' });
+      window.dispatchEvent(new Event('openLoginModal'));
+      return;
+    }
     const pid = product._id || product.id;
     const alreadyWishlisted = isWishlisted(pid);
     if (!alreadyWishlisted && wishlistItems.length >= MAX_WISHLIST) {
@@ -199,6 +205,8 @@ const Collections = () => {
       confirmLabel: alreadyWishlisted ? 'Remove' : 'Add',
       variant: alreadyWishlisted ? 'danger' : 'primary',
       icon: 'fa-star',
+      rememberKey: shopActionConfirmRememberKey(),
+      rememberLabel: "Don't show again",
     });
     if (!ok) return;
     toggleWishlistMutation(product);
@@ -209,6 +217,12 @@ const Collections = () => {
   };
 
   const handleAddToWishlist = async (product) => {
+    if (!isAuthenticated) {
+      showNotification('Please login to add to favorites', 'error', { dedupeKey: 'login-required' });
+      setSelectedProduct(null);
+      window.dispatchEvent(new Event('openLoginModal'));
+      return;
+    }
     const pid = product._id || product.id;
     const alreadyWishlisted = isWishlisted(pid);
     if (!alreadyWishlisted && wishlistItems.length >= MAX_WISHLIST) {
@@ -223,6 +237,8 @@ const Collections = () => {
       confirmLabel: alreadyWishlisted ? 'Remove' : 'Add',
       variant: alreadyWishlisted ? 'danger' : 'primary',
       icon: 'fa-star',
+      rememberKey: shopActionConfirmRememberKey(),
+      rememberLabel: "Don't show again",
     });
     if (!ok) return;
     toggleWishlistMutation(product);
@@ -364,11 +380,7 @@ const Collections = () => {
             const stockQty = Number(product.stock ?? 0);
             const isOutOfStock = stockQty <= 0;
 
-            const releaseMs = getReleaseMs(product);
-            const diffMs    = releaseMs !== null ? Date.now() - releaseMs : -1;
-            // Never show "Just Released" on out-of-stock items
-            const showReleasedBadge = !isOutOfStock && diffMs >= 0 && diffMs < JUST_RELEASED_MS;
-            const showNewBadge = !isOutOfStock && !showReleasedBadge && isNewArrival(product);
+            const showNewBadge = !isOutOfStock && isNewArrival(product);
             const isLowStock = !isOutOfStock && stockQty > 0 && stockQty <= 5;
             const showSale = shouldShowSaleBadge(product);
             const showPreOrder = shouldShowPreOrderBadge(product) && !isReleased(product);
@@ -377,15 +389,12 @@ const Collections = () => {
               <div
                 key={pid}
                 data-product-id={pid}
-                className={`collection-card ${highlightedProductId === pid ? 'highlighted' : ''} ${hasPromo ? 'collection-card-promo' : ''} ${showReleasedBadge ? 'collection-card-released' : ''} ${isOutOfStock ? 'collection-card-oos' : ''}`}
+                className={`collection-card ${highlightedProductId === pid ? 'highlighted' : ''} ${hasPromo ? 'collection-card-promo' : ''} ${isOutOfStock ? 'collection-card-oos' : ''}`}
                 onClick={() => setSelectedProduct(product)}
               >
-                {showReleasedBadge ? (
-                  <div className="collection-released-badge"><i className="fas fa-sparkles"></i> Just Released</div>
-                ) : showNewBadge ? (
-                  <div className="collection-new-badge">NEW</div>
-                ) : (showSale || showPreOrder) ? (
+                {(showNewBadge || showSale || showPreOrder) ? (
                   <div className="collection-badge-stack">
+                    {showNewBadge && <div className="collection-new-badge">NEW</div>}
                     {showSale && (
                       <div className="collection-sale-badge">
                         <span>SALE</span>
@@ -400,7 +409,7 @@ const Collections = () => {
                   </div>
                 ) : null}
 
-                {hasPromo && !showReleasedBadge && !showNewBadge && (
+                {hasPromo && !showNewBadge && !showSale && (
                   <div className="collection-promo-badge">
                     <i className="fas fa-tag"></i> {activePromo.discount}% OFF
                   </div>

@@ -6,7 +6,7 @@ import { useCollectionProducts } from '../utils/productStorage';
 import { useWishlist, useToggleWishlist } from '../context/wishlistUtils';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
-import { useConfirm } from '../context/ConfirmContext';
+import { useConfirm, shopActionConfirmRememberKey } from '../context/ConfirmContext';
 import { PointsBadge } from '../utils/pointsUtils';
 import {
   formatSaleEndLabel,
@@ -18,11 +18,9 @@ import {
   getProductNewAnchorMs,
   toPhtMs,
 } from '../utils/saleUtils';
-import LoginModal from './LoginModal';
 import './WeverseSection.css';
 
 const MAX_WISHLIST = 10;
-const JUST_RELEASED_MS = 24 * 60 * 60 * 1000; // first day after release
 
 const getReleaseMs = (product) => {
   if (product?.releasedAt) return Number(product.releasedAt);
@@ -31,7 +29,6 @@ const getReleaseMs = (product) => {
 };
 
 const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
-  const [showLoginModal, setShowLoginModal] = React.useState(false);
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
   const { showNotification } = useNotification();
@@ -97,8 +94,8 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
   const handleWishlistClick = async (e, product) => {
     e.stopPropagation();
     if (!isAuthenticated) {
-      setShowLoginModal(true);
-      showNotification('Please login to add to favorites', 'error');
+      showNotification('Please login to add to favorites', 'error', { dedupeKey: 'login-required' });
+      window.dispatchEvent(new Event('openLoginModal'));
       return;
     }
     const pid = product._id || product.id;
@@ -115,6 +112,8 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
       confirmLabel: alreadyWishlisted ? 'Remove' : 'Add',
       variant: alreadyWishlisted ? 'danger' : 'primary',
       icon: 'fa-star',
+      rememberKey: shopActionConfirmRememberKey(),
+      rememberLabel: "Don't show again",
     });
     if (!ok) return;
     toggleWishlist(product);
@@ -140,9 +139,7 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
     const isOutOfStock = stockQty <= 0;
 
     const releaseMs = getReleaseMs(product);
-    const diffMs = releaseMs !== null ? Date.now() - releaseMs : -1;
-    // Never show "Just Released" / NEW on out-of-stock items
-    const showReleasedBadge = !isOutOfStock && diffMs >= 0 && diffMs < JUST_RELEASED_MS;
+    // Never show NEW on out-of-stock items
     const showNewBadgeResolved = !isOutOfStock && (showNewBadge || isNewArrival(product));
 
     const discountPct =
@@ -162,17 +159,12 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
     return (
       <div
         key={pid}
-        className={`wv-card ${hasPromo ? 'wv-card-promo' : ''} ${showReleasedBadge ? 'wv-card-released' : ''} ${isOutOfStock ? 'wv-card-oos' : ''}`}
+        className={`wv-card ${hasPromo ? 'wv-card-promo' : ''} ${isOutOfStock ? 'wv-card-oos' : ''}`}
         onClick={() => onProductClick && onProductClick(product)}
       >
-        {showReleasedBadge ? (
-          <div className="wv-released-badge">
-            <i className="fas fa-sparkles"></i> Just Released
-          </div>
-        ) : showNewBadgeResolved ? (
-          <div className="wv-new-badge">NEW</div>
-        ) : (isOnSale || showPreOrder) ? (
+        {(showNewBadgeResolved || isOnSale || showPreOrder) ? (
           <div className="wv-badge-stack">
+            {showNewBadgeResolved && <div className="wv-new-badge">NEW</div>}
             {isOnSale && (
               <div className="wv-sale-badge">
                 <span>{discountPct ? `-${discountPct}%` : 'SALE'}</span>
@@ -187,7 +179,7 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
           </div>
         ) : null}
 
-        {hasPromo && !showReleasedBadge && !showNewBadgeResolved && (
+        {hasPromo && !showNewBadgeResolved && !isOnSale && (
           <div className="wv-promo-badge">
             <i className="fas fa-tag"></i> {activePromo.discount}% OFF
           </div>
@@ -220,10 +212,10 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
             )}
             <PointsBadge price={product.price} />
           </div>
-          {isOnSale && formatSaleEndLabel(product) && (
+          {isOnSale && (formatSaleEndLabel(product) || formatSaleEndShort(product)) && (
             <div className="wv-sale-period">
               <i className="fas fa-clock"></i>
-              <span>{formatSaleEndLabel(product)}</span>
+              <span>{formatSaleEndLabel(product) || formatSaleEndShort(product)}</span>
             </div>
           )}
           <div
@@ -248,10 +240,20 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
                 : '… sold'}
             </span>
           </div>
-          {reviewMap[pid] && (
-            <div className="wv-card-review">
+          {hasPromo && (
+            <div className="wv-card-promo-hint">
+              <i className="fas fa-ticket-alt"></i> Promo available · use{' '}
+              <strong>{activePromo.code}</strong>
+            </div>
+          )}
+          {/* Count/rating only on card — comments show inside product modal */}
+          <div
+            className={`wv-card-review${reviewMap[pid] ? '' : ' is-empty'}`}
+            aria-hidden={!reviewMap[pid]}
+          >
+            {reviewMap[pid] ? (
               <div className="wv-card-review-top">
-                <span className="wv-card-review-stars">
+                <span className="wv-card-review-stars" aria-hidden="true">
                   {[1, 2, 3, 4, 5].map((s) => (
                     <i
                       key={s}
@@ -263,31 +265,17 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
                   {reviewMap[pid].count} review{reviewMap[pid].count === 1 ? '' : 's'}
                 </span>
               </div>
-              <p className="wv-card-review-text">
-                {reviewMap[pid].review.length > 42
-                  ? `${reviewMap[pid].review.slice(0, 42).trim()}…`
-                  : reviewMap[pid].review}
-              </p>
-              {reviewMap[pid].review.length > 42 && (
-                <button
-                  type="button"
-                  className="wv-card-review-more"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onProductClick?.(product);
-                  }}
-                >
-                  See more
-                </button>
-              )}
-            </div>
-          )}
-          {hasPromo && (
-            <div className="wv-card-promo-hint">
-              <i className="fas fa-ticket-alt"></i> Promo available · use{' '}
-              <strong>{activePromo.code}</strong>
-            </div>
-          )}
+            ) : (
+              <div className="wv-card-review-top">
+                <span className="wv-card-review-stars" aria-hidden="true">
+                  {[1, 2, 3, 4, 5].map((s) => (
+                    <i key={s} className="fas fa-star" />
+                  ))}
+                </span>
+                <span className="wv-card-review-count">No reviews</span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -347,7 +335,6 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
         </section>
       )}
 
-      {showLoginModal && <LoginModal onClose={() => setShowLoginModal(false)} />}
     </>
   );
 };

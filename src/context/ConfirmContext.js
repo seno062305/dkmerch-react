@@ -3,26 +3,45 @@ import ConfirmModal from '../components/ConfirmModal';
 
 const ConfirmContext = createContext(null);
 
-/** One skip preference for ALL add-to-cart confirms (every product). */
-export const ADD_TO_CART_CONFIRM_SKIP_KEY = 'dk_skip_add_to_cart_confirm';
+/**
+ * One global skip for shop action confirms:
+ * favorites, add to cart, and buy now (all products).
+ */
+export const SHOP_CONFIRM_SKIP_KEY = 'dk_skip_shop_action_confirm';
+/** @deprecated use SHOP_CONFIRM_SKIP_KEY — kept for older localStorage / imports */
+export const ADD_TO_CART_CONFIRM_SKIP_KEY = SHOP_CONFIRM_SKIP_KEY;
 
-/** @deprecated email arg ignored — skip is global for all products */
+/** Shared remember key for favorites / cart / buy now */
+export function shopActionConfirmRememberKey() {
+  return SHOP_CONFIRM_SKIP_KEY;
+}
+
+/** @deprecated email arg ignored — skip is global for all shop confirms */
 export function addToCartConfirmRememberKey(_email) {
-  return ADD_TO_CART_CONFIRM_SKIP_KEY;
+  return SHOP_CONFIRM_SKIP_KEY;
 }
 
-function isAddToCartSkipKey(key) {
-  return typeof key === 'string' && key.startsWith('dk_skip_add_to_cart_confirm');
+function isShopSkipKey(key) {
+  if (typeof key !== 'string') return false;
+  return (
+    key === SHOP_CONFIRM_SKIP_KEY
+    || key.startsWith('dk_skip_shop_action_confirm')
+    || key.startsWith('dk_skip_add_to_cart_confirm')
+  );
 }
 
-function hasAddToCartSkip() {
+function hasShopConfirmSkip() {
   try {
-    if (localStorage.getItem(ADD_TO_CART_CONFIRM_SKIP_KEY) === '1') return true;
-    // Migrate older per-account keys → treat as global skip
+    if (localStorage.getItem(SHOP_CONFIRM_SKIP_KEY) === '1') return true;
+    // Migrate older ATC / per-account keys → global shop skip
     for (let i = 0; i < localStorage.length; i += 1) {
       const k = localStorage.key(i);
-      if (k && k.startsWith('dk_skip_add_to_cart_confirm:') && localStorage.getItem(k) === '1') {
-        localStorage.setItem(ADD_TO_CART_CONFIRM_SKIP_KEY, '1');
+      if (
+        k
+        && (k.startsWith('dk_skip_add_to_cart_confirm') || k.startsWith('dk_skip_shop_action_confirm'))
+        && localStorage.getItem(k) === '1'
+      ) {
+        localStorage.setItem(SHOP_CONFIRM_SKIP_KEY, '1');
         return true;
       }
     }
@@ -46,9 +65,8 @@ export const ConfirmProvider = ({ children }) => {
     setState(null);
     if (saveDontShow) {
       try {
-        // Always persist the global ATC skip so every product is covered
-        if (isAddToCartSkipKey(rememberKey)) {
-          localStorage.setItem(ADD_TO_CART_CONFIRM_SKIP_KEY, '1');
+        if (isShopSkipKey(rememberKey)) {
+          localStorage.setItem(SHOP_CONFIRM_SKIP_KEY, '1');
         } else {
           localStorage.setItem(rememberKey, '1');
         }
@@ -63,7 +81,7 @@ export const ConfirmProvider = ({ children }) => {
 
     if (rememberKey) {
       try {
-        if (isAddToCartSkipKey(rememberKey) && hasAddToCartSkip()) {
+        if (isShopSkipKey(rememberKey) && hasShopConfirmSkip()) {
           return Promise.resolve(true);
         }
         if (localStorage.getItem(rememberKey) === '1') {
@@ -87,7 +105,7 @@ export const ConfirmProvider = ({ children }) => {
         variant: opts.variant || 'primary',
         icon: opts.icon || null,
         rememberKey,
-        rememberLabel: opts.rememberLabel || 'Do not show again',
+        rememberLabel: opts.rememberLabel || "Don't show again",
       });
     });
   }, []);

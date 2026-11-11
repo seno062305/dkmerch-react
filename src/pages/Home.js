@@ -9,7 +9,8 @@ import ProductModal from '../components/ProductModal';
 import { useAddToCart } from '../context/cartUtils';
 import { useToggleWishlist, useWishlist } from '../context/wishlistUtils';
 import { useNotification } from '../context/NotificationContext';
-import { useConfirm } from '../context/ConfirmContext';
+import { useConfirm, shopActionConfirmRememberKey } from '../context/ConfirmContext';
+import { useAuth } from '../context/AuthContext';
 
 const PH_OFFSET_MS = 8 * 60 * 60 * 1000;
 
@@ -145,6 +146,7 @@ const Home = () => {
   const [expiredPromo, setExpiredPromo] = useState(null);
   const { showNotification } = useNotification();
   const { confirm } = useConfirm();
+  const { isAuthenticated } = useAuth();
   const location = useLocation();
 
   const addToCartMutation      = useAddToCart();
@@ -270,6 +272,12 @@ const Home = () => {
 
   // ── Add to Wishlist — with confirmation ──
   const handleAddToWishlist = async (product) => {
+    if (!isAuthenticated) {
+      showNotification('Please login to add to favorites', 'error', { dedupeKey: 'login-required' });
+      setSelectedProduct(null);
+      window.dispatchEvent(new Event('openLoginModal'));
+      return;
+    }
     const pid = product._id || product.id;
     const alreadyWishlisted = isWishlisted(pid);
     const ok = await confirm({
@@ -280,6 +288,8 @@ const Home = () => {
       confirmLabel: alreadyWishlisted ? 'Remove' : 'Add',
       variant: alreadyWishlisted ? 'danger' : 'primary',
       icon: 'fa-star',
+      rememberKey: shopActionConfirmRememberKey(),
+      rememberLabel: "Don't show again",
     });
     if (!ok) return;
     toggleWishlistMutation(product);

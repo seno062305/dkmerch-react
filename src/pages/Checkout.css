@@ -497,12 +497,20 @@ textarea {
 
 .form-group textarea.order-notes-box,
 textarea.order-notes-box {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   min-height: 72px;
-  max-height: 220px;
+  max-height: 72px;
   height: 72px;
   resize: none !important;
+  overflow-x: hidden;
   overflow-y: auto;
   field-sizing: fixed;
+  -webkit-appearance: none;
+  appearance: none;
+  touch-action: manipulation;
 }
 
 /* ═══════════════════════════════════

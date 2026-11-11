@@ -101,8 +101,7 @@
 }
 
 .wv-new-badge {
-    position: absolute;
-    top: 8px; left: 8px;
+    position: static;
     background: linear-gradient(135deg, var(--primary-color, #fc1268), #9c27b0);
     color: white;
     font-size: 11px;
@@ -110,7 +109,7 @@
     letter-spacing: 0.04em;
     padding: 4px 10px;
     border-radius: 3px;
-    z-index: 2;
+    flex-shrink: 0;
 }
 
 .wv-released-badge {
@@ -139,9 +138,11 @@
     position: absolute;
     top: 8px;
     left: 8px;
+    right: 48px;
     z-index: 10;
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
+    flex-wrap: wrap;
     align-items: flex-start;
     gap: 4px;
     pointer-events: none;
@@ -159,7 +160,7 @@
     padding: 4px 10px;
     border-radius: 3px;
     text-transform: uppercase;
-    max-width: 150px;
+    max-width: 180px;
     line-height: 1.2;
 }
 .wv-sale-badge-end {
@@ -168,6 +169,10 @@
     text-transform: none;
     opacity: 0.95;
     letter-spacing: 0;
+    display: block;
+    max-width: 168px;
+    white-space: normal;
+    line-height: 1.25;
 }
 
 .wv-preorder-badge {
@@ -272,19 +277,29 @@
 .wv-card-price-current.sale { color: #dc3545; }
 
 .wv-card-review {
-    margin-top: 6px;
-    padding: 8px 9px;
+    margin-top: auto;
+    padding: 6px 8px;
     border-radius: 8px;
     background: #f8fafc;
     border: 1px solid #eef2f7;
-    cursor: pointer;
+    /* Compact count-only row — keep equal card height */
+    min-height: 30px;
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+}
+.wv-card-review.is-empty {
+    visibility: hidden;
+    pointer-events: none;
+    border-color: transparent;
+    background: transparent;
 }
 .wv-card-review-top {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 6px;
-    margin-bottom: 4px;
+    width: 100%;
 }
 .wv-card-review-stars {
     display: inline-flex;
@@ -297,30 +312,7 @@
     font-size: 10px;
     font-weight: 700;
     color: #94a3b8;
-}
-.wv-card-review-text {
-    margin: 0;
-    font-size: 11px;
-    line-height: 1.35;
-    color: #475569;
-    word-break: break-word;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    overflow: hidden;
-    min-height: 0;
-    max-height: 2.7em;
-    scrollbar-width: none;
-}
-.wv-card-review-more {
-    border: none;
-    background: none;
-    color: #fc1268;
-    font-size: 11px;
-    font-weight: 700;
-    padding: 4px 0 0;
-    cursor: pointer;
+    white-space: nowrap;
 }
 
 .wv-sale-period {
@@ -328,10 +320,14 @@
     align-items: flex-start;
     gap: 5px;
     font-size: 11px;
-    font-weight: 600;
+    font-weight: 700;
     color: #b91c1c;
     line-height: 1.35;
     margin: 0 0 6px;
+    padding: 5px 7px;
+    border-radius: 6px;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
 }
 .wv-sale-period i {
     margin-top: 1px;
@@ -552,8 +548,8 @@
     .wv-card-info { padding: 6px 7px 10px; }
     .wv-card-img { padding: 6px; }
     .wv-card-sold { font-size: 10px; margin-bottom: 3px; }
-    .wv-card-review { padding: 6px 7px; margin-top: 4px; }
-    .wv-card-review-text { font-size: 10px; max-height: 2.6em; }
+    .wv-card-review { padding: 5px 6px; min-height: 28px; }
+    .wv-card-review-count { font-size: 9px; }
     .wv-promo-banner { font-size: 12px; padding: 8px 12px; }
     .wv-promo-badge { font-size: 9px; padding: 2px 7px; }
 }

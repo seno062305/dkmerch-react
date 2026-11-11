@@ -4,8 +4,7 @@ import './WishlistPage.css';
 import { useWishlist, useRemoveFromWishlist } from '../context/wishlistUtils';
 import { useAddToCart } from '../context/cartUtils';
 import { useNotification } from '../context/NotificationContext';
-import { useConfirm, addToCartConfirmRememberKey } from '../context/ConfirmContext';
-import { useAuth } from '../context/AuthContext';
+import { useConfirm, shopActionConfirmRememberKey } from '../context/ConfirmContext';
 import { useProducts, usePreOrderProducts } from '../utils/productStorage';
 import { formatSaleEndLabel, formatSaleEndShort, shouldShowSaleBadge, shouldShowPreOrderBadge, hasDiscountedPrice } from '../utils/saleUtils';
 import { useCloseOnHistoryBack } from '../hooks/useCloseOnHistoryBack';
@@ -14,7 +13,6 @@ const MAX_WISHLIST = 10;
 
 const WishlistPage = ({ onProductClick }) => {
   const navigate = useNavigate();
-  const { user } = useAuth();
   const { showNotification } = useNotification();
   const { confirm } = useConfirm();
   const [lightboxImg, setLightboxImg] = useState(null);
@@ -93,8 +91,8 @@ const WishlistPage = ({ onProductClick }) => {
       confirmLabel: 'Add to Cart',
       variant: 'primary',
       icon: 'fa-shopping-cart',
-      rememberKey: addToCartConfirmRememberKey(user?.email),
-      rememberLabel: 'Do not show again',
+      rememberKey: shopActionConfirmRememberKey(),
+      rememberLabel: "Don't show again",
     });
     if (!ok) return;
     addToCart({
@@ -119,6 +117,8 @@ const WishlistPage = ({ onProductClick }) => {
       confirmLabel: 'Buy Now',
       variant: 'primary',
       icon: 'fa-bolt',
+      rememberKey: shopActionConfirmRememberKey(),
+      rememberLabel: "Don't show again",
     });
     if (!ok) return;
     const productId = String(item.productId);
@@ -260,23 +260,26 @@ const WishlistPage = ({ onProductClick }) => {
                       <p className={`wishlist-stock-line ${oos ? 'out' : ''}`}>
                         {oos ? 'Out of stock' : `${item.stock} in stock`}
                       </p>
+                      <div className="wishlist-card-actions">
+                        <button
+                          type="button"
+                          className="btn btn-add-cart wishlist-action-btn"
+                          disabled={oos}
+                          onClick={(e) => { e.stopPropagation(); handleAddToCart(item); }}
+                        >
+                          <i className="fas fa-shopping-cart"></i> Add to Cart
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-buy-now wishlist-action-btn"
+                          disabled={oos}
+                          onClick={(e) => { e.stopPropagation(); handleBuyNow(item); }}
+                        >
+                          <i className="fas fa-bolt"></i> Buy Now
+                        </button>
+                      </div>
                       <button
-                        className="btn btn-primary btn-small order-view-btn"
-                        style={{ marginBottom: '8px' }}
-                        disabled={oos}
-                        onClick={(e) => { e.stopPropagation(); handleAddToCart(item); }}
-                      >
-                        <i className="fas fa-shopping-cart"></i> Add to Cart
-                      </button>
-                      <button
-                        className="btn btn-buy-now-wish btn-small order-view-btn"
-                        style={{ marginBottom: '8px' }}
-                        disabled={oos}
-                        onClick={(e) => { e.stopPropagation(); handleBuyNow(item); }}
-                      >
-                        <i className="fas fa-bolt"></i> Buy Now
-                      </button>
-                      <button
+                        type="button"
                         className="order-remove-btn"
                         onClick={(e) => { e.stopPropagation(); handleRemoveFromWishlist(item.productId, item.name); }}
                       >

@@ -1499,15 +1499,7 @@ const Checkout = () => {
                   rows={3}
                   maxLength={500}
                   placeholder="Any special instructions for your order..."
-                  onChange={(e) => {
-                    handleChange(e);
-                    const el = e.target;
-                    // Grow only when text needs more than the base box (chat-style)
-                    el.style.height = '72px';
-                    if (el.scrollHeight > 72) {
-                      el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
-                    }
-                  }}
+                  onChange={handleChange}
                 />
               </div>
             </div>

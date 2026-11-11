@@ -254,18 +254,55 @@
 }
 .wishlist-stock-line.out { color: #c2410c; }
 
-.btn-buy-now-wish {
-  background: linear-gradient(135deg, #f59e0b, #f97316) !important;
-  border: none !important;
-  color: #fff !important;
-}
-.btn-buy-now-wish:disabled,
-.order-view-btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
+.wishlist-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+  align-items: stretch;
 }
 
-/* Add to Cart button */
+.wishlist-action-btn.btn-add-cart,
+.wishlist-action-btn.btn-buy-now {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+  height: 42px;
+  min-height: 42px;
+  max-height: 42px;
+  margin: 0;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  box-sizing: border-box;
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.wishlist-action-btn.btn-add-cart {
+  background: linear-gradient(135deg, #fc1268, #e0105a);
+  box-shadow: 0 3px 10px rgba(252, 18, 104, 0.28);
+}
+
+.wishlist-action-btn.btn-buy-now {
+  background: linear-gradient(135deg, #111827, #374151);
+  box-shadow: 0 3px 10px rgba(17, 24, 39, 0.22);
+}
+
+.wishlist-action-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Legacy single-button layout fallback */
 .order-view-btn {
   width: 100%;
   justify-content: center;

@@ -466,9 +466,8 @@ export default function DKMerchChatBot() {
               <div style={{ color: "#fff", fontWeight: 800, fontSize: 15, letterSpacing: 0.3 }}>
                 DKMerch Support
               </div>
-              <div style={{ color: "rgba(255,255,255,0.8)", fontSize: 12, display: "flex", alignItems: "center", gap: 5 }}>
-                <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#4ade80", display: "inline-block" }} />
-                Online now
+              <div style={{ color: "rgba(255,255,255,0.8)", fontSize: 12 }}>
+                Automated assistant
               </div>
             </div>
           </div>

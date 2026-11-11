@@ -27,6 +27,20 @@ const CustomerBottomNav = () => {
     goToCustomerTab(navigate, path, to);
   };
 
+  const goToChat = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isAuthenticated) {
+      try {
+        sessionStorage.setItem('redirectAfterLogin', '/chat');
+        sessionStorage.setItem('dk_login_customers_only', '1');
+      } catch { /* ignore */ }
+      window.dispatchEvent(new CustomEvent('openLoginModal', { detail: { customersOnly: true } }));
+      return;
+    }
+    goToCustomerTab(navigate, path, '/chat');
+  };
+
   return (
     <nav className="customer-bottom-nav customer-bottom-nav--6" aria-label="Customer navigation">
       <a href="/" className={`cbn-item ${isActive('/') ? 'active' : ''}`} onClick={(e) => goTo(e, '/')}>
@@ -45,7 +59,7 @@ const CustomerBottomNav = () => {
         <i className="fas fa-map-marker-alt"></i>
         <span>Track</span>
       </a>
-      <a href="/chat" className={`cbn-item ${isActive('/chat') ? 'active' : ''}`} onClick={(e) => goTo(e, '/chat')}>
+      <a href="/chat" className={`cbn-item ${isActive('/chat') ? 'active' : ''}`} onClick={goToChat}>
         <span className="cbn-icon-wrap">
           <i className="fas fa-comments"></i>
           {unread > 0 && <em className="cbn-badge">{unread > 9 ? '9+' : unread}</em>}

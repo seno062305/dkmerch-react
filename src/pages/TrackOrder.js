@@ -378,15 +378,7 @@ const RefundModal = ({ order, onClose, onSuccess }) => {
               value={comment}
               rows={2}
               maxLength={500}
-              onChange={(e) => {
-                setComment(e.target.value);
-                const el = e.target;
-                // Grow only when text overflows the base height (no expand-on-hold)
-                el.style.height = '64px';
-                if (el.scrollHeight > 64) {
-                  el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
-                }
-              }}
+              onChange={(e) => setComment(e.target.value)}
             />
           </div>
           {error && <div className="refund-error-msg"><i className="fas fa-exclamation-circle"></i> {error}</div>}

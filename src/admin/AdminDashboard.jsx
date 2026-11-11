@@ -152,7 +152,6 @@ const AdminDashboard = () => {
         explanation: 'Non-admin customer accounts registered in the store.',
         breakdown: [
           { label: 'Registered Users', value: stats.totalUsers, color: '#7c3aed' },
-          { label: 'Completed Orders', value: stats.completedOrders },
         ],
       });
     } else if (type === 'products') {
@@ -213,7 +212,7 @@ const AdminDashboard = () => {
       label: 'Registered Users',
       value: usersReady ? String(stats.totalUsers) : null,
       hint: usersReady
-        ? `${stats.completedOrders} completed orders`
+        ? `${stats.totalUsers} customer account${stats.totalUsers === 1 ? '' : 's'}`
         : 'Loading users…',
       tooltip: 'Non-admin customer accounts registered in the store.',
       color: '#3b82f6',
