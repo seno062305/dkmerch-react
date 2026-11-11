@@ -496,20 +496,28 @@ const Settings = () => {
 
   const handleSendCode = async () => {
     if (passwordCooldown > 0) return;
-    if (passwordAttempts >= 3) { setCodeMsg('❌ Maximum attempts reached.'); setPasswordCooldown(300); setPasswordAttempts(0); return; }
     const targetEmail = isForgotPasswordFlow ? passwordForm.email : user?.email;
     if (!targetEmail) { setCodeMsg('❌ No email address found.'); return; }
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     setSentCode(code); setSendingCode(true); setCodeMsg('');
     try {
       const result = await sendPasswordResetCode({ to: targetEmail, code, name: user?.name || undefined });
-      if (result?.success) setCodeMsg(`✅ Code sent to ${targetEmail}!`);
-      else { setCodeMsg(`❌ Failed: ${result?.message || 'Unknown error'}`); setSentCode(''); }
+      if (result?.success) {
+        setCodeMsg(`✅ Code sent to ${targetEmail}!`);
+        setPasswordCooldown(result.cooldownSec || 30);
+        setPasswordAttempts(p => p + 1);
+      } else if (result?.rateLimited) {
+        const wait = result.waitSec || result.cooldownSec || 30;
+        setPasswordCooldown(wait);
+        setCodeMsg(`❌ ${result.message || `Please wait ${wait}s before requesting another code.`}`);
+        setSentCode('');
+      } else {
+        setCodeMsg(`❌ Failed: ${result?.message || 'Unknown error'}`);
+        setSentCode('');
+      }
     } catch { setCodeMsg('❌ Failed to send email.'); setSentCode(''); }
     finally {
       setSendingCode(false);
-      setPasswordCooldown(passwordAttempts === 0 ? 60 : passwordAttempts === 1 ? 120 : 180);
-      setPasswordAttempts(p => p + 1);
     }
   };
 

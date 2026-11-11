@@ -155,7 +155,7 @@ function recordPinFail(userId) {
 }
 
 // ── PIN reset OTP (cooldown + code survive close + refresh) ──────────────────
-const PIN_OTP_COOLDOWN_SECS = 60;
+const PIN_OTP_COOLDOWN_SECS = 30;
 const PIN_OTP_CODE_TTL_MS = 1000 * 60 * 10; // 10 minutes to enter the emailed code
 const pinOtpCooldownKey = (userId) => `dkmerch_pin_otp_until_${userId || "anon"}`;
 const pinOtpCodeKey = (userId) => `dkmerch_pin_otp_code_${userId || "anon"}`;
@@ -1063,13 +1063,32 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
     // 1) Prefer dedicated login OTP email if deployed
     try {
       const r = await sendLoginOTP({ to, name, otp: code });
-      if (r?.success) return { success: true };
+      if (r?.success) {
+        return {
+          success: true,
+          waitSec: r?.cooldownSec || r?.waitSec,
+          cooldownSec: r?.cooldownSec || r?.waitSec,
+        };
+      }
+      if (r?.rateLimited) {
+        return {
+          success: false,
+          rateLimited: true,
+          waitSec: r.waitSec || r.cooldownSec || 30,
+          message: r.message || `Please wait ${r.waitSec || 30}s before requesting another code.`,
+        };
+      }
     } catch {}
-    // 2) Same working email action as Forgot Password
+    // 2) Same working email action as Forgot Password (skip if already rate-limited above)
     try {
       const r = await sendPasswordResetCode({ to, code, name });
       if (r?.success) return { success: true };
-      return { success: false, message: r?.message || "Failed to send email." };
+      return {
+        success: false,
+        rateLimited: !!r?.rateLimited,
+        waitSec: r?.waitSec || r?.cooldownSec || 0,
+        message: r?.message || "Failed to send email.",
+      };
     } catch (err) {
       return { success: false, message: String(err?.message || "Failed to send email.") };
     }
@@ -1097,11 +1116,21 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
 
     const mailed = await emailPinResetOtp(email, name, code);
     if (!mailed.success) {
-      return { success: false, message: mailed.message || "Failed to send OTP email." };
+      return {
+        success: false,
+        rateLimited: !!mailed.rateLimited,
+        waitSec: mailed.waitSec || 0,
+        message: mailed.message || "Failed to send OTP email.",
+      };
     }
     setPinResetSentCode(code);
     savePinResetOtpCode(pendingUser._id, code);
-    return { success: true, email };
+    return {
+      success: true,
+      email,
+      waitSec: mailed.waitSec || mailed.cooldownSec || PIN_OTP_COOLDOWN_SECS,
+      cooldownSec: mailed.cooldownSec || mailed.waitSec || PIN_OTP_COOLDOWN_SECS,
+    };
   };
 
   /** Open pink Reset PIN wizard — Gmail → OTP → new PIN (never navigates Home). */
@@ -1211,6 +1240,10 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
 
       const mailed = await emailPinResetOtp(email, name, code);
       if (!mailed.success) {
+        if (mailed.rateLimited && mailed.waitSec) {
+          setPasswordCooldown(mailed.waitSec);
+          startPinOtpCooldown(safeUser._id, mailed.waitSec);
+        }
         setCodeMsg(`❌ ${mailed.message || "Failed to send code."}`);
         return;
       }
@@ -1221,8 +1254,9 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
       setResetPinStep(1);
       setCodeMsg(`✅ Code sent to ${email}. Check your inbox.`);
       showNotification(`PIN reset code sent to ${email}`, "success", { duration: 5000 });
-      const cooldown = passwordAttempts === 0 ? 60 : passwordAttempts === 1 ? 120 : 180;
+      const cooldown = mailed.cooldownSec || mailed.waitSec || 30;
       setPasswordCooldown(cooldown);
+      startPinOtpCooldown(safeUser._id, cooldown);
       setPasswordAttempts((prev) => prev + 1);
     } catch {
       setCodeMsg("❌ Failed to send code. Try again.");
@@ -1350,11 +1384,15 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
     try {
       const sent = await issuePinResetOtp();
       if (sent.success) {
-        const secs = startPinOtpCooldown(pendingUser._id);
+        const secs = startPinOtpCooldown(pendingUser._id, sent.cooldownSec || sent.waitSec || PIN_OTP_COOLDOWN_SECS);
         setLoginOtpDigits(["", "", "", "", "", ""]);
         setLoginOtpCooldown(secs);
         setLoginOtpMsg("✅ New code sent! Check your inbox.");
       } else {
+        if (sent.rateLimited && sent.waitSec) {
+          startPinOtpCooldown(pendingUser._id, sent.waitSec);
+          setLoginOtpCooldown(sent.waitSec);
+        }
         setLoginOtpError(sent.message || "Failed to resend OTP.");
       }
     } catch {
@@ -1470,12 +1508,6 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
       setCodeMsg("❌ Please enter a valid email address.");
       return;
     }
-    if (passwordAttempts >= 3) {
-      setCodeMsg("❌ Maximum attempts reached. Try again later.");
-      setPasswordCooldown(300);
-      setPasswordAttempts(0);
-      return;
-    }
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     setSendingCode(true);
     setCodeMsg("");
@@ -1486,6 +1518,13 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
         setForgotEmail(email);
         setSentCode(code);
         setCodeMsg(`✅ Code sent to ${email}! Check your inbox.`);
+        const cooldown = result?.cooldownSec || (passwordAttempts === 0 ? 30 : passwordAttempts === 1 ? 60 : 120);
+        setPasswordCooldown(cooldown);
+        setPasswordAttempts((prev) => prev + 1);
+      } else if (result?.rateLimited) {
+        const wait = result.waitSec || result.cooldownSec || 30;
+        setPasswordCooldown(wait);
+        setCodeMsg(`❌ ${result.message || `Please wait ${wait}s before requesting another code.`}`);
       } else if (result?.notFound) {
         setCodeMsg("❌ No registered account found with that email.");
       } else {
@@ -1495,9 +1534,6 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
       setCodeMsg("❌ Failed to send email.");
     } finally {
       setSendingCode(false);
-      const cooldown = passwordAttempts === 0 ? 60 : passwordAttempts === 1 ? 120 : 180;
-      setPasswordCooldown(cooldown);
-      setPasswordAttempts(prev => prev + 1);
     }
   };
 
@@ -1562,7 +1598,11 @@ const LoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false, onClearU
         setReactivateSentOtp(result.otp);
         setReactivateStep(2);
         setReactivateMsg(`✅ Verification code sent to ${reactivateEmail}!`);
-        setReactivateCooldown(60);
+        setReactivateCooldown(emailResult?.cooldownSec || 30);
+      } else if (emailResult?.rateLimited) {
+        const wait = emailResult.waitSec || emailResult.cooldownSec || 30;
+        setReactivateCooldown(wait);
+        setReactivateMsg(`❌ ${emailResult.message || `Please wait ${wait}s before requesting another code.`}`);
       } else {
         setReactivateMsg("❌ Failed to send email. Please try again.");
       }

@@ -17,6 +17,41 @@ const SITE_URL = resolveSiteUrl();
 const TEST_EMAIL = "dkmerchtest@gmail.com";
 const IS_TEST_MODE = false;
 
+type OtpGateBlocked = {
+  blocked: true;
+  success: false;
+  rateLimited: true;
+  waitSec: number;
+  cooldownSec: number;
+  message: string;
+};
+type OtpGateOk = { blocked: false; cooldownSec: number };
+
+/** Shared escalating cooldown for OTP / verification emails (30s → 1m+). */
+async function gateOtpEmail(
+  ctx: { runMutation: (fn: any, args: any) => Promise<any> },
+  to: string
+): Promise<OtpGateBlocked | OtpGateOk> {
+  const gate = await ctx.runMutation(internal.otpCooldown.consumeEmailOtpSend, {
+    email: String(to || "").trim().toLowerCase(),
+  });
+  if (!gate?.ok) {
+    const waitSec = Math.max(1, Number(gate?.waitSec) || 30);
+    return {
+      blocked: true,
+      success: false,
+      rateLimited: true,
+      waitSec,
+      cooldownSec: waitSec,
+      message: gate?.message || `Please wait ${waitSec}s before requesting another code.`,
+    };
+  }
+  return {
+    blocked: false,
+    cooldownSec: Math.max(30, Number(gate?.cooldownSec) || 30),
+  };
+}
+
 // ── BASE EMAIL (internal) ─────────────────────────────────────────────────────
 
 export const sendEmail = internalAction({
@@ -125,7 +160,17 @@ export const sendRegistrationOTP = action({
   handler: async (
     ctx,
     { to, name, otp }: { to: string; name: string; otp: string }
-  ): Promise<{ success: boolean; message?: string; id?: string }> => {
+  ): Promise<{
+    success: boolean;
+    message?: string;
+    id?: string;
+    rateLimited?: boolean;
+    waitSec?: number;
+    cooldownSec?: number;
+  }> => {
+    const gate = await gateOtpEmail(ctx, to);
+    if (gate.blocked) return gate;
+
     const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -178,11 +223,12 @@ export const sendRegistrationOTP = action({
 </body>
 </html>`;
 
-    return await ctx.runAction(internal.sendEmail.sendEmail, {
+    const sent = await ctx.runAction(internal.sendEmail.sendEmail, {
       to,
       subject: `${otp} — Your DKMerch Verification Code`,
       html,
     });
+    return { ...sent, cooldownSec: gate.cooldownSec };
   },
 });
 
@@ -196,7 +242,17 @@ export const sendLoginOTP = action({
   handler: async (
     ctx,
     { to, name, otp }: { to: string; name: string; otp: string }
-  ): Promise<{ success: boolean; message?: string; id?: string }> => {
+  ): Promise<{
+    success: boolean;
+    message?: string;
+    id?: string;
+    rateLimited?: boolean;
+    waitSec?: number;
+    cooldownSec?: number;
+  }> => {
+    const gate = await gateOtpEmail(ctx, to);
+    if (gate.blocked) return gate;
+
     const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -244,11 +300,12 @@ export const sendLoginOTP = action({
 </body>
 </html>`;
 
-    return await ctx.runAction(internal.sendEmail.sendEmail, {
+    const sent = await ctx.runAction(internal.sendEmail.sendEmail, {
       to,
       subject: `${otp} — Your DKMerch Login Code`,
       html,
     });
+    return { ...sent, cooldownSec: gate.cooldownSec };
   },
 });
 
@@ -337,7 +394,15 @@ export const sendPasswordResetCode = action({
   handler: async (
     ctx,
     { to, code, name }: { to: string; code: string; name?: string }
-  ): Promise<{ success: boolean; message?: string; id?: string; notFound?: boolean }> => {
+  ): Promise<{
+    success: boolean;
+    message?: string;
+    id?: string;
+    notFound?: boolean;
+    rateLimited?: boolean;
+    waitSec?: number;
+    cooldownSec?: number;
+  }> => {
     const email = String(to || "").trim().toLowerCase();
     if (!email || !email.includes("@")) {
       return { success: false, message: "Please enter a valid email address." };
@@ -352,6 +417,9 @@ export const sendPasswordResetCode = action({
         message: "No registered account found with that email.",
       };
     }
+
+    const gate = await gateOtpEmail(ctx, user.email || email);
+    if (gate.blocked) return gate;
 
     const displayName = name || user.name || user.fullName || "there";
     const html = `
@@ -375,11 +443,12 @@ export const sendPasswordResetCode = action({
       </div>
     `;
 
-    return await ctx.runAction(internal.sendEmail.sendEmail, {
+    const sent = await ctx.runAction(internal.sendEmail.sendEmail, {
       to: user.email || email,
       subject: `${code} — Your DKMerch Password Reset Code`,
       html,
     });
+    return { ...sent, cooldownSec: gate.cooldownSec };
   },
 });
 
@@ -1798,7 +1867,17 @@ export const sendReactivationOTP = action({
   handler: async (
     ctx,
     { to, name, otp }: { to: string; name: string; otp: string }
-  ): Promise<{ success: boolean; message?: string; id?: string }> => {
+  ): Promise<{
+    success: boolean;
+    message?: string;
+    id?: string;
+    rateLimited?: boolean;
+    waitSec?: number;
+    cooldownSec?: number;
+  }> => {
+    const gate = await gateOtpEmail(ctx, to);
+    if (gate.blocked) return gate;
+
     const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -1851,10 +1930,11 @@ export const sendReactivationOTP = action({
 </body>
 </html>`;
 
-    return await ctx.runAction(internal.sendEmail.sendEmail, {
+    const sent = await ctx.runAction(internal.sendEmail.sendEmail, {
       to,
       subject: `${otp} — Reactivate Your DKMerch Account`,
       html,
     });
+    return { ...sent, cooldownSec: gate.cooldownSec };
   },
 });

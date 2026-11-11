@@ -578,4 +578,12 @@ export default defineSchema({
     role: v.optional(v.string()),
   }).index("by_token", ["token"]),
 
+  /** Shared OTP / verification-email cooldown (reset PIN, forgot pass, register, reactivate, etc.) */
+  emailOtpCooldowns: defineTable({
+    email: v.string(),
+    sendCount: v.number(),
+    lastSentAt: v.number(),
+    nextAllowedAt: v.number(),
+  }).index("by_email", ["email"]),
+
 });

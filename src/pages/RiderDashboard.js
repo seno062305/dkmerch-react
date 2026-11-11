@@ -1285,7 +1285,13 @@ const RiderDashboard = () => {
     try {
       const result = await sendPasswordResetCode({ to: email, code });
       if (result?.success) setForgotMsg(`✅ Code sent to ${email}`);
-      else { setForgotMsg(`❌ ${result?.message || 'Failed to send code.'}`); setSentCode(''); }
+      else if (result?.rateLimited) {
+        setForgotMsg(`❌ ${result.message || `Please wait ${result.waitSec || 30}s before requesting another code.`}`);
+        setSentCode('');
+      } else {
+        setForgotMsg(`❌ ${result?.message || 'Failed to send code.'}`);
+        setSentCode('');
+      }
     } catch {
       setForgotMsg('❌ Failed to send email.');
       setSentCode('');

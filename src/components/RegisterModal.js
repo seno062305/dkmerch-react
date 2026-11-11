@@ -335,11 +335,17 @@ const RegisterModal = ({ onClose }) => {
     try {
       const result = await resendOtpMutation({ email: pendingEmail });
       if (result.success) {
-        await sendRegistrationOTP({ to: pendingEmail, name: pendingName, otp: result.otp });
-        setOtpDigits(["", "", "", "", "", ""]);
-        setOtpSuccess("✅ New code sent! Check your inbox.");
-        setResendCooldown(60);
-        setTimeout(() => otpRefs.current[0]?.focus(), 100);
+        const mailed = await sendRegistrationOTP({ to: pendingEmail, name: pendingName, otp: result.otp });
+        if (mailed?.rateLimited) {
+          const wait = mailed.waitSec || mailed.cooldownSec || 30;
+          setResendCooldown(wait);
+          setOtpError(mailed.message || `Please wait ${wait}s before requesting another code.`);
+        } else {
+          setOtpDigits(["", "", "", "", "", ""]);
+          setOtpSuccess("✅ New code sent! Check your inbox.");
+          setResendCooldown(mailed?.cooldownSec || 30);
+          setTimeout(() => otpRefs.current[0]?.focus(), 100);
+        }
       } else {
         setOtpError(result.message || "Failed to resend. Please try again.");
       }
@@ -501,13 +507,13 @@ const RegisterModal = ({ onClose }) => {
         });
       } catch {}
 
-      await sendRegistrationOTP({ to: formData.email, name: formData.name, otp: result.otp });
+      const mailed = await sendRegistrationOTP({ to: formData.email, name: formData.name, otp: result.otp });
       setPendingEmail(formData.email);
       setPendingName(formData.name);
       setOtpDigits(["", "", "", "", "", ""]);
       setOtpError("");
       setOtpSuccess("");
-      setResendCooldown(60);
+      setResendCooldown(mailed?.rateLimited ? (mailed.waitSec || 30) : (mailed?.cooldownSec || 30));
       setView("otp");
 
     } catch (err) {
@@ -524,12 +530,6 @@ const RegisterModal = ({ onClose }) => {
       setCodeMsg("❌ Please enter a valid email address.");
       return;
     }
-    if (passwordAttempts >= 3) {
-      setCodeMsg("❌ Maximum attempts reached. Try again later.");
-      setPasswordCooldown(300);
-      setPasswordAttempts(0);
-      return;
-    }
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     setSentCode(code);
     setSendingCode(true);
@@ -538,6 +538,13 @@ const RegisterModal = ({ onClose }) => {
       const result = await sendPasswordResetCode({ to: forgotEmail, code });
       if (result?.success) {
         setCodeMsg(`✅ Code sent to ${forgotEmail}! Check your inbox.`);
+        setPasswordCooldown(result.cooldownSec || 30);
+        setPasswordAttempts((prev) => prev + 1);
+      } else if (result?.rateLimited) {
+        const wait = result.waitSec || result.cooldownSec || 30;
+        setPasswordCooldown(wait);
+        setCodeMsg(`❌ ${result.message || `Please wait ${wait}s before requesting another code.`}`);
+        setSentCode("");
       } else {
         setCodeMsg(`❌ Failed to send: ${result?.message || "Unknown error"}`);
         setSentCode("");
@@ -547,9 +554,6 @@ const RegisterModal = ({ onClose }) => {
       setSentCode("");
     } finally {
       setSendingCode(false);
-      const cooldown = passwordAttempts === 0 ? 60 : passwordAttempts === 1 ? 120 : 180;
-      setPasswordCooldown(cooldown);
-      setPasswordAttempts(prev => prev + 1);
     }
   };
 

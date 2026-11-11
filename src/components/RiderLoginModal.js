@@ -285,10 +285,6 @@ const RiderLoginModal = ({ onClose, onLoginSuccess }) => {
       setCodeMsg("❌ Please enter a valid email address.");
       return;
     }
-    if (pwAttempts >= 3) {
-      setCodeMsg("❌ Maximum attempts reached. Try again later.");
-      setPwCooldown(300); setPwAttempts(0); return;
-    }
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     setSentCode(code); setSendingCode(true); setCodeMsg("");
     try {
@@ -297,6 +293,13 @@ const RiderLoginModal = ({ onClose, onLoginSuccess }) => {
       });
       if (result?.success) {
         setCodeMsg(`✅ Code sent to ${forgotEmail}! Check your inbox.`);
+        setPwCooldown(result.cooldownSec || 30);
+        setPwAttempts(prev => prev + 1);
+      } else if (result?.rateLimited) {
+        const wait = result.waitSec || result.cooldownSec || 30;
+        setPwCooldown(wait);
+        setCodeMsg(`❌ ${result.message || `Please wait ${wait}s before requesting another code.`}`);
+        setSentCode("");
       } else {
         setCodeMsg(`❌ Failed to send: ${result?.message || "Unknown error"}`);
         setSentCode("");
@@ -305,8 +308,6 @@ const RiderLoginModal = ({ onClose, onLoginSuccess }) => {
       setCodeMsg("❌ Failed to send email."); setSentCode("");
     } finally {
       setSendingCode(false);
-      const cooldown = pwAttempts === 0 ? 60 : pwAttempts === 1 ? 120 : 180;
-      setPwCooldown(cooldown); setPwAttempts(prev => prev + 1);
     }
   };
 
