@@ -10,6 +10,7 @@ import { api } from '../../convex/_generated/api';
 import './Header.css';
 import RiderLoginModal from './RiderLoginModal';
 import RewardsModal from './RewardsModal';
+import CustomerNotificationBell from './CustomerNotificationBell';
 const Header = ({ cartCount, wishlistCount, onCartClick }) => {
   const { user, isAuthenticated, logout } = useAuth();
   const { confirm } = useConfirm();
@@ -308,6 +309,10 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
                 </span>
                 <span>Cart</span>
               </button>
+
+              {isAuthenticated && user?.email && (
+                <CustomerNotificationBell email={user.email} />
+              )}
 
               {isAuthenticated ? (
                 <div className="account-dropdown-wrapper" ref={dropdownRef}>

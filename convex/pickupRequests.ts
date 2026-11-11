@@ -2,6 +2,7 @@
 import { query, mutation } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
+import { insertCustomerNotification } from "./customerNotifications";
 
 export const getAllPickupRequests = query(async ({ db }) => {
   return await db.query("pickupRequests").order("desc").collect();
@@ -247,6 +248,14 @@ export const acceptOrder = mutation({
         title: "Rider assigned",
         body: `${args.riderName} accepted your order.`,
         url: `/track-order?order=${encodeURIComponent(order.orderId)}`,
+      });
+      await insertCustomerNotification(db, {
+        email: order.email,
+        type: "rider_assigned",
+        title: "Rider assigned",
+        body: `${args.riderName} accepted your order and will deliver it soon.`,
+        url: `/track-order?order=${encodeURIComponent(order.orderId)}`,
+        orderId: order.orderId,
       });
     };
 

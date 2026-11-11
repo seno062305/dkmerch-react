@@ -8,6 +8,33 @@ import {
   ensureOrderCounterSeeded,
   repairDuplicateOrderSeqs,
 } from "./lib/orderSeq";
+import { insertCustomerNotification } from "./customerNotifications";
+
+function shortOrderId(orderId: string): string {
+  return String(orderId || "").slice(-8).toUpperCase();
+}
+
+async function notifyCustomerInApp(
+  db: any,
+  args: {
+    email?: string | null;
+    type: string;
+    title: string;
+    body: string;
+    url?: string;
+    orderId?: string;
+  }
+) {
+  if (!args.email) return;
+  await insertCustomerNotification(db, {
+    email: args.email,
+    type: args.type,
+    title: args.title,
+    body: args.body,
+    url: args.url,
+    orderId: args.orderId,
+  });
+}
 
 export const getAllOrders = query(async ({ db }) => {
   // Newest orders first system-wide
@@ -232,6 +259,14 @@ async function onOrderConfirmed(
       body: `Hi ${customerName}! Your order #${orderId.slice(-8).toUpperCase()} was confirmed.`,
       url: `/track-order?order=${encodeURIComponent(orderId)}`,
     });
+    await notifyCustomerInApp(db, {
+      email: order.email,
+      type: "order_confirmed",
+      title: "Order confirmed ✅",
+      body: `Your order #${shortOrderId(orderId)} was confirmed by admin.`,
+      url: `/track-order?order=${encodeURIComponent(orderId)}`,
+      orderId,
+    });
   }
 
   // Outside NCR → LBC Express only — do not notify motorcycle riders
@@ -283,19 +318,31 @@ export const updateOrderStatus = mutation({
       await onOrderConfirmed(scheduler, db, order, orderId);
     } else if (orderStatus && order.email) {
       // Notify customer on every admin progress step (shipped / completed / cancelled / etc.)
+      const label = String(orderStatus).replace(/_/g, " ");
+      const note = orderStatus === "cancelled" ? (order.cancelReason || undefined) : undefined;
       await scheduler.runAfter(0, internal.sendEmail.sendOrderStatusUpdateEmail, {
         to: order.email,
         customerName: order.customerName || "Customer",
         orderId,
         orderStatus,
         actorLabel: "Admin",
-        note: orderStatus === "cancelled" ? (order.cancelReason || undefined) : undefined,
+        note,
       });
       await scheduler.runAfter(0, internal.webPush.sendToEmail, {
         email: order.email,
-        title: `Order update · #${orderId.slice(-8).toUpperCase()}`,
-        body: `Status: ${String(orderStatus).replace(/_/g, " ")}`,
+        title: `Order update · #${shortOrderId(orderId)}`,
+        body: note ? `Status: ${label}. Reason: ${note}` : `Status: ${label}`,
         url: `/track-order?order=${encodeURIComponent(orderId)}`,
+      });
+      await notifyCustomerInApp(db, {
+        email: order.email,
+        type: orderStatus === "cancelled" ? "order_cancelled" : "order_update",
+        title: `Order ${label} · #${shortOrderId(orderId)}`,
+        body: note
+          ? `Admin updated your order to ${label}. Reason: ${note}`
+          : `Admin updated your order to ${label}.`,
+        url: `/track-order?order=${encodeURIComponent(orderId)}`,
+        orderId,
       });
     }
 
@@ -349,22 +396,39 @@ export const updateOrderFields = mutation({
         filtered.orderStatus === 'out_for_delivery' || filtered.orderStatus === 'completed';
       const hasRider = !!(filtered.riderInfo?.name || order.riderInfo?.name);
       const actorLabel = isRiderStep && hasRider ? 'Rider' : 'Admin';
+      const label = String(filtered.orderStatus).replace(/_/g, ' ');
+      const note =
+        filtered.orderStatus === 'cancelled'
+          ? (filtered.cancelReason || order.cancelReason || undefined)
+          : undefined;
       await scheduler.runAfter(0, internal.sendEmail.sendOrderStatusUpdateEmail, {
         to: order.email,
         customerName: order.customerName || 'Customer',
         orderId,
         orderStatus: filtered.orderStatus,
         actorLabel,
-        note:
-          filtered.orderStatus === 'cancelled'
-            ? (filtered.cancelReason || order.cancelReason || undefined)
-            : undefined,
+        note,
       });
       await scheduler.runAfter(0, internal.webPush.sendToEmail, {
         email: order.email,
-        title: `Order update · #${orderId.slice(-8).toUpperCase()}`,
-        body: `${actorLabel}: ${String(filtered.orderStatus).replace(/_/g, ' ')}`,
+        title: `Order update · #${shortOrderId(orderId)}`,
+        body: note ? `${actorLabel}: ${label}. Reason: ${note}` : `${actorLabel}: ${label}`,
         url: `/track-order?order=${encodeURIComponent(orderId)}`,
+      });
+      await notifyCustomerInApp(db, {
+        email: order.email,
+        type:
+          filtered.orderStatus === 'cancelled'
+            ? 'order_cancelled'
+            : filtered.orderStatus === 'out_for_delivery'
+              ? 'out_for_delivery'
+              : 'order_update',
+        title: `Order ${label} · #${shortOrderId(orderId)}`,
+        body: note
+          ? `${actorLabel} updated your order to ${label}. Reason: ${note}`
+          : `${actorLabel} updated your order to ${label}.`,
+        url: `/track-order?order=${encodeURIComponent(orderId)}`,
+        orderId,
       });
     }
 
@@ -407,12 +471,56 @@ export const updateOrderOtp = mutation({
 });
 
 export const deleteOrder = mutation({
-  args: { orderId: v.string() },
-  handler: async ({ db }, { orderId }) => {
+  args: {
+    orderId: v.string(),
+    reason: v.string(),
+  },
+  handler: async ({ db, scheduler }, { orderId, reason }) => {
+    const trimmedReason = String(reason || "").trim();
+    if (!trimmedReason) {
+      return { success: false, message: "A delete reason is required." };
+    }
     const order = await db.query("orders")
       .withIndex("by_orderId", q => q.eq("orderId", orderId))
       .first();
-    if (!order) return { success: false };
+    if (!order) return { success: false, message: "Order not found." };
+
+    const customerEmail = String(order.email || "").trim();
+    const customerName = order.customerName || "Customer";
+    const shortId = shortOrderId(orderId);
+
+    if (customerEmail) {
+      await scheduler.runAfter(0, internal.sendEmail.sendOrderStatusUpdateEmail, {
+        to: customerEmail,
+        customerName,
+        orderId,
+        orderStatus: "order_deleted",
+        actorLabel: "Admin",
+        note: trimmedReason,
+      });
+      await scheduler.runAfter(0, internal.webPush.sendToEmail, {
+        email: customerEmail,
+        title: `Order removed · #${shortId}`,
+        body: `Admin deleted your order. Reason: ${trimmedReason}`,
+        url: "/track-order",
+      });
+      await notifyCustomerInApp(db, {
+        email: customerEmail,
+        type: "order_deleted",
+        title: `Order deleted · #${shortId}`,
+        body: `Admin deleted your order. Reason: ${trimmedReason}`,
+        url: "/track-order",
+        orderId,
+      });
+    }
+
+    // Clean related pickup requests for this order
+    const pickups = await db
+      .query("pickupRequests")
+      .withIndex("by_orderId", (q: any) => q.eq("orderId", orderId))
+      .collect();
+    await Promise.all(pickups.map((p: any) => db.delete(p._id)));
+
     await db.delete(order._id);
     return { success: true };
   },
@@ -662,6 +770,20 @@ export const notifyCustomerOutForDelivery = mutation({
         riderPlate:   args.riderPlate,
         otp,
       });
+      await scheduler.runAfter(0, internal.webPush.sendToEmail, {
+        email: customerEmail,
+        title: `Out for delivery · #${shortOrderId(order.orderId)}`,
+        body: `${args.riderName} is on the way — check Track Order for your OTP.`,
+        url: `/track-order?order=${encodeURIComponent(order.orderId)}`,
+      });
+      await notifyCustomerInApp(db, {
+        email: customerEmail,
+        type: "out_for_delivery",
+        title: `Out for delivery · #${shortOrderId(order.orderId)}`,
+        body: `${args.riderName} is on the way with your order. Open Track Order for your delivery OTP.`,
+        url: `/track-order?order=${encodeURIComponent(order.orderId)}`,
+        orderId: order.orderId,
+      });
     }
 
     if (phone) {
@@ -825,11 +947,21 @@ export const rejectCustomerCancel = mutation({
     });
 
     if (order.email) {
+      const body =
+        adminNote || "Your cancel request was not approved. The order will continue.";
       await scheduler.runAfter(0, internal.webPush.sendToEmail, {
         email: order.email,
-        title: `Cancel request declined · #${orderId.slice(-8).toUpperCase()}`,
-        body: adminNote || "Your cancel request was not approved. The order will continue.",
+        title: `Cancel request declined · #${shortOrderId(orderId)}`,
+        body,
         url: `/track-order?order=${encodeURIComponent(orderId)}`,
+      });
+      await notifyCustomerInApp(db, {
+        email: order.email,
+        type: "cancel_rejected",
+        title: `Cancel declined · #${shortOrderId(orderId)}`,
+        body,
+        url: `/track-order?order=${encodeURIComponent(orderId)}`,
+        orderId,
       });
     }
     return { success: true };
@@ -942,13 +1074,22 @@ export const applyCustomerCancel = mutation({
           ? `${reason}. Refund of ₱${amount.toLocaleString("en-PH")} was sent to your payment method.`
           : reason,
       });
+      const body = wasPaid
+        ? `Refund ₱${amount.toLocaleString("en-PH")} is on the way to your wallet.`
+        : "Your cancel request was approved. Order cancelled.";
       await scheduler.runAfter(0, internal.webPush.sendToEmail, {
         email: order.email,
         title: `Cancel approved · #${shortId}`,
-        body: wasPaid
-          ? `Refund ₱${amount.toLocaleString("en-PH")} is on the way to your wallet.`
-          : "Your cancel request was approved. Order cancelled.",
+        body,
         url: `/track-order?order=${encodeURIComponent(args.orderId)}`,
+      });
+      await notifyCustomerInApp(db, {
+        email: order.email,
+        type: "cancel_approved",
+        title: `Cancel approved · #${shortId}`,
+        body,
+        url: `/track-order?order=${encodeURIComponent(args.orderId)}`,
+        orderId: args.orderId,
       });
     }
 

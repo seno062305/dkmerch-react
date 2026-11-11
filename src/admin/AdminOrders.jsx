@@ -555,16 +555,24 @@ const AdminOrders = () => {
     }
   };
 
-  const handleDelete = async (orderId) => {
-    const ok = await confirm({
-      title: 'Delete order?',
-      message: 'Are you sure you want to delete this order?',
-      confirmLabel: 'Delete',
-      variant: 'danger',
-    });
-    if (!ok) return;
-    await deleteOrderMutation({ orderId });
-    setSelectedOrder(null);
+  const handleDelete = async (orderId, reason) => {
+    const trimmed = String(reason || '').trim();
+    if (!trimmed) {
+      showNotification('Please provide a reason before deleting the order.', 'error');
+      return;
+    }
+    try {
+      const result = await deleteOrderMutation({ orderId, reason: trimmed });
+      if (!result?.success) {
+        showNotification(result?.message || 'Failed to delete order.', 'error');
+        return;
+      }
+      showNotification('Order deleted. Customer was notified.', 'success');
+      setSelectedOrder(null);
+    } catch (err) {
+      console.error('Failed to delete order:', err);
+      showNotification(err?.data || err?.message || 'Failed to delete order.', 'error');
+    }
   };
 
   const handleCancelWithReason = async (orderId, reason) => {
@@ -858,6 +866,7 @@ const RejectConfirmDialog = ({ order, adminNote, onConfirm, onCancel }) => {
 const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDelete, onResolveRefund, onResolveCancelRequest, getStatusColor, getStatusLabel }) => {
   useBodyScrollLock(true);
   const [showCancelModal,   setShowCancelModal]   = useState(false);
+  const [showDeleteModal,   setShowDeleteModal]   = useState(false);
   const [proofExpanded,     setProofExpanded]     = useState(false);
   const [photoExpanded2,    setPhotoExpanded2]    = useState(false);
   const [refundAdminNote,   setRefundAdminNote]   = useState('');
@@ -1425,7 +1434,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                 {!canPrintWaybill && <span style={{ fontSize: '11px', fontWeight: 600, opacity: 0.85, marginLeft: 4 }}>(Confirm order first)</span>}
               </button>
             )}
-            <button className="delete-order-btn" onClick={() => onDelete(order.orderId)}><i className="fas fa-trash"></i> Delete Order</button>
+            <button className="delete-order-btn" onClick={() => setShowDeleteModal(true)}><i className="fas fa-trash"></i> Delete Order</button>
           </div>
 
           </div>{/* end right pane */}
@@ -1434,6 +1443,13 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
       </div>
 
       {showCancelModal && <CancelReasonModal order={order} onConfirm={reason => { onCancelWithReason(order.orderId, reason); setShowCancelModal(false); }} onClose={() => setShowCancelModal(false)} />}
+      {showDeleteModal && (
+        <DeleteReasonModal
+          order={order}
+          onConfirm={(reason) => { onDelete(order.orderId, reason); setShowDeleteModal(false); }}
+          onClose={() => setShowDeleteModal(false)}
+        />
+      )}
       {showRejectConfirm && <RejectConfirmDialog order={order} adminNote={refundAdminNote} onConfirm={() => handleRefundResolve('rejected')} onCancel={() => setShowRejectConfirm(false)} />}
       {showWaybill && <WaybillModal order={order} onClose={() => setShowWaybill(false)} />}
       {showItemsModal && (
@@ -1557,6 +1573,94 @@ const CANCEL_PRESETS = [
   'Payment issue / not verified', 'Rider unavailable in the area',
   'Incorrect order details', 'Fraudulent order detected', 'Other reason',
 ];
+
+const DELETE_PRESETS = [
+  'Duplicate / test order',
+  'Invalid customer details',
+  'Payment not completed',
+  'Fraudulent / suspicious order',
+  'Customer requested removal',
+  'Inventory / listing error',
+  'Other reason',
+];
+
+const DeleteReasonModal = ({ order, onConfirm, onClose }) => {
+  useBodyScrollLock(true);
+  const [selectedPreset, setSelectedPreset] = useState('');
+  const [customReason, setCustomReason] = useState('');
+  const [error, setError] = useState('');
+  const isOther = selectedPreset === 'Other reason';
+  const finalReason = isOther ? customReason.trim() : selectedPreset;
+
+  return (
+    <div className="cancel-reason-overlay" onClick={onClose}>
+      <div className="cancel-reason-modal" onClick={e => e.stopPropagation()}>
+        <div className="cancel-reason-header">
+          <div className="cancel-reason-icon" style={{ background: 'rgba(220,38,38,0.12)', color: '#dc2626' }}>
+            <i className="fas fa-trash"></i>
+          </div>
+          <div>
+            <h3>Delete Order</h3>
+            <p>Order #{formatOrderShortId(order)}</p>
+          </div>
+          <button className="close-btn" onClick={onClose}><i className="fas fa-times"></i></button>
+        </div>
+        <div className="cancel-reason-body">
+          <p className="cancel-reason-prompt">
+            Select or enter a reason. The customer will get an email and an in-app notification.
+          </p>
+          <div className="cancel-presets">
+            {DELETE_PRESETS.map(preset => (
+              <button
+                key={preset}
+                className={`cancel-preset-chip ${selectedPreset === preset ? 'active' : ''}`}
+                onClick={() => {
+                  setSelectedPreset(preset);
+                  setError('');
+                  if (preset !== 'Other reason') setCustomReason('');
+                }}
+              >
+                {selectedPreset === preset && <i className="fas fa-check"></i>} {preset}
+              </button>
+            ))}
+          </div>
+          {isOther && (
+            <div className="cancel-custom-wrap">
+              <label>Specify reason <span className="required">*</span></label>
+              <textarea
+                className="cancel-custom-input"
+                placeholder="Type delete reason…"
+                value={customReason}
+                onChange={e => { setCustomReason(e.target.value); setError(''); }}
+                rows={3}
+                maxLength={300}
+                autoFocus
+              />
+              <div className="char-count">{customReason.length}/300</div>
+            </div>
+          )}
+          {error && <div className="cancel-error"><i className="fas fa-exclamation-circle"></i> {error}</div>}
+        </div>
+        <div className="cancel-reason-footer">
+          <button className="cancel-go-back-btn" onClick={onClose}>
+            <i className="fas fa-arrow-left"></i> Go Back
+          </button>
+          <button
+            className="cancel-confirm-btn"
+            style={{ background: 'linear-gradient(135deg,#b91c1c,#dc2626)' }}
+            onClick={() => {
+              if (!finalReason) { setError('Please select or enter a reason.'); return; }
+              onConfirm(finalReason);
+            }}
+            disabled={!finalReason}
+          >
+            <i className="fas fa-trash"></i> Confirm Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const CancelReasonModal = ({ order, onConfirm, onClose }) => {
   useBodyScrollLock(true);

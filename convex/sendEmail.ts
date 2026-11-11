@@ -762,6 +762,22 @@ export const sendPromoNotificationToAllUsers = internalAction({
         html,
       });
 
+      await ctx.runMutation(internal.customerNotifications.create, {
+        email: user.email,
+        type: "promo",
+        title: `Promo: ${args.promoCode} — ${args.discount}% OFF`,
+        body: `New deal for ${args.promoName} fans. Use code ${args.promoCode} (up to ₱${Number(args.maxDiscount || 0).toLocaleString()}).`,
+        url: `/promo/${encodeURIComponent(args.promoCode)}`,
+      });
+      try {
+        await ctx.runAction(internal.webPush.sendToEmail, {
+          email: user.email,
+          title: `🔥 ${args.promoCode} — ${args.discount}% OFF`,
+          body: `New promo for ${args.promoName} fans on DKMerch.`,
+          url: `/promo/${encodeURIComponent(args.promoCode)}`,
+        });
+      } catch { /* ignore push failures */ }
+
       await new Promise((r) => setTimeout(r, 600));
       sent++;
     }
@@ -884,6 +900,12 @@ export const sendOrderStatusUpdateEmail = internalAction({
       out_for_delivery: { title: "Out for Delivery", emoji: "🛵", color: "#c2410c", blurb: "A rider is on the way with your order." },
       completed: { title: "Delivered", emoji: "🎉", color: "#166534", blurb: "Your order was marked as delivered. Salamat!" },
       cancelled: { title: "Order Cancelled", emoji: "❌", color: "#991b1b", blurb: "Your order was cancelled." },
+      order_deleted: {
+        title: "Order Removed",
+        emoji: "🗑️",
+        color: "#991b1b",
+        blurb: "An admin removed this order from DKMerch.",
+      },
     };
     const meta = statusMap[args.orderStatus] || {
       title: "Order Update",

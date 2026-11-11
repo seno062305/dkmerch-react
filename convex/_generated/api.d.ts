@@ -15,6 +15,7 @@ import type * as backup from "../backup.js";
 import type * as cart from "../cart.js";
 import type * as catalogOptions from "../catalogOptions.js";
 import type * as crons from "../crons.js";
+import type * as customerNotifications from "../customerNotifications.js";
 import type * as deliveryChat from "../deliveryChat.js";
 import type * as failoverApply from "../failoverApply.js";
 import type * as failoverSync from "../failoverSync.js";
@@ -57,6 +58,7 @@ declare const fullApi: ApiFromModules<{
   cart: typeof cart;
   catalogOptions: typeof catalogOptions;
   crons: typeof crons;
+  customerNotifications: typeof customerNotifications;
   deliveryChat: typeof deliveryChat;
   failoverApply: typeof failoverApply;
   failoverSync: typeof failoverSync;

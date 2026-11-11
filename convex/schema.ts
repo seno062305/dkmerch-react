@@ -366,6 +366,21 @@ export default defineSchema({
     read: v.boolean(),
   }).index("by_read", ["read"]),
 
+  /** In-app notification center for customers (bell next to profile). */
+  customerNotifications: defineTable({
+    email: v.string(),
+    type: v.string(), // order_confirmed | order_update | order_deleted | promo | out_for_delivery | cancel_rejected | cancel_approved | …
+    title: v.string(),
+    body: v.string(),
+    url: v.optional(v.string()),
+    orderId: v.optional(v.string()),
+    createdAt: v.number(),
+    read: v.boolean(),
+  })
+    .index("by_email", ["email"])
+    .index("by_email_read", ["email", "read"])
+    .index("by_email_created", ["email", "createdAt"]),
+
   settings: defineTable({
     storeName:    v.optional(v.string()),
     storeAddress: v.optional(v.string()),
