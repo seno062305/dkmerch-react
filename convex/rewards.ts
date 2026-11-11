@@ -351,6 +351,31 @@ export const addTestPoints = mutation({
   },
 });
 
+/** Set absolute points balance (testing / admin support). */
+export const setTestPoints = mutation({
+  args: { email: v.string(), points: v.number() },
+  handler: async ({ db }, { email, points }) => {
+    const normalized = String(email || "").trim().toLowerCase();
+    const amount = Math.max(0, Math.floor(Number(points) || 0));
+    if (!normalized) return { success: false, message: "Email required." };
+    const existing = await db
+      .query("userPoints")
+      .withIndex("by_email", q => q.eq("email", normalized))
+      .first();
+    if (existing) {
+      await db.patch(existing._id, { totalPoints: amount });
+    } else {
+      await db.insert("userPoints", {
+        email: normalized,
+        userName: "Test User",
+        totalPoints: amount,
+        history: [],
+      });
+    }
+    return { success: true, email: normalized, totalPoints: amount };
+  },
+});
+
 export const getAllUserPointsBackup = query({
   handler: async ({ db }) => db.query("userPoints").collect(),
 });

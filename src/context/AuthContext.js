@@ -463,15 +463,18 @@ export const AuthProvider = ({ children }) => {
     return () => window.removeEventListener("dkOpenLoginAlert", bump);
   }, [pendingLoginAlert, pendingRiderLoginAlert]);
 
-  // Only sign out if THIS session was removed (stale takeover) — not after Yes
+  // Only sign out if THIS session was removed (true takeover) — never during Yes/No
   useEffect(() => {
     if (!sessionCheck || sessionCheck.valid !== false) return;
     if (sessionCheck.reason !== "new_device_logged_in") return;
     if (holdLogoutConfirmRef.current) return;
+    // Keep owner signed in while approving / blocking the other device
+    if (securityAlert?.mode === "pending" || securityAlert?.mode === "approved") return;
+    if (pendingLoginAlert || pendingRiderLoginAlert) return;
     if (kickedRef.current) return;
     kickedRef.current = true;
     finishSecurityLogout();
-  }, [sessionCheck]);
+  }, [sessionCheck, securityAlert, pendingLoginAlert, pendingRiderLoginAlert]);
 
   const handleSecurityYes = async (opts = {}) => {
     // Second step: dismiss confirmation — stay signed in on this device
@@ -494,22 +497,25 @@ export const AuthProvider = ({ children }) => {
       result = await confirmRiderLoginAlert({
         email: String(prev.email),
         sessionId: String(alert.sessionId),
+        keepSessionId: prev.sessionId ? String(prev.sessionId) : undefined,
       });
     } else {
       if (!prev._id) throw new Error("Missing login request. Please try again.");
       result = await confirmLoginAlert({
         userId: String(prev._id),
         sessionId: String(alert.sessionId),
+        keepSessionId: prev.sessionId ? String(prev.sessionId) : undefined,
       });
     }
     if (!result?.success) {
       throw new Error(result?.message || "Could not approve this login.");
     }
     holdLogoutConfirmRef.current = true;
+    kickedRef.current = false;
     setSecurityAlert((s) => (s ? { ...s, mode: "approved" } : s));
     const device = alert.deviceName || "the other device";
     showNotification(
-      `Login approved on ${device}. You’re still signed in here.`,
+      `Login approved on ${device}. You’re still signed in here — both devices can use the account.`,
       "success",
       { duration: 5000, dedupeKey: "login-alert-yes" }
     );

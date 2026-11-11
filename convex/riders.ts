@@ -574,8 +574,9 @@ export const confirmRiderLoginAlert = mutation({
   args: {
     email: v.string(),
     sessionId: v.string(),
+    keepSessionId: v.optional(v.string()),
   },
-  handler: async ({ db }, { email, sessionId }) => {
+  handler: async ({ db }, { email, sessionId, keepSessionId }) => {
     const rider = await db
       .query("riderApplications")
       .withIndex("by_email", q => q.eq("email", email))
@@ -595,17 +596,17 @@ export const confirmRiderLoginAlert = mutation({
       return { success: false, message: "Login request timed out." };
     }
     const newId = String(alert.sessionId);
-    const prevId = alert.previousSessionId ? String(alert.previousSessionId) : "";
+    const prevId = String(keepSessionId || alert.previousSessionId || "").trim();
     const ids = getRiderSessionIds(rider);
     if (prevId && !ids.includes(prevId)) ids.push(prevId);
-    if (!ids.includes(newId)) ids.push(newId);
+    if (newId && !ids.includes(newId)) ids.push(newId);
     await db.patch(rider._id, {
-      activeSessionId: newId,
-      activeSessionIds: ids,
+      activeSessionId: prevId || newId,
+      activeSessionIds: [...new Set(ids.filter(Boolean))],
       activeDeviceAt: Date.now(),
-      activeDeviceName: alert.deviceName,
-      activeDeviceLocation: alert.location,
-      activeDevicePlatform: alert.platform,
+      activeDeviceName: (rider as any).activeDeviceName || alert.deviceName,
+      activeDeviceLocation: (rider as any).activeDeviceLocation || alert.location,
+      activeDevicePlatform: (rider as any).activeDevicePlatform || alert.platform,
       kickedAt: undefined,
       loginAlert: { ...alert, status: "approved", resolved: true },
     } as any);

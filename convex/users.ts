@@ -424,7 +424,12 @@ export const startUserSession = mutation({
       resolved: false,
     };
     // Keep owner sessions intact — only store the pending request
-    await db.patch(args.userId, { loginAlert: alert } as any);
+    await db.patch(args.userId, {
+      loginAlert: alert,
+      activeSessionId: previousSessionId,
+      activeSessionIds: existingIds,
+      // Don't refresh activeDeviceAt from the NEW device — owner stays "primary"
+    } as any);
 
     try {
       await scheduler.runAfter(LOGIN_ALERT_TTL_MS, internal.users.expireLoginAlert, {
@@ -628,10 +633,35 @@ export const checkUserSession = query({
       if (!user) return { valid: false, reason: "not_found" };
       const ids = getActiveSessionIds(user);
       if (ids.length === 0) return { valid: true, reason: "legacy" };
-      const ok = ids.includes(sid);
+      if (ids.includes(sid)) {
+        return {
+          valid: true,
+          reason: "ok",
+          activeDeviceAt: user.activeDeviceAt ?? null,
+          activeDeviceName: user.activeDeviceName ?? null,
+          activeDeviceLocation: user.activeDeviceLocation ?? null,
+        };
+      }
+      // Pending Yes/No — owner device must stay signed in (never force-logout)
+      const alert = user.loginAlert;
+      if (
+        alert
+        && alert.status === "pending"
+        && !alert.resolved
+        && !isLoginAlertExpired(alert)
+        && String(alert.previousSessionId || "") === sid
+      ) {
+        return {
+          valid: true,
+          reason: "pending_approval",
+          activeDeviceAt: user.activeDeviceAt ?? null,
+          activeDeviceName: user.activeDeviceName ?? null,
+          activeDeviceLocation: user.activeDeviceLocation ?? null,
+        };
+      }
       return {
-        valid: ok,
-        reason: ok ? "ok" : "new_device_logged_in",
+        valid: false,
+        reason: "new_device_logged_in",
         activeDeviceAt: user.activeDeviceAt ?? null,
         activeDeviceName: user.activeDeviceName ?? null,
         activeDeviceLocation: user.activeDeviceLocation ?? null,
@@ -704,8 +734,10 @@ export const confirmLoginAlert = mutation({
   args: {
     userId: v.string(),
     sessionId: v.string(),
+    /** Owner device session — always keep this signed in after Yes */
+    keepSessionId: v.optional(v.string()),
   },
-  handler: async ({ db }, { userId, sessionId }) => {
+  handler: async ({ db }, { userId, sessionId, keepSessionId }) => {
     const user = await db.get(userId as any) as any;
     if (!user) return { success: false, message: "Account not found." };
     const alert = user.loginAlert;
@@ -722,17 +754,22 @@ export const confirmLoginAlert = mutation({
       return { success: false, message: "Login request timed out." };
     }
     const newId = String(alert.sessionId);
-    const prevId = alert.previousSessionId ? String(alert.previousSessionId) : "";
+    const prevId = String(
+      keepSessionId
+      || alert.previousSessionId
+      || ""
+    ).trim();
     const ids = getActiveSessionIds(user);
     if (prevId && !ids.includes(prevId)) ids.push(prevId);
-    if (!ids.includes(newId)) ids.push(newId);
+    if (newId && !ids.includes(newId)) ids.push(newId);
+    // Both devices stay active — owner session stays primary so they never get kicked
     await db.patch(user._id, {
-      activeSessionId: newId,
-      activeSessionIds: ids,
+      activeSessionId: prevId || newId,
+      activeSessionIds: [...new Set(ids.filter(Boolean))],
       activeDeviceAt: Date.now(),
-      activeDeviceName: alert.deviceName,
-      activeDeviceLocation: alert.location,
-      activeDevicePlatform: alert.platform,
+      activeDeviceName: user.activeDeviceName || alert.deviceName,
+      activeDeviceLocation: user.activeDeviceLocation || alert.location,
+      activeDevicePlatform: user.activeDevicePlatform || alert.platform,
       loginAlert: { ...alert, status: "approved", resolved: true },
     } as any);
     return { success: true };
