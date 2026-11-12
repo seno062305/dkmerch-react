@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
@@ -14,6 +14,7 @@ import './ProductModal.css';
 
 /* Preview in modal — full text only after See more */
 const REVIEW_CHAR_LIMIT = 80;
+const PREVIEW_REVIEW_LIMIT = 3;
 
 const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequireLogin }) => {
   const { isAuthenticated, user } = useAuth();
@@ -29,6 +30,8 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
   const [showLightbox, setShowLightbox]         = useState(false);
   const [cartToast, setCartToast]               = useState(false);
   const [expandedReviews, setExpandedReviews]   = useState({});
+  const [showAllReviews, setShowAllReviews]     = useState(false);
+  const [reviewStarFilter, setReviewStarFilter] = useState('all'); // 'all' | 1..5
   const [showBuyNowQty, setShowBuyNowQty]       = useState(false);
   const [buyNowQty, setBuyNowQty]               = useState(1);
   const reviewBoxRef = useRef(null);
@@ -216,6 +219,87 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
     return (convexReviews.reduce((acc, r) => acc + r.rating, 0) / convexReviews.length).toFixed(1);
   };
 
+  const previewReviews = useMemo(
+    () => convexReviews.slice(0, PREVIEW_REVIEW_LIMIT),
+    [convexReviews]
+  );
+
+  const starCounts = useMemo(() => {
+    const counts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    convexReviews.forEach((r) => {
+      const n = Math.min(5, Math.max(1, Number(r.rating) || 0));
+      counts[n] += 1;
+    });
+    return counts;
+  }, [convexReviews]);
+
+  const filteredAllReviews = useMemo(() => {
+    if (reviewStarFilter === 'all') return convexReviews;
+    return convexReviews.filter((r) => Number(r.rating) === Number(reviewStarFilter));
+  }, [convexReviews, reviewStarFilter]);
+
+  const toggleExpand = useCallback((id) => {
+    setExpandedReviews((prev) => ({ ...prev, [id]: !prev[id] }));
+  }, []);
+
+  const openAllReviews = () => {
+    setReviewStarFilter('all');
+    setShowAllReviews(true);
+  };
+
+  const closeAllReviews = () => {
+    setShowAllReviews(false);
+    setReviewStarFilter('all');
+  };
+
+  const renderReviewItem = (rev, { compact = false } = {}) => {
+    const isLong = rev.review.length > REVIEW_CHAR_LIMIT;
+    const isExpanded = expandedReviews[rev._id];
+    return (
+      <div key={rev._id} className={`modal-left-review-item${compact ? '' : ' reviews-modal-item'}`}>
+        <div className="modal-left-review-header">
+          <div className="modal-left-review-user">
+            <i className="fas fa-user-circle"></i>
+            <span>{rev.userName}</span>
+          </div>
+          <div className="modal-left-review-actions">
+            <div className="modal-left-review-stars">
+              {[1, 2, 3, 4, 5].map((s) => (
+                <i key={s} className={`fas fa-star ${s <= rev.rating ? 'filled' : ''}`}></i>
+              ))}
+            </div>
+            {isAuthenticated && user?.email === rev.userEmail && (
+              <button
+                className="modal-left-review-delete"
+                onClick={() => handleDeleteReview(rev._id)}
+                title="Delete your review"
+              >
+                <i className="fas fa-trash-alt"></i>
+              </button>
+            )}
+          </div>
+        </div>
+        <p className="modal-left-review-text">
+          {isLong && !isExpanded
+            ? rev.review.slice(0, REVIEW_CHAR_LIMIT) + '...'
+            : rev.review}
+        </p>
+        {isLong && (
+          <button
+            type="button"
+            className="modal-left-review-toggle"
+            onClick={() => toggleExpand(rev._id)}
+          >
+            {isExpanded ? 'See less' : 'See more'}
+          </button>
+        )}
+        <small className="modal-left-review-date">
+          {new Date(rev.createdAt).toLocaleDateString()}
+        </small>
+      </div>
+    );
+  };
+
   const handleSubmitReview = async () => {
     if (!isAuthenticated) {
       requireLogin('Please login to submit a review');
@@ -390,10 +474,6 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
     onAddToWishlist(product);
   };
 
-  const toggleExpand = (id) => {
-    setExpandedReviews(prev => ({ ...prev, [id]: !prev[id] }));
-  };
-
   useBodyScrollLock(true);
 
   useEffect(() => {
@@ -474,56 +554,20 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
                 </div>
               )}
 
-              {/* ── Customer Reviews list ── */}
+              {/* ── Customer Reviews list (max 3 preview) ── */}
               {convexReviews.length > 0 && (
                 <div className="modal-left-reviews">
-                  {convexReviews.map(rev => {
-                    const isLong = rev.review.length > REVIEW_CHAR_LIMIT;
-                    const isExpanded = expandedReviews[rev._id];
-                    return (
-                      <div key={rev._id} className="modal-left-review-item">
-                        <div className="modal-left-review-header">
-                          <div className="modal-left-review-user">
-                            <i className="fas fa-user-circle"></i>
-                            <span>{rev.userName}</span>
-                          </div>
-                          <div className="modal-left-review-actions">
-                            <div className="modal-left-review-stars">
-                              {[1,2,3,4,5].map(s => (
-                                <i key={s} className={`fas fa-star ${s <= rev.rating ? 'filled' : ''}`}></i>
-                              ))}
-                            </div>
-                            {isAuthenticated && user?.email === rev.userEmail && (
-                              <button
-                                className="modal-left-review-delete"
-                                onClick={() => handleDeleteReview(rev._id)}
-                                title="Delete your review"
-                              >
-                                <i className="fas fa-trash-alt"></i>
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                        <p className="modal-left-review-text">
-                          {isLong && !isExpanded
-                            ? rev.review.slice(0, REVIEW_CHAR_LIMIT) + '...'
-                            : rev.review}
-                        </p>
-                        {isLong && (
-                          <button
-                            type="button"
-                            className="modal-left-review-toggle"
-                            onClick={() => toggleExpand(rev._id)}
-                          >
-                            {isExpanded ? 'See less' : 'See more'}
-                          </button>
-                        )}
-                        <small className="modal-left-review-date">
-                          {new Date(rev.createdAt).toLocaleDateString()}
-                        </small>
-                      </div>
-                    );
-                  })}
+                  {previewReviews.map((rev) => renderReviewItem(rev, { compact: true }))}
+                  {convexReviews.length > PREVIEW_REVIEW_LIMIT && (
+                    <button
+                      type="button"
+                      className="modal-reviews-see-all"
+                      onClick={openAllReviews}
+                    >
+                      See more reviews
+                      <i className="fas fa-chevron-right"></i>
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -594,11 +638,12 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
                   </div>
                 )}
 
-                <div className="modal-actions">
+                <div className={`modal-actions${isAuthenticated && !(product.isPreOrder && !isReleased) ? ' has-buy-now' : ' is-guest'}`}>
                   {product.isPreOrder && !isReleased ? (
                     <>
                       <button className="btn btn-preorder" onClick={handlePreOrderClick} disabled={outOfStock}>
-                        <i className="fas fa-shopping-cart"></i> Pre-Order Now
+                        <i className="fas fa-shopping-cart"></i>
+                        <span>Pre-Order Now</span>
                       </button>
                       <button type="button" className="btn-fav-outline" onClick={handleWishlistClick} title="Add to Favorites" aria-label="Add to favorites">
                         <i className="fas fa-heart" aria-hidden="true"></i>
@@ -607,11 +652,13 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
                   ) : (
                     <>
                       <button className="btn btn-add-cart" onClick={handleAddToCartClick} disabled={outOfStock}>
-                        <i className="fas fa-shopping-cart"></i> Add to Cart
+                        <i className="fas fa-shopping-cart"></i>
+                        <span>Add to Cart</span>
                       </button>
                       {isAuthenticated && (
                         <button className="btn btn-buy-now" onClick={handleBuyNowClick} disabled={outOfStock}>
-                          <i className="fas fa-bolt"></i> Buy Now
+                          <i className="fas fa-bolt"></i>
+                          <span>Buy Now</span>
                         </button>
                       )}
                       <button type="button" className="btn-fav-outline" onClick={handleWishlistClick} title="Add to Favorites" aria-label="Add to favorites">
@@ -709,6 +756,80 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
             <i className="fas fa-times"></i>
           </button>
           <img src={product.image} alt={product.name} onClick={(e) => e.stopPropagation()} />
+        </div>
+      )}
+
+      {showAllReviews && (
+        <div
+          className="reviews-modal-overlay"
+          onClick={closeAllReviews}
+          role="presentation"
+        >
+          <div
+            className="reviews-modal"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Customer reviews"
+          >
+            <div className="reviews-modal-head">
+              <div>
+                <h3>
+                  Customer Reviews
+                  <span className="reviews-modal-total">({convexReviews.length})</span>
+                </h3>
+                <p className="reviews-modal-sub">
+                  {getAverageRating()} average · filter by star rating
+                </p>
+              </div>
+              <button
+                type="button"
+                className="reviews-modal-close"
+                onClick={closeAllReviews}
+                aria-label="Close reviews"
+              >
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+
+            <div className="reviews-star-filters" role="tablist" aria-label="Filter by stars">
+              <button
+                type="button"
+                className={`reviews-star-chip${reviewStarFilter === 'all' ? ' is-active' : ''}`}
+                onClick={() => setReviewStarFilter('all')}
+              >
+                All
+                <em>{convexReviews.length}</em>
+              </button>
+              {[5, 4, 3, 2, 1].map((star) => (
+                <button
+                  key={star}
+                  type="button"
+                  className={`reviews-star-chip${Number(reviewStarFilter) === star ? ' is-active' : ''}`}
+                  onClick={() => setReviewStarFilter(star)}
+                >
+                  {star}
+                  <i className="fas fa-star"></i>
+                  <em>{starCounts[star]}</em>
+                </button>
+              ))}
+            </div>
+
+            <div className="reviews-modal-list">
+              {filteredAllReviews.length === 0 ? (
+                <div className="reviews-modal-empty">
+                  <i className="fas fa-star"></i>
+                  <p>
+                    {reviewStarFilter === 'all'
+                      ? 'No reviews yet.'
+                      : `No ${reviewStarFilter}-star reviews.`}
+                  </p>
+                </div>
+              ) : (
+                filteredAllReviews.map((rev) => renderReviewItem(rev))
+              )}
+            </div>
+          </div>
         </div>
       )}
 

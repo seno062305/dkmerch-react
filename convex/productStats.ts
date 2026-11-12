@@ -61,23 +61,30 @@ export const getSoldCountsForProducts = query({
   },
 });
 
-/** Latest reviews for many products (home / shop teasers). */
+/** Average rating + review count for many products (home / shop card teasers). */
 export const getLatestReviewsForProducts = query({
   args: { productIds: v.array(v.string()) },
   handler: async ({ db }, { productIds }) => {
     const ids = (productIds || []).map((id) => String(id)).filter(Boolean).slice(0, 40);
-    const out: Record<string, { rating: number; review: string; userName: string; count: number }> = {};
+    const out: Record<
+      string,
+      { rating: number; review: string; userName: string; count: number }
+    > = {};
     for (const productId of ids) {
       const rows = await db
         .query("reviews")
         .withIndex("by_product", (q) => q.eq("productId", productId))
         .order("desc")
-        .take(20);
+        .collect();
       if (!rows.length) continue;
+      const sum = rows.reduce((acc, r) => acc + (Number(r.rating) || 0), 0);
+      const avg = sum / rows.length;
+      // rating = average across all reviews (matches product modal); text from latest.
+      const latest = rows[0];
       out[productId] = {
-        rating: rows[0].rating,
-        review: rows[0].review || "",
-        userName: rows[0].userName || "Customer",
+        rating: Math.round(avg * 10) / 10,
+        review: latest?.review || "",
+        userName: latest?.userName || "Customer",
         count: rows.length,
       };
     }

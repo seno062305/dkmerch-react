@@ -248,7 +248,7 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
               <strong>{activePromo.code}</strong>
             </div>
           )}
-          {/* Count/rating only on card — comments show inside product modal */}
+          {/* Total average rating on card — same as product modal summary */}
           <div
             className={`wv-card-review${reviewMap[pid] ? '' : ' is-empty'}`}
             aria-hidden={!reviewMap[pid]}
@@ -259,9 +259,12 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
                   {[1, 2, 3, 4, 5].map((s) => (
                     <i
                       key={s}
-                      className={`fas fa-star ${s <= reviewMap[pid].rating ? 'on' : ''}`}
+                      className={`fas fa-star ${s <= Math.round(reviewMap[pid].rating) ? 'on' : ''}`}
                     />
                   ))}
+                </span>
+                <span className="wv-card-review-score">
+                  {Number(reviewMap[pid].rating).toFixed(1)}
                 </span>
                 <span className="wv-card-review-count">
                   {reviewMap[pid].count} review{reviewMap[pid].count === 1 ? '' : 's'}

@@ -306,8 +306,16 @@
     gap: 2px;
     font-size: 10px;
     color: #d1d5db;
+    flex-shrink: 0;
 }
 .wv-card-review-stars .on { color: #f59e0b; }
+.wv-card-review-score {
+    font-size: 12px;
+    font-weight: 800;
+    color: #1a1a2e;
+    line-height: 1;
+    margin-right: auto;
+}
 .wv-card-review-count {
     font-size: 10px;
     font-weight: 700;
