@@ -46,10 +46,14 @@ function getDistanceKm(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function calcLalamoveShipping(storeLat, storeLng, lat, lng, cartItems = [], products = []) {
+function calcLalamoveShipping(storeLat, storeLng, lat, lng, cartItems = [], products = [], baseFareOverride) {
   if (!lat || !lng || !storeLat || !storeLng) return null;
 
-  const cfg = LALAMOVE_CONFIG;
+  const baseFare =
+    baseFareOverride != null && Number.isFinite(Number(baseFareOverride))
+      ? Number(baseFareOverride)
+      : LALAMOVE_CONFIG.baseFare;
+  const cfg = { ...LALAMOVE_CONFIG, baseFare };
   const km  = Math.round(getDistanceKm(storeLat, storeLng, lat, lng) * 10) / 10;
 
   let fee = cfg.baseFare;
@@ -611,6 +615,10 @@ const Checkout = () => {
   const hasStoreLocation = !!(storeSettings?.storeLat && storeSettings?.storeLng);
   const STORE_LAT        = storeSettings?.storeLat ?? 14.5995;
   const STORE_LNG        = storeSettings?.storeLng ?? 121.0;
+  const SHIPPING_BASE_FARE =
+    storeSettings?.shippingBaseFare != null && Number.isFinite(Number(storeSettings.shippingBaseFare))
+      ? Number(storeSettings.shippingBaseFare)
+      : LALAMOVE_CONFIG.baseFare;
 
   const savedProfile = useQuery(
     api.users.getProfile,
@@ -728,7 +736,15 @@ const Checkout = () => {
     : checkoutItems;
 
   const shippingInfo = addressCoords && !isOutsideNCR
-    ? calcLalamoveShipping(STORE_LAT, STORE_LNG, addressCoords.lat, addressCoords.lng, shippingCartItems, products)
+    ? calcLalamoveShipping(
+      STORE_LAT,
+      STORE_LNG,
+      addressCoords.lat,
+      addressCoords.lng,
+      shippingCartItems,
+      products,
+      SHIPPING_BASE_FARE
+    )
     : null;
   // LBC fee is arranged with admin — not charged at checkout payment
   const shippingFee = isOutsideNCR ? 0 : (shippingInfo?.fee ?? 0);
@@ -1423,7 +1439,15 @@ const Checkout = () => {
                       />
                     </div>
                     {addressCoords && !isOutsideNCR && (() => {
-                      const preview = calcLalamoveShipping(STORE_LAT, STORE_LNG, addressCoords.lat, addressCoords.lng, shippingCartItems, products);
+                      const preview = calcLalamoveShipping(
+                        STORE_LAT,
+                        STORE_LNG,
+                        addressCoords.lat,
+                        addressCoords.lng,
+                        shippingCartItems,
+                        products,
+                        SHIPPING_BASE_FARE
+                      );
                       return preview ? (
                         <div className="form-group full-width">
                           <ShippingBreakdown shippingInfo={preview} isEstimate={!hasStoreLocation} />

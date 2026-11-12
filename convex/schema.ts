@@ -400,6 +400,8 @@ export default defineSchema({
     storeAddress: v.optional(v.string()),
     storeLat:     v.optional(v.number()),
     storeLng:     v.optional(v.number()),
+    /** Lalamove-style base fare (₱) used at checkout. */
+    shippingBaseFare: v.optional(v.number()),
     autoBackupSchedule: v.optional(v.string()), // "daily" | "weekly" | "off"
     lastAutoBackupAt:   v.optional(v.number()),
     lastRestoreAt:      v.optional(v.number()),

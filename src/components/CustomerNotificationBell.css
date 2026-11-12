@@ -327,6 +327,19 @@
   font-weight: 700;
 }
 
+.cust-bell-cta {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  margin-top: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #ffe4ef;
+  color: #fc1268;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
 .cust-bell-item-time {
   font-size: 0.8rem;
   font-weight: 600;

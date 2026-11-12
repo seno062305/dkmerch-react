@@ -1279,8 +1279,11 @@ const AdminBackup = () => {
     storeAddress: '',
     storeLat: '',
     storeLng: '',
+    shippingBaseFare: '49',
   });
   const [storeFormSaved, setStoreFormSaved] = useState(false);
+  const [shippingSaved, setShippingSaved] = useState(false);
+  const [shippingSaving, setShippingSaving] = useState(false);
   const [storeLocating, setStoreLocating] = useState(false);
 
   useEffect(() => {
@@ -1290,6 +1293,10 @@ const AdminBackup = () => {
       storeAddress: storeSettings.storeAddress ?? '',
       storeLat: storeSettings.storeLat != null ? String(storeSettings.storeLat) : '',
       storeLng: storeSettings.storeLng != null ? String(storeSettings.storeLng) : '',
+      shippingBaseFare:
+        storeSettings.shippingBaseFare != null
+          ? String(storeSettings.shippingBaseFare)
+          : '49',
     });
   }, [storeSettings]);
 
@@ -1297,6 +1304,7 @@ const AdminBackup = () => {
     const { name, value } = e.target;
     setStoreForm((prev) => ({ ...prev, [name]: value }));
     setStoreFormSaved(false);
+    if (name === 'shippingBaseFare') setShippingSaved(false);
   };
 
   const handleDetectLocation = () => {
@@ -1355,6 +1363,43 @@ const AdminBackup = () => {
     } catch (err) {
       console.error(err);
       showNotification('Failed to save store location.', 'error');
+    }
+  };
+
+  const handleSaveShippingFee = async () => {
+    const fare = Math.round(Number(storeForm.shippingBaseFare));
+    if (!Number.isFinite(fare) || fare < 0) {
+      showNotification('Enter a valid shipping fee (₱0 or more).', 'warning');
+      return;
+    }
+    const prev =
+      storeSettings?.shippingBaseFare != null
+        ? Number(storeSettings.shippingBaseFare)
+        : 49;
+    if (fare === prev) {
+      showNotification('Shipping fee is unchanged.', 'info');
+      return;
+    }
+    const ok = window.confirm(
+      `Update base shipping fee from ₱${prev.toLocaleString('en-PH')} to ₱${fare.toLocaleString('en-PH')}?\n\nAll customers will get an in-app notification with Shop now → Collections.\n\nContinue?`
+    );
+    if (!ok) return;
+    setShippingSaving(true);
+    try {
+      const res = await updateSettings({
+        shippingBaseFare: fare,
+        notifyShippingChange: true,
+      });
+      setShippingSaved(true);
+      showNotification(
+        `Shipping fee saved. Notified ${res?.notified ?? 0} customer(s).`,
+        'success'
+      );
+    } catch (err) {
+      console.error(err);
+      showNotification('Failed to save shipping fee.', 'error');
+    } finally {
+      setShippingSaving(false);
     }
   };
 
@@ -2120,6 +2165,59 @@ const AdminBackup = () => {
               >
                 <i className={storeFormSaved ? 'fas fa-check' : 'fas fa-save'}></i>{' '}
                 {storeFormSaved ? 'Saved!' : 'Save Location'}
+              </button>
+            </div>
+          </div>
+
+          <div className="ab-card" style={{ marginTop: 16 }}>
+            <div className="ab-card-title">
+              <i className="fas fa-truck" style={{ background: '#eff6ff', color: '#2563eb' }}></i>
+              <h3>Shipping Fee</h3>
+            </div>
+            <p style={{ margin: '0 0 12px', color: '#64748b', fontSize: 13, lineHeight: 1.45 }}>
+              Base delivery fare used at checkout (distance / extras still add on top).
+              Saving a new amount asks for confirmation and notifies customers in-app only.
+            </p>
+            <div className="ab-store-grid">
+              <div className="ab-store-field">
+                <label className="ab-password-label" htmlFor="ab-shipping-base">
+                  Base shipping fee (₱)
+                </label>
+                <input
+                  id="ab-shipping-base"
+                  className="ab-oracle-input"
+                  type="number"
+                  name="shippingBaseFare"
+                  min="0"
+                  step="1"
+                  value={storeForm.shippingBaseFare}
+                  onChange={handleStoreFormChange}
+                  placeholder="49"
+                />
+              </div>
+            </div>
+            <div className="ab-store-actions">
+              <button
+                type="button"
+                className="ab-btn-primary"
+                onClick={handleSaveShippingFee}
+                disabled={shippingSaving}
+                style={shippingSaved ? { background: '#16a34a' } : undefined}
+              >
+                <i
+                  className={
+                    shippingSaving
+                      ? 'fas fa-spinner fa-spin'
+                      : shippingSaved
+                        ? 'fas fa-check'
+                        : 'fas fa-save'
+                  }
+                ></i>{' '}
+                {shippingSaving
+                  ? 'Saving…'
+                  : shippingSaved
+                    ? 'Saved & notified!'
+                    : 'Save Shipping Fee'}
               </button>
             </div>
           </div>

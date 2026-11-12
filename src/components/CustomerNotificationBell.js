@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useCloseOnHistoryBack } from '../hooks/useCloseOnHistoryBack';
 import { useConfirm } from '../context/ConfirmContext';
 import { clearUpdatePromptDismiss } from '../utils/appUpdate';
+import { goToCustomerTab } from '../utils/navScroll';
 import './CustomerNotificationBell.css';
 
 const INITIAL_VISIBLE = 12;
@@ -27,6 +28,7 @@ function typeBadge(type) {
   switch (String(type || '')) {
     case 'promo': return { icon: 'fa-fire', tone: 'promo' };
     case 'app_update': return { icon: 'fa-mobile-alt', tone: 'update' };
+    case 'shipping_fee': return { icon: 'fa-truck', tone: 'delivery' };
     case 'order_confirmed': return { icon: 'fa-check', tone: 'ok' };
     case 'out_for_delivery': return { icon: 'fa-motorcycle', tone: 'delivery' };
     case 'rider_assigned': return { icon: 'fa-user-check', tone: 'delivery' };
@@ -91,6 +93,10 @@ function resolveNotificationTarget(n) {
     return '/?appUpdate=1';
   }
 
+  if (type === 'shipping_fee') {
+    return '/collections';
+  }
+
   if (
     orderId
     && (
@@ -116,6 +122,7 @@ function resolveNotificationTarget(n) {
  */
 const CustomerNotificationBell = ({ email }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { confirm } = useConfirm();
   const [open, setOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -189,7 +196,12 @@ const CustomerNotificationBell = ({ email }) => {
     setMenuOpen(false);
     setOpen(false);
     const target = resolveNotificationTarget(n);
-    if (target) navigate(target);
+    if (!target) return;
+    if (String(n?.type || '') === 'shipping_fee' || target === '/collections') {
+      goToCustomerTab(navigate, location.pathname, '/collections');
+      return;
+    }
+    navigate(target);
   };
 
   const handleMarkAllRead = async () => {
@@ -374,6 +386,9 @@ const CustomerNotificationBell = ({ email }) => {
                             <strong>{n.title}</strong>
                             {n.body ? ` ${n.body}` : ''}
                           </span>
+                          {String(n.type || '') === 'shipping_fee' && (
+                            <span className="cust-bell-cta">Shop now</span>
+                          )}
                           <span className="cust-bell-item-time">{timeAgo(n.createdAt)}</span>
                         </span>
                         {!n.read && <span className="cust-bell-dot" aria-hidden="true" />}
