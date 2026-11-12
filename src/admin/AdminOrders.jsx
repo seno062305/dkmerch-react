@@ -487,6 +487,8 @@ const AdminOrders = () => {
   const [page,          setPage]          = useState(0);
 
   const orders = useQuery(api.orders.getAllOrders) || [];
+  const storeSettings = useQuery(api.settings.getSettings);
+  const storePin = { storeLat: storeSettings?.storeLat, storeLng: storeSettings?.storeLng };
   const updateOrderStatusMutation = useMutation(api.orders.updateOrderStatus);
   const updateOrderFieldsMutation = useMutation(api.orders.updateOrderFields);
   const deleteOrderMutation       = useMutation(api.orders.deleteOrder);
@@ -597,11 +599,11 @@ const AdminOrders = () => {
     const customer = order?.customerName || 'the customer';
 
     if (newOrderStatus === 'confirmed') {
-      const lbc = isLbcOrder(order);
+      const lbc = isLbcOrder(order, storePin);
       const ok = await confirm({
         title: 'Confirm this order?',
         message: lbc
-          ? `Confirm order #${shortId} for ${customer}?\n\nThis is an outside-NCR (LBC Express) order. It will NOT appear in the rider Available tab — ship via LBC and send the tracking ID to the customer.`
+          ? `Confirm order #${shortId} for ${customer}?\n\nThis is outside the rider delivery area (LBC Express). It will NOT appear in the rider Available tab — ship via LBC and send the tracking ID to the customer.`
           : `Confirm order #${shortId} for ${customer}?\n\nThis marks the order as confirmed and makes it available for riders to scan and accept.`,
         confirmLabel: 'Confirm Order',
         cancelLabel: 'Cancel',
@@ -1058,6 +1060,7 @@ const AdminOrders = () => {
           onResolveCancelRequest={handleResolveCancelRequest}
           getStatusColor={getStatusColor}
           getStatusLabel={getStatusLabel}
+          storePin={storePin}
         />
       )}
     </div>
@@ -1093,7 +1096,7 @@ const RejectConfirmDialog = ({ order, adminNote, onConfirm, onCancel }) => {
 /* ══════════════════════════════════════
    ORDER MODAL
 ══════════════════════════════════════ */
-const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDelete, onResolveRefund, onResolveCancelRequest, getStatusColor, getStatusLabel }) => {
+const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDelete, onResolveRefund, onResolveCancelRequest, getStatusColor, getStatusLabel, storePin = null }) => {
   useBodyScrollLock(true);
   const [showCancelModal,   setShowCancelModal]   = useState(false);
   const [showDeleteModal,   setShowDeleteModal]   = useState(false);
@@ -1132,7 +1135,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
   const paymentStatus  = order.paymentStatus || 'pending';
   const isPaid         = paymentStatus === 'paid';
   const isDone         = currentStatus === 'completed' || currentStatus === 'cancelled';
-  const isLbc          = isLbcOrder(order);
+  const isLbc          = isLbcOrder(order, storePin);
   const isRiderManaged = !isLbc && (currentStatus === 'shipped' || currentStatus === 'out_for_delivery');
   const canConfirm     = isPaid && currentStatus === 'pending' && order.cancelRequestStatus !== 'requested';
   const canCancel      = !isDone && !isRiderManaged;

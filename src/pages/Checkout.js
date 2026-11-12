@@ -11,7 +11,7 @@ import { useMutation, useQuery, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { runWithFailover } from '../lib/failoverWrite';
 import { failoverCheckoutAssist, isFailoverPayConfigured } from '../lib/failoverPayEmail';
-import { isWithinNCR } from '../utils/deliveryUtils';
+import { isWithinNCR, isWithinRiderRange } from '../utils/deliveryUtils';
 import { isAppOutdated } from '../utils/appUpdate';
 import './Checkout.css';
 
@@ -121,6 +121,8 @@ const AddressMapPicker = ({
   onSelectSuggestion,
   savedCoords,
   onNCRViolation,
+  storeLat,
+  storeLng,
 }) => {
   const mapRef         = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -167,10 +169,10 @@ const AddressMapPicker = ({
   }, []);
 
   const checkAndNotifyNCR = useCallback((lat, lng) => {
-    const valid = isWithinNCR(lat, lng);
+    const valid = isWithinRiderRange(lat, lng, storeLat, storeLng);
     if (onNCRViolation) onNCRViolation(!valid);
     return valid;
-  }, [onNCRViolation]);
+  }, [onNCRViolation, storeLat, storeLng]);
 
   const makeIcon = useCallback((withinNCR) => {
     const L = window.L;
@@ -190,7 +192,7 @@ const AddressMapPicker = ({
       markerRef.current.setIcon(makeIcon(withinNCR));
       markerRef.current.setLatLng([lat, lng]);
       markerRef.current.getPopup()?.setContent(
-        `<div style="font-size:12px;max-width:220px"><strong>${withinNCR ? '📍 Delivery pin' : '⚠️ Outside NCR · LBC'}</strong><br><small>${label || 'Pinned location'}</small></div>`
+        `<div style="font-size:12px;max-width:220px"><strong>${withinNCR ? '📍 Delivery pin' : '⚠️ Outside rider area · LBC'}</strong><br><small>${label || 'Pinned location'}</small></div>`
       );
       markerRef.current.openPopup();
       if (fly) {
@@ -203,7 +205,7 @@ const AddressMapPicker = ({
     onSelectSuggestion({ ...fields, lat, lng });
     setStatusText(withinNCR
       ? 'Pin set — drag to fine-tune'
-      : '⚠️ Outside NCR — LBC Express shipping'
+      : '⚠️ Outside rider area — LBC Express shipping'
     );
   }, [checkAndNotifyNCR, makeIcon, onSelectSuggestion]);
 
@@ -273,7 +275,9 @@ const AddressMapPicker = ({
         maxZoom: 19,
       }).addTo(map);
 
-      const initWithinNCR = savedCoords ? isWithinNCR(savedCoords.lat, savedCoords.lng) : true;
+      const initWithinNCR = savedCoords
+        ? isWithinRiderRange(savedCoords.lat, savedCoords.lng, storeLat, storeLng)
+        : true;
       const marker = L.marker([startLat, startLng], {
         icon: makeIcon(initWithinNCR),
         draggable: true,
@@ -287,7 +291,7 @@ const AddressMapPicker = ({
         setPinSet(true);
         setStatusText(initWithinNCR
           ? 'Showing your saved pin — drag to adjust'
-          : '⚠️ Saved pin is outside NCR (LBC)'
+          : '⚠️ Saved pin is outside rider area (LBC)'
         );
       }
 
@@ -489,9 +493,9 @@ const AddressMapPicker = ({
                     <i className="fas fa-map-marker-alt" />
                     <span>
                       {s.label}
-                      {!isWithinNCR(s.lat, s.lng) && (
+                      {!isWithinRiderRange(s.lat, s.lng, storeLat, storeLng) && (
                         <span style={{ display: 'block', fontSize: 11, color: '#b45309', fontWeight: 700, marginTop: 2 }}>
-                          📦 Outside NCR — LBC Express
+                          📦 Outside rider area — LBC Express
                         </span>
                       )}
                     </span>
@@ -777,9 +781,9 @@ const Checkout = () => {
       const coords = { lat: profile.addressLat, lng: profile.addressLng };
       setSavedCoords(coords);
       setAddressCoords(coords);
-      setIsOutsideNCR(!isWithinNCR(coords.lat, coords.lng));
+      setIsOutsideNCR(!isWithinRiderRange(coords.lat, coords.lng, STORE_LAT, STORE_LNG));
     }
-  }, [isAuthenticated, navigate, showNotification, user, savedProfile]);
+  }, [isAuthenticated, navigate, showNotification, user, savedProfile, STORE_LAT, STORE_LNG]);
 
   // ── Cart empty guard — skip for reward orders / wait briefly for Buy Now sync ─
   useEffect(() => {
@@ -1435,6 +1439,8 @@ const Checkout = () => {
                         onSelectSuggestion={handleAddressSelect}
                         savedCoords={savedCoords}
                         onNCRViolation={setIsOutsideNCR}
+                        storeLat={STORE_LAT}
+                        storeLng={STORE_LNG}
                       />
                     </div>
                     {addressCoords && !isOutsideNCR && (() => {

@@ -45,19 +45,38 @@ export const createPickupRequest = mutation({
   },
 });
 
-const NCR_BOUNDS = { minLat: 14.35, maxLat: 14.80, minLng: 120.86, maxLng: 121.15 };
+const RIDER_MAX_KM = 40;
 
-function isLbcDelivery(order: any): boolean {
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+async function isLbcDelivery(db: any, order: any): Promise<boolean> {
   if (!order) return false;
-  if (order.deliveryMethod === 'lbc') return true;
   if (order.deliveryMethod === 'rider') return false;
+
+  const settings = await db.query("settings").first();
+  const storeLat = Number(settings?.storeLat);
+  const storeLng = Number(settings?.storeLng);
   const lat = Number(order.addressLat);
   const lng = Number(order.addressLng);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
-  return !(
-    lat >= NCR_BOUNDS.minLat && lat <= NCR_BOUNDS.maxLat &&
-    lng >= NCR_BOUNDS.minLng && lng <= NCR_BOUNDS.maxLng
-  );
+
+  if (
+    Number.isFinite(lat) && Number.isFinite(lng) &&
+    Number.isFinite(storeLat) && Number.isFinite(storeLng)
+  ) {
+    return haversineKm(storeLat, storeLng, lat, lng) > RIDER_MAX_KM;
+  }
+
+  return order.deliveryMethod === 'lbc';
 }
 
 async function findOrderByIdOrShort(db: any, orderIdRaw: string) {
@@ -88,8 +107,8 @@ export const markOrderFromScan = mutation({
       return { success: false, message: "Order not found. Check the waybill and try again." };
     }
 
-    if (isLbcDelivery(order)) {
-      return { success: false, message: "This order ships via LBC Express (outside NCR) — not available for riders." };
+    if (await isLbcDelivery(db, order)) {
+      return { success: false, message: "This order ships via LBC Express (outside rider area) — not available for riders." };
     }
 
     const status = (order.orderStatus || order.status || "").toLowerCase();
@@ -174,8 +193,8 @@ export const acceptOrder = mutation({
       return { success: false, message: "Order not found." };
     }
 
-    if (isLbcDelivery(order)) {
-      return { success: false, message: "This order ships via LBC Express (outside NCR) — not available for riders." };
+    if (await isLbcDelivery(db, order)) {
+      return { success: false, message: "This order ships via LBC Express (outside rider area) — not available for riders." };
     }
 
     const status = (order.orderStatus || order.status || "").toLowerCase();

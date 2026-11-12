@@ -214,19 +214,39 @@ export const upsertOrderFromFailover = internalMutation({
 });
 
 // ─── SHARED HELPER ────────────────────────────────────────────────────────────
-const NCR_BOUNDS = { minLat: 14.35, maxLat: 14.80, minLng: 120.86, maxLng: 121.15 };
+const RIDER_MAX_KM = 40;
 
-function isLbcDelivery(order: any): boolean {
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/** LBC only when far from store (or explicit lbc without nearby coords). */
+async function isLbcDelivery(db: any, order: any): Promise<boolean> {
   if (!order) return false;
-  if (order.deliveryMethod === 'lbc') return true;
   if (order.deliveryMethod === 'rider') return false;
+
+  const settings = await db.query("settings").first();
+  const storeLat = Number(settings?.storeLat);
+  const storeLng = Number(settings?.storeLng);
   const lat = Number(order.addressLat);
   const lng = Number(order.addressLng);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
-  return !(
-    lat >= NCR_BOUNDS.minLat && lat <= NCR_BOUNDS.maxLat &&
-    lng >= NCR_BOUNDS.minLng && lng <= NCR_BOUNDS.maxLng
-  );
+
+  if (
+    Number.isFinite(lat) && Number.isFinite(lng) &&
+    Number.isFinite(storeLat) && Number.isFinite(storeLng)
+  ) {
+    return haversineKm(storeLat, storeLng, lat, lng) > RIDER_MAX_KM;
+  }
+
+  return order.deliveryMethod === 'lbc';
 }
 
 async function onOrderConfirmed(
@@ -242,7 +262,7 @@ async function onOrderConfirmed(
   const itemCount      = order.items?.length || 0;
   const shippingAddr   = order.shippingAddress || 'N/A';
   const now            = new Date().toISOString();
-  const isLbc          = isLbcDelivery(order);
+  const isLbc          = await isLbcDelivery(db, order);
 
   if (order.email) {
     await scheduler.runAfter(0, internal.sendEmail.sendOrderConfirmedEmail, {

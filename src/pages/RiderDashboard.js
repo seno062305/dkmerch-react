@@ -13,7 +13,7 @@ import InstallAppModal, {
   isStandaloneApp,
   isInsecureInstallHost,
 } from '../components/InstallAppModal';
-import { isLbcOrder } from '../utils/deliveryUtils';
+import { isRiderAvailableOrder } from '../utils/deliveryUtils';
 import DeliveryChatPanel from '../components/DeliveryChatPanel';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
 import { getOverlayRoot } from '../utils/scrollLock';
@@ -981,6 +981,11 @@ const RiderDashboard = () => {
   const riderInfo    = useQuery(api.riders.getRiderByEmail, user?.email ? { email: user.email } : 'skip');
   const allOrders    = useQuery(api.orders.getAllOrders)  || [];
   const allPickups   = useQuery(api.pickupRequests.getAllPickupRequests) || [];
+  const storeSettings = useQuery(api.settings.getSettings);
+  const storePin = {
+    storeLat: storeSettings?.storeLat,
+    storeLng: storeSettings?.storeLng,
+  };
   const sessionCheck = useQuery(
     api.riders.checkRiderSession,
     user?.email && user?.sessionId ? { email: user.email, sessionId: user.sessionId } : 'skip'
@@ -1029,11 +1034,10 @@ const RiderDashboard = () => {
     );
 
   // Newest confirmed orders first — each order stays its own Available card (never grouped by customer)
-  // LBC / outside-NCR orders ship via courier — never show in rider Available
+  // LBC / far-from-store orders ship via courier — local (within store radius) stay for riders
   const availableOrders = allOrders
     .filter(o =>
-      (o.orderStatus === 'confirmed' || o.status === 'Confirmed') &&
-      !isLbcOrder(o) &&
+      isRiderAvailableOrder(o, storePin) &&
       !isOrderClaimed(o.orderId)
     )
     .sort((a, b) => {
