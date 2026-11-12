@@ -495,9 +495,9 @@ export const AuthProvider = ({ children }) => {
       queueMicrotask(() => {
         try {
           showNotification(
-            `New login request from ${pending.deviceName || "another device"}. Confirm if this was you.`,
+            `Login request · ${pending.deviceName || "another device"}`,
             "warning",
-            { duration: 8000, dedupeKey: `login-alert-pending:${pending.sessionId}` }
+            { duration: 3200, dedupeKey: `login-alert-pending:${pending.sessionId}` }
           );
         } catch { /* ignore */ }
       });
