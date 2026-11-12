@@ -29,12 +29,29 @@ const AppUpdateModal = ({ force = false }) => {
     location.pathname.startsWith('/checkout') ||
     location.pathname.startsWith('/order-success');
 
+  const clearForcedParam = () => {
+    if (!forcedVersion) return;
+    try {
+      const next = new URLSearchParams(searchParams);
+      next.delete('appUpdate');
+      setSearchParams(next, { replace: true });
+    } catch { /* ignore */ }
+  };
+
   useEffect(() => {
     if (!latest?.isActive || !latest.version) return;
     const outdated = isAppOutdated(latest.version);
+    const fromNotif =
+      !!(forcedVersion && (forcedVersion === latest.version || forcedVersion === '1'));
 
-    // Opened from email / notification bell — always re-show update popup
-    if (forcedVersion && (forcedVersion === latest.version || forcedVersion === '1')) {
+    // Opened from notification / email
+    if (fromNotif) {
+      if (!outdated) {
+        // Already on latest — show success, never re-prompt Update now
+        setOpen(true);
+        setPhase('already');
+        return;
+      }
       try { clearUpdatePromptDismiss(latest.version); } catch { /* ignore */ }
       setOpen(true);
       setPhase('prompt');
@@ -65,14 +82,24 @@ const AppUpdateModal = ({ force = false }) => {
 
   if (!open || !latest) return null;
 
+  const outdatedNow = isAppOutdated(latest.version);
   const mustUpdate =
-    onCheckout
-    || !!(forcedVersion && (forcedVersion === latest.version || forcedVersion === '1'));
+    outdatedNow
+    && (
+      onCheckout
+      || !!(forcedVersion && (forcedVersion === latest.version || forcedVersion === '1'))
+    );
 
   const dismiss = () => {
     if (mustUpdate || phase === 'loading' || phase === 'done') return;
+    if (phase === 'already') {
+      setOpen(false);
+      clearForcedParam();
+      return;
+    }
     dismissUpdatePrompt(latest.version);
     setOpen(false);
+    clearForcedParam();
   };
 
   const runUpdate = async () => {
@@ -106,11 +133,7 @@ const AppUpdateModal = ({ force = false }) => {
     setPhase('done');
 
     await new Promise((r) => setTimeout(r, 700));
-    if (forcedVersion) {
-      const next = new URLSearchParams(searchParams);
-      next.delete('appUpdate');
-      setSearchParams(next, { replace: true });
-    }
+    clearForcedParam();
     markKeepSessionAfterUpdate();
     window.location.reload();
   };
@@ -118,10 +141,24 @@ const AppUpdateModal = ({ force = false }) => {
   return (
     <div className="aum-overlay" role="dialog" aria-modal="true">
       <div className="aum-modal">
-        {phase === 'prompt' && !mustUpdate && (
+        {(phase === 'prompt' && !mustUpdate) || phase === 'already' ? (
           <button type="button" className="aum-close" onClick={dismiss} aria-label="Close">
             <i className="fas fa-times" />
           </button>
+        ) : null}
+
+        {phase === 'already' && (
+          <>
+            <div className="aum-icon">✅</div>
+            <h2>Update successfully</h2>
+            <p className="aum-msg">
+              You&apos;re already on the latest version. No update needed.
+            </p>
+            <p className="aum-ver">Version {latest.version}</p>
+            <button type="button" className="aum-btn" onClick={dismiss}>
+              OK
+            </button>
+          </>
         )}
 
         {phase === 'prompt' && (
@@ -158,7 +195,7 @@ const AppUpdateModal = ({ force = false }) => {
         {phase === 'done' && (
           <>
             <div className="aum-icon">✅</div>
-            <h2>Update complete</h2>
+            <h2>Update successfully</h2>
             <p className="aum-msg">Restarting the app…</p>
           </>
         )}

@@ -4,7 +4,7 @@ import { useMutation, useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useCloseOnHistoryBack } from '../hooks/useCloseOnHistoryBack';
 import { useConfirm } from '../context/ConfirmContext';
-import { clearUpdatePromptDismiss } from '../utils/appUpdate';
+import { clearUpdatePromptDismiss, getInstalledAppVersion } from '../utils/appUpdate';
 import { goToCustomerTab } from '../utils/navScroll';
 import './CustomerNotificationBell.css';
 
@@ -56,7 +56,11 @@ export function resolveNotificationTarget(n) {
       version = m?.[1] || '';
     }
     if (version) {
-      try { clearUpdatePromptDismiss(version); } catch { /* ignore */ }
+      // Only clear dismiss when still outdated — already-updated opens success UI
+      const installed = getInstalledAppVersion();
+      if (!installed || installed !== version) {
+        try { clearUpdatePromptDismiss(version); } catch { /* ignore */ }
+      }
       return `/?appUpdate=${encodeURIComponent(version)}`;
     }
     return '/?appUpdate=1';
