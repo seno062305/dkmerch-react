@@ -572,6 +572,12 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_threadId", ["threadId"]),
 
+  /** Global chat presence (e.g. key "admin") so customers see admin online while Admin Chat is open. */
+  supportPresence: defineTable({
+    key: v.string(),
+    onlineAt: v.number(),
+  }).index("by_key", ["key"]),
+
   // Customer ↔ Rider delivery chat (per order)
   deliveryThreads: defineTable({
     orderId: v.string(),

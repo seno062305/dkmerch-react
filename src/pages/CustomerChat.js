@@ -28,8 +28,12 @@ const CustomerChat = () => {
   const markRead = useMutation(api.supportChat.markThreadReadByCustomer);
   const heartbeatPresence = useMutation(api.supportChat.heartbeatPresence);
 
+  const adminPresence = useQuery(api.supportChat.getAdminOnline, {});
   const ONLINE_MS = 45000;
-  const adminOnline = !!(thread?.adminOnlineAt && Date.now() - thread.adminOnlineAt < ONLINE_MS);
+  const adminOnline = !!(
+    (adminPresence?.isOnline) ||
+    (thread?.adminOnlineAt && Date.now() - thread.adminOnlineAt < ONLINE_MS)
+  );
   const adminLastReadAt = thread?.adminLastReadAt || 0;
   void presenceTick;
 
@@ -212,12 +216,15 @@ const CustomerChat = () => {
       <div className="customer-chat-shell">
         <header className="customer-chat-header">
           <div className="customer-chat-brand">
-            <img src="/images/dklogo.jpg" alt="DKMerch" />
-            <div>
+            <div className="customer-chat-avatar-wrap">
+              <img src="/images/dklogo.jpg" alt="DKMerch" />
+              {adminOnline && <span className="customer-chat-online-dot" title="Admin online" />}
+            </div>
+            <div className="customer-chat-brand-text">
               <strong>Chat with Admin</strong>
               <span className={`customer-chat-presence ${adminOnline ? 'is-online' : 'is-offline'}`}>
-                <i className="fas fa-circle"></i>
-                {adminOnline ? 'Admin online' : 'Admin offline'}
+                <i className="fas fa-circle" aria-hidden="true"></i>
+                {adminOnline ? 'Online' : 'Offline'}
               </span>
             </div>
           </div>

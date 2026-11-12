@@ -62,12 +62,33 @@ export const getOrCreateMyThread = mutation({
   },
 });
 
+async function getAdminPresenceOnlineAt(db: any) {
+  const row = await db
+    .query("supportPresence")
+    .withIndex("by_key", (q: any) => q.eq("key", "admin"))
+    .first();
+  return row?.onlineAt || 0;
+}
+
 export const getMyThread = query({
   args: { customerEmail: v.string() },
   handler: async ({ db }, { customerEmail }) => {
     const email = normalizeEmail(customerEmail);
     if (!email) return null;
-    return await findThreadByEmail(db, email);
+    const thread = await findThreadByEmail(db, email);
+    if (!thread) return null;
+    const globalAdminOnlineAt = await getAdminPresenceOnlineAt(db);
+    const adminOnlineAt = Math.max(thread.adminOnlineAt || 0, globalAdminOnlineAt || 0);
+    return { ...thread, adminOnlineAt };
+  },
+});
+
+/** Customer header can poll this even before a thread exists. */
+export const getAdminOnline = query({
+  args: {},
+  handler: async ({ db }) => {
+    const onlineAt = await getAdminPresenceOnlineAt(db);
+    return { onlineAt, isOnline: onlineAt > 0 && Date.now() - onlineAt < 45000 };
   },
 });
 
@@ -306,10 +327,24 @@ export const heartbeatPresence = mutation({
       await db.patch(thread._id, { customerOnlineAt: now, updatedAt: now });
       return { success: true };
     }
-    if (!args.threadId) return { success: false };
-    const thread = await db.get(args.threadId);
-    if (!thread) return { success: false };
-    await db.patch(args.threadId, { adminOnlineAt: now, updatedAt: now });
+
+    // Global admin presence — any customer can see admin online while Admin Chat is open
+    const existing = await db
+      .query("supportPresence")
+      .withIndex("by_key", (q: any) => q.eq("key", "admin"))
+      .first();
+    if (existing) {
+      await db.patch(existing._id, { onlineAt: now });
+    } else {
+      await db.insert("supportPresence", { key: "admin", onlineAt: now });
+    }
+
+    if (args.threadId) {
+      const thread = await db.get(args.threadId);
+      if (thread) {
+        await db.patch(args.threadId, { adminOnlineAt: now, updatedAt: now });
+      }
+    }
     return { success: true };
   },
 });

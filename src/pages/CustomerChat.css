@@ -40,6 +40,11 @@
   gap: 10px;
 }
 
+.customer-chat-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
 .customer-chat-brand img {
   width: 48px;
   height: 48px;
@@ -48,12 +53,33 @@
   background: #fff;
   padding: 3px;
   filter: contrast(1.12) saturate(1.08) brightness(1.03);
+  display: block;
+}
+
+.customer-chat-online-dot {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #22c55e;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.35);
+}
+
+.customer-chat-brand-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .customer-chat-brand strong {
   display: block;
   font-size: 15px;
   color: #111827;
+  line-height: 1.2;
 }
 
 .customer-chat-brand > div > span:not(.customer-chat-presence) {
@@ -119,11 +145,13 @@
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  font-weight: 600;
-  color: #94a3b8;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #64748b;
 }
 .customer-chat-presence i {
   font-size: 8px;
+  color: #94a3b8;
 }
 .customer-chat-presence.is-online {
   color: #16a34a;
@@ -131,8 +159,11 @@
 .customer-chat-presence.is-online i {
   color: #22c55e;
 }
+.customer-chat-presence.is-offline {
+  color: #64748b;
+}
 .customer-chat-presence.is-offline i {
-  color: #cbd5e1;
+  color: #94a3b8;
 }
 
 .customer-chat-seen {

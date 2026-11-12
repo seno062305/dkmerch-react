@@ -114,9 +114,11 @@ const AdminChat = () => {
   }, [activeId, markRead, messages.length]);
 
   useEffect(() => {
-    if (!activeId) return undefined;
     const ping = () => {
-      heartbeatPresence({ role: 'admin', threadId: activeId }).catch(() => {});
+      heartbeatPresence({
+        role: 'admin',
+        ...(activeId ? { threadId: activeId } : {}),
+      }).catch(() => {});
     };
     ping();
     const id = setInterval(ping, 20000);
