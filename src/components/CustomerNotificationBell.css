@@ -70,6 +70,24 @@
   max-height: min(72vh, 540px);
 }
 
+/* Full-page (mobile tab): never trap scroll inside the panel/list */
+.cust-bell-panel--page {
+  display: block;
+  flex: none;
+  max-height: none;
+  min-height: 0;
+  overflow: visible;
+}
+
+.cust-bell-panel--page .cust-bell-list {
+  overflow: visible !important;
+  max-height: none !important;
+  flex: none !important;
+  min-height: 120px;
+  overscroll-behavior: auto;
+  touch-action: pan-y;
+}
+
 .cust-bell-header {
   display: flex;
   align-items: center;

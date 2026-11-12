@@ -47,6 +47,10 @@ body.dk-scroll-locked .dk-chat-window,
 body.dk-scroll-locked .dk-chat-window * {
   touch-action: pan-y manipulation;
 }
+body.dk-scroll-locked .notif-page,
+body.dk-scroll-locked .notif-page * {
+  touch-action: pan-y manipulation;
+}
 
 /* Sibling of <body> — overlays stay viewport-fixed while body scroll is frozen */
 #dk-overlay-root {
