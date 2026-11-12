@@ -802,10 +802,13 @@ export const updateRiderLocation = mutation({
     };
 
     if (isRealPosition) {
-      patch.lastKnownLat     = args.lat;
-      patch.lastKnownLng     = args.lng;
-      patch.lastKnownAt      = now;
-      patch.lastKnownAddress = args.lastKnownAddress ?? null;
+      patch.lastKnownLat = args.lat;
+      patch.lastKnownLng = args.lng;
+      patch.lastKnownAt = now;
+      // Keep previous address unless a new one is provided (GPS ticks often omit it)
+      if (args.lastKnownAddress) {
+        patch.lastKnownAddress = args.lastKnownAddress;
+      }
     }
 
     if (existing) {
@@ -815,6 +818,7 @@ export const updateRiderLocation = mutation({
         orderId:    args.orderId,
         riderEmail: args.riderEmail,
         riderName:  args.riderName,
+        lastKnownAddress: args.lastKnownAddress ?? null,
         ...patch,
       });
     }
@@ -899,7 +903,9 @@ export const updateRiderLocationsBatch = mutation({
         patch.lastKnownLat = args.lat;
         patch.lastKnownLng = args.lng;
         patch.lastKnownAt = now;
-        patch.lastKnownAddress = args.lastKnownAddress ?? null;
+        if (args.lastKnownAddress) {
+          patch.lastKnownAddress = args.lastKnownAddress;
+        }
       }
       if (existing) await db.patch(existing._id, patch);
       else {
@@ -907,6 +913,7 @@ export const updateRiderLocationsBatch = mutation({
           orderId,
           riderEmail: args.riderEmail,
           riderName: args.riderName,
+          lastKnownAddress: args.lastKnownAddress ?? null,
           ...patch,
         });
       }

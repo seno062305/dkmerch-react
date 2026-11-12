@@ -1015,6 +1015,7 @@ const Checkout = () => {
               price:       getEffectivePrice(item, product),
               image:       product?.image || '',
               quantity:    getQty(item),
+              category:    product?.category || item.category || undefined,
               isPreOrder:  product?.isPreOrder  || false,
               releaseDate: product?.releaseDate || null,
             };

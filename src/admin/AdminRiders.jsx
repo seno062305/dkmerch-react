@@ -342,10 +342,22 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
   }, []);
 
   const location = useQuery(api.riders.getRiderLocation, { orderId });
+  const [resolvedLastAddress, setResolvedLastAddress] = useState('');
 
   const isLive       = !!(location?.isTracking && location?.updatedAt && (Date.now() - location.updatedAt) < 12000);
   const hasLoc       = !!(location?.lat && location?.lng && location.lat !== 0 && location.lng !== 0);
-  const hasLastKnown = !!(location?.lastKnownLat && location?.lastKnownLng);
+  // Prefer dedicated lastKnown*; if missing, fall back to last GPS fix on the same row
+  const lastSeenLat  = (location?.lastKnownLat && location.lastKnownLat !== 0)
+    ? location.lastKnownLat
+    : (hasLoc ? location.lat : null);
+  const lastSeenLng  = (location?.lastKnownLng && location.lastKnownLng !== 0)
+    ? location.lastKnownLng
+    : (hasLoc ? location.lng : null);
+  const hasLastKnown = !!(lastSeenLat && lastSeenLng);
+  const lastSeenAddress =
+    location?.lastKnownAddress
+    || resolvedLastAddress
+    || '';
 
   const orderStatus = (order.orderStatus || order.status || '').toLowerCase();
   const isDelivered = orderStatus === 'completed' || orderStatus === 'delivered';
@@ -418,19 +430,51 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
     [80, 250, 500].forEach((ms) => setTimeout(refresh, ms));
   }, [isFullscreen]);
 
+  // Reverse-geocode last seen pin when address is missing
+  useEffect(() => {
+    if (isLive || !hasLastKnown) return;
+    if (location?.lastKnownAddress) {
+      setResolvedLastAddress('');
+      return;
+    }
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lastSeenLat}&lon=${lastSeenLng}&zoom=16&addressdetails=1`,
+          { headers: { 'Accept-Language': 'en' } }
+        );
+        const data = await res.json();
+        if (!cancelled && data?.display_name) setResolvedLastAddress(String(data.display_name));
+      } catch { /* ignore */ }
+    };
+    run();
+    return () => { cancelled = true; };
+  }, [isLive, hasLastKnown, lastSeenLat, lastSeenLng, location?.lastKnownAddress]);
+
   // Show last known location when offline
   useEffect(() => {
-    if (!mapReadyRef.current || !mapObjRef.current || !location || !window.L) return;
+    if (!mapReadyRef.current || !mapObjRef.current || !window.L) return;
     if (isLive) return;
     if (!hasLastKnown) return;
 
     const L = window.L;
     const map = mapObjRef.current;
-    const { lastKnownLat, lastKnownLng, lastKnownAt, lastKnownAddress } = location;
+    const lastKnownAt = location?.lastKnownAt || location?.updatedAt;
+    const lastKnownAddress = lastSeenAddress;
 
     const prev = lastPlottedRef.current;
-    if (prev.lat === lastKnownLat && prev.lng === lastKnownLng && lastKnownMarkerRef.current) return;
-    lastPlottedRef.current = { lat: lastKnownLat, lng: lastKnownLng };
+    if (prev.lat === lastSeenLat && prev.lng === lastSeenLng && lastKnownMarkerRef.current) {
+      try {
+        lastKnownMarkerRef.current.setPopupContent(`<div style="min-width:200px">
+          <strong>🛵 ${order.riderInfo?.name || 'Rider'}</strong><br>
+          <span style="color:#f59e0b;font-weight:600;font-size:12px">⚠️ Last seen ${lastKnownAt ? new Date(lastKnownAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }) : ''}</span>
+          ${lastKnownAddress ? `<br><span style="color:#374151;font-size:11px">📍 ${lastKnownAddress}</span>` : `<br><span style="color:#6b7280;font-size:11px">📍 ${Number(lastSeenLat).toFixed(5)}, ${Number(lastSeenLng).toFixed(5)}</span>`}
+        </div>`);
+      } catch {}
+      return;
+    }
+    lastPlottedRef.current = { lat: lastSeenLat, lng: lastSeenLng };
 
     const lastTimeStr = lastKnownAt
       ? new Date(lastKnownAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })
@@ -447,33 +491,36 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
 
     if (!lastKnownMarkerRef.current) {
       try {
-        lastKnownMarkerRef.current = L.marker([lastKnownLat, lastKnownLng], { icon: ghostIcon })
+        lastKnownMarkerRef.current = L.marker([lastSeenLat, lastSeenLng], { icon: ghostIcon })
           .addTo(map)
-          .bindPopup(`<div style="min-width:180px">
+          .bindPopup(`<div style="min-width:200px">
             <strong>🛵 ${order.riderInfo?.name || 'Rider'}</strong><br>
             <span style="color:#f59e0b;font-weight:600;font-size:12px">⚠️ Last seen ${lastTimeStr}</span>
-            ${lastKnownAddress ? `<br><span style="color:#374151;font-size:11px">📍 ${lastKnownAddress}</span>` : ''}
+            ${lastKnownAddress
+              ? `<br><span style="color:#374151;font-size:11px">📍 ${lastKnownAddress}</span>`
+              : `<br><span style="color:#6b7280;font-size:11px">📍 ${Number(lastSeenLat).toFixed(5)}, ${Number(lastSeenLng).toFixed(5)}</span>`}
           </div>`)
           .openPopup();
       } catch {}
     } else {
       try {
-        lastKnownMarkerRef.current.setLatLng([lastKnownLat, lastKnownLng]);
+        lastKnownMarkerRef.current.setLatLng([lastSeenLat, lastSeenLng]);
         lastKnownMarkerRef.current.setIcon(ghostIcon);
+        lastKnownMarkerRef.current.openPopup();
       } catch {}
     }
 
     const destLat = order?.addressLat;
     const destLng = order?.addressLng;
-    if (destLat && destLng) drawRoute(lastKnownLat, lastKnownLng, destLat, destLng, true);
+    if (destLat && destLng) drawRoute(lastSeenLat, lastSeenLng, destLat, destLng, true);
     else if (!hasFittedRef.current) {
       try {
-        map.setView([lastKnownLat, lastKnownLng], 15, { animate: false });
+        map.setView([lastSeenLat, lastSeenLng], 15, { animate: false });
         hasFittedRef.current = true;
       } catch {}
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location, isLive, hasLastKnown, mapReadyRef.current]);
+  }, [location, isLive, hasLastKnown, lastSeenLat, lastSeenLng, lastSeenAddress, mapReadyRef.current]);
 
   const clearRoute = useCallback(() => {
     if (routeLineRef.current) {
@@ -607,9 +654,11 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
     mapReadyRef.current = false;
   }, []);
 
-  const lastKnownAt      = location?.lastKnownAt;
+  const lastKnownAt      = location?.lastKnownAt || location?.updatedAt;
   const lastKnownTimeStr = lastKnownAt ? new Date(lastKnownAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }) : null;
   const lastKnownAgoStr  = lastKnownAt ? timeAgo(lastKnownAt) : null;
+  const lastKnownPlace   = lastSeenAddress
+    || (hasLastKnown ? `${Number(lastSeenLat).toFixed(5)}, ${Number(lastSeenLng).toFixed(5)}` : '');
 
   const overlayClass = isFullscreen ? 'ar-modal-overlay ar-map-overlay ar-overlay--full' : 'ar-modal-overlay ar-map-overlay';
 
@@ -638,7 +687,8 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
                 </div>
               : hasLastKnown
                 ? <div className="ar-map-stale-badge" style={{ background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a' }}>
-                    ⚠️ Offline · Last seen {lastKnownTimeStr || 'unknown'}
+                    ⚠️ Last seen {lastKnownTimeStr || 'unknown'}
+                    {lastKnownPlace ? ` · ${lastKnownPlace}` : ''}
                   </div>
                 : !location
                   ? <div className="ar-map-waiting-badge">⏳ Waiting for rider GPS…</div>
@@ -662,8 +712,9 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
           <div className="ar-map-offline-bar">
             <span style={{ fontSize: 14 }}>⚠️</span>
             <span>
-              <strong>Rider offline</strong> · Last known {lastKnownTimeStr} ({lastKnownAgoStr})
-              {location?.lastKnownAddress && <> · <strong>📍 {location.lastKnownAddress}</strong></>}
+              <strong>Last seen location</strong>
+              {lastKnownTimeStr ? <> · {lastKnownTimeStr}{lastKnownAgoStr ? ` (${lastKnownAgoStr})` : ''}</> : null}
+              {lastKnownPlace && <> · <strong>📍 {lastKnownPlace}</strong></>}
             </span>
           </div>
         )}

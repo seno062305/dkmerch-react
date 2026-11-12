@@ -35,6 +35,7 @@ const GPS = {
   _sendBatchFn: null,     // ({ orderIds, ...coords }) => Promise — all OFD
   _lastPos:    null,
   _bestGpsAt:  0,
+  _lastGeocodeAt: 0,
   _source:     'gps',     // 'gps' | 'ip'
 
   isActive()       { return this._interval !== null; },
@@ -110,9 +111,33 @@ const GPS = {
       accuracy,
       heading: heading ?? this._lastPos?.heading,
       speed: speed ?? undefined,
-      address: address || (source === 'gps' ? undefined : this._lastPos?.address),
+      // Keep prior address unless a new label is provided
+      address: address || this._lastPos?.address || undefined,
     };
     this._pushNow();
+    if (source === 'gps' && !address) this._maybeReverseGeocode(lat, lng);
+  },
+
+  async _maybeReverseGeocode(lat, lng) {
+    const now = Date.now();
+    if (this._lastGeocodeAt && now - this._lastGeocodeAt < 90_000) return;
+    if (this._lastPos?.address && !String(this._lastPos.address).startsWith('Approx.')) {
+      // Refresh occasionally even with an address
+      if (this._lastGeocodeAt && now - this._lastGeocodeAt < 5 * 60_000) return;
+    }
+    this._lastGeocodeAt = now;
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=16&addressdetails=1`,
+        { headers: { 'Accept-Language': 'en' } }
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      const label = data?.display_name;
+      if (!label || !this._lastPos) return;
+      this._lastPos = { ...this._lastPos, address: String(label) };
+      this._pushNow();
+    } catch { /* ignore */ }
   },
 
   async _tryIpFallback() {

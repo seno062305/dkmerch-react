@@ -51,12 +51,58 @@ const PaymentMethodMark = ({ pm, size = 18 }) => {
   return null;
 };
 
+/** Bulk waybill: many lines → category summary; otherwise full product names. */
+const WAYBILL_BULK_ITEM_THRESHOLD = 4;
+
+function getWaybillItemRows(items = []) {
+  const list = Array.isArray(items) ? items : [];
+  if (list.length > WAYBILL_BULK_ITEM_THRESHOLD) {
+    const byCat = {};
+    list.forEach((item) => {
+      const cat = String(item.category || item.group || 'Other').trim() || 'Other';
+      if (!byCat[cat]) {
+        byCat[cat] = { name: cat, quantity: 0, price: 0, subtotal: 0, isCategory: true };
+      }
+      const qty = Number(item.quantity) || 1;
+      byCat[cat].quantity += qty;
+      byCat[cat].subtotal += (Number(item.price) || 0) * qty;
+    });
+    return Object.values(byCat).map((row) => ({
+      ...row,
+      price: row.quantity ? row.subtotal / row.quantity : 0,
+    }));
+  }
+  return list.map((item) => {
+    const qty = Number(item.quantity) || 0;
+    const price = Number(item.price) || 0;
+    return {
+      name: String(item.name || item.title || 'N/A').trim() || 'N/A',
+      quantity: qty,
+      price,
+      subtotal: qty * price,
+      isCategory: false,
+    };
+  });
+}
+
 /* ══════════════════════════════════════
    WAYBILL MODAL
 ══════════════════════════════════════ */
 const WaybillModal = ({ order, onClose }) => {
   const { showNotification } = useNotification();
   const [printing, setPrinting] = useState(false);
+  const products = useQuery(api.products.getAllProducts) || [];
+  const enrichedItems = useMemo(() => {
+    return (order?.items || []).map((item) => {
+      if (item.category) return item;
+      const full = products.find(
+        (p) => String(p._id) === String(item.id) || String(p.id) === String(item.id)
+      );
+      return full?.category ? { ...item, category: full.category } : item;
+    });
+  }, [order?.items, products]);
+  const waybillRows = useMemo(() => getWaybillItemRows(enrichedItems), [enrichedItems]);
+  const isBulkWaybill = enrichedItems.length > WAYBILL_BULK_ITEM_THRESHOLD;
 
   const subtotal    = order.subtotal    || 0;
   const shippingFee = order.shippingFee || 0;
@@ -137,23 +183,21 @@ const WaybillModal = ({ order, onClose }) => {
         throw new Error('QR PNG missing');
       }
 
-      const itemsHtml = (order.items || []).map((item, idx) => `
+      const rows = getWaybillItemRows(enrichedItems);
+      const bulk = enrichedItems.length > WAYBILL_BULK_ITEM_THRESHOLD;
+      const itemsHtml = rows.map((item, idx) => `
         <tr>
           <td>${idx + 1}</td>
-          <td style="font-weight:700">${esc(item.name || 'N/A')}</td>
+          <td class="wb-item-name">${esc(item.name)}</td>
           <td class="td-center">${esc(item.quantity)}</td>
           <td class="td-right">₱${Number(item.price || 0).toLocaleString('en-PH')}</td>
-          <td class="td-right wb-accent">₱${Number((item.quantity || 0) * (item.price || 0)).toLocaleString('en-PH')}</td>
+          <td class="td-right wb-accent">₱${Number(item.subtotal || 0).toLocaleString('en-PH')}</td>
         </tr>`).join('');
 
       const riderHtml = order.riderInfo?.name ? `
-        <div class="wb-box">
-          <div class="wb-box-hd">Assigned Rider</div>
-          <div class="wb-box-body wb-rider-row">
-            <div><div class="wb-field-lbl">Name</div><div class="wb-field-val">${esc(order.riderInfo.name)}</div></div>
-            <div><div class="wb-field-lbl">Phone</div><div class="wb-field-val">${esc(order.riderInfo.phone || 'N/A')}</div></div>
-            ${order.riderInfo.plate ? `<div><div class="wb-field-lbl">Plate No.</div><div class="wb-field-val">${esc(order.riderInfo.plate)}</div></div>` : ''}
-          </div>
+        <div class="wb-block">
+          <div class="wb-sec-lbl">Rider</div>
+          <div class="wb-rider-line">${esc(order.riderInfo.name)}${order.riderInfo.phone ? ` · ${esc(order.riderInfo.phone)}` : ''}${order.riderInfo.plate ? ` · ${esc(order.riderInfo.plate)}` : ''}</div>
         </div>` : '';
 
       const promoHtml = hasPromo
@@ -187,40 +231,44 @@ const WaybillModal = ({ order, onClose }) => {
   .wb-print-again:hover { background: #e0105c; }
   .waybill-print-root {
     width: 100mm; height: 150mm; max-height: 150mm; margin: 0; background: #fff;
-    padding: 3.5mm; display: flex; flex-direction: column; gap: 2.2mm;
+    padding: 3.2mm; display: flex; flex-direction: column; gap: 2mm;
     overflow: hidden;
   }
-  .wb-header { display: flex; justify-content: space-between; align-items: center; gap: 2.5mm; padding-bottom: 2mm; border-bottom: 2.5px solid #000; flex-shrink: 0; }
-  .wb-brand-name { font-size: 18pt; font-weight: 900; color: #fc1268; line-height: 1; }
-  .wb-brand-sub { font-size: 8pt; color: #444; font-weight: 700; margin-top: 0.8mm; }
-  .wb-brand-contact { font-size: 7pt; color: #444; margin-top: 0.6mm; font-weight: 600; }
-  .wb-qr-block { display: flex; flex-direction: column; align-items: center; gap: 1.2mm; flex-shrink: 0; }
+  .wb-header { display: flex; justify-content: space-between; align-items: center; gap: 2mm; padding-bottom: 1.8mm; border-bottom: 2px solid #000; flex-shrink: 0; }
+  .wb-brand-name { font-size: 16pt; font-weight: 900; color: #fc1268; line-height: 1; }
+  .wb-brand-sub { font-size: 7.5pt; color: #333; font-weight: 700; margin-top: 0.6mm; }
+  .wb-brand-contact { font-size: 6.5pt; color: #444; margin-top: 0.4mm; font-weight: 600; }
+  .wb-qr-block { display: flex; flex-direction: column; align-items: center; gap: 1mm; flex-shrink: 0; }
   .wb-qr-block img {
-    width: 24mm; height: 24mm; display: block;
+    width: 22mm; height: 22mm; display: block;
     image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges; image-rendering: pixelated;
   }
-  .wb-qr-label { font-size: 7pt; color: #000; font-weight: 900; text-transform: uppercase; letter-spacing: 0.4px; }
-  .wb-cols { display: grid; grid-template-columns: 0.9fr 1.1fr; gap: 2.2mm; flex-shrink: 0; }
-  .wb-box { border: 1.5px solid #000; border-radius: 0; overflow: hidden; }
-  .wb-box-hd { background: #eee; padding: 1.4mm 2mm; font-size: 7pt; font-weight: 900; color: #000; text-transform: uppercase; border-bottom: 1px solid #000; }
-  .wb-box-body { padding: 1.8mm 2mm; display: flex; flex-direction: column; gap: 1.2mm; }
-  .wb-rider-row { flex-direction: row !important; gap: 2.5mm !important; flex-wrap: wrap; }
-  .wb-field-lbl { font-size: 6.5pt; color: #333; font-weight: 800; text-transform: uppercase; }
-  .wb-field-val { font-size: 8.5pt; color: #000; font-weight: 700; line-height: 1.25; word-break: break-word; }
+  .wb-qr-label { font-size: 6.5pt; color: #000; font-weight: 900; text-transform: uppercase; letter-spacing: 0.3px; }
+  .wb-block { flex-shrink: 0; }
+  .wb-sec-lbl { font-size: 6.5pt; font-weight: 900; text-transform: uppercase; letter-spacing: 0.3px; color: #000; margin-bottom: 0.8mm; }
+  .wb-cols { display: grid; grid-template-columns: 0.85fr 1.15fr; gap: 3mm; flex-shrink: 0; padding-bottom: 1.5mm; border-bottom: 1px solid #000; }
+  .wb-field-lbl { font-size: 6pt; color: #333; font-weight: 800; text-transform: uppercase; }
+  .wb-field-val { font-size: 8pt; color: #000; font-weight: 700; line-height: 1.3; word-break: break-word; white-space: normal; }
   .wb-accent { color: #fc1268; font-weight: 900; }
-  .wb-items-box { border: 1.5px solid #000; border-radius: 0; overflow: hidden; flex: 1 1 auto; min-height: 0; }
-  .wb-items-hd { background: #eee; padding: 1.4mm 2mm; font-size: 7pt; font-weight: 900; color: #000; text-transform: uppercase; border-bottom: 1px solid #000; }
-  .wb-items-table { width: 100%; border-collapse: collapse; }
-  .wb-items-table th { padding: 1.2mm 1.5mm; text-align: left; font-size: 7pt; font-weight: 800; color: #000; border-bottom: 1px solid #ccc; }
-  .wb-items-table td { padding: 1.2mm 1.5mm; font-size: 8pt; color: #000; font-weight: 600; border-bottom: 1px solid #eee; }
+  .wb-rider-line { font-size: 8pt; font-weight: 700; line-height: 1.3; }
+  .wb-items-box { flex: 1 1 auto; min-height: 0; overflow: visible; }
+  .wb-items-hd { font-size: 6.5pt; font-weight: 900; text-transform: uppercase; padding-bottom: 0.8mm; }
+  .wb-items-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .wb-items-table th { padding: 0.8mm 1mm; text-align: left; font-size: 6.5pt; font-weight: 800; color: #000; border-bottom: 1px solid #000; }
+  .wb-items-table td { padding: 1mm; font-size: 7.5pt; color: #000; font-weight: 600; border-bottom: 0.5px solid #ccc; vertical-align: top; }
+  .wb-item-name { font-weight: 700; white-space: normal; word-break: break-word; overflow-wrap: anywhere; line-height: 1.25; }
+  .wb-items-table th:nth-child(1), .wb-items-table td:nth-child(1) { width: 6%; }
+  .wb-items-table th:nth-child(2), .wb-items-table td:nth-child(2) { width: 48%; }
+  .wb-items-table th:nth-child(3), .wb-items-table td:nth-child(3) { width: 10%; }
+  .wb-items-table th:nth-child(4), .wb-items-table td:nth-child(4) { width: 16%; }
+  .wb-items-table th:nth-child(5), .wb-items-table td:nth-child(5) { width: 20%; }
   .td-right { text-align: right; font-weight: 800; }
   .td-center { text-align: center; }
-  .wb-totals { border: 1.5px solid #000; border-radius: 0; overflow: hidden; flex-shrink: 0; }
-  .wb-totals-row { display: flex; justify-content: space-between; padding: 1.4mm 2.2mm; font-size: 8.5pt; font-weight: 700; color: #000; border-bottom: 1px solid #ddd; }
-  .wb-totals-row:last-child { border-bottom: none; }
-  .wb-grand { background: #fff1f5 !important; font-size: 11pt; font-weight: 900; color: #fc1268 !important; }
+  .wb-totals { flex-shrink: 0; border-top: 1px solid #000; padding-top: 1mm; }
+  .wb-totals-row { display: flex; justify-content: space-between; padding: 0.6mm 0; font-size: 8pt; font-weight: 700; color: #000; }
+  .wb-grand { font-size: 10pt; font-weight: 900; color: #fc1268 !important; border-top: 1px solid #000; margin-top: 0.6mm; padding-top: 1mm; }
   .wb-promo-row { color: #000; font-weight: 800; }
-  .wb-footer { text-align: center; font-size: 7pt; color: #000; font-weight: 700; border-top: 1px solid #000; padding-top: 1.5mm; line-height: 1.35; flex-shrink: 0; }
+  .wb-footer { text-align: center; font-size: 6.5pt; color: #000; font-weight: 700; border-top: 1px solid #000; padding-top: 1.2mm; line-height: 1.35; flex-shrink: 0; }
   @media screen {
     html, body { width: auto; height: auto; min-height: 100%; overflow: auto; background: #e2e8f0; -webkit-font-smoothing: antialiased; }
     .wb-screen-bar { display: flex; }
@@ -241,10 +289,7 @@ const WaybillModal = ({ order, onClose }) => {
       margin: 0 !important; box-shadow: none !important; border: none !important;
       page-break-after: avoid; page-break-inside: avoid; break-inside: avoid;
     }
-    /* Thermal B&W: pink becomes muddy — force solid black for sharp text */
     .wb-brand-name, .wb-accent, .wb-grand, .wb-grand strong, .wb-footer strong { color: #000 !important; }
-    .wb-grand { background: #eee !important; }
-    .wb-box-hd, .wb-items-hd { background: #ddd !important; }
     .wb-qr-block img { image-rendering: crisp-edges !important; }
   }
 </style></head><body>
@@ -266,29 +311,25 @@ const WaybillModal = ({ order, onClose }) => {
     </div>
   </div>
   <div class="wb-cols">
-    <div class="wb-box">
-      <div class="wb-box-hd">From (Sender)</div>
-      <div class="wb-box-body">
-        <div><div class="wb-field-lbl">Store</div><div class="wb-field-val wb-accent">DKMerch</div></div>
-        <div><div class="wb-field-lbl">Address</div><div class="wb-field-val">Manila, Philippines</div></div>
-        <div><div class="wb-field-lbl">Contact</div><div class="wb-field-val">support@dkmerch.com</div></div>
-      </div>
+    <div class="wb-block">
+      <div class="wb-sec-lbl">From</div>
+      <div class="wb-field-val wb-accent">DKMerch</div>
+      <div class="wb-field-val">Manila, Philippines</div>
+      <div class="wb-field-val">support@dkmerch.com</div>
     </div>
-    <div class="wb-box">
-      <div class="wb-box-hd">To (Recipient)</div>
-      <div class="wb-box-body">
-        <div><div class="wb-field-lbl">Order ID</div><div class="wb-field-val wb-accent" style="font-family:Courier New,monospace">#${esc(shortId)}</div></div>
-        <div><div class="wb-field-lbl">Name</div><div class="wb-field-val" style="font-weight:900">${esc(order.customerName || 'N/A')}</div></div>
-        <div><div class="wb-field-lbl">Phone</div><div class="wb-field-val">${esc(order.phone || 'N/A')}</div></div>
-        <div><div class="wb-field-lbl">Address</div><div class="wb-field-val">${esc(order.shippingAddress || 'N/A')}</div></div>
-      </div>
+    <div class="wb-block">
+      <div class="wb-sec-lbl">To</div>
+      <div class="wb-field-val wb-accent" style="font-family:Courier New,monospace">#${esc(shortId)}</div>
+      <div class="wb-field-val" style="font-weight:900">${esc(order.customerName || 'N/A')}</div>
+      <div class="wb-field-val">${esc(order.phone || 'N/A')}</div>
+      <div class="wb-field-val">${esc(order.shippingAddress || 'N/A')}</div>
     </div>
   </div>
   ${riderHtml}
   <div class="wb-items-box">
-    <div class="wb-items-hd">Order Items (${(order.items || []).length})</div>
+    <div class="wb-items-hd">${bulk ? `Items by category (${rows.length})` : `Order items (${rows.length})`}</div>
     <table class="wb-items-table">
-      <thead><tr><th>#</th><th>Item</th><th class="td-center">Qty</th><th class="td-right">Unit</th><th class="td-right">Subtotal</th></tr></thead>
+      <thead><tr><th>#</th><th>${bulk ? 'Category' : 'Item'}</th><th class="td-center">Qty</th><th class="td-right">Unit</th><th class="td-right">Subtotal</th></tr></thead>
       <tbody>${itemsHtml}</tbody>
     </table>
   </div>
@@ -359,46 +400,54 @@ const WaybillModal = ({ order, onClose }) => {
               </div>
             </div>
             <div className="wb-cols">
-              <div className="wb-box">
-                <div className="wb-box-hd">From (Sender)</div>
-                <div className="wb-box-body">
-                  <div><div className="wb-field-lbl">Store</div><div className="wb-field-val" style={{ fontWeight: 800, color: '#fc1268' }}>DKMerch</div></div>
-                  <div><div className="wb-field-lbl">Address</div><div className="wb-field-val">Manila, Philippines</div></div>
-                  <div><div className="wb-field-lbl">Contact</div><div className="wb-field-val">support@dkmerch.com</div></div>
-                </div>
+              <div className="wb-block">
+                <div className="wb-sec-lbl">From</div>
+                <div className="wb-field-val" style={{ fontWeight: 800, color: '#fc1268' }}>DKMerch</div>
+                <div className="wb-field-val">Manila, Philippines</div>
+                <div className="wb-field-val">support@dkmerch.com</div>
               </div>
-              <div className="wb-box wb-to">
-                <div className="wb-box-hd">To (Recipient)</div>
-                <div className="wb-box-body">
-                  <div><div className="wb-field-lbl">Order ID</div><div className="wb-field-val" style={{ fontFamily: 'Courier New, monospace', fontWeight: 800, color: '#fc1268' }}>#{shortId}</div></div>
-                  <div><div className="wb-field-lbl">Name</div><div className="wb-field-val" style={{ fontWeight: 800 }}>{order.customerName || 'N/A'}</div></div>
-                  <div><div className="wb-field-lbl">Phone</div><div className="wb-field-val">{order.phone || 'N/A'}</div></div>
-                  <div><div className="wb-field-lbl">Address</div><div className="wb-field-val">{order.shippingAddress || 'N/A'}</div></div>
-                </div>
+              <div className="wb-block wb-to">
+                <div className="wb-sec-lbl">To</div>
+                <div className="wb-field-val" style={{ fontFamily: 'Courier New, monospace', fontWeight: 800, color: '#fc1268' }}>#{shortId}</div>
+                <div className="wb-field-val" style={{ fontWeight: 800 }}>{order.customerName || 'N/A'}</div>
+                <div className="wb-field-val">{order.phone || 'N/A'}</div>
+                <div className="wb-field-val">{order.shippingAddress || 'N/A'}</div>
               </div>
             </div>
             {order.riderInfo?.name && (
-              <div className="wb-box">
-                <div className="wb-box-hd">Assigned Rider</div>
-                <div className="wb-box-body wb-rider-row">
-                  <div><div className="wb-field-lbl">Name</div><div className="wb-field-val">{order.riderInfo.name}</div></div>
-                  <div><div className="wb-field-lbl">Phone</div><div className="wb-field-val">{order.riderInfo.phone || 'N/A'}</div></div>
-                  {order.riderInfo.plate && <div><div className="wb-field-lbl">Plate No.</div><div className="wb-field-val">{order.riderInfo.plate}</div></div>}
+              <div className="wb-block">
+                <div className="wb-sec-lbl">Rider</div>
+                <div className="wb-rider-line">
+                  {order.riderInfo.name}
+                  {order.riderInfo.phone ? ` · ${order.riderInfo.phone}` : ''}
+                  {order.riderInfo.plate ? ` · ${order.riderInfo.plate}` : ''}
                 </div>
               </div>
             )}
             <div className="wb-items-box">
-              <div className="wb-items-hd">Order Items ({order.items?.length || 0})</div>
+              <div className="wb-items-hd">
+                {isBulkWaybill
+                  ? `Items by category (${waybillRows.length})`
+                  : `Order items (${waybillRows.length})`}
+              </div>
               <table className="wb-items-table">
-                <thead><tr><th>#</th><th>Item</th><th className="td-center">Qty</th><th className="td-right">Unit</th><th className="td-right">Subtotal</th></tr></thead>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>{isBulkWaybill ? 'Category' : 'Item'}</th>
+                    <th className="td-center">Qty</th>
+                    <th className="td-right">Unit</th>
+                    <th className="td-right">Subtotal</th>
+                  </tr>
+                </thead>
                 <tbody>
-                  {order.items?.map((item, idx) => (
+                  {waybillRows.map((item, idx) => (
                     <tr key={idx}>
                       <td style={{ color: '#9ca3af' }}>{idx + 1}</td>
-                      <td style={{ fontWeight: 600 }}>{item.name || 'N/A'}</td>
+                      <td className="wb-item-name">{item.name}</td>
                       <td className="td-center">{item.quantity}</td>
                       <td className="td-right">₱{(item.price || 0).toLocaleString('en-PH')}</td>
-                      <td className="td-right" style={{ color: '#fc1268' }}>₱{((item.quantity || 0) * (item.price || 0)).toLocaleString('en-PH')}</td>
+                      <td className="td-right" style={{ color: '#fc1268' }}>₱{(item.subtotal || 0).toLocaleString('en-PH')}</td>
                     </tr>
                   ))}
                 </tbody>

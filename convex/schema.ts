@@ -172,6 +172,7 @@ export default defineSchema({
         price: v.number(),
         image: v.string(),
         quantity: v.number(),
+        category: v.optional(v.string()),
         isPreOrder: v.optional(v.boolean()),
         releaseDate: v.optional(v.union(v.string(), v.null())),
       })
