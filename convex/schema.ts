@@ -41,6 +41,8 @@ export default defineSchema({
     activeDeviceName:         v.optional(v.string()),
     activeDeviceLocation:     v.optional(v.string()),
     activeDevicePlatform:     v.optional(v.string()),
+    /** Set on silent/session takeover so old devices can show a notice before logout. */
+    kickedAt:                 v.optional(v.number()),
     /**
      * Pending new-device login (FB-style).
      * New device is NOT active until status becomes "approved".

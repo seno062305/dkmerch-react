@@ -133,7 +133,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   // Customer + admin — session still valid unless this device was removed
-  const sessionCheck = useQuery(
+  const userSessionCheck = useQuery(
     api.users.checkUserSession,
     isAuthenticated
       && user?._id
@@ -142,6 +142,20 @@ export const AuthProvider = ({ children }) => {
       ? { userId: String(user._id), sessionId: String(user.sessionId) }
       : "skip"
   );
+
+  // Rider — same kick/notice path when another device takes over
+  const riderSessionCheck = useQuery(
+    api.riders.checkRiderSession,
+    isAuthenticated
+      && user?.role === "rider"
+      && user?.email
+      && user?.sessionId
+      ? { email: String(user.email), sessionId: String(user.sessionId) }
+      : "skip"
+  );
+
+  const sessionCheck =
+    user?.role === "rider" ? riderSessionCheck : userSessionCheck;
 
   /**
    * Pending new-device login while THIS device is still signed in.
@@ -364,7 +378,8 @@ export const AuthProvider = ({ children }) => {
     const onVis = () => { if (!document.hidden) touch(); };
     window.addEventListener("focus", touch);
     document.addEventListener("visibilitychange", onVis);
-    const id = window.setInterval(touch, 45_000);
+    // Keep heartbeat fresh so other-device login still shows Yes/No (not silent takeover)
+    const id = window.setInterval(touch, 20_000);
     return () => {
       window.removeEventListener("focus", touch);
       document.removeEventListener("visibilitychange", onVis);
@@ -563,7 +578,7 @@ export const AuthProvider = ({ children }) => {
     return () => window.removeEventListener("dkOpenLoginAlert", bump);
   }, [pendingLoginAlert, pendingRiderLoginAlert]);
 
-  // Only sign out if THIS session was removed (takeover / logout-all) — silent, no notice
+  // Sign out if THIS session was removed (takeover / logout-all)
   useEffect(() => {
     if (!sessionCheck || sessionCheck.valid !== false) return;
     if (
@@ -576,8 +591,23 @@ export const AuthProvider = ({ children }) => {
     if (pendingLoginAlert || pendingRiderLoginAlert) return;
     if (kickedRef.current) return;
     kickedRef.current = true;
+    const device = sessionCheck.activeDeviceName || "another device";
+    const where = sessionCheck.activeDeviceLocation
+      ? ` · ${sessionCheck.activeDeviceLocation}`
+      : "";
+    queueMicrotask(() => {
+      try {
+        showNotification(
+          sessionCheck.reason === "new_device_logged_in"
+            ? `Your account was opened on ${device}${where}. You’ve been signed out here.`
+            : `You’ve been signed out on this device (${device}${where}).`,
+          "warning",
+          { duration: 8000, dedupeKey: `session-kick:${sessionCheck.reason}:${device}` }
+        );
+      } catch { /* ignore */ }
+    });
     finishSecurityLogout();
-  }, [sessionCheck, securityAlert, pendingLoginAlert, pendingRiderLoginAlert]);
+  }, [sessionCheck, securityAlert, pendingLoginAlert, pendingRiderLoginAlert, showNotification]);
 
   const handleSecurityYes = async (opts = {}) => {
     // Second step: dismiss confirmation — stay signed in on this device

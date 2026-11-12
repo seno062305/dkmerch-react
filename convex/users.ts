@@ -270,10 +270,16 @@ export const hasLoginPin = query({
   },
 });
 
-/** Pending Yes/No login request auto-denies after this (always 60s, even on re-request). */
-const LOGIN_ALERT_TTL_MS = 60 * 1000;
+/** Pending Yes/No login request auto-denies after this (even on re-request). */
+const LOGIN_ALERT_TTL_MS = 2 * 60 * 1000;
 /** How long other devices keep showing a fan-out sign-in toast. */
 const LOGIN_BROADCAST_TTL_MS = 10 * 60 * 1000;
+/**
+ * Treat another device as still open if it heartbeated within this window.
+ * Mobile browsers pause timers in background — 90s was too short and caused
+ * silent takeovers (auto-logout with no Yes/No notice).
+ */
+const USER_SESSION_ACTIVE_MS = 15 * 60 * 1000;
 
 function isLoginAlertExpired(alert: any, now = Date.now()) {
   if (!alert) return true;
@@ -449,10 +455,17 @@ export const startUserSession = mutation({
     }
 
     const sessionId = genSessionId();
-    const USER_SESSION_ACTIVE_MS = 90 * 1000;
     const at = Number(user.activeDeviceAt) || 0;
-    const otherDeviceLive = existingIds.length > 0 && at > 0 && (now - at) < USER_SESSION_ACTIVE_MS;
-    const STUCK_PENDING_MS = 2 * 60 * 1000;
+    // Session IDs present + recent heartbeat OR any existing session within window
+    const otherDeviceLive =
+      existingIds.length > 0
+      && (
+        (at > 0 && (now - at) < USER_SESSION_ACTIVE_MS)
+        // Soft fallback: if sessions exist but heartbeat missing, still gate for a while
+        // after last known activity / creation — avoid silent takeovers on mobile.
+        || (at <= 0 && existingIds.length > 0)
+      );
+    const STUCK_PENDING_MS = 3 * 60 * 1000;
     const pendingAlert = user.loginAlert;
     const pendingAge = pendingAlert?.at ? now - Number(pendingAlert.at) : 0;
     const pendingOpen =
@@ -471,10 +484,21 @@ export const startUserSession = mutation({
 
     // First login / no live other device / stuck or expired Yes/No → take over
     if (!otherDeviceLive || stuckPending || pendingTimedOutOrDenied) {
-      await db.patch(
-        args.userId,
-        activateSessionPatch(sessionId, now, deviceName, location, platform) as any,
-      );
+      const hadOtherSessions = existingIds.length > 0;
+      const patch = {
+        ...activateSessionPatch(sessionId, now, deviceName, location, platform),
+        ...(hadOtherSessions
+          ? {
+              loginBroadcast: makeLoginBroadcast(
+                "opened",
+                { sessionId, deviceName, location },
+                now,
+              ),
+              kickedAt: now,
+            }
+          : {}),
+      } as any;
+      await db.patch(args.userId, patch);
       await upsertUserSession(db, {
         userId: String(args.userId),
         sessionId,
@@ -483,19 +507,24 @@ export const startUserSession = mutation({
         platform,
         now,
       });
-      return { success: true, sessionId, pendingApproval: false };
+      return {
+        success: true,
+        sessionId,
+        pendingApproval: false,
+        tookOver: hadOtherSessions,
+      };
     }
 
-    // Active pending request → keep waiting; refresh details + always reset 60s countdown
+    // Active pending request → keep waiting; refresh countdown, keep same sessionId
     if (pendingOpen) {
       const expiresAt = now + LOGIN_ALERT_TTL_MS;
       const alert = {
-        sessionId: String(sessionId),
+        sessionId: String(pendingAlert.sessionId || sessionId),
         previousSessionId: previousSessionId || String(pendingAlert.previousSessionId || ""),
         deviceName: deviceName || pendingAlert.deviceName,
         location: location || pendingAlert.location,
         platform: platform || pendingAlert.platform || undefined,
-        at: now,
+        at: Number(pendingAlert.at) || now,
         expiresAt,
         status: "pending" as const,
         resolved: false,
@@ -596,9 +625,10 @@ export const expireLoginAlert = internalMutation({
       const alert = user.loginAlert;
       if (!alert || String(alert.sessionId) !== sid) return { success: true, skipped: true };
       if (alert.resolved || alert.status !== "pending") return { success: true, skipped: true };
+      // Deny the wait — do NOT clear activeDeviceAt (owner device may still be open)
       await db.patch(user._id, {
         loginAlert: { ...alert, status: "denied", resolved: true },
-        activeDeviceAt: undefined,
+        loginBroadcast: makeLoginBroadcast("blocked", alert),
       } as any);
       return { success: true, denied: true };
     } catch {
@@ -946,10 +976,12 @@ export const checkUserSession = query({
           activeDeviceLocation: user.activeDeviceLocation ?? null,
         };
       }
+      const kickedAt = Number(user.kickedAt) || 0;
+      const recentTakeover = kickedAt > 0 && (Date.now() - kickedAt) < 10 * 60 * 1000;
       return {
         valid: false,
-        // session_revoked covers Settings "log out device / all" (silent kick, no notice)
-        reason: "session_revoked",
+        // new_device_logged_in → show notice; session_revoked → settings logout-all / revoke
+        reason: recentTakeover ? "new_device_logged_in" : "session_revoked",
         activeDeviceAt: user.activeDeviceAt ?? null,
         activeDeviceName: user.activeDeviceName ?? null,
         activeDeviceLocation: user.activeDeviceLocation ?? null,

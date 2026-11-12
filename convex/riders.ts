@@ -6,8 +6,8 @@ import { v } from "convex/values";
 const genSessionId = () =>
   `${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${Math.random().toString(36).slice(2, 10)}`;
 
-/** Always 60s window — resets on every new login request */
-const RIDER_LOGIN_ALERT_TTL_MS = 60 * 1000;
+/** Yes/No window — resets on every new login request */
+const RIDER_LOGIN_ALERT_TTL_MS = 2 * 60 * 1000;
 const RIDER_LOGIN_BROADCAST_TTL_MS = 10 * 60 * 1000;
 
 function makeRiderLoginBroadcast(
@@ -447,15 +447,18 @@ function getRiderSessionIds(rider: any): string[] {
   return fromArr;
 }
 
-/** Session counts as "open on another device" only with a fresh heartbeat (~touch every 20–30s). */
-const RIDER_SESSION_ACTIVE_MS = 90 * 1000;
+/**
+ * Mobile browsers pause heartbeats in background — keep a wide window so
+ * another-device login still shows Yes/No instead of silent auto-logout.
+ */
+const RIDER_SESSION_ACTIVE_MS = 15 * 60 * 1000;
 
 function hasLiveRiderSession(rider: any, now = Date.now()): boolean {
   const ids = getRiderSessionIds(rider);
   if (ids.length === 0) return false;
   const at = Number(rider?.activeDeviceAt) || 0;
-  // Never heartbeated / missing / zeroed → not open (new account or cancelled wait)
-  if (!at) return false;
+  // Sessions exist but never heartbeated yet → still treat as open (gate Yes/No)
+  if (!at) return true;
   return now - at < RIDER_SESSION_ACTIVE_MS;
 }
 
@@ -607,9 +610,19 @@ export const loginRider = mutation({
 
     // Direct login when: no live other device, stuck wait, or prior Yes/No expired/denied
     if (!otherDeviceLive || stuckPending || pendingTimedOutOrDenied) {
+      const hadOtherSessions = existingIds.length > 0;
       await db.patch(rider._id, {
         ...activateRiderSessionPatch(sessionId, now, deviceName, location, platform),
-        loginBroadcast: undefined,
+        ...(hadOtherSessions
+          ? {
+              loginBroadcast: makeRiderLoginBroadcast(
+                "opened",
+                { sessionId, deviceName, location },
+                now,
+              ),
+              kickedAt: now,
+            }
+          : { loginBroadcast: undefined }),
       } as any);
       return {
         success: true,
@@ -617,6 +630,7 @@ export const loginRider = mutation({
         rider: safeRider,
         sessionId,
         pendingApproval: false,
+        tookOver: hadOtherSessions,
       };
     }
 
@@ -713,8 +727,8 @@ export const expireRiderLoginAlert = internalMutation({
     if (alert.resolved || alert.status !== "pending") return { success: true, skipped: true };
     await db.patch(rider._id, {
       loginAlert: { ...alert, status: "denied", resolved: true },
-      // Free next login — nobody confirmed in time
-      activeDeviceAt: undefined,
+      loginBroadcast: makeRiderLoginBroadcast("blocked", alert),
+      // Keep owner heartbeat — do not clear activeDeviceAt
     } as any);
     return { success: true, denied: true };
   },
@@ -736,11 +750,45 @@ export const checkRiderSession = query({
     if (ids.length === 0) return { valid: true, reason: "legacy" };
 
     const sid = String(sessionId || "").trim();
-    const isValid = ids.includes(sid);
+    if (ids.includes(sid)) {
+      return {
+        valid: true,
+        reason: "ok",
+        activeDeviceAt: rider.activeDeviceAt ?? null,
+        activeDeviceName: rider.activeDeviceName ?? null,
+        activeDeviceLocation: rider.activeDeviceLocation ?? null,
+        kickedAt: rider.kickedAt ?? null,
+      };
+    }
+
+    // Owner stays signed in while Yes/No is pending
+    const alert = (rider as any).loginAlert;
+    if (
+      alert
+      && alert.status === "pending"
+      && !alert.resolved
+      && !isRiderLoginAlertExpired(alert)
+      && (
+        String(alert.previousSessionId || "") === sid
+        || ids.includes(sid)
+      )
+    ) {
+      return {
+        valid: true,
+        reason: "pending_approval",
+        activeDeviceAt: rider.activeDeviceAt ?? null,
+        activeDeviceName: rider.activeDeviceName ?? null,
+        activeDeviceLocation: rider.activeDeviceLocation ?? null,
+        kickedAt: rider.kickedAt ?? null,
+      };
+    }
+
     return {
-      valid: isValid,
-      reason: isValid ? "ok" : "new_device_logged_in",
-      activeDeviceAt: rider.activeDeviceAt,
+      valid: false,
+      reason: "new_device_logged_in",
+      activeDeviceAt: rider.activeDeviceAt ?? null,
+      activeDeviceName: rider.activeDeviceName ?? null,
+      activeDeviceLocation: rider.activeDeviceLocation ?? null,
       kickedAt: rider.kickedAt ?? null,
     };
   },
