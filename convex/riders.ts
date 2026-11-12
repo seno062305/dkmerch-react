@@ -600,16 +600,10 @@ export const loginRider = mutation({
       && !pendingAlert.resolved
       && !isRiderLoginAlertExpired(pendingAlert, now);
     const stuckPending = pendingOpen && pendingAge > STUCK_PENDING_MS;
-    const pendingTimedOutOrDenied =
-      !!pendingAlert
-      && (
-        pendingAlert.status === "denied"
-        || isRiderLoginAlertExpired(pendingAlert, now)
-        || (pendingAlert.resolved && pendingAlert.status !== "approved")
-      );
 
-    // Direct login when: no live other device, stuck wait, or prior Yes/No expired/denied
-    if (!otherDeviceLive || stuckPending || pendingTimedOutOrDenied) {
+    // Direct login when: no live other device, or stuck wait with no response.
+    // Owner tapping "No" (denied) must NOT take over on the next try.
+    if (!otherDeviceLive || stuckPending) {
       const hadOtherSessions = existingIds.length > 0;
       await db.patch(rider._id, {
         ...activateRiderSessionPatch(sessionId, now, deviceName, location, platform),
@@ -920,9 +914,17 @@ export const denyRiderLoginAlert = mutation({
     if (!neu) return { success: false, message: "Invalid session." };
     const now = Date.now();
     if (alert && String(alert.sessionId) === neu) {
+      const existingIds = Array.isArray((rider as any).activeSessionIds)
+        ? (rider as any).activeSessionIds.map((s: any) => String(s || "").trim()).filter(Boolean)
+        : [];
+      const primary = String((rider as any).activeSessionId || "").trim();
+      const ownerIds = [...new Set([primary, ...existingIds].filter(Boolean))].filter((id) => id !== neu);
       await db.patch(rider._id, {
         loginAlert: { ...alert, status: "denied", resolved: true },
         loginBroadcast: makeRiderLoginBroadcast("blocked", alert, now),
+        activeSessionIds: ownerIds.length ? ownerIds : (rider as any).activeSessionIds,
+        activeSessionId: ownerIds[0] || (rider as any).activeSessionId,
+        kickedAt: undefined,
       } as any);
     }
     if (rider.email) {

@@ -11,10 +11,10 @@ const ICONS = {
 };
 
 const DEFAULT_MS = {
-  success: 5000,
-  info: 5000,
-  warning: 5000,
-  error: 5000,
+  success: 4500,
+  info: 4500,
+  warning: 5500,
+  error: 6000,
 };
 
 const guessType = (message) => {
@@ -29,35 +29,59 @@ export const NotificationProvider = ({ children }) => {
   const [toasts, setToasts] = useState([]);
   const idRef = useRef(0);
   const showRef = useRef(null);
+  const timersRef = useRef(new Map());
+
+  const clearTimer = useCallback((id) => {
+    const t = timersRef.current.get(id);
+    if (t) {
+      window.clearTimeout(t);
+      timersRef.current.delete(id);
+    }
+  }, []);
 
   const dismiss = useCallback((id) => {
+    clearTimer(id);
     setToasts((prev) => prev.filter((t) => t.id !== id));
-  }, []);
+  }, [clearTimer]);
 
   const showNotification = useCallback((message, type = 'info', options = {}) => {
     const safeType = ICONS[type] ? type : 'info';
     const text = String(message || '');
     const dedupeKey = options.dedupeKey || `${safeType}:${text}`;
-    const duration = options.duration ?? DEFAULT_MS[safeType] ?? 3200;
+    // Always auto-dismiss unless explicitly set to 0 / Infinity
+    const rawDuration = options.duration;
+    const duration = rawDuration === 0 || rawDuration === Infinity
+      ? 0
+      : Math.max(1200, Number(rawDuration ?? DEFAULT_MS[safeType] ?? 4500) || 4500);
 
+    // Generate id outside setState so the dismiss timer always gets a real id
     let createdId = null;
     let skipped = false;
     setToasts((prev) => {
-      if (prev.some((t) => t.dedupeKey === dedupeKey)) {
+      const existing = prev.find((t) => t.dedupeKey === dedupeKey);
+      if (existing) {
         skipped = true;
-        return prev; // same message already visible — no spam stack
+        createdId = existing.id;
+        return prev;
       }
       createdId = ++idRef.current;
       return [...prev.slice(-4), { id: createdId, message: text, type: safeType, dedupeKey }];
     });
 
-    if (!skipped && createdId != null && duration > 0) {
-      window.setTimeout(() => dismiss(createdId), duration);
+    if (createdId != null && duration > 0) {
+      clearTimer(createdId);
+      const timer = window.setTimeout(() => dismiss(createdId), duration);
+      timersRef.current.set(createdId, timer);
     }
     return createdId;
-  }, [dismiss]);
+  }, [clearTimer, dismiss]);
 
   showRef.current = showNotification;
+
+  useEffect(() => () => {
+    timersRef.current.forEach((t) => window.clearTimeout(t));
+    timersRef.current.clear();
+  }, []);
 
   // Route native alert() to toast so leftover browser alerts become notifications
   useEffect(() => {

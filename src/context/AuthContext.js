@@ -416,7 +416,8 @@ export const AuthProvider = ({ children }) => {
     setIsAuthenticated(false);
     setNeedsDeviceUnlock(false);
     setSecurityAlert(null);
-    kickedRef.current = false;
+    // Keep kickedRef true until a successful login so the kick toast
+    // is not re-fired in a loop (which made it look "stuck").
     try {
       if (
         window.location.pathname.startsWith("/admin")
@@ -537,13 +538,13 @@ export const AuthProvider = ({ children }) => {
           showNotification(
             `Your account was opened on ${device}${where}.`,
             "info",
-            { duration: 7000, dedupeKey: key }
+            { duration: 5000, dedupeKey: key }
           );
         } else if (broadcast.kind === "blocked") {
           showNotification(
             `A sign-in on ${device} was blocked.`,
             "success",
-            { duration: 6000, dedupeKey: key }
+            { duration: 4500, dedupeKey: key }
           );
         }
       } catch { /* ignore */ }
@@ -595,15 +596,16 @@ export const AuthProvider = ({ children }) => {
     const where = sessionCheck.activeDeviceLocation
       ? ` · ${sessionCheck.activeDeviceLocation}`
       : "";
-    queueMicrotask(() => {
+    const kickMsg =
+      sessionCheck.reason === "new_device_logged_in"
+        ? `Your account was opened on ${device}${where}. You’ve been signed out here.`
+        : `You’ve been signed out on this device (${device}${where}).`;
+    voidMicrotask(() => {
       try {
-        showNotification(
-          sessionCheck.reason === "new_device_logged_in"
-            ? `Your account was opened on ${device}${where}. You’ve been signed out here.`
-            : `You’ve been signed out on this device (${device}${where}).`,
-          "warning",
-          { duration: 8000, dedupeKey: `session-kick:${sessionCheck.reason}:${device}` }
-        );
+        showNotification(kickMsg, "warning", {
+          duration: 5500,
+          dedupeKey: `session-kick:${sessionCheck.reason}:${device}`,
+        });
       } catch { /* ignore */ }
     });
     finishSecurityLogout();

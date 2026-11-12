@@ -474,16 +474,11 @@ export const startUserSession = mutation({
       && !pendingAlert.resolved
       && !isLoginAlertExpired(pendingAlert, now);
     const stuckPending = pendingOpen && pendingAge > STUCK_PENDING_MS;
-    const pendingTimedOutOrDenied =
-      !!pendingAlert
-      && (
-        pendingAlert.status === "denied"
-        || isLoginAlertExpired(pendingAlert, now)
-        || (pendingAlert.resolved && pendingAlert.status !== "approved")
-      );
 
-    // First login / no live other device / stuck or expired Yes/No → take over
-    if (!otherDeviceLive || stuckPending || pendingTimedOutOrDenied) {
+    // First login / no live other device / stuck Yes/No (no response) → take over.
+    // IMPORTANT: owner tapping "No" (denied) must NOT take over — that was kicking
+    // the owner and letting the denied device in on retry.
+    if (!otherDeviceLive || stuckPending) {
       const hadOtherSessions = existingIds.length > 0;
       const patch = {
         ...activateSessionPatch(sessionId, now, deviceName, location, platform),
@@ -1178,9 +1173,14 @@ export const denyLoginAlert = mutation({
     const now = Date.now();
 
     if (alert && String(alert.sessionId) === neu) {
+      // Keep owner sessions intact — only mark the request denied
+      const ownerIds = getActiveSessionIds(user).filter((id) => id && id !== neu);
       await db.patch(user._id, {
         loginAlert: { ...alert, status: "denied", resolved: true },
         loginBroadcast: makeLoginBroadcast("blocked", alert, now),
+        activeSessionIds: ownerIds.length ? ownerIds : user.activeSessionIds,
+        activeSessionId: ownerIds[0] || user.activeSessionId,
+        kickedAt: undefined,
       } as any);
     }
 
