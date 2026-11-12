@@ -971,6 +971,23 @@ export const sendAppUpdateEmailToAllUsers = internalAction({
         subject: `📲 Update available — ${args.title} | DKMerch`,
         html,
       });
+
+      await ctx.runMutation(internal.customerNotifications.create, {
+        email: user.email,
+        type: "app_update",
+        title: `App update · v${args.version}`,
+        body: `${args.title}: ${args.message}`,
+        url: `/?appUpdate=${encodeURIComponent(args.version)}`,
+      });
+      try {
+        await ctx.runAction(internal.webPush.sendToEmail, {
+          email: user.email,
+          title: `📲 ${args.title}`,
+          body: args.message,
+          url: `/?appUpdate=${encodeURIComponent(args.version)}`,
+        });
+      } catch { /* push optional */ }
+
       await new Promise((r) => setTimeout(r, 400));
       sent++;
     }

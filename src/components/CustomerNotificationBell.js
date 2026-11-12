@@ -19,6 +19,7 @@ function timeAgo(ts) {
 function typeIcon(type) {
   switch (String(type || '')) {
     case 'promo': return '🔥';
+    case 'app_update': return '📲';
     case 'order_confirmed': return '✅';
     case 'out_for_delivery': return '🛵';
     case 'rider_assigned': return '🏍️';

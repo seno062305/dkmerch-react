@@ -1860,7 +1860,7 @@ const AdminBackup = () => {
                   return;
                 }
                 const ok = window.confirm(
-                  `Publish app update v${version}?\n\nCustomers will get an email with an Update button, and the in-app update popup will appear.\n\nContinue?`
+                  `Publish app update v${version}?\n\nCustomers will get email, push, and in-app bell notifications, plus the update popup.\n\nContinue?`
                 );
                 if (!ok) return;
                 setUpdateMsg('');
@@ -1875,7 +1875,7 @@ const AdminBackup = () => {
                   if (!res?.success) {
                     setUpdateMsg(res?.message || 'Failed to publish update.');
                   } else {
-                    setUpdateMsg('Update published. Customers were emailed.');
+                    setUpdateMsg('Update published. Customers were notified (email + bell + push).');
                     setUpdateForm((p) => ({ ...p, version: '' }));
                     showNotification('App update published successfully.', 'success');
                   }
