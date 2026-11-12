@@ -66,14 +66,7 @@ const WishlistPage = ({ onProductClick }) => {
   const displayItems = (wishlistItems || []).map(resolveLive);
   const count = displayItems.length;
 
-  const handleRemoveFromWishlist = async (productId, productName) => {
-    const ok = await confirm({
-      title: 'Remove favorite?',
-      message: `Remove "${productName}" from your favorites?`,
-      confirmLabel: 'Remove',
-      variant: 'danger',
-    });
-    if (!ok) return;
+  const handleRemoveFromWishlist = (productId) => {
     removeFromWishlist(productId);
     showNotification('Removed from favorites', 'success');
   };
@@ -221,9 +214,18 @@ const WishlistPage = ({ onProductClick }) => {
                           {showPreOrder && <span className="wishlist-preorder-badge">PRE-ORDER</span>}
                         </div>
                       )}
-                      <span className="wishlist-star-badge">
+                      <button
+                        type="button"
+                        className="wishlist-star-badge"
+                        title="Remove from favorites"
+                        aria-label={`Remove ${item.name} from favorites`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRemoveFromWishlist(item.productId);
+                        }}
+                      >
                         <i className="fas fa-star" aria-hidden="true"></i>
-                      </span>
+                      </button>
                       {oos && <div className="wishlist-oos-overlay">Out of Stock</div>}
                     </div>
 
@@ -262,13 +264,6 @@ const WishlistPage = ({ onProductClick }) => {
                           onClick={(e) => { e.stopPropagation(); handleBuyNow(item); }}
                         >
                           <i className="fas fa-bolt"></i> Buy Now
-                        </button>
-                        <button
-                          type="button"
-                          className="wishlist-remove-btn"
-                          onClick={(e) => { e.stopPropagation(); handleRemoveFromWishlist(item.productId, item.name); }}
-                        >
-                          <i className="fas fa-trash-alt"></i> Remove
                         </button>
                       </div>
                     </div>
