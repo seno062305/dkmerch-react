@@ -1849,6 +1849,23 @@
   max-height: 420px;
 }
 
+.customer-pod-lightbox {
+  z-index: 2147483646 !important;
+}
+
+.customer-pod-photo-btn {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 12px;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
 .customer-pod-photo {
   width: 100%;
   max-height: 360px;
@@ -1856,6 +1873,27 @@
   border-radius: 12px;
   border: 2px solid #e2e8f0;
   background: #f8fafc;
+  display: block;
+  pointer-events: none;
+}
+.customer-pod-zoom {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(17, 24, 39, 0.72);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  pointer-events: none;
+}
+.customer-pod-photo-btn:hover .customer-pod-photo,
+.customer-pod-photo-btn:focus-visible .customer-pod-photo {
+  border-color: #fc1268;
 }
 .customer-pod-time {
   font-size: 12px;

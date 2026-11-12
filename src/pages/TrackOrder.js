@@ -966,7 +966,6 @@ const TrackOrder = ({ onProductClick }) => {
     const releaseDate  = getPreOrderReleaseDate(order);
     const needsPayment = isPendingPayment(order);
     const { canRefund, hoursLeft, expired } = getRefundWindow(order);
-    const hasProof     = !!(delivered && order.deliveryProofPhoto);
 
     const itemImages = (order.items || []).map(item => {
       const product = getProductById(item.id);
@@ -1081,15 +1080,6 @@ const TrackOrder = ({ onProductClick }) => {
                 <i className="fas fa-ban"></i> Cancel
               </button>
             )}
-            {hasProof && (
-              <button
-                type="button"
-                className="btn order-proof-btn"
-                onClick={() => openLightbox([order.deliveryProofPhoto], 0)}
-              >
-                <i className="fas fa-camera"></i> Proof
-              </button>
-            )}
             {showReviewRefund && (
               <div className="order-card-actions-row">
                 <button
@@ -1186,7 +1176,9 @@ const TrackOrder = ({ onProductClick }) => {
           isOutForDeliveryStatus={isOutForDeliveryStatus}
           onRequestRefund={null}
           isGuest={true}
+          onOpenLightbox={openLightbox}
         />
+        <Lightbox />
       </main>
     );
   }
@@ -1248,6 +1240,7 @@ const TrackOrder = ({ onProductClick }) => {
             onCustomerCancel={openCancelOrder}
             cancelling={false}
             isGuest={false}
+            onOpenLightbox={openLightbox}
           />
         )}
         {cancelOrder && (
@@ -1323,14 +1316,28 @@ const TrackOrder = ({ onProductClick }) => {
           )}
         </section>
       </div>
-      {selectedOrder && <TrackingModal key={selectedOrderId} order={selectedOrder} products={products} onClose={handleCloseModal} getTimelineSteps={getTimelineSteps} getStatusClass={getStatusClass} getDisplayStatus={getDisplayStatus} isOutForDeliveryStatus={isOutForDeliveryStatus} onRequestRefund={null} isGuest={true} />}
+      {selectedOrder && (
+        <TrackingModal
+          key={selectedOrderId}
+          order={selectedOrder}
+          products={products}
+          onClose={handleCloseModal}
+          getTimelineSteps={getTimelineSteps}
+          getStatusClass={getStatusClass}
+          getDisplayStatus={getDisplayStatus}
+          isOutForDeliveryStatus={isOutForDeliveryStatus}
+          onRequestRefund={null}
+          isGuest={true}
+          onOpenLightbox={openLightbox}
+        />
+      )}
       <Lightbox />
     </main>
   );
 };
 
 // ─── TRACKING MODAL ──────────────────────────────────────────────────────────
-const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusClass, getDisplayStatus, isOutForDeliveryStatus, onRequestRefund, onCustomerCancel, cancelling = false, isGuest = false }) => {
+const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusClass, getDisplayStatus, isOutForDeliveryStatus, onRequestRefund, onCustomerCancel, cancelling = false, isGuest = false, onOpenLightbox }) => {
   useCloseOnHistoryBack(true, onClose, 'trackingModal');
   const { showNotification } = useNotification();
   const createPaymentLink = useAction(api.payments.createPaymentLink);
@@ -1338,6 +1345,25 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
   const [continuingPayment, setContinuingPayment] = useState(false);
   const [proofExpanded,     setProofExpanded]     = useState(true);
   const [refundProofExpanded, setRefundProofExpanded] = useState(true);
+  const [localProofOpen, setLocalProofOpen] = useState(false);
+
+  const openProofFull = () => {
+    if (!order.deliveryProofPhoto) return;
+    // Must open inside this portal (#dk-overlay-root) so it sits above the tracking modal
+    setLocalProofOpen(true);
+  };
+
+  useEffect(() => {
+    if (!localProofOpen) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        setLocalProofOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [localProofOpen]);
 
   const cancelRefundProofUrl = useQuery(
     api.orders.getRefundPhotoUrl,
@@ -1365,10 +1391,17 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
   useEffect(() => { if (order.deliveryOtp) setLocalOtp(order.deliveryOtp); }, [order.deliveryOtp]);
 
   useEffect(() => {
-    const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
+    const handleKey = (e) => {
+      if (e.key !== 'Escape') return;
+      if (localProofOpen) {
+        setLocalProofOpen(false);
+        return;
+      }
+      onClose();
+    };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [onClose]);
+  }, [onClose, localProofOpen]);
 
   const getProductById = (id) => products.find(p => p._id === id || p.id === id);
 
@@ -1382,6 +1415,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
   };
 
   return createPortal(
+    <>
     <div className="tracking-modal-overlay" onClick={onClose}>
       <div className="tracking-modal" onClick={e => e.stopPropagation()}>
         <div className="tracking-result">
@@ -1539,12 +1573,22 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
               </button>
               {proofExpanded && (
                 <div className="customer-pod-body">
-                  <p className="customer-pod-note">Photo taken by your rider when the order was delivered.</p>
-                  <img
-                    src={order.deliveryProofPhoto}
-                    alt="Proof of delivery"
-                    className="customer-pod-photo"
-                  />
+                  <p className="customer-pod-note">Photo taken by your rider when the order was delivered. Tap the photo to view full size.</p>
+                  <button
+                    type="button"
+                    className="customer-pod-photo-btn"
+                    onClick={openProofFull}
+                    aria-label="View delivery proof full size"
+                  >
+                    <img
+                      src={order.deliveryProofPhoto}
+                      alt="Proof of delivery"
+                      className="customer-pod-photo"
+                    />
+                    <span className="customer-pod-zoom" aria-hidden="true">
+                      <i className="fas fa-search-plus"></i>
+                    </span>
+                  </button>
                   {order.deliveryConfirmedAt && (
                     <span className="customer-pod-time">
                       <i className="fas fa-clock"></i>{' '}
@@ -1645,7 +1689,31 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
 
         </div>
       </div>
-    </div>,
+    </div>
+    {localProofOpen && order.deliveryProofPhoto && (
+      <div
+        className="order-lightbox customer-pod-lightbox"
+        onClick={() => setLocalProofOpen(false)}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Delivery proof full size"
+      >
+        <button
+          type="button"
+          className="lightbox-close"
+          onClick={() => setLocalProofOpen(false)}
+          aria-label="Close"
+        >
+          <i className="fas fa-times"></i>
+        </button>
+        <img
+          src={order.deliveryProofPhoto}
+          alt="Proof of delivery"
+          onClick={(e) => e.stopPropagation()}
+        />
+      </div>
+    )}
+    </>,
     getOverlayRoot() || document.body
   );
 };
