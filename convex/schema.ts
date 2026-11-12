@@ -110,6 +110,17 @@ export default defineSchema({
     .index("by_token", ["token"])
     .index("by_email", ["email"]),
 
+  /** Email OTP for rider application / admin Add Rider (verify inbox works). */
+  pendingRiderOtps: defineTable({
+    email: v.string(),
+    name: v.optional(v.string()),
+    otp: v.string(),
+    otpExpiresAt: v.number(),
+    verified: v.optional(v.boolean()),
+    verifiedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  }).index("by_email", ["email"]),
+
   registrationAttempts: defineTable({
     fingerprint: v.string(),
     attemptedAt: v.number(),

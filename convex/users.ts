@@ -449,19 +449,28 @@ export const startUserSession = mutation({
     }
 
     const sessionId = genSessionId();
-    const hasOtherSession = existingIds.length > 0;
-    // Only treat pending as abandoned after 15m — never skip Yes/No on a fresh retry
-    const STUCK_PENDING_MS = 15 * 60 * 1000;
+    const USER_SESSION_ACTIVE_MS = 90 * 1000;
+    const at = Number(user.activeDeviceAt) || 0;
+    const otherDeviceLive = existingIds.length > 0 && at > 0 && (now - at) < USER_SESSION_ACTIVE_MS;
+    const STUCK_PENDING_MS = 2 * 60 * 1000;
     const pendingAlert = user.loginAlert;
     const pendingAge = pendingAlert?.at ? now - Number(pendingAlert.at) : 0;
-    const stuckPending =
+    const pendingOpen =
       pendingAlert
       && pendingAlert.status === "pending"
       && !pendingAlert.resolved
-      && pendingAge > STUCK_PENDING_MS;
+      && !isLoginAlertExpired(pendingAlert, now);
+    const stuckPending = pendingOpen && pendingAge > STUCK_PENDING_MS;
+    const pendingTimedOutOrDenied =
+      !!pendingAlert
+      && (
+        pendingAlert.status === "denied"
+        || isLoginAlertExpired(pendingAlert, now)
+        || (pendingAlert.resolved && pendingAlert.status !== "approved")
+      );
 
-    // First login on this account, or a stuck pending that never got answered → take over
-    if (!hasOtherSession || stuckPending) {
+    // First login / no live other device / stuck or expired Yes/No → take over
+    if (!otherDeviceLive || stuckPending || pendingTimedOutOrDenied) {
       await db.patch(
         args.userId,
         activateSessionPatch(sessionId, now, deviceName, location, platform) as any,
@@ -478,12 +487,7 @@ export const startUserSession = mutation({
     }
 
     // Active pending request → keep waiting; refresh details + always reset 60s countdown
-    if (
-      pendingAlert
-      && pendingAlert.status === "pending"
-      && !pendingAlert.resolved
-      && !isLoginAlertExpired(pendingAlert, now)
-    ) {
+    if (pendingOpen) {
       const expiresAt = now + LOGIN_ALERT_TTL_MS;
       const alert = {
         sessionId: String(sessionId),
@@ -593,6 +597,7 @@ export const expireLoginAlert = internalMutation({
       if (alert.resolved || alert.status !== "pending") return { success: true, skipped: true };
       await db.patch(user._id, {
         loginAlert: { ...alert, status: "denied", resolved: true },
+        activeDeviceAt: undefined,
       } as any);
       return { success: true, denied: true };
     } catch {
@@ -884,10 +889,14 @@ export const cancelPendingLogin = mutation({
     try {
       const user = await db.get(id as any) as any;
       if (!user) return { success: false };
-      const alert = user.loginAlert;
-      // Drop only the pending request — keep owner sessions so the next
-      // login from another device still triggers Yes/No.
-      await db.patch(user._id, { loginAlert: undefined } as any);
+      // Clear gate so retry isn't stuck in Waiting for approval with nobody to confirm
+      await db.patch(user._id, {
+        loginAlert: undefined,
+        loginBroadcast: undefined,
+        activeSessionId: undefined,
+        activeSessionIds: [],
+        activeDeviceAt: undefined,
+      } as any);
       return { success: true };
     } catch {
       return { success: false };

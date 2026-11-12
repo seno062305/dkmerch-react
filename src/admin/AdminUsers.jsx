@@ -385,6 +385,15 @@ const AdminUsers = () => {
   const [pendingAppDetail, setPendingAppDetail] = useState(null);
   const [showRiderPw, setShowRiderPw]     = useState(false);
   const [viewingRider, setViewingRider]   = useState(null);
+  const [riderOtp, setRiderOtp]           = useState('');
+  const [riderOtpSent, setRiderOtpSent]   = useState(false);
+  const [riderOtpVerified, setRiderOtpVerified] = useState(false);
+  const [riderOtpBusy, setRiderOtpBusy]   = useState(false);
+  const [riderOtpMsg, setRiderOtpMsg]     = useState('');
+  const [riderOtpCooldown, setRiderOtpCooldown] = useState(0);
+  const requestRiderEmailOtp = useMutation(api.riders.requestRiderEmailOtp);
+  const verifyRiderEmailOtp  = useMutation(api.riders.verifyRiderEmailOtp);
+  const sendRegistrationOTP  = useAction(api.sendEmail.sendRegistrationOTP);
 
   useEffect(() => {
     if (activeTab !== 'riders' && activeTab !== 'applications') return;
@@ -479,6 +488,90 @@ const AdminUsers = () => {
     if (name === 'password' || name === 'confirmPassword') next = value.slice(0, 10);
     setRiderForm(prev => ({ ...prev, [name]: next }));
     setRiderFormError('');
+    if (name === 'email') {
+      setRiderOtp('');
+      setRiderOtpSent(false);
+      setRiderOtpVerified(false);
+      setRiderOtpMsg('');
+    }
+  };
+
+  useEffect(() => {
+    if (riderOtpCooldown <= 0) return undefined;
+    const t = setTimeout(() => setRiderOtpCooldown((s) => Math.max(0, s - 1)), 1000);
+    return () => clearTimeout(t);
+  }, [riderOtpCooldown]);
+
+  const handleSendRiderOtp = async () => {
+    const email = riderForm.email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setRiderOtpMsg('Enter a valid email first.');
+      return;
+    }
+    if (riderOtpCooldown > 0) return;
+    setRiderOtpBusy(true);
+    setRiderOtpMsg('');
+    try {
+      const gen = await requestRiderEmailOtp({
+        email,
+        name: riderForm.fullName.trim() || 'Rider',
+      });
+      if (!gen?.success || !gen.otp) {
+        setRiderOtpMsg(gen?.message || 'Failed to create OTP.');
+        return;
+      }
+      const mailed = await sendRegistrationOTP({
+        to: email,
+        name: riderForm.fullName.trim() || 'Rider',
+        otp: gen.otp,
+      });
+      if (mailed?.rateLimited) {
+        setRiderOtpCooldown(mailed.waitSec || mailed.cooldownSec || 30);
+        setRiderOtpMsg(mailed.message || 'Please wait before requesting another code.');
+        return;
+      }
+      if (!mailed?.success) {
+        setRiderOtpMsg(mailed?.message || 'Failed to send OTP email.');
+        return;
+      }
+      setRiderOtpSent(true);
+      setRiderOtpVerified(false);
+      setRiderOtp('');
+      setRiderOtpCooldown(mailed.cooldownSec || mailed.waitSec || 30);
+      setRiderOtpMsg(`OTP sent to ${email}. Check inbox (and spam).`);
+    } catch (err) {
+      console.error(err);
+      setRiderOtpMsg('Failed to send OTP. Try again.');
+    } finally {
+      setRiderOtpBusy(false);
+    }
+  };
+
+  const handleVerifyRiderOtp = async () => {
+    const email = riderForm.email.trim();
+    const code = riderOtp.trim();
+    if (!code || code.length < 6) {
+      setRiderOtpMsg('Enter the 6-digit OTP from email.');
+      return;
+    }
+    setRiderOtpBusy(true);
+    setRiderOtpMsg('');
+    try {
+      const result = await verifyRiderEmailOtp({ email, otp: code });
+      if (!result?.success) {
+        setRiderOtpMsg(result?.message || 'Incorrect OTP.');
+        setRiderOtpVerified(false);
+        return;
+      }
+      setRiderOtpVerified(true);
+      setRiderOtpMsg('Email verified. You can create the rider.');
+    } catch (err) {
+      console.error(err);
+      setRiderOtpMsg('Verification failed. Try again.');
+      setRiderOtpVerified(false);
+    } finally {
+      setRiderOtpBusy(false);
+    }
   };
 
   const handleAdminCreateRider = async (e) => {
@@ -487,6 +580,10 @@ const AdminUsers = () => {
     const { fullName, email, phone, address, plateNumber, licenseNumber, password, confirmPassword, riderPhoto } = riderForm;
     if (!fullName.trim() || !email.trim() || !phone.trim() || !password) {
       setRiderFormError('Full name, email, phone, and password are required.');
+      return;
+    }
+    if (!riderOtpVerified) {
+      setRiderFormError('Send and verify the email OTP first so we know the inbox works.');
       return;
     }
     if (!riderPhoto) {
@@ -544,6 +641,10 @@ const AdminUsers = () => {
         console.warn('Rider welcome email failed:', mailErr);
       }
       setRiderForm(EMPTY_RIDER_FORM);
+      setRiderOtp('');
+      setRiderOtpSent(false);
+      setRiderOtpVerified(false);
+      setRiderOtpMsg('');
       showNotification(`Rider created: ${result.dkRiderId}`, 'success');
       setActiveTab('riders');
       setRiderFilterStatus('all');
@@ -1327,6 +1428,38 @@ const AdminUsers = () => {
                 <div className="form-group">
                   <label>Email (login) *</label>
                   <input name="email" type="email" value={riderForm.email} onChange={handleRiderFormChange} placeholder="rider@email.com" required />
+                  <div className="au-rider-otp-row">
+                    <button
+                      type="button"
+                      className="au-btn-secondary au-otp-send-btn"
+                      disabled={riderOtpBusy || riderOtpCooldown > 0}
+                      onClick={handleSendRiderOtp}
+                    >
+                      {riderOtpBusy ? <><i className="fas fa-spinner fa-spin"></i> Sending…</>
+                        : riderOtpCooldown > 0 ? `Resend in ${riderOtpCooldown}s`
+                          : <><i className="fas fa-paper-plane"></i> Send OTP</>}
+                    </button>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      placeholder="6-digit OTP"
+                      value={riderOtp}
+                      onChange={(e) => setRiderOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      disabled={!riderOtpSent || riderOtpVerified}
+                    />
+                    <button
+                      type="button"
+                      className="au-btn-secondary"
+                      disabled={riderOtpBusy || !riderOtpSent || riderOtpVerified}
+                      onClick={handleVerifyRiderOtp}
+                    >
+                      {riderOtpVerified ? <><i className="fas fa-check"></i> Verified</> : 'Verify'}
+                    </button>
+                  </div>
+                  {riderOtpMsg && (
+                    <small className={`au-field-hint ${riderOtpVerified ? 'au-otp-ok' : ''}`}>{riderOtpMsg}</small>
+                  )}
                 </div>
                 <div className="form-group">
                   <label>Phone *</label>
@@ -1462,7 +1595,19 @@ const AdminUsers = () => {
                 <div className="au-rider-form-error"><i className="fas fa-exclamation-circle"></i> {riderFormError}</div>
               )}
               <div className="au-rider-form-actions">
-                <button type="button" className="au-btn-secondary" onClick={() => { setRiderForm(EMPTY_RIDER_FORM); setRiderFormError(''); }} disabled={riderFormLoading}>
+                <button
+                  type="button"
+                  className="au-btn-secondary"
+                  onClick={() => {
+                    setRiderForm(EMPTY_RIDER_FORM);
+                    setRiderFormError('');
+                    setRiderOtp('');
+                    setRiderOtpSent(false);
+                    setRiderOtpVerified(false);
+                    setRiderOtpMsg('');
+                  }}
+                  disabled={riderFormLoading}
+                >
                   Clear
                 </button>
                 <button type="submit" className="au-btn-primary" disabled={riderFormLoading}>

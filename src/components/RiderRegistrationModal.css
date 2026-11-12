@@ -150,6 +150,45 @@
   gap: 4px;
 }
 
+.rider-otp-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  align-items: center;
+}
+.rider-otp-row input {
+  flex: 1 1 110px;
+  min-width: 100px;
+  max-width: 140px;
+  text-align: center;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+.rider-otp-send-btn,
+.rider-otp-verify-btn {
+  border: 1.5px solid #f9a8d4;
+  background: #fff0f6;
+  color: #be185d;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.rider-otp-send-btn:disabled,
+.rider-otp-verify-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.rider-otp-msg {
+  font-size: 12px;
+  color: #b45309;
+  margin-top: 4px;
+}
+.rider-otp-msg.ok { color: #15803d; font-weight: 600; }
+
 .rider-form-group label {
   font-size: 12px;
   font-weight: 600;

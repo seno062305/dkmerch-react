@@ -91,6 +91,7 @@ const RiderLoginModal = ({ onClose, onLoginSuccess }) => {
   });
   const [loginDenied, setLoginDenied] = useState(false);
   const [denyReason, setDenyReason] = useState(null);
+  const clearRiderLoginGate = useMutation(api.riders.clearRiderLoginGate);
 
   // ── Forgot password state ─────────────────────────────────────
   const [forgotEmail, setForgotEmail]         = useState("");
@@ -123,6 +124,24 @@ const RiderLoginModal = ({ onClose, onLoginSuccess }) => {
     const { attempts } = getRLState();
     if (remaining > 0) { setLoginCooldown(remaining); setLoginAttempts(attempts); }
   }, []);
+
+  // Stale "Waiting for approval" with nobody to confirm → unlock so login works
+  useEffect(() => {
+    const p = awaitingApproval;
+    if (!p?.email) return undefined;
+    const age = Date.now() - Number(p.at || 0);
+    if (age < 90_000) return undefined;
+    let cancelled = false;
+    (async () => {
+      try { await clearRiderLoginGate({ email: String(p.email) }); } catch { /* ignore */ }
+      if (cancelled) return;
+      clearPendingLogin();
+      setAwaitingApproval(null);
+      setLoginDenied(false);
+      setDenyReason(null);
+    })();
+    return () => { cancelled = true; };
+  }, [awaitingApproval, clearRiderLoginGate]);
 
   // ── Tick cooldowns ────────────────────────────────────────────
   useEffect(() => {
@@ -341,7 +360,9 @@ const RiderLoginModal = ({ onClose, onLoginSuccess }) => {
         expiresAt={awaitingApproval.expiresAt || riderApprovalStatus?.expiresAt}
         onTimeout={async () => {
           try {
-            if (awaitingApproval.email && awaitingApproval.sessionId) {
+            if (awaitingApproval.email) {
+              await clearRiderLoginGate({ email: String(awaitingApproval.email) });
+            } else if (awaitingApproval.email && awaitingApproval.sessionId) {
               await cancelPendingRiderLogin({
                 email: String(awaitingApproval.email),
                 sessionId: String(awaitingApproval.sessionId),
@@ -354,11 +375,8 @@ const RiderLoginModal = ({ onClose, onLoginSuccess }) => {
         }}
         onClose={async () => {
           try {
-            if (awaitingApproval.email && awaitingApproval.sessionId) {
-              await cancelPendingRiderLogin({
-                email: String(awaitingApproval.email),
-                sessionId: String(awaitingApproval.sessionId),
-              });
+            if (awaitingApproval.email) {
+              await clearRiderLoginGate({ email: String(awaitingApproval.email) });
             }
           } catch { /* ignore */ }
           clearPendingLogin();
@@ -375,7 +393,11 @@ const RiderLoginModal = ({ onClose, onLoginSuccess }) => {
     return (
       <LoginDeniedModal
         reason={denyReason}
-        onClose={() => {
+        onClose={async () => {
+          try {
+            const email = formData.email || awaitingApproval?.email;
+            if (email) await clearRiderLoginGate({ email: String(email) });
+          } catch { /* ignore */ }
           setLoginDenied(false);
           setDenyReason(null);
           setAwaitingApproval(null);

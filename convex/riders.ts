@@ -163,16 +163,20 @@ export const createRiderApplication = mutation({
     validId2: v.optional(v.union(v.string(), v.null())),
   },
   handler: async ({ db }, args) => {
+    const email = String(args.email || "").trim().toLowerCase();
+    const verified = await assertRiderEmailVerified(db, email);
+    if (!verified.ok) return { success: false, message: verified.message };
+
     const existing = await db
       .query("riderApplications")
-      .withIndex("by_email", q => q.eq("email", args.email))
+      .withIndex("by_email", q => q.eq("email", email))
       .first();
     if (existing) {
       return { success: false, message: "This email is already registered as a rider applicant." };
     }
     const id = await db.insert("riderApplications", {
       fullName: args.fullName,
-      email: args.email,
+      email,
       phone: args.phone,
       vehicleType: args.vehicleType,
       status: "pending",
@@ -185,6 +189,9 @@ export const createRiderApplication = mutation({
       validId1: args.validId1,
       validId2: args.validId2,
     });
+    if (verified.row?._id) {
+      try { await db.delete(verified.row._id); } catch { /* optional */ }
+    }
     return { success: true, id };
   },
 });
@@ -224,6 +231,9 @@ export const adminCreateRider = mutation({
   },
   handler: async ({ db }, args) => {
     const email = args.email.trim().toLowerCase();
+    const verified = await assertRiderEmailVerified(db, email);
+    if (!verified.ok) return { success: false, message: verified.message };
+
     const existing = await db
       .query("riderApplications")
       .withIndex("by_email", q => q.eq("email", email))
@@ -255,6 +265,10 @@ export const adminCreateRider = mutation({
       loginAlert: undefined,
       loginBroadcast: undefined,
     });
+
+    if (verified.row?._id) {
+      try { await db.delete(verified.row._id); } catch { /* optional */ }
+    }
 
     return { success: true, id, dkRiderId, email, fullName: args.fullName.trim() };
   },
@@ -422,16 +436,26 @@ function getRiderSessionIds(rider: any): string[] {
   return fromArr;
 }
 
-/** Session counts as "open on another device" only if recently active. */
-const RIDER_SESSION_ACTIVE_MS = 5 * 60 * 1000;
+/** Session counts as "open on another device" only with a fresh heartbeat (~touch every 20–30s). */
+const RIDER_SESSION_ACTIVE_MS = 90 * 1000;
 
 function hasLiveRiderSession(rider: any, now = Date.now()): boolean {
   const ids = getRiderSessionIds(rider);
   if (ids.length === 0) return false;
   const at = Number(rider?.activeDeviceAt) || 0;
-  // Never heartbeated / missing timestamp → treat as not open (new or stale account)
+  // Never heartbeated / missing / zeroed → not open (new account or cancelled wait)
   if (!at) return false;
   return now - at < RIDER_SESSION_ACTIVE_MS;
+}
+
+function clearRiderLoginGatePatch() {
+  return {
+    loginAlert: undefined,
+    loginBroadcast: undefined,
+    activeSessionId: undefined,
+    activeSessionIds: [] as string[],
+    activeDeviceAt: undefined,
+  };
 }
 
 function activateRiderSessionPatch(
@@ -553,17 +577,25 @@ export const loginRider = mutation({
 
     const sessionId = genSessionId();
     const otherDeviceLive = hasLiveRiderSession(rider, now);
-    const STUCK_PENDING_MS = 15 * 60 * 1000;
+    const STUCK_PENDING_MS = 2 * 60 * 1000;
     const pendingAlert = (rider as any).loginAlert;
     const pendingAge = pendingAlert?.at ? now - Number(pendingAlert.at) : 0;
-    const stuckPending =
+    const pendingOpen =
       pendingAlert
       && pendingAlert.status === "pending"
       && !pendingAlert.resolved
-      && pendingAge > STUCK_PENDING_MS;
+      && !isRiderLoginAlertExpired(pendingAlert, now);
+    const stuckPending = pendingOpen && pendingAge > STUCK_PENDING_MS;
+    const pendingTimedOutOrDenied =
+      !!pendingAlert
+      && (
+        pendingAlert.status === "denied"
+        || isRiderLoginAlertExpired(pendingAlert, now)
+        || (pendingAlert.resolved && pendingAlert.status !== "approved")
+      );
 
-    // First login / no other device actively open / stuck pending → open directly
-    if (!otherDeviceLive || stuckPending) {
+    // Direct login when: no live other device, stuck wait, or prior Yes/No expired/denied
+    if (!otherDeviceLive || stuckPending || pendingTimedOutOrDenied) {
       await db.patch(rider._id, {
         ...activateRiderSessionPatch(sessionId, now, deviceName, location, platform),
         loginBroadcast: undefined,
@@ -577,21 +609,16 @@ export const loginRider = mutation({
       };
     }
 
-    // Active pending → keep waiting; always reset 60s countdown on re-request
-    if (
-      pendingAlert
-      && pendingAlert.status === "pending"
-      && !pendingAlert.resolved
-      && !isRiderLoginAlertExpired(pendingAlert, now)
-    ) {
+    // Active pending + live owner device → keep waiting (refresh countdown)
+    if (pendingOpen) {
       const expiresAt = now + RIDER_LOGIN_ALERT_TTL_MS;
       const alert = {
-        sessionId: String(sessionId),
+        sessionId: String(pendingAlert.sessionId || sessionId),
         previousSessionId: previousSessionId || String(pendingAlert.previousSessionId || ""),
         deviceName: deviceName || pendingAlert.deviceName,
         location: location || pendingAlert.location,
         platform: platform || pendingAlert.platform || undefined,
-        at: now,
+        at: Number(pendingAlert.at) || now,
         expiresAt,
         status: "pending" as const,
         resolved: false,
@@ -600,12 +627,6 @@ export const loginRider = mutation({
         loginAlert: alert,
         loginBroadcast: makeRiderLoginBroadcast("request", alert, now),
       } as any);
-      try {
-        await scheduler.runAfter(RIDER_LOGIN_ALERT_TTL_MS, internal.riders.expireRiderLoginAlert, {
-          email: String(rider.email),
-          sessionId: String(alert.sessionId),
-        });
-      } catch { /* optional */ }
       return {
         success: true,
         riderExists: true,
@@ -616,7 +637,7 @@ export const loginRider = mutation({
       };
     }
 
-    // Another device still has a session → ALWAYS require Yes/No
+    // Another device is truly live → require Yes/No once
     const expiresAt = now + RIDER_LOGIN_ALERT_TTL_MS;
     const alert = {
       sessionId,
@@ -680,6 +701,8 @@ export const expireRiderLoginAlert = internalMutation({
     if (alert.resolved || alert.status !== "pending") return { success: true, skipped: true };
     await db.patch(rider._id, {
       loginAlert: { ...alert, status: "denied", resolved: true },
+      // Free next login — nobody confirmed in time
+      activeDeviceAt: undefined,
     } as any);
     return { success: true, denied: true };
   },
@@ -867,19 +890,23 @@ export const cancelPendingRiderLogin = mutation({
       .withIndex("by_email", q => q.eq("email", email))
       .first();
     if (!rider) return { success: false };
-    const sid = String(sessionId || "").trim();
-    const alert = (rider as any).loginAlert;
-    if (alert && String(alert.sessionId) === sid) {
-      await db.patch(rider._id, {
-        loginAlert: undefined,
-        activeDeviceAt: 0,
-      } as any);
-    } else {
-      await db.patch(rider._id, {
-        loginAlert: undefined,
-        activeDeviceAt: 0,
-      } as any);
-    }
+    void sessionId;
+    // Clear gate completely so the next login opens directly (no ghost wait loop)
+    await db.patch(rider._id, clearRiderLoginGatePatch() as any);
+    return { success: true };
+  },
+});
+
+/** Emergency unlock — clear Yes/No gate so rider can log in again. */
+export const clearRiderLoginGate = mutation({
+  args: { email: v.string() },
+  handler: async ({ db }, { email }) => {
+    const rider = await db
+      .query("riderApplications")
+      .withIndex("by_email", q => q.eq("email", String(email || "").trim().toLowerCase()))
+      .first();
+    if (!rider) return { success: false, message: "Rider not found." };
+    await db.patch(rider._id, clearRiderLoginGatePatch() as any);
     return { success: true };
   },
 });
@@ -1380,6 +1407,92 @@ export const getAllApprovedRiderEmails = internalQuery({
     return riders
       .filter(r => !!r.email)
       .map(r => ({ fullName: r.fullName, email: r.email }));
+  },
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rider application email OTP (verify inbox before apply / admin create)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const RIDER_OTP_TTL_MS = 3 * 60 * 1000;
+const RIDER_OTP_VERIFIED_TTL_MS = 30 * 60 * 1000;
+
+async function assertRiderEmailVerified(db: any, email: string) {
+  const normalized = String(email || "").trim().toLowerCase();
+  const row = await db
+    .query("pendingRiderOtps")
+    .withIndex("by_email", (q: any) => q.eq("email", normalized))
+    .first();
+  if (!row?.verified || !row.verifiedAt) {
+    return { ok: false as const, message: "Please verify the email with the OTP code first." };
+  }
+  if (Date.now() - Number(row.verifiedAt) > RIDER_OTP_VERIFIED_TTL_MS) {
+    return { ok: false as const, message: "Email verification expired. Send a new OTP." };
+  }
+  return { ok: true as const, row };
+}
+
+/** Generate OTP for rider email — client then emails it via sendRegistrationOTP. */
+export const requestRiderEmailOtp = mutation({
+  args: {
+    email: v.string(),
+    name: v.optional(v.string()),
+  },
+  handler: async ({ db }, { email, name }) => {
+    const normalized = String(email || "").trim().toLowerCase();
+    if (!normalized || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
+      return { success: false, message: "Enter a valid email address." };
+    }
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const now = Date.now();
+    const existing = await db
+      .query("pendingRiderOtps")
+      .withIndex("by_email", (q: any) => q.eq("email", normalized))
+      .first();
+    if (existing) {
+      await db.patch(existing._id, {
+        otp,
+        otpExpiresAt: now + RIDER_OTP_TTL_MS,
+        verified: false,
+        verifiedAt: undefined,
+        name: name || existing.name,
+        createdAt: now,
+      });
+    } else {
+      await db.insert("pendingRiderOtps", {
+        email: normalized,
+        name: name || undefined,
+        otp,
+        otpExpiresAt: now + RIDER_OTP_TTL_MS,
+        verified: false,
+        createdAt: now,
+      });
+    }
+    return { success: true, otp, email: normalized };
+  },
+});
+
+export const verifyRiderEmailOtp = mutation({
+  args: {
+    email: v.string(),
+    otp: v.string(),
+  },
+  handler: async ({ db }, { email, otp }) => {
+    const normalized = String(email || "").trim().toLowerCase();
+    const code = String(otp || "").trim();
+    const row = await db
+      .query("pendingRiderOtps")
+      .withIndex("by_email", (q: any) => q.eq("email", normalized))
+      .first();
+    if (!row) return { success: false, message: "No OTP found. Please send a new code." };
+    if (Date.now() > Number(row.otpExpiresAt)) {
+      return { success: false, message: "OTP expired. Please send a new code.", expired: true };
+    }
+    if (String(row.otp) !== code) {
+      return { success: false, message: "Incorrect OTP. Please try again." };
+    }
+    await db.patch(row._id, { verified: true, verifiedAt: Date.now() });
+    return { success: true };
   },
 });
 

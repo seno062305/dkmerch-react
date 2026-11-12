@@ -1133,6 +1133,28 @@
   border-color: #fc1268;
   box-shadow: 0 0 0 3px rgba(252,18,104,0.1);
 }
+.au-rider-otp-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  align-items: center;
+}
+.au-rider-otp-row input {
+  flex: 1 1 110px;
+  min-width: 100px;
+  max-width: 140px;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-align: center;
+}
+.au-otp-send-btn { white-space: nowrap; }
+.au-otp-ok { color: #15803d !important; font-weight: 600; }
+
 .au-pw-row {
   position: relative;
   display: flex;

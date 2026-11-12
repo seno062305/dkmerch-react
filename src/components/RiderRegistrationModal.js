@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import './RiderRegistrationModal.css';
-import { useMutation } from 'convex/react';
+import { useMutation, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { appendActivityLog } from '../admin/lib/localActivityLog';
 import { runWithFailover } from '../lib/failoverWrite';
@@ -263,12 +263,28 @@ const RiderRegistrationModal = ({ onClose }) => {
   const [showPassword, setShowPassword]               = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [consentChecked, setConsentChecked]           = useState(false);
+  const [otpCode, setOtpCode]                         = useState('');
+  const [otpSent, setOtpSent]                         = useState(false);
+  const [otpVerified, setOtpVerified]                 = useState(false);
+  const [otpBusy, setOtpBusy]                         = useState(false);
+  const [otpMsg, setOtpMsg]                           = useState('');
+  const [otpCooldown, setOtpCooldown]                       = useState(0);
+
+  const requestRiderEmailOtp = useMutation(api.riders.requestRiderEmailOtp);
+  const verifyRiderEmailOtp  = useMutation(api.riders.verifyRiderEmailOtp);
+  const sendRegistrationOTP  = useAction(api.sendEmail.sendRegistrationOTP);
 
   const riderPhotoRef = useRef();
   const validId1Ref   = useRef();
   const validId2Ref   = useRef();
 
   useBodyScrollLock(true);
+
+  useEffect(() => {
+    if (otpCooldown <= 0) return undefined;
+    const t = setTimeout(() => setOtpCooldown((s) => Math.max(0, s - 1)), 1000);
+    return () => clearTimeout(t);
+  }, [otpCooldown]);
 
   const validateRiderPassword = (pw) => {
     if (!pw) return ['Password is required.'];
@@ -321,6 +337,81 @@ const RiderRegistrationModal = ({ onClose }) => {
     else                               { next[name] = value; }
     setForm(next);
     setErrors(prev => ({ ...prev, [name]: '' }));
+    if (name === 'email') {
+      setOtpCode('');
+      setOtpSent(false);
+      setOtpVerified(false);
+      setOtpMsg('');
+    }
+  };
+
+  const handleSendOtp = async () => {
+    if (!form.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+      setErrors(prev => ({ ...prev, email: 'Enter a valid email first.' }));
+      return;
+    }
+    if (otpCooldown > 0) return;
+    setOtpBusy(true);
+    setOtpMsg('');
+    try {
+      const gen = await requestRiderEmailOtp({
+        email: form.email.trim(),
+        name: form.fullName.trim() || 'Rider',
+      });
+      if (!gen?.success || !gen.otp) {
+        setOtpMsg(gen?.message || 'Failed to create OTP.');
+        return;
+      }
+      const mailed = await sendRegistrationOTP({
+        to: form.email.trim(),
+        name: form.fullName.trim() || 'Rider',
+        otp: gen.otp,
+      });
+      if (mailed?.rateLimited) {
+        setOtpCooldown(mailed.waitSec || mailed.cooldownSec || 30);
+        setOtpMsg(mailed.message || 'Please wait before requesting another code.');
+        return;
+      }
+      if (!mailed?.success) {
+        setOtpMsg(mailed?.message || 'Failed to send OTP email.');
+        return;
+      }
+      setOtpSent(true);
+      setOtpVerified(false);
+      setOtpCode('');
+      setOtpCooldown(mailed.cooldownSec || mailed.waitSec || 30);
+      setOtpMsg(`OTP sent to ${form.email.trim()}. Check inbox (and spam).`);
+    } catch {
+      setOtpMsg('Failed to send OTP. Try again.');
+    } finally {
+      setOtpBusy(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    const code = otpCode.trim();
+    if (!code || code.length < 6) {
+      setOtpMsg('Enter the 6-digit OTP from your email.');
+      return;
+    }
+    setOtpBusy(true);
+    setOtpMsg('');
+    try {
+      const result = await verifyRiderEmailOtp({ email: form.email.trim(), otp: code });
+      if (!result?.success) {
+        setOtpMsg(result?.message || 'Incorrect OTP.');
+        setOtpVerified(false);
+        return;
+      }
+      setOtpVerified(true);
+      setOtpMsg('Email verified! You can submit your application.');
+      setErrors(prev => ({ ...prev, email: '', otp: '' }));
+    } catch {
+      setOtpMsg('Verification failed. Try again.');
+      setOtpVerified(false);
+    } finally {
+      setOtpBusy(false);
+    }
   };
 
   const fileToBase64 = (file) => new Promise((res, rej) => {
@@ -423,6 +514,7 @@ const RiderRegistrationModal = ({ onClose }) => {
     else if (form.password !== form.confirmPassword) e.confirmPassword = 'Passwords do not match.';
 
     if (!consentChecked) e.consent = 'You must agree to the Privacy Policy and Terms to continue.';
+    if (!otpVerified) e.otp = 'Verify your email with the OTP code first.';
 
     return e;
   };
@@ -516,6 +608,39 @@ const RiderRegistrationModal = ({ onClose }) => {
                       value={form.email} onChange={handleChange} maxLength={60}
                       className={errors.email ? 'input-error' : ''} />
                     {errors.email && <span className="error-msg">⚠ {errors.email}</span>}
+                    <div className="rider-otp-row">
+                      <button
+                        type="button"
+                        className="rider-otp-send-btn"
+                        disabled={otpBusy || otpCooldown > 0}
+                        onClick={handleSendOtp}
+                      >
+                        {otpBusy ? 'Sending…' : otpCooldown > 0 ? `Resend in ${otpCooldown}s` : 'Send OTP'}
+                      </button>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        placeholder="6-digit OTP"
+                        value={otpCode}
+                        onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        disabled={!otpSent || otpVerified}
+                        className={errors.otp ? 'input-error' : ''}
+                      />
+                      <button
+                        type="button"
+                        className="rider-otp-verify-btn"
+                        disabled={otpBusy || !otpSent || otpVerified}
+                        onClick={handleVerifyOtp}
+                      >
+                        {otpVerified ? 'Verified' : 'Verify'}
+                      </button>
+                    </div>
+                    {(otpMsg || errors.otp) && (
+                      <span className={`rider-otp-msg ${otpVerified ? 'ok' : ''}`}>
+                        {errors.otp ? `⚠ ${errors.otp}` : otpMsg}
+                      </span>
+                    )}
                   </div>
 
                   <div className="rider-form-group">
