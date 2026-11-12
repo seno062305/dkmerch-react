@@ -4,7 +4,7 @@ import './PreOrder.css';
 import { usePreOrderProducts } from '../utils/productStorage';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
-import { useConfirm } from '../context/ConfirmContext';
+import { useConfirm, preOrderConfirmRememberKey } from '../context/ConfirmContext';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import LoginModal from '../components/LoginModal';
@@ -92,6 +92,8 @@ const PreOrder = () => {
       confirmLabel: 'Pre-Order',
       variant: 'primary',
       icon: 'fa-clock',
+      rememberKey: preOrderConfirmRememberKey(),
+      rememberLabel: "Don't show again",
     });
     if (!ok) return;
     setLoadingId(product._id);

@@ -309,6 +309,70 @@ function activateSessionPatch(
   };
 }
 
+async function upsertUserSession(
+  db: any,
+  args: {
+    userId: string;
+    sessionId: string;
+    deviceName?: string;
+    location?: string;
+    platform?: string;
+    now?: number;
+  }
+) {
+  const userId = String(args.userId || "").trim();
+  const sessionId = String(args.sessionId || "").trim();
+  if (!userId || !sessionId) return;
+  const now = args.now || Date.now();
+  const existing = await db
+    .query("userSessions")
+    .withIndex("by_user_session", (q: any) => q.eq("userId", userId).eq("sessionId", sessionId))
+    .first();
+  if (existing) {
+    const patch: any = { lastActiveAt: now };
+    if (args.deviceName) patch.deviceName = String(args.deviceName).slice(0, 120);
+    if (args.location) patch.location = String(args.location).slice(0, 160);
+    if (args.platform) patch.platform = String(args.platform).slice(0, 80);
+    await db.patch(existing._id, patch);
+    return existing._id;
+  }
+  return await db.insert("userSessions", {
+    userId,
+    sessionId,
+    deviceName: String(args.deviceName || "Unknown device").slice(0, 120),
+    location: String(args.location || "Unknown location").slice(0, 160),
+    platform: args.platform ? String(args.platform).slice(0, 80) : undefined,
+    createdAt: now,
+    lastActiveAt: now,
+  });
+}
+
+async function removeUserSession(db: any, userId: string, sessionId: string) {
+  const uid = String(userId || "").trim();
+  const sid = String(sessionId || "").trim();
+  if (!uid || !sid) return;
+  const row = await db
+    .query("userSessions")
+    .withIndex("by_user_session", (q: any) => q.eq("userId", uid).eq("sessionId", sid))
+    .first();
+  if (row) await db.delete(row._id);
+}
+
+async function removeAllUserSessions(db: any, userId: string, keepSessionId?: string) {
+  const uid = String(userId || "").trim();
+  if (!uid) return;
+  const keep = String(keepSessionId || "").trim();
+  const rows = await db
+    .query("userSessions")
+    .withIndex("by_user", (q: any) => q.eq("userId", uid))
+    .collect();
+  await Promise.all(
+    rows
+      .filter((r: any) => !keep || String(r.sessionId) !== keep)
+      .map((r: any) => db.delete(r._id))
+  );
+}
+
 /**
  * Start a session. Pending Yes/No only when another device is RECENTLY active.
  * Stale / same-device / same-session → activate immediately (no alert, no push).
@@ -356,6 +420,14 @@ export const startUserSession = mutation({
         delete patch.loginAlert;
       }
       await db.patch(args.userId, patch);
+      await upsertUserSession(db, {
+        userId: String(args.userId),
+        sessionId: currentSessionId,
+        deviceName,
+        location,
+        platform,
+        now,
+      });
       return { success: true, sessionId: currentSessionId, pendingApproval: false };
     }
 
@@ -377,6 +449,14 @@ export const startUserSession = mutation({
         args.userId,
         activateSessionPatch(sessionId, now, deviceName, location, platform) as any,
       );
+      await upsertUserSession(db, {
+        userId: String(args.userId),
+        sessionId,
+        deviceName,
+        location,
+        platform,
+        now,
+      });
       return { success: true, sessionId, pendingApproval: false };
     }
 
@@ -509,6 +589,14 @@ export const touchUserSession = mutation({
 
       if (sid && ids.includes(sid)) {
         await db.patch(user._id, { activeDeviceAt: now } as any);
+        await upsertUserSession(db, {
+          userId: id,
+          sessionId: sid,
+          deviceName: user.activeDeviceName,
+          location: user.activeDeviceLocation,
+          platform: user.activeDevicePlatform,
+          now,
+        });
         return { success: true, sessionId: sid };
       }
 
@@ -521,18 +609,29 @@ export const touchUserSession = mutation({
           activeSessionId: primary,
           activeSessionIds: ids,
         } as any);
+        await upsertUserSession(db, {
+          userId: id,
+          sessionId: primary,
+          deviceName: user.activeDeviceName,
+          location: user.activeDeviceLocation,
+          platform: user.activeDevicePlatform,
+          now,
+        });
         return { success: true, sessionId: primary, rebound: true };
       }
 
       // No server sessions left — quietly create one for this already-signed-in device.
       // Preserve any pending loginAlert so Yes/No is not wiped by a heartbeat.
       const newSid = sid || genSessionId();
+      const deviceName = String(user.activeDeviceName || "This device").slice(0, 120);
+      const location = String(user.activeDeviceLocation || "Unknown location").slice(0, 160);
+      const platform = String(user.activeDevicePlatform || "").slice(0, 80);
       const patch = activateSessionPatch(
         newSid,
         now,
-        String(user.activeDeviceName || "This device").slice(0, 120),
-        String(user.activeDeviceLocation || "Unknown location").slice(0, 160),
-        String(user.activeDevicePlatform || "").slice(0, 80),
+        deviceName,
+        location,
+        platform,
       ) as any;
       const pending = user.loginAlert;
       if (
@@ -544,6 +643,14 @@ export const touchUserSession = mutation({
         delete patch.loginAlert;
       }
       await db.patch(user._id, patch);
+      await upsertUserSession(db, {
+        userId: id,
+        sessionId: newSid,
+        deviceName,
+        location,
+        platform,
+        now,
+      });
       return { success: true, sessionId: newSid, created: true };
     } catch {
       return { success: false };
@@ -566,7 +673,10 @@ export const endUserSession = mutation({
       const sid = String(sessionId || "").trim();
       const ids = getActiveSessionIds(user);
       if (sid) {
-        if (!ids.includes(sid)) return { success: true, cleared: false };
+        if (!ids.includes(sid)) {
+          await removeUserSession(db, id, sid);
+          return { success: true, cleared: false };
+        }
         const remaining = ids.filter((s) => s !== sid);
         if (remaining.length === 0) {
           await db.patch(user._id, {
@@ -581,6 +691,7 @@ export const endUserSession = mutation({
             activeSessionIds: remaining,
           } as any);
         }
+        await removeUserSession(db, id, sid);
         return { success: true, cleared: true };
       }
       await db.patch(user._id, {
@@ -589,10 +700,141 @@ export const endUserSession = mutation({
         activeDeviceAt: undefined,
         loginAlert: undefined,
       } as any);
+      await removeAllUserSessions(db, id);
       return { success: true, cleared: true };
     } catch {
       return { success: false };
     }
+  },
+});
+
+/** List devices/sessions for Settings → Where you're logged in. */
+export const listUserSessions = query({
+  args: {
+    userId: v.string(),
+    currentSessionId: v.optional(v.string()),
+  },
+  handler: async ({ db }, { userId, currentSessionId }) => {
+    const uid = String(userId || "").trim();
+    if (!uid) return [];
+    const user = await db.get(uid as any) as any;
+    if (!user) return [];
+    const current = String(currentSessionId || "").trim();
+    const activeIds = getActiveSessionIds(user);
+    const rows = await db
+      .query("userSessions")
+      .withIndex("by_user", (q: any) => q.eq("userId", uid))
+      .collect();
+
+    const bySid = new Map(rows.map((r: any) => [String(r.sessionId), r]));
+    // Ensure every activeSessionId appears even if metadata row is missing
+    for (const sid of activeIds) {
+      if (!bySid.has(sid)) {
+        bySid.set(sid, {
+          _id: null,
+          userId: uid,
+          sessionId: sid,
+          deviceName:
+            sid === String(user.activeSessionId || "")
+              ? (user.activeDeviceName || "Unknown device")
+              : "Unknown device",
+          location:
+            sid === String(user.activeSessionId || "")
+              ? (user.activeDeviceLocation || "Unknown location")
+              : "Unknown location",
+          platform:
+            sid === String(user.activeSessionId || "")
+              ? user.activeDevicePlatform
+              : undefined,
+          createdAt: user.activeDeviceAt || Date.now(),
+          lastActiveAt: user.activeDeviceAt || Date.now(),
+        });
+      }
+    }
+
+    const list = [...bySid.values()]
+      .filter((r: any) => activeIds.includes(String(r.sessionId)))
+      .map((r: any) => ({
+        sessionId: String(r.sessionId),
+        deviceName: String(r.deviceName || "Unknown device"),
+        location: String(r.location || "Unknown location"),
+        platform: r.platform ? String(r.platform) : "",
+        createdAt: Number(r.createdAt) || 0,
+        lastActiveAt: Number(r.lastActiveAt) || 0,
+        isCurrent: !!current && String(r.sessionId) === current,
+      }))
+      .sort((a, b) => {
+        if (a.isCurrent !== b.isCurrent) return a.isCurrent ? -1 : 1;
+        return b.lastActiveAt - a.lastActiveAt;
+      });
+
+    return list;
+  },
+});
+
+/** Log out one device/session from Settings. */
+export const logoutSession = mutation({
+  args: {
+    userId: v.string(),
+    sessionId: v.string(),
+  },
+  handler: async ({ db }, { userId, sessionId }) => {
+    const id = String(userId || "").trim();
+    const sid = String(sessionId || "").trim();
+    if (!id || !sid) return { success: false, message: "Missing session." };
+    const user = await db.get(id as any) as any;
+    if (!user) return { success: false, message: "Account not found." };
+    const ids = getActiveSessionIds(user);
+    const remaining = ids.filter((s) => s !== sid);
+    if (remaining.length === 0) {
+      await db.patch(user._id, {
+        activeSessionId: undefined,
+        activeSessionIds: undefined,
+        activeDeviceAt: undefined,
+        loginAlert: undefined,
+      } as any);
+    } else {
+      await db.patch(user._id, {
+        activeSessionId: remaining[0],
+        activeSessionIds: remaining,
+      } as any);
+    }
+    await removeUserSession(db, id, sid);
+    return { success: true, remaining: remaining.length, loggedOutCurrent: !remaining.includes(sid) && ids.includes(sid) };
+  },
+});
+
+/** Log out all devices. Pass keepSessionId to keep this device signed in. */
+export const logoutAllSessions = mutation({
+  args: {
+    userId: v.string(),
+    keepSessionId: v.optional(v.string()),
+  },
+  handler: async ({ db }, { userId, keepSessionId }) => {
+    const id = String(userId || "").trim();
+    const keep = String(keepSessionId || "").trim();
+    if (!id) return { success: false, message: "Missing user." };
+    const user = await db.get(id as any) as any;
+    if (!user) return { success: false, message: "Account not found." };
+    const ids = getActiveSessionIds(user);
+    if (keep && ids.includes(keep)) {
+      await db.patch(user._id, {
+        activeSessionId: keep,
+        activeSessionIds: [keep],
+        activeDeviceAt: Date.now(),
+        loginAlert: undefined,
+      } as any);
+      await removeAllUserSessions(db, id, keep);
+      return { success: true, remaining: 1, keptCurrent: true };
+    }
+    await db.patch(user._id, {
+      activeSessionId: undefined,
+      activeSessionIds: undefined,
+      activeDeviceAt: undefined,
+      loginAlert: undefined,
+    } as any);
+    await removeAllUserSessions(db, id);
+    return { success: true, remaining: 0, keptCurrent: false };
   },
 });
 
@@ -666,7 +908,8 @@ export const checkUserSession = query({
       }
       return {
         valid: false,
-        reason: "new_device_logged_in",
+        // session_revoked covers Settings "log out device / all" (silent kick, no notice)
+        reason: "session_revoked",
         activeDeviceAt: user.activeDeviceAt ?? null,
         activeDeviceName: user.activeDeviceName ?? null,
         activeDeviceLocation: user.activeDeviceLocation ?? null,
@@ -768,15 +1011,36 @@ export const confirmLoginAlert = mutation({
     if (prevId && !ids.includes(prevId)) ids.push(prevId);
     if (newId && !ids.includes(newId)) ids.push(newId);
     // Both devices stay active — owner session stays primary so they never get kicked
+    const now = Date.now();
     await db.patch(user._id, {
       activeSessionId: prevId || newId,
       activeSessionIds: [...new Set(ids.filter(Boolean))],
-      activeDeviceAt: Date.now(),
+      activeDeviceAt: now,
       activeDeviceName: user.activeDeviceName || alert.deviceName,
       activeDeviceLocation: user.activeDeviceLocation || alert.location,
       activeDevicePlatform: user.activeDevicePlatform || alert.platform,
       loginAlert: { ...alert, status: "approved", resolved: true },
     } as any);
+    if (prevId) {
+      await upsertUserSession(db, {
+        userId: String(user._id),
+        sessionId: prevId,
+        deviceName: user.activeDeviceName || "This device",
+        location: user.activeDeviceLocation || "Unknown location",
+        platform: user.activeDevicePlatform,
+        now,
+      });
+    }
+    if (newId) {
+      await upsertUserSession(db, {
+        userId: String(user._id),
+        sessionId: newId,
+        deviceName: alert.deviceName || "Another device",
+        location: alert.location || "Unknown location",
+        platform: alert.platform,
+        now,
+      });
+    }
     return { success: true };
   },
 });

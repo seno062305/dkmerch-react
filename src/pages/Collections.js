@@ -105,7 +105,13 @@ const Collections = () => {
         known.find(g => g.toUpperCase() === String(filterGroup).trim().toUpperCase()) ||
         filterGroup;
       setSelectedGroup(matched);
-      if (scrollToTop) window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    if (scrollToTop || filterGroup) {
+      try { window.scrollTo({ top: 0, left: 0, behavior: 'auto' }); } catch { /* ignore */ }
+      try {
+        document.documentElement.scrollTop = 0;
+        document.body.scrollTop = 0;
+      } catch { /* ignore */ }
       window.history.replaceState({}, document.title);
     }
   }, [location.pathname, location.state, catalogGroups]);

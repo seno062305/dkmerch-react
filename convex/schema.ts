@@ -67,6 +67,20 @@ export default defineSchema({
     .index("by_email", ["email"])
     .index("by_username", ["username"]),
 
+  /** Per-device login sessions for "Where you're logged in". */
+  userSessions: defineTable({
+    userId: v.string(),
+    sessionId: v.string(),
+    deviceName: v.string(),
+    location: v.optional(v.string()),
+    platform: v.optional(v.string()),
+    createdAt: v.number(),
+    lastActiveAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_session", ["sessionId"])
+    .index("by_user_session", ["userId", "sessionId"]),
+
   pendingUsers: defineTable({
     name: v.string(),
     username: v.string(),

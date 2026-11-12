@@ -722,9 +722,11 @@ const TrackOrder = ({ onProductClick }) => {
   const { user, isAuthenticated } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const orderIdParam = searchParams.get('order') || searchParams.get('orderId') || searchParams.get('id');
+  const highlightParam = searchParams.get('highlight') === '1';
 
   const [filter,             setFilter]             = useState('active');
   const [selectedOrderId,    setSelectedOrderId]    = useState(null);
+  const [highlightOrderId,   setHighlightOrderId]   = useState(null);
   const [qrOrder,            setQrOrder]            = useState(null);
   const [trackingEmail,      setTrackingEmail]      = useState('');
   const [searchEmail,        setSearchEmail]        = useState('');
@@ -766,28 +768,47 @@ const TrackOrder = ({ onProductClick }) => {
     if (found) {
       openedFromUrlRef.current = orderIdParam;
       setSelectedOrderId(found._id);
+      if (highlightParam) setHighlightOrderId(found.orderId);
       return;
     }
     if (directOrder) {
       openedFromUrlRef.current = orderIdParam;
       setQrOrder(directOrder);
+      if (highlightParam) setHighlightOrderId(directOrder.orderId);
     }
-  }, [orderIdParam, orders, emailOrders, directOrder, selectedOrderId, qrOrder]);
+  }, [orderIdParam, orders, emailOrders, directOrder, selectedOrderId, qrOrder, highlightParam]);
+
+  useEffect(() => {
+    if (!highlightOrderId) return;
+    const t = setTimeout(() => {
+      try {
+        document
+          .querySelector(`[data-order-id="${CSS.escape(String(highlightOrderId))}"]`)
+          ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } catch { /* ignore */ }
+    }, 250);
+    const clear = setTimeout(() => setHighlightOrderId(null), 4500);
+    return () => {
+      clearTimeout(t);
+      clearTimeout(clear);
+    };
+  }, [highlightOrderId]);
 
   const handleCloseModal = useCallback(() => {
     setLightboxData(null);
     setSelectedOrderId(null);
     setQrOrder(null);
     // Clear ?order= so the reopen effect does not immediately pop the modal again
-    if (orderIdParam) {
+    if (orderIdParam || highlightParam) {
       openedFromUrlRef.current = orderIdParam; // block reopen until param is gone
       const next = new URLSearchParams(searchParams);
       next.delete('order');
       next.delete('orderId');
       next.delete('id');
+      next.delete('highlight');
       setSearchParams(next, { replace: true });
     }
-  }, [orderIdParam, searchParams, setSearchParams]);
+  }, [orderIdParam, highlightParam, searchParams, setSearchParams]);
   const handleOpenModal  = useCallback((order) => setSelectedOrderId(order._id), []);
   const getProductById   = useCallback((id) => products.find(p => p._id === id || p.id === id), [products]);
 
@@ -944,7 +965,7 @@ const TrackOrder = ({ onProductClick }) => {
   };
 
   // ─── ORDER CARD ────────────────────────────────────────────────────────────
-  const OrderCard = ({ order, onViewDetails, isGuest = false }) => {
+  const OrderCard = ({ order, onViewDetails, isGuest = false, highlighted = false }) => {
     const scrollRef = useRef(null);
     const [activeImgIdx,       setActiveImgIdx]       = useState(0);
     const [continuingPayment,  setContinuingPayment]  = useState(false);
@@ -978,7 +999,10 @@ const TrackOrder = ({ onProductClick }) => {
     };
 
     return (
-      <div className="order-card">
+      <div
+        className={`order-card${highlighted ? ' order-card--highlight' : ''}`}
+        data-order-id={order.orderId}
+      >
         <div className="order-card-img-wrap">
           <span className={`order-status-overlay ${getStatusClass(statusKey)}`}>{orderStatus}</span>
           {itemImages.length > 0 ? (
@@ -1188,7 +1212,15 @@ const TrackOrder = ({ onProductClick }) => {
                 )}
               </div>
             ) : (
-              <div className="orders-grid">{filteredOrders.map(order => <OrderCard key={order._id} order={order} onViewDetails={handleOpenModal} isGuest={false} />)}</div>
+              <div className="orders-grid">{filteredOrders.map(order => (
+                <OrderCard
+                  key={order._id}
+                  order={order}
+                  onViewDetails={handleOpenModal}
+                  isGuest={false}
+                  highlighted={highlightOrderId === order.orderId}
+                />
+              ))}</div>
             )}
           </section>
         </div>

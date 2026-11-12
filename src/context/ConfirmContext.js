@@ -8,12 +8,18 @@ const ConfirmContext = createContext(null);
  * favorites, add to cart, and buy now (all products).
  */
 export const SHOP_CONFIRM_SKIP_KEY = 'dk_skip_shop_action_confirm';
+export const PREORDER_CONFIRM_SKIP_KEY = 'dk_skip_preorder_confirm';
 /** @deprecated use SHOP_CONFIRM_SKIP_KEY — kept for older localStorage / imports */
 export const ADD_TO_CART_CONFIRM_SKIP_KEY = SHOP_CONFIRM_SKIP_KEY;
 
 /** Shared remember key for favorites / cart / buy now */
 export function shopActionConfirmRememberKey() {
   return SHOP_CONFIRM_SKIP_KEY;
+}
+
+/** Remember key for Place pre-order confirmation */
+export function preOrderConfirmRememberKey() {
+  return PREORDER_CONFIRM_SKIP_KEY;
 }
 
 /** @deprecated email arg ignored — skip is global for all shop confirms */

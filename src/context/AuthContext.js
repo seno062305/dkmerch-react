@@ -12,6 +12,7 @@ import {
 } from "../lib/deviceUnlock";
 import { readAuthGate, isAuthGateLocked, clearAuthGate } from "../lib/authGate";
 import { collectLoginDeviceInfo } from "../utils/deviceInfo";
+import { consumeKeepSessionAfterUpdate } from "../utils/appUpdate";
 import NewLoginAlertModal from "../components/NewLoginAlertModal";
 import { useNotification } from "./NotificationContext";
 
@@ -174,6 +175,8 @@ export const AuthProvider = ({ children }) => {
     const loggedOut = wasExplicitLogout();
     const gate = readAuthGate();
     const gateLocked = isAuthGateLocked(gate);
+    // App update reload — keep customer / admin / rider signed in (no PIN, no logout)
+    const keepAfterUpdate = consumeKeepSessionAfterUpdate();
 
     const restoreSession = (withPinGate = false) => {
       // Don't mark session alive yet when PIN is required — otherwise a soft
@@ -207,13 +210,6 @@ export const AuthProvider = ({ children }) => {
       return;
     }
 
-    // Only show PIN/reset UI again if THAT gate was open when they refreshed
-    if ((gate === "reset" || gate === "pin") && storedUser && !loggedOut) {
-      restoreSession(true);
-      setIsReady(true);
-      return;
-    }
-
     if (!storedUser || loggedOut) {
       if (loggedOut) {
         clearAuthUser();
@@ -223,6 +219,21 @@ export const AuthProvider = ({ children }) => {
       setRole(null);
       setIsAuthenticated(false);
       setNeedsDeviceUnlock(false);
+      setIsReady(true);
+      return;
+    }
+
+    // Just finished "Update now" → stay on account for every role
+    if (keepAfterUpdate && !loggedOut) {
+      try { clearAuthGate(); } catch { /* ignore */ }
+      restoreSession(false);
+      setIsReady(true);
+      return;
+    }
+
+    // Only show PIN/reset UI again if THAT gate was open when they refreshed
+    if ((gate === "reset" || gate === "pin") && storedUser && !loggedOut) {
+      restoreSession(true);
       setIsReady(true);
       return;
     }
@@ -254,6 +265,13 @@ export const AuthProvider = ({ children }) => {
 
     // Browser tab with stored auth but no unlock profile → stay logged in
     if (!pwa && !gateLocked) {
+      restoreSession(false);
+      setIsReady(true);
+      return;
+    }
+
+    // Rider (or any role) with stored auth after soft reload — stay signed in
+    if (storedUser.role === "rider" && !gateLocked) {
       restoreSession(false);
       setIsReady(true);
       return;
@@ -468,10 +486,13 @@ export const AuthProvider = ({ children }) => {
     return () => window.removeEventListener("dkOpenLoginAlert", bump);
   }, [pendingLoginAlert, pendingRiderLoginAlert]);
 
-  // Only sign out if THIS session was removed (true takeover) — never during Yes/No
+  // Only sign out if THIS session was removed (takeover / logout-all) — silent, no notice
   useEffect(() => {
     if (!sessionCheck || sessionCheck.valid !== false) return;
-    if (sessionCheck.reason !== "new_device_logged_in") return;
+    if (
+      sessionCheck.reason !== "new_device_logged_in"
+      && sessionCheck.reason !== "session_revoked"
+    ) return;
     if (holdLogoutConfirmRef.current) return;
     // Keep owner signed in while approving / blocking the other device
     if (securityAlert?.mode === "pending" || securityAlert?.mode === "approved") return;

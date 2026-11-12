@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useCollectionProducts } from '../utils/productStorage';
@@ -18,6 +18,7 @@ import {
   getProductNewAnchorMs,
   toPhtMs,
 } from '../utils/saleUtils';
+import { goToCustomerTab } from '../utils/navScroll';
 import './WeverseSection.css';
 
 const MAX_WISHLIST = 10;
@@ -30,6 +31,7 @@ const getReleaseMs = (product) => {
 
 const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { isAuthenticated } = useAuth();
   const { showNotification } = useNotification();
   const { confirm } = useConfirm();
@@ -328,7 +330,11 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
           </div>
 
           <div className="wv-see-all-row">
-            <button className="wv-see-all" onClick={() => navigate('/collections')}>
+            <button
+              type="button"
+              className="wv-see-all"
+              onClick={() => goToCustomerTab(navigate, location.pathname, '/collections')}
+            >
               See All Items
             </button>
           </div>

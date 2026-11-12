@@ -5,6 +5,7 @@ import { useMutation, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useNotification } from '../context/NotificationContext';
 import QuickSignInScannerModal from '../components/QuickSignInScannerModal';
+import LoggedInDevicesModal from '../components/LoggedInDevicesModal';
 import { useCloseOnHistoryBack } from '../hooks/useCloseOnHistoryBack';
 import './Settings.css';
 
@@ -352,6 +353,7 @@ const Settings = () => {
   const [showDeactModal,  setShowDeactModal]  = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showQuickSignIn, setShowQuickSignIn] = useState(false);
+  const [showDevicesModal, setShowDevicesModal] = useState(false);
 
   // ── Deactivation state ──
   const [deactStep,     setDeactStep]     = useState(1);
@@ -806,6 +808,21 @@ const Settings = () => {
                 </button>
               </div>
 
+              <div className="settings-acct-card settings-acct-card--devices">
+                <div className="settings-acct-card-icon"><i className="fas fa-laptop"></i></div>
+                <div className="settings-acct-card-info">
+                  <h4>Where you’re logged in</h4>
+                  <p>See every device using your account. Log out one device or all devices anytime.</p>
+                </div>
+                <button
+                  type="button"
+                  className="settings-acct-btn settings-acct-btn--devices"
+                  onClick={() => setShowDevicesModal(true)}
+                >
+                  View devices
+                </button>
+              </div>
+
               <div className="settings-acct-card settings-acct-card--warn">
                 <div className="settings-acct-card-icon"><i className="fas fa-pause-circle"></i></div>
                 <div className="settings-acct-card-info">
@@ -880,6 +897,18 @@ const Settings = () => {
               showNotification('Desktop login approved — that browser is signing in now.', 'success');
             }
             return result;
+          }}
+        />
+      )}
+
+      {showDevicesModal && (
+        <LoggedInDevicesModal
+          userId={user?._id || user?.id}
+          currentSessionId={user?.sessionId}
+          onClose={() => setShowDevicesModal(false)}
+          onLogoutCurrent={() => {
+            try { logout?.(); } catch { /* ignore */ }
+            navigate('/');
           }}
         />
       )}

@@ -7,6 +7,7 @@ import {
   dismissUpdatePrompt,
   isAppOutdated,
   isUpdatePromptDismissed,
+  markKeepSessionAfterUpdate,
   setInstalledAppVersion,
 } from '../utils/appUpdate';
 import './AppUpdateModal.css';
@@ -14,7 +15,7 @@ import './AppUpdateModal.css';
 /**
  * Soft prompt while browsing (close / Maybe later — persists across reloads).
  * Forced on checkout / payment and when opened from email (?appUpdate=).
- * Cart / wishlist live in Convex + localStorage — update never clears those.
+ * Cart / wishlist / auth live in Convex + localStorage — update never clears those.
  */
 const AppUpdateModal = ({ force = false }) => {
   const latest = useQuery(api.appUpdates.getLatestUpdate);
@@ -32,7 +33,9 @@ const AppUpdateModal = ({ force = false }) => {
     if (!latest?.isActive || !latest.version) return;
     const outdated = isAppOutdated(latest.version);
 
-    if (forcedVersion && forcedVersion === latest.version) {
+    // Opened from email / notification bell — always re-show update popup
+    if (forcedVersion && (forcedVersion === latest.version || forcedVersion === '1')) {
+      try { clearUpdatePromptDismiss(latest.version); } catch { /* ignore */ }
       setOpen(true);
       setPhase('prompt');
       return;
@@ -62,7 +65,9 @@ const AppUpdateModal = ({ force = false }) => {
 
   if (!open || !latest) return null;
 
-  const mustUpdate = onCheckout || !!(forcedVersion && forcedVersion === latest.version);
+  const mustUpdate =
+    onCheckout
+    || !!(forcedVersion && (forcedVersion === latest.version || forcedVersion === '1'));
 
   const dismiss = () => {
     if (mustUpdate || phase === 'loading' || phase === 'done') return;
@@ -75,6 +80,8 @@ const AppUpdateModal = ({ force = false }) => {
     // Mark version first so reload does not re-prompt; keep cart/local data intact
     setInstalledAppVersion(latest.version);
     clearUpdatePromptDismiss(latest.version);
+    // Keep customer / admin / rider signed in across reload + SW claim
+    markKeepSessionAfterUpdate();
 
     try {
       if (navigator.serviceWorker?.getRegistrations) {
@@ -92,6 +99,9 @@ const AppUpdateModal = ({ force = false }) => {
       }
     } catch { /* ignore */ }
 
+    // Re-stamp right before reload in case SW install cleared sessionStorage
+    markKeepSessionAfterUpdate();
+
     await new Promise((r) => setTimeout(r, 1200));
     setPhase('done');
 
@@ -101,6 +111,7 @@ const AppUpdateModal = ({ force = false }) => {
       next.delete('appUpdate');
       setSearchParams(next, { replace: true });
     }
+    markKeepSessionAfterUpdate();
     window.location.reload();
   };
 

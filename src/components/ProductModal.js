@@ -4,7 +4,7 @@ import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
-import { useConfirm, shopActionConfirmRememberKey } from '../context/ConfirmContext';
+import { useConfirm, shopActionConfirmRememberKey, preOrderConfirmRememberKey } from '../context/ConfirmContext';
 import { useNavigate } from 'react-router-dom';
 import PromoCodeInput from './PromoCodeInput';
 import { formatSaleEndLabel, formatSaleEndShort, formatSaleRange, shouldShowSaleBadge, shouldShowPreOrderBadge, hasDiscountedPrice } from '../utils/saleUtils';
@@ -374,6 +374,8 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
       confirmLabel: 'Pre-Order',
       variant: 'primary',
       icon: 'fa-clock',
+      rememberKey: preOrderConfirmRememberKey(),
+      rememberLabel: "Don't show again",
     });
     if (!ok) return;
     onAddToCart({ ...product, appliedPromo, finalPrice: discountedPrice });
