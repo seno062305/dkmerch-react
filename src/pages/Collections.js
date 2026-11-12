@@ -22,7 +22,6 @@ import {
 } from '../utils/saleUtils';
 import './Collections.css';
 
-const MAX_WISHLIST = 10;
 const PRODUCTS_PER_PAGE = 20;
 
 function buildShopPageList(page, totalPages) {
@@ -197,10 +196,6 @@ const Collections = () => {
       return;
     }
     const alreadyWishlisted = isWishlisted(product);
-    if (!alreadyWishlisted && wishlistItems.length >= MAX_WISHLIST) {
-      showNotification(`Favorites limit reached (max ${MAX_WISHLIST}). Remove an item first.`, 'error');
-      return;
-    }
     const ok = await confirm({
       title: alreadyWishlisted ? 'Remove favorite?' : 'Add to favorites?',
       message: alreadyWishlisted
@@ -228,10 +223,6 @@ const Collections = () => {
       return;
     }
     const alreadyWishlisted = isWishlisted(product);
-    if (!alreadyWishlisted && wishlistItems.length >= MAX_WISHLIST) {
-      showNotification(`Favorites full (max ${MAX_WISHLIST})`, 'error');
-      return;
-    }
     // Inside product modal: skip confirm + global toast (modal shows pill toast)
     if (!opts.silent) {
       const ok = await confirm({

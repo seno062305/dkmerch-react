@@ -21,7 +21,6 @@ import {
 import { goToCustomerTab } from '../utils/navScroll';
 import './WeverseSection.css';
 
-const MAX_WISHLIST = 10;
 
 const getReleaseMs = (product) => {
   if (product?.releasedAt) return Number(product.releasedAt);
@@ -107,10 +106,6 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
       return;
     }
     const alreadyWishlisted = isWishlisted(product);
-    if (!alreadyWishlisted && wishlistItems.length >= MAX_WISHLIST) {
-      showNotification(`Favorites limit reached (max ${MAX_WISHLIST}). Remove an item first.`, 'error');
-      return;
-    }
     const ok = await confirm({
       title: alreadyWishlisted ? 'Remove favorite?' : 'Add to favorites?',
       message: alreadyWishlisted

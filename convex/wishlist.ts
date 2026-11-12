@@ -2,8 +2,6 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 
-const MAX_WISHLIST = 10;
-
 // ── QUERIES ──────────────────────────────────────
 
 export const getWishlist = query({
@@ -51,16 +49,6 @@ export const toggleWishlist = mutation({
     if (existing) {
       await db.delete(existing._id);
       return { added: false };
-    }
-
-    // ✅ Check max limit before inserting
-    const currentItems = await db
-      .query("wishlist")
-      .withIndex("by_user", q => q.eq("userId", userId))
-      .collect();
-
-    if (currentItems.length >= MAX_WISHLIST) {
-      return { added: false, limitReached: true };
     }
 
     await db.insert("wishlist", { userId, productId, name, price, image });

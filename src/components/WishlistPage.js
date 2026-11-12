@@ -9,8 +9,6 @@ import { useProducts, usePreOrderProducts } from '../utils/productStorage';
 import { formatSaleEndLabel, formatSaleEndShort, shouldShowSaleBadge, shouldShowPreOrderBadge, hasDiscountedPrice } from '../utils/saleUtils';
 import { useCloseOnHistoryBack } from '../hooks/useCloseOnHistoryBack';
 
-const MAX_WISHLIST = 10;
-
 const WishlistPage = ({ onProductClick }) => {
   const navigate = useNavigate();
   const { showNotification } = useNotification();
@@ -64,8 +62,8 @@ const WishlistPage = ({ onProductClick }) => {
   const removeFromWishlist = useRemoveFromWishlist();
   const addToCart = useAddToCart();
 
-  // ✅ Convex already returns desc order (latest first) — just limit to 10
-  const displayItems = (wishlistItems || []).slice(0, MAX_WISHLIST).map(resolveLive);
+  // Convex already returns desc order (latest first)
+  const displayItems = (wishlistItems || []).map(resolveLive);
   const count = displayItems.length;
 
   const handleRemoveFromWishlist = async (productId, productName) => {
@@ -175,14 +173,6 @@ const WishlistPage = ({ onProductClick }) => {
               <div className="wishlist-count-bar">
                 <i className="fas fa-star" style={{ color: '#f5a623' }} aria-hidden="true"></i>
                 <span>{count} favorite{count !== 1 ? 's' : ''}</span>
-                <span className="wishlist-slot-indicator">
-                  <span className={`wishlist-slot-count ${count >= MAX_WISHLIST ? 'full' : ''}`}>
-                    {count}/{MAX_WISHLIST}
-                  </span>
-                  {count >= MAX_WISHLIST && (
-                    <span className="wishlist-slot-full-label">Limit reached</span>
-                  )}
-                </span>
               </div>
 
               <div className="wishlist-grid">
