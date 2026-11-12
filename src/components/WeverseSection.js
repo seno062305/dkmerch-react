@@ -40,8 +40,14 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
   const wishlistItems = useWishlist();
   const toggleWishlist = useToggleWishlist();
 
-  const isWishlisted = (productId) =>
-    wishlistItems.some((item) => item.productId === productId);
+  const isWishlisted = (productOrId) =>
+    wishlistItems.some((item) => {
+      if (productOrId && typeof productOrId === 'object') {
+        const ids = [productOrId._id, productOrId.id].map((x) => String(x || '').trim()).filter(Boolean);
+        return ids.includes(String(item.productId || '').trim());
+      }
+      return String(item.productId) === String(productOrId || '');
+    });
 
   const isPromoProduct = (product) => {
     if (!activePromo || !activePromo.isActive) return false;
@@ -100,8 +106,7 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
       window.dispatchEvent(new Event('openLoginModal'));
       return;
     }
-    const pid = product._id || product.id;
-    const alreadyWishlisted = isWishlisted(pid);
+    const alreadyWishlisted = isWishlisted(product);
     if (!alreadyWishlisted && wishlistItems.length >= MAX_WISHLIST) {
       showNotification(`Favorites limit reached (max ${MAX_WISHLIST}). Remove an item first.`, 'error');
       return;
@@ -118,7 +123,7 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
       rememberLabel: "Don't show again",
     });
     if (!ok) return;
-    toggleWishlist(product);
+    await toggleWishlist(product);
     showNotification(
       alreadyWishlisted
         ? `${product.name} removed from favorites!`
@@ -188,11 +193,11 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
         )}
 
         <button
-          className={`wv-card-fav ${isWishlisted(pid) ? 'active' : ''}`}
+          className={`wv-card-fav ${isWishlisted(product) ? 'active' : ''}`}
           onClick={(e) => handleWishlistClick(e, product)}
-          title={isWishlisted(pid) ? 'Remove from favorites' : 'Add to favorites'}
+          title={isWishlisted(product) ? 'Remove from favorites' : 'Add to favorites'}
         >
-          <i className={`fas fa-star ${isWishlisted(pid) ? 'filled' : ''}`} aria-hidden="true"></i>
+          <i className={`fas fa-star ${isWishlisted(product) ? 'filled' : ''}`} aria-hidden="true"></i>
         </button>
 
         <div className="wv-card-img">

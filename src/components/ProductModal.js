@@ -5,6 +5,7 @@ import { api } from '../../convex/_generated/api';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
 import { useConfirm, shopActionConfirmRememberKey, preOrderConfirmRememberKey } from '../context/ConfirmContext';
+import { useIsInWishlist } from '../context/wishlistUtils';
 import { useNavigate } from 'react-router-dom';
 import PromoCodeInput from './PromoCodeInput';
 import { formatSaleEndLabel, formatSaleEndShort, formatSaleRange, shouldShowSaleBadge, shouldShowPreOrderBadge, hasDiscountedPrice } from '../utils/saleUtils';
@@ -453,6 +454,8 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
     triggerCartToast();
   };
 
+  const isFavorited = useIsInWishlist(product);
+
   const handleWishlistClick = () => {
     if (!isAuthenticated) {
       requireLogin('Please login to add to favorites');
@@ -632,8 +635,15 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
                         <i className="fas fa-shopping-cart"></i>
                         <span>Pre-Order Now</span>
                       </button>
-                      <button type="button" className="btn-fav-outline" onClick={handleWishlistClick} title="Add to Favorites" aria-label="Add to favorites">
-                        <i className="fas fa-star" aria-hidden="true"></i>
+                      <button
+                        type="button"
+                        className={`btn-fav-outline${isFavorited ? ' is-active' : ''}`}
+                        onClick={handleWishlistClick}
+                        title={isFavorited ? 'Remove from Favorites' : 'Add to Favorites'}
+                        aria-label={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
+                        aria-pressed={isFavorited}
+                      >
+                        <i className={`fas fa-star${isFavorited ? ' filled' : ''}`} aria-hidden="true"></i>
                       </button>
                     </>
                   ) : (
@@ -648,8 +658,15 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
                           <span>Buy Now</span>
                         </button>
                       )}
-                      <button type="button" className="btn-fav-outline" onClick={handleWishlistClick} title="Add to Favorites" aria-label="Add to favorites">
-                        <i className="fas fa-star" aria-hidden="true"></i>
+                      <button
+                        type="button"
+                        className={`btn-fav-outline${isFavorited ? ' is-active' : ''}`}
+                        onClick={handleWishlistClick}
+                        title={isFavorited ? 'Remove from Favorites' : 'Add to Favorites'}
+                        aria-label={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
+                        aria-pressed={isFavorited}
+                      >
+                        <i className={`fas fa-star${isFavorited ? ' filled' : ''}`} aria-hidden="true"></i>
                       </button>
                     </>
                   )}

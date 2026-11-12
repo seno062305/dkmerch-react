@@ -4,7 +4,7 @@ import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useCatalogOptions } from '../hooks/useCatalogOptions';
 import { useAddToCart } from '../context/cartUtils';
-import { useWishlist, useToggleWishlist } from '../context/wishlistUtils';
+import { useWishlist, useToggleWishlist, wishlistHasProduct } from '../context/wishlistUtils';
 import { useNotification } from '../context/NotificationContext';
 import { useConfirm, shopActionConfirmRememberKey } from '../context/ConfirmContext';
 import { useAuth } from '../context/AuthContext';
@@ -77,8 +77,7 @@ const Collections = () => {
   const activePromos           = useQuery(api.promos.getActivePromos) || [];
   const activePromo            = activePromos[0] || null;
 
-  const isWishlisted = (productId) =>
-    wishlistItems.some(item => item.productId === productId);
+  const isWishlisted = (productOrId) => wishlistHasProduct(wishlistItems, productOrId);
 
   const isPromoProduct = (product) => {
     if (!activePromo || !activePromo.isActive) return false;
@@ -197,8 +196,7 @@ const Collections = () => {
       window.dispatchEvent(new Event('openLoginModal'));
       return;
     }
-    const pid = product._id || product.id;
-    const alreadyWishlisted = isWishlisted(pid);
+    const alreadyWishlisted = isWishlisted(product);
     if (!alreadyWishlisted && wishlistItems.length >= MAX_WISHLIST) {
       showNotification(`Favorites limit reached (max ${MAX_WISHLIST}). Remove an item first.`, 'error');
       return;
@@ -215,7 +213,7 @@ const Collections = () => {
       rememberLabel: "Don't show again",
     });
     if (!ok) return;
-    toggleWishlistMutation(product);
+    await toggleWishlistMutation(product);
     showNotification(
       alreadyWishlisted ? `${product.name} removed from favorites!` : `${product.name} added to favorites!`,
       'success'
@@ -229,8 +227,7 @@ const Collections = () => {
       window.dispatchEvent(new Event('openLoginModal'));
       return;
     }
-    const pid = product._id || product.id;
-    const alreadyWishlisted = isWishlisted(pid);
+    const alreadyWishlisted = isWishlisted(product);
     if (!alreadyWishlisted && wishlistItems.length >= MAX_WISHLIST) {
       showNotification(`Favorites limit reached (max ${MAX_WISHLIST}). Remove an item first.`, 'error');
       return;
@@ -247,7 +244,7 @@ const Collections = () => {
       rememberLabel: "Don't show again",
     });
     if (!ok) return;
-    toggleWishlistMutation(product);
+    await toggleWishlistMutation(product);
     showNotification(
       alreadyWishlisted ? `${product.name} removed from favorites!` : `${product.name} added to favorites!`,
       'success'
@@ -381,7 +378,7 @@ const Collections = () => {
           {pagedProducts.map(product => {
             const pid      = product._id || product.id;
             const hasPromo = isPromoProduct(product);
-            const wishlisted = isWishlisted(pid);
+            const wishlisted = isWishlisted(product);
 
             const stockQty = Number(product.stock ?? 0);
             const isOutOfStock = stockQty <= 0;

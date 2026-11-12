@@ -7,7 +7,7 @@ import LogoMarquee from '../components/LogoMarquee';
 import WeverseSection from '../components/WeverseSection';
 import ProductModal from '../components/ProductModal';
 import { useAddToCart } from '../context/cartUtils';
-import { useToggleWishlist, useWishlist } from '../context/wishlistUtils';
+import { useToggleWishlist, useWishlist, wishlistHasProduct } from '../context/wishlistUtils';
 import { useNotification } from '../context/NotificationContext';
 import { useConfirm, shopActionConfirmRememberKey } from '../context/ConfirmContext';
 import { useAuth } from '../context/AuthContext';
@@ -207,8 +207,7 @@ const Home = () => {
     }, 600);
   }, [allPromos, location.search]);
 
-  const isWishlisted = (productId) =>
-    wishlistItems.some(item => item.productId === productId);
+  const isWishlisted = (productOrId) => wishlistHasProduct(wishlistItems, productOrId);
 
   const staticSlides = [
     {
@@ -278,8 +277,7 @@ const Home = () => {
       window.dispatchEvent(new Event('openLoginModal'));
       return;
     }
-    const pid = product._id || product.id;
-    const alreadyWishlisted = isWishlisted(pid);
+    const alreadyWishlisted = isWishlisted(product);
     const ok = await confirm({
       title: alreadyWishlisted ? 'Remove favorite?' : 'Add to favorites?',
       message: alreadyWishlisted
@@ -292,7 +290,7 @@ const Home = () => {
       rememberLabel: "Don't show again",
     });
     if (!ok) return;
-    toggleWishlistMutation(product);
+    await toggleWishlistMutation(product);
     showNotification(
       alreadyWishlisted
         ? `${product.name} removed from wishlist!`

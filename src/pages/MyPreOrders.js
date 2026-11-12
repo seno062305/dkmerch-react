@@ -304,14 +304,15 @@ const PreOrderCard = ({ req, loadingId, removingId, onAddToCart, onRemove, fmt12
 
   return (
     <div className={`mpo-card mpo-card--${status}`}>
-      <div className={`mpo-status-badge mpo-status-badge--${status}`}>
-        {status === 'available' && <><span className="mpo-pulse"></span> Available Now!</>}
-        {status === 'upcoming'  && <><i className="fas fa-clock"></i> Upcoming</>}
-        {status === 'added'     && <><i className="fas fa-check"></i> Added to Cart</>}
-      </div>
-
-      <div className="mpo-card-image">
-        <img src={req.productImage} alt={req.productName} />
+      <div className="mpo-card-media">
+        <div className={`mpo-status-badge mpo-status-badge--${status}`}>
+          {status === 'available' && <><span className="mpo-pulse"></span> Available Now!</>}
+          {status === 'upcoming'  && <><i className="fas fa-clock"></i> Upcoming</>}
+          {status === 'added'     && <><i className="fas fa-check"></i> Added to Cart</>}
+        </div>
+        <div className="mpo-card-image">
+          <img src={req.productImage} alt={req.productName} decoding="async" />
+        </div>
       </div>
 
       <div className="mpo-card-info">

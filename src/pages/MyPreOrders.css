@@ -196,11 +196,19 @@
   opacity: 0.82;
 }
 
+/* ── Media (image + badge) ── */
+.mpo-card-media {
+  position: relative;
+  flex-shrink: 0;
+  width: 100%;
+}
+
 /* ── Status Badge ── */
 .mpo-status-badge {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: 10px;
+  left: 10px;
+  right: auto;
   font-size: 11px;
   font-weight: 700;
   padding: 5px 10px;
@@ -211,6 +219,7 @@
   z-index: 5;
   text-transform: uppercase;
   letter-spacing: 0.3px;
+  pointer-events: none;
 }
 
 .mpo-status-badge--upcoming {
@@ -244,24 +253,26 @@
 .mpo-card-image {
   width: 100%;
   aspect-ratio: 1 / 1;
-  background: #f8f9fa;
+  background: #f3f4f6;
   overflow: hidden;
-  padding: 20px;
+  padding: 0;
   box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: block;
   flex-shrink: 0;
+  line-height: 0;
 }
 
 .mpo-card-image img {
   width: 100%;
   height: 100%;
-  object-fit: contain;
-  transition: transform 0.3s ease;
+  object-fit: cover;
+  object-position: center center;
+  display: block;
+  transform: none !important;
+  image-orientation: from-image;
 }
 
-.mpo-card:hover .mpo-card-image img { transform: scale(1.04); }
+.mpo-card:hover .mpo-card-image img { transform: none !important; }
 
 /* ── Card Info ── */
 .mpo-card-info {
@@ -480,40 +491,47 @@
   }
   .mpo-card {
     flex-direction: row;
-    align-items: flex-start;
+    align-items: stretch;
     border-radius: 12px;
     min-height: 0;
   }
   .mpo-card:hover { transform: none; }
-  .mpo-card-image {
-    width: 92px;
-    min-width: 92px;
-    height: 92px;
-    max-height: 92px;
-    aspect-ratio: 1 / 1;
-    padding: 6px;
+  .mpo-card-media {
+    width: 104px;
+    min-width: 104px;
+    max-width: 104px;
     margin: 10px 0 10px 10px;
-    flex-shrink: 0;
     align-self: center;
     border-radius: 10px;
-    box-sizing: border-box;
+    overflow: hidden;
+    background: #f3f4f6;
+  }
+  .mpo-card-image {
+    width: 104px;
+    min-width: 104px;
+    height: 104px;
+    max-height: 104px;
+    aspect-ratio: 1 / 1;
+    padding: 0;
+    margin: 0;
+    border-radius: 0;
   }
   .mpo-card-image img {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    object-position: center;
-    display: block;
+    width: 104px;
+    height: 104px;
+    object-fit: cover;
+    object-position: center center;
+    transform: none !important;
   }
-  .mpo-card-info { padding: 10px 10px 10px 8px; gap: 4px; min-width: 0; flex: 1; }
+  .mpo-card-info { padding: 10px 10px 10px 10px; gap: 4px; min-width: 0; flex: 1; }
   .mpo-card-name { font-size: 13px; -webkit-line-clamp: 2; }
   .mpo-card-price { font-size: 14px; }
   .mpo-status-badge {
-    position: static;
-    align-self: flex-start;
+    position: absolute;
+    top: 6px;
+    left: 6px;
     font-size: 9px;
     padding: 3px 7px;
-    margin-bottom: 2px;
   }
   .mpo-release-badge { font-size: 11px; padding: 5px 8px; }
   .mpo-card-meta { font-size: 11px; }
@@ -533,13 +551,18 @@
   .mpo-stat-num { font-size: 15px; }
   .mpo-stat-label { font-size: 8px; }
   .mpo-empty-state { padding: 40px 14px; }
-  .mpo-card-image {
-    width: 80px;
-    min-width: 80px;
-    height: 80px;
-    max-height: 80px;
-    padding: 5px;
+  .mpo-card-media {
+    width: 88px;
+    min-width: 88px;
+    max-width: 88px;
     margin: 8px 0 8px 8px;
+  }
+  .mpo-card-image,
+  .mpo-card-image img {
+    width: 88px;
+    min-width: 88px;
+    height: 88px;
+    max-height: 88px;
   }
   .mpo-tab { font-size: 10px; padding: 7px 2px; }
   .mpo-card-name { font-size: 12px; }
