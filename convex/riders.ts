@@ -669,6 +669,7 @@ export const loginRider = mutation({
           title: "New login to your DKMerch rider account",
           body: `${deviceName} · ${location}. Confirm if this was you.`,
           url: "/rider?open=loginAlert",
+          role: "rider",
         });
       } catch { /* push optional */ }
     }
@@ -872,6 +873,7 @@ export const denyRiderLoginAlert = mutation({
           title: "Login blocked",
           body: "A rider login attempt was denied. If this wasn't you, change your password.",
           url: "/rider",
+          role: "rider",
         });
       } catch { /* optional */ }
     }

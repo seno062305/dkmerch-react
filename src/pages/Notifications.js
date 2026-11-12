@@ -14,6 +14,16 @@ const Notifications = () => {
 
   useEffect(() => {
     scrollPageToTop({ smooth: false });
+    // Ensure page can scroll on mobile (clear leftover modal lock classes)
+    try {
+      document.documentElement.classList.remove('dk-scroll-locked');
+      document.body.classList.remove('dk-scroll-locked', 'product-modal-open', 'cart-modal-open');
+      document.body.style.removeProperty('top');
+      document.body.style.removeProperty('position');
+      document.body.style.removeProperty('width');
+      document.body.style.overflow = '';
+      document.body.style.touchAction = '';
+    } catch { /* ignore */ }
   }, []);
 
   useEffect(() => {

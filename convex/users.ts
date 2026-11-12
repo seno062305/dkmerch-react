@@ -565,6 +565,7 @@ export const startUserSession = mutation({
           body: `${deviceName} · ${location}. Confirm if this was you.`,
           // Path-only so the installed PWA opens (not a fresh browser tab)
           url: "/?open=loginAlert",
+          role: "user",
         });
       } catch { /* push optional */ }
     }
@@ -1120,6 +1121,7 @@ export const confirmLoginAlert = mutation({
           title: "Account opened on another device",
           body: `${alert.deviceName || "Another device"}${alert.location ? ` · ${alert.location}` : ""}.`,
           url: "/",
+          role: "user",
         });
       } catch { /* optional */ }
     }
@@ -1166,6 +1168,7 @@ export const denyLoginAlert = mutation({
           title: "Login blocked",
           body: "A login attempt was denied. If this wasn't you, change your password.",
           url: "/",
+          role: "user",
         });
       } catch { /* optional */ }
     }

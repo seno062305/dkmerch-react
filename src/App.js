@@ -277,15 +277,16 @@ function AppContent() {
         if (u.origin !== window.location.origin) return;
         const open = u.searchParams.get('open') || '';
         if (open === 'loginAlert') {
-          // Mark for AuthContext — popup shows after PIN unlock (not on PIN page)
+          const riderAlert = u.pathname.startsWith('/rider');
+          // Same email can be customer + rider — don't cross-open the wrong app's Yes/No
+          if (role === 'rider' && !riderAlert) return;
+          if ((role === 'user' || role === 'admin') && riderAlert) return;
           try { sessionStorage.setItem('dkmerch_open_login_alert', '1'); } catch { /* ignore */ }
           window.dispatchEvent(new Event('dkOpenLoginAlert'));
-          // Prefer home so after unlock the Yes/No modal is visible
-          const target = `/?open=loginAlert${u.hash || ''}`;
-          if (`${location.pathname}${location.search}` !== '/?open=loginAlert'
-            && location.pathname !== '/') {
-            navigate(target, { replace: true });
-          } else if (location.pathname === '/' && !location.search.includes('open=loginAlert')) {
+          const target = riderAlert
+            ? `/rider?open=loginAlert${u.hash || ''}`
+            : `/?open=loginAlert${u.hash || ''}`;
+          if (`${location.pathname}${location.search}` !== target) {
             navigate(target, { replace: true });
           }
           return;
@@ -299,9 +300,17 @@ function AppContent() {
 
     // Cold start / hard open from notification
     try {
-      if (new URLSearchParams(window.location.search).get('open') === 'loginAlert') {
-        sessionStorage.setItem('dkmerch_open_login_alert', '1');
-        window.dispatchEvent(new Event('dkOpenLoginAlert'));
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('open') === 'loginAlert') {
+        const riderPath = window.location.pathname.startsWith('/rider');
+        if (role === 'rider' && !riderPath) {
+          /* customer alert — ignore on rider session */
+        } else if ((role === 'user' || role === 'admin') && riderPath) {
+          /* rider alert — ignore on customer session */
+        } else {
+          sessionStorage.setItem('dkmerch_open_login_alert', '1');
+          window.dispatchEvent(new Event('dkOpenLoginAlert'));
+        }
       }
     } catch { /* ignore */ }
 
@@ -323,7 +332,7 @@ function AppContent() {
         navigator.serviceWorker.removeEventListener('message', onSwMessage);
       }
     };
-  }, [navigate, location.pathname]);
+  }, [navigate, location.pathname, role]);
 
   // Keep / request push subscription for logged-in customers (needed for phone order alerts)
   useEffect(() => {
@@ -348,6 +357,36 @@ function AppContent() {
           p256dh: sub.keys.p256dh,
           auth: sub.keys.auth,
           userAgent: navigator.userAgent,
+          role: 'user',
+        });
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [isAuthenticated, user?.email, role, savePushSub]);
+
+  // Rider push — separate role so customer login alerts never hit the rider app (same email OK)
+  useEffect(() => {
+    if (!isAuthenticated || !user?.email || role !== 'rider') return;
+    if (!isPushSupported()) return;
+    const permission = getNotificationPermission();
+    if (permission === 'denied') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        if (permission !== 'granted') {
+          const asked = sessionStorage.getItem('dkmerch_rider_push_asked') === '1';
+          if (asked) return;
+          sessionStorage.setItem('dkmerch_rider_push_asked', '1');
+        }
+        const sub = await subscribeToPush();
+        if (cancelled || !sub?.endpoint || !sub?.keys) return;
+        await savePushSub({
+          email: user.email,
+          endpoint: sub.endpoint,
+          p256dh: sub.keys.p256dh,
+          auth: sub.keys.auth,
+          userAgent: navigator.userAgent,
+          role: 'rider',
         });
       } catch { /* ignore */ }
     })();

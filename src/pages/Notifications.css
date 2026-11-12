@@ -1,14 +1,21 @@
 .notif-page {
   min-height: calc(100dvh - 120px);
+  max-height: none;
   padding: 16px 14px 96px;
   background:
     radial-gradient(ellipse at top, #fff0f6 0%, transparent 55%),
     #f8fafc;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
 }
 
 .notif-page-inner {
   max-width: 560px;
   margin: 0 auto;
+  min-height: 0;
 }
 
 .notif-page-top {
@@ -42,13 +49,18 @@
   border-radius: 14px;
   border: 1px solid rgba(66, 1, 30, 0.08);
   box-shadow: 0 10px 28px rgba(66, 1, 30, 0.08);
-  overflow: hidden;
+  /* Let the page scroll — don't trap touch inside a clipped panel */
+  overflow: visible;
   max-height: none;
+  display: block;
 }
 
 .notif-page .cust-bell-list {
-  max-height: none;
+  max-height: none !important;
   min-height: 240px;
+  overflow: visible !important;
+  flex: none;
+  touch-action: pan-y;
 }
 
 @media (min-width: 769px) {

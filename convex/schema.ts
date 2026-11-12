@@ -619,6 +619,8 @@ export default defineSchema({
     p256dh: v.string(),
     auth: v.string(),
     userAgent: v.optional(v.string()),
+    /** user | rider | admin — keep customer vs rider login alerts separate (same email OK). */
+    role: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

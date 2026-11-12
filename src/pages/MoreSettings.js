@@ -40,7 +40,7 @@ const LINKS = [
 ];
 
 const MoreSettings = () => {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, role } = useAuth();
   const { showNotification } = useNotification();
   const savePushSub = useMutation(api.pushSubscriptions.saveSubscription);
   const [pushBusy, setPushBusy] = useState(false);
@@ -64,6 +64,7 @@ const MoreSettings = () => {
         p256dh: sub.keys.p256dh,
         auth: sub.keys.auth,
         userAgent: navigator.userAgent,
+        role: role === 'rider' ? 'rider' : 'user',
       });
       setPushStatus('granted');
       showNotification('Phone notifications enabled for DKMerch.', 'success');

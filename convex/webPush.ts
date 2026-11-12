@@ -23,13 +23,15 @@ function configureVapid() {
   webpush.setVapidDetails(subject, publicKey, privateKey);
 }
 
-/** Send a system notification to all devices subscribed for this customer email. */
+/** Send a system notification to devices subscribed for this email (+ optional role). */
 export const sendToEmail = internalAction({
   args: {
     email: v.string(),
     title: v.string(),
     body: v.string(),
     url: v.optional(v.string()),
+    /** user | rider | admin — keep same-email customer/rider alerts separate */
+    role: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<{ success: boolean; sent: number }> => {
     const email = String(args.email || "").trim().toLowerCase();
@@ -44,6 +46,7 @@ export const sendToEmail = internalAction({
 
     const subs: any[] = await ctx.runQuery(internal.pushSubscriptions.listByEmailInternal, {
       email,
+      role: args.role ? String(args.role).trim().toLowerCase() : undefined,
     });
     if (!subs?.length) return { success: true, sent: 0 };
 

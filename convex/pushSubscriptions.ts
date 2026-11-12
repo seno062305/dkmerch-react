@@ -10,10 +10,12 @@ export const saveSubscription = mutation({
     p256dh: v.string(),
     auth: v.string(),
     userAgent: v.optional(v.string()),
+    role: v.optional(v.string()),
   },
   handler: async ({ db }, args) => {
     const email = normalizeEmail(args.email);
     const endpoint = String(args.endpoint || "").trim();
+    const role = String(args.role || "user").trim().toLowerCase() || "user";
     if (!email || !endpoint || !args.p256dh || !args.auth) {
       return { success: false, message: "Invalid subscription." };
     }
@@ -28,6 +30,7 @@ export const saveSubscription = mutation({
         p256dh: args.p256dh,
         auth: args.auth,
         userAgent: args.userAgent || existing.userAgent,
+        role,
         updatedAt: now,
       });
       return { success: true, id: existing._id };
@@ -38,6 +41,7 @@ export const saveSubscription = mutation({
       p256dh: args.p256dh,
       auth: args.auth,
       userAgent: args.userAgent || "",
+      role,
       createdAt: now,
       updatedAt: now,
     });
@@ -75,11 +79,21 @@ export const getByEmail = query({
 });
 
 export const listByEmailInternal = internalQuery({
-  args: { email: v.string() },
-  handler: async ({ db }, { email }) => {
-    return await db
+  args: {
+    email: v.string(),
+    /** When set, only subscriptions for this role (user/rider/admin). */
+    role: v.optional(v.string()),
+  },
+  handler: async ({ db }, { email, role }) => {
+    const rows = await db
       .query("pushSubscriptions")
       .withIndex("by_email", (q) => q.eq("email", normalizeEmail(email)))
       .collect();
+    const want = String(role || "").trim().toLowerCase();
+    if (!want) return rows;
+    return rows.filter((r: any) => {
+      const rRole = String(r.role || "user").trim().toLowerCase();
+      return rRole === want;
+    });
   },
 });

@@ -310,7 +310,7 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
                 <span>Cart</span>
               </button>
 
-              {isAuthenticated && user?.email && (
+              {isAuthenticated && user?.email && user?.role !== 'rider' && (
                 <CustomerNotificationBell email={user.email} />
               )}
 

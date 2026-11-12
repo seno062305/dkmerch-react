@@ -444,7 +444,13 @@ export const AuthProvider = ({ children }) => {
     // Query still loading — don't clear / skip the notice
     if (customerLoading || riderLoading) return;
 
-    const pending = pendingLoginAlert || pendingRiderLoginAlert || null;
+    // Strict role split — same email must not show customer alerts on rider (or vice versa)
+    const pending =
+      current?.role === "rider"
+        ? (pendingRiderLoginAlert || null)
+        : (current?.role === "user" || current?.role === "admin")
+          ? (pendingLoginAlert || null)
+          : null;
     if (!pending) {
       // Don't wipe a held confirmation (approved/denied local UI); only clear live pending
       setSecurityAlert((prev) => (prev?.mode === "pending" ? null : prev));
@@ -485,10 +491,15 @@ export const AuthProvider = ({ children }) => {
 
   // Fan-out toast on ALL devices when account is requested / opened / blocked
   useEffect(() => {
-    const broadcast = loginBroadcast || riderLoginBroadcast || null;
-    if (!broadcast?.kind || !broadcast?.at) return;
     const current = userRef.current;
     if (!current || !isAuthenticated) return;
+    const broadcast =
+      current.role === "rider"
+        ? (riderLoginBroadcast || null)
+        : (current.role === "user" || current.role === "admin")
+          ? (loginBroadcast || null)
+          : null;
+    if (!broadcast?.kind || !broadcast?.at) return;
     // Waiting new device already has its own pending-approval UI
     if (String(current.sessionId || "") === String(broadcast.sessionId || "")) return;
 
@@ -529,7 +540,12 @@ export const AuthProvider = ({ children }) => {
     const bump = () => {
       try { sessionStorage.setItem("dkmerch_open_login_alert", "1"); } catch { /* ignore */ }
       const current = userRef.current;
-      const pending = pendingLoginAlert || pendingRiderLoginAlert;
+      const pending =
+        current?.role === "rider"
+          ? (pendingRiderLoginAlert || null)
+          : (current?.role === "user" || current?.role === "admin")
+            ? (pendingLoginAlert || null)
+            : null;
       if (!current || !pending) return;
       if (holdLogoutConfirmRef.current) return;
       try { clearAuthGate(); } catch { /* ignore */ }
