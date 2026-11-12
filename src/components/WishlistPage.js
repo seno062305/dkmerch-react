@@ -228,6 +228,9 @@ const WishlistPage = ({ onProductClick }) => {
                     </div>
 
                     <div className="wishlist-card-info">
+                      {(item.kpopGroup || item.group) && (
+                        <div className="wishlist-card-group">{item.kpopGroup || item.group}</div>
+                      )}
                       <p className="wishlist-card-name">{item.name}</p>
                       <div className="wishlist-card-price-row">
                         <span className={`wishlist-card-price${showSale ? ' sale' : ''}`}>
@@ -240,6 +243,7 @@ const WishlistPage = ({ onProductClick }) => {
                         )}
                       </div>
                       <p className={`wishlist-stock-line ${oos ? 'out' : ''}`}>
+                        <i className={`fas ${oos ? 'fa-box-open' : 'fa-gift'}`} aria-hidden="true"></i>
                         {oos ? 'Out of stock' : `${item.stock} in stock`}
                       </p>
                       <div className="wishlist-card-actions">
@@ -259,14 +263,14 @@ const WishlistPage = ({ onProductClick }) => {
                         >
                           <i className="fas fa-bolt"></i> Buy Now
                         </button>
+                        <button
+                          type="button"
+                          className="wishlist-remove-btn"
+                          onClick={(e) => { e.stopPropagation(); handleRemoveFromWishlist(item.productId, item.name); }}
+                        >
+                          <i className="fas fa-trash-alt"></i> Remove
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        className="wishlist-remove-btn"
-                        onClick={(e) => { e.stopPropagation(); handleRemoveFromWishlist(item.productId, item.name); }}
-                      >
-                        <i className="fas fa-trash-alt"></i> Remove
-                      </button>
                     </div>
                   </div>
                   );
