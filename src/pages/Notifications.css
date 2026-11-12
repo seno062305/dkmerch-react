@@ -1,0 +1,58 @@
+.notif-page {
+  min-height: calc(100dvh - 120px);
+  padding: 16px 14px 96px;
+  background:
+    radial-gradient(ellipse at top, #fff0f6 0%, transparent 55%),
+    #f8fafc;
+}
+
+.notif-page-inner {
+  max-width: 560px;
+  margin: 0 auto;
+}
+
+.notif-page-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.notif-page-top h1 {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #42011e;
+}
+
+.notif-page-back {
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #475569;
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.notif-page .cust-bell-panel--page {
+  background: #fff;
+  border-radius: 14px;
+  border: 1px solid rgba(66, 1, 30, 0.08);
+  box-shadow: 0 10px 28px rgba(66, 1, 30, 0.08);
+  overflow: hidden;
+  max-height: none;
+}
+
+.notif-page .cust-bell-list {
+  max-height: none;
+  min-height: 240px;
+}
+
+@media (min-width: 769px) {
+  .notif-page {
+    padding-top: 28px;
+  }
+}

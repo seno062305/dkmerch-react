@@ -6,7 +6,6 @@ import { api } from '../../convex/_generated/api';
 import { useUserOrders, useOrdersByEmail } from '../utils/orderStorage';
 import { useProducts, usePreOrderProducts } from '../utils/productStorage';
 import { isLbcOrder, openLbcTracker, LBC_TRACK_URL } from '../utils/deliveryUtils';
-import DkIcon, { DK_ICONS } from '../components/DkIcon';
 import { useNotification } from '../context/NotificationContext';
 import DeliveryChatPanel from '../components/DeliveryChatPanel';
 import { useCloseOnHistoryBack } from '../hooks/useCloseOnHistoryBack';
@@ -14,15 +13,17 @@ import { createPortal } from 'react-dom';
 import { formatOrderShortId } from '../utils/orderId';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
 import { getOverlayRoot } from '../utils/scrollLock';
+import { validateImageFile, IMAGE_ACCEPT_NO_GIF } from '../utils/imageUpload';
 import './TrackOrder.css';
 
-/** Cancel request allowed only before admin confirms the order. */
+/** Cancel allowed on Active orders until rider pickup / out for delivery. */
 const canCustomerCancelOrder = (order) => {
   if (!order) return false;
-  const status = String(order.orderStatus || order.status || '').toLowerCase();
-  if (status === 'cancelled') return false;
+  const status = String(order.orderStatus || order.status || '').toLowerCase().replace(/\s+/g, '_');
   if (order.cancelRequestStatus === 'requested') return false;
-  if (status && status !== 'pending' && status !== 'pending payment') return false;
+  if (['cancelled', 'delivered', 'completed', 'out_for_delivery', 'shipped', 'in_transit'].includes(status)) {
+    return false;
+  }
   if (order.riderId || order.riderInfo) return false;
   return true;
 };
@@ -292,8 +293,8 @@ const RefundModal = ({ order, onClose, onSuccess }) => {
   const handlePhotoChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) { setError('Please upload an image file.'); return; }
-    if (file.size > 5 * 1024 * 1024) { setError('Image must be less than 5MB.'); return; }
+    const check = validateImageFile(file);
+    if (!check.ok) { setError(check.error); e.target.value = ''; return; }
     setError(''); setPhoto(file); setPhotoPreview(URL.createObjectURL(file));
   };
 
@@ -359,7 +360,7 @@ const RefundModal = ({ order, onClose, onSuccess }) => {
           <div className="refund-field-group">
             <label className="refund-modal-label"><i className="fas fa-camera"></i> Photo Proof <span className="refund-required">*</span></label>
             {!photoPreview
-              ? <div className="refund-photo-upload-area" onClick={() => fileInputRef.current?.click()}><i className="fas fa-cloud-upload-alt"></i><p>Click to upload</p><small>JPG, PNG · Max 5MB</small><input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePhotoChange} /></div>
+              ? <div className="refund-photo-upload-area" onClick={() => fileInputRef.current?.click()}><i className="fas fa-cloud-upload-alt"></i><p>Click to upload</p><small>JPG, PNG · Max 5MB · No GIF</small><input ref={fileInputRef} type="file" accept={IMAGE_ACCEPT_NO_GIF} style={{ display: 'none' }} onChange={handlePhotoChange} /></div>
               : <div className="refund-photo-preview-wrap"><img src={photoPreview} alt="Damage proof" className="refund-photo-preview" /><button className="refund-photo-remove" onClick={removePhoto} type="button"><i className="fas fa-trash-alt"></i> Remove</button></div>}
           </div>
           <div className="refund-field-group">
@@ -732,7 +733,6 @@ const TrackOrder = ({ onProductClick }) => {
   const [searchEmail,        setSearchEmail]        = useState('');
   const [showTrackedOrders,  setShowTrackedOrders]  = useState(false);
   const [lightboxData,       setLightboxData]       = useState(null);
-  const [removeConfirm,      setRemoveConfirm]      = useState(null);
   const [refundOrder,        setRefundOrder]        = useState(null);
   const [refundSuccess,      setRefundSuccess]      = useState(false);
   const [cancelOrder,        setCancelOrder]        = useState(null);
@@ -871,17 +871,9 @@ const TrackOrder = ({ onProductClick }) => {
     ];
   };
 
-  const handleRemoveOrder = (orderId) => {
-    const updated = [...hiddenOrders, orderId];
-    setHiddenOrders(updated);
-    localStorage.setItem('hiddenDeliveredOrders', JSON.stringify(updated));
-    setRemoveConfirm(null);
-  };
-
   const openLightbox  = (images, startIndex = 0) => setLightboxData({ images, index: startIndex });
   const closeLightbox = useCallback(() => setLightboxData(null), []);
   useCloseOnHistoryBack(!!lightboxData, closeLightbox, 'orderLightbox');
-  useCloseOnHistoryBack(!!removeConfirm, () => setRemoveConfirm(null), 'removeOrderConfirm');
   const lightboxNext  = () => setLightboxData(prev => ({ ...prev, index: (prev.index + 1) % prev.images.length }));
   const lightboxPrev  = () => setLightboxData(prev => ({ ...prev, index: (prev.index - 1 + prev.images.length) % prev.images.length }));
   const sortByNewest  = (arr) => [...arr].sort((a, b) => (b._creationTime || 0) - (a._creationTime || 0));
@@ -898,9 +890,9 @@ const TrackOrder = ({ onProductClick }) => {
   });
 
   const FILTERS = [
-    { key: 'active',    icon: 'fa-box',           dkIcon: DK_ICONS.shoppingBag, label: 'Active',     count: activeOrders.length,    desc: 'Active & ongoing orders' },
-    { key: 'delivered', icon: 'fa-check-double',  dkIcon: DK_ICONS.shoppingBag, label: 'Delivered',  count: deliveredOrders.length, desc: 'Successfully delivered' },
-    { key: 'cancelled', icon: 'fa-ban',           dkIcon: DK_ICONS.shoppingBag, label: 'Cancelled',  count: cancelledOrders.length, desc: 'Cancelled orders' },
+    { key: 'active',    icon: 'fa-box',          label: 'Active',     count: activeOrders.length,    desc: 'Active & ongoing orders' },
+    { key: 'delivered', icon: 'fa-check-double', label: 'Delivered',  count: deliveredOrders.length, desc: 'Successfully delivered' },
+    { key: 'cancelled', icon: 'fa-ban',          label: 'Cancelled',  count: cancelledOrders.length, desc: 'Cancelled orders' },
   ];
 
   const guestActiveOrders = sortByNewest(emailOrders).filter(
@@ -966,9 +958,7 @@ const TrackOrder = ({ onProductClick }) => {
 
   // ─── ORDER CARD ────────────────────────────────────────────────────────────
   const OrderCard = ({ order, onViewDetails, isGuest = false, highlighted = false }) => {
-    const scrollRef = useRef(null);
-    const [activeImgIdx,       setActiveImgIdx]       = useState(0);
-    const [continuingPayment,  setContinuingPayment]  = useState(false);
+    const [continuingPayment, setContinuingPayment] = useState(false);
     const createPaymentLink = useAction(api.payments.createPaymentLink);
 
     const ordDate      = order._creationTime ? new Date(order._creationTime) : null;
@@ -978,18 +968,15 @@ const TrackOrder = ({ onProductClick }) => {
     const releaseDate  = getPreOrderReleaseDate(order);
     const needsPayment = isPendingPayment(order);
     const { canRefund, hoursLeft, expired } = getRefundWindow(order);
+    const hasProof     = !!(delivered && order.deliveryProofPhoto);
 
     const itemImages = (order.items || []).map(item => {
       const product = getProductById(item.id);
       return { src: item.image || product?.image || null, name: item.name || product?.name || 'Item' };
     }).filter(i => i.src);
 
-    const scrollTo = (idx) => {
-      setActiveImgIdx(idx);
-      if (scrollRef.current) { const child = scrollRef.current.children[idx]; if (child) child.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' }); }
-    };
-
-    const handleContinuePayment = async () => {
+    const handleContinuePayment = async (e) => {
+      e?.stopPropagation?.();
       setContinuingPayment(true);
       try {
         if (order.paymentLinkUrl) { window.location.href = order.paymentLinkUrl; return; }
@@ -998,128 +985,153 @@ const TrackOrder = ({ onProductClick }) => {
       } catch { showNotification('Failed. Please try again.', 'error'); setContinuingPayment(false); }
     };
 
+    const openCardDetails = () => onViewDetails(order);
+
+    const thumb = itemImages[0];
+    const showReviewRefund = !isGuest && delivered;
+    const showRefundBtn = showReviewRefund && (
+      (!order.refundStatus && canRefund) || (order.refundStatus === 'rejected' && canRefund)
+    );
+
     return (
       <div
-        className={`order-card${highlighted ? ' order-card--highlight' : ''}`}
+        className={`order-card order-card--list${highlighted ? ' order-card--highlight' : ''}`}
         data-order-id={order.orderId}
+        role="button"
+        tabIndex={0}
+        onClick={(e) => {
+          if (e.target.closest('.order-card-actions, .order-card-thumb, a, button')) return;
+          openCardDetails();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            openCardDetails();
+          }
+        }}
       >
-        <div className="order-card-img-wrap">
-          <span className={`order-status-overlay ${getStatusClass(statusKey)}`}>{orderStatus}</span>
-          {itemImages.length > 0 ? (
-            <>
-              <div className="order-img-strip" ref={scrollRef}>
-                {itemImages.map((img, idx) => (
-                  <div key={idx} className={`order-img-slide ${idx === activeImgIdx ? 'active' : ''}`} onClick={() => openLightbox(itemImages.map(i => i.src), idx)} title="Click to enlarge">
-                    <img src={img.src} alt={img.name} /><div className="order-img-zoom"><i className="fas fa-search-plus"></i></div>
-                  </div>
-                ))}
-              </div>
-              {itemImages.length > 1 && (
-                <>
-                  <div className="order-img-dots">{itemImages.map((_, idx) => <button key={idx} className={`order-img-dot ${idx === activeImgIdx ? 'active' : ''}`} onClick={() => scrollTo(idx)} />)}</div>
-                  <button className="order-img-arrow order-img-arrow-left" onClick={() => scrollTo((activeImgIdx - 1 + itemImages.length) % itemImages.length)}><i className="fas fa-chevron-left"></i></button>
-                  <button className="order-img-arrow order-img-arrow-right" onClick={() => scrollTo((activeImgIdx + 1) % itemImages.length)}><i className="fas fa-chevron-right"></i></button>
-                </>
-              )}
-            </>
-          ) : <div className="order-no-img-wrap"><i className="fas fa-box order-no-img"></i></div>}
-        </div>
-        <div className="order-card-info">
-          <p className="order-card-id">Order #{formatOrderShortId(order) || 'N/A'}</p>
-          {isLbcOrder(order) && (
-            <div className="order-card-lbc-badge"><i className="fas fa-truck"></i> LBC Express</div>
+        <button
+          type="button"
+          className="order-card-thumb"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (thumb) openLightbox(itemImages.map((i) => i.src), 0);
+            else openCardDetails();
+          }}
+          aria-label="View product image"
+        >
+          {thumb ? (
+            <img src={thumb.src} alt={thumb.name} />
+          ) : (
+            <i className="fas fa-box order-no-img" />
           )}
+          {itemImages.length > 1 && <span className="order-thumb-more">+{itemImages.length - 1}</span>}
+        </button>
+
+        <div className="order-card-info">
+          <div className="order-card-top">
+            <p className="order-card-id">#{formatOrderShortId(order) || 'N/A'}</p>
+            <span className={`order-status-chip ${getStatusClass(statusKey)}`}>{orderStatus}</span>
+          </div>
           <p className="order-card-name">
             {order.items?.[0]?.name || getProductById(order.items?.[0]?.id)?.name || 'Order'}
             {(order.items?.length || 1) > 1 && <span className="order-and-more"> +{order.items.length - 1} more</span>}
           </p>
-          {releaseDate && <div className="order-card-preorder-badge"><i className="fas fa-calendar-alt"></i><span>Expected: {new Date(releaseDate).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}</span></div>}
-          {delivered && order.refundStatus && <div style={{ marginBottom: 6 }}><RefundBadge status={order.refundStatus} /></div>}
-          {order.cancelRequestStatus === 'requested' && (
-            <div className="order-card-refund-timer" style={{ marginBottom: 6 }}>
-              <i className="fas fa-hourglass-half"></i>
-              <span>Cancel request pending admin review</span>
-            </div>
-          )}
-          {order.cancelRequestStatus === 'rejected' && (
-            <div className="order-card-refund-expired" style={{ marginBottom: 6 }}>
-              <i className="fas fa-times-circle"></i>
-              <span>Cancel request declined — order continues</span>
-            </div>
-          )}
-          {order.cancelRequestStatus === 'approved' && order.cancelRefundProofId && (
-            <div className="order-card-refund-timer" style={{ marginBottom: 6 }}>
-              <i className="fas fa-receipt"></i>
-              <span>Admin refund proof available — open details</span>
-            </div>
-          )}
-          {!isGuest && delivered && !order.refundStatus && canRefund && <div className="order-card-refund-timer"><i className="fas fa-hourglass-half"></i><span>Refund window: <strong>{hoursLeft}h left</strong></span></div>}
-          {!isGuest && delivered && !order.refundStatus && expired && <div className="order-card-refund-expired"><i className="fas fa-clock"></i><span>Refund window expired</span></div>}
-          <div className="order-card-meta">
-            <span className={`order-status-text ${getStatusClass(statusKey)}`}><i className="fas fa-circle"></i> {orderStatus}</span>
-            {ordDate && <span className="order-card-date"><i className="fas fa-calendar-alt"></i>{ordDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>}
+          <div className="order-card-meta-line">
+            <span className="order-card-price">₱{order.total?.toLocaleString()}</span>
+            {ordDate && (
+              <span className="order-card-date">
+                {ordDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              </span>
+            )}
+            {isLbcOrder(order) && <span className="order-card-lbc-badge"><i className="fas fa-truck"></i> LBC</span>}
           </div>
-          <div className="order-card-price-row"><span className="order-card-price">₱{order.total?.toLocaleString()}</span></div>
-          {isLbcOrder(order) && (
-            <button type="button" className="btn lbc-track-btn order-card-lbc-btn" onClick={openLbcTracker}>
-              <i className="fas fa-truck"></i> Track on LBC
-            </button>
+          {releaseDate && (
+            <div className="order-card-preorder-badge">
+              <i className="fas fa-calendar-alt"></i>
+              <span>Expected: {new Date(releaseDate).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+            </div>
           )}
-          {!isGuest && needsPayment ? (
-            <>
-              <button className="btn btn-continue-payment" onClick={handleContinuePayment} disabled={continuingPayment}>{continuingPayment ? <><i className="fas fa-spinner fa-spin"></i> Loading…</> : <><i className="fas fa-credit-card"></i> Continue Payment</>}</button>
-              <button className="btn btn-outline btn-small order-view-btn" style={{ marginTop: '6px' }} onClick={() => onViewDetails(order)}><i className="fas fa-search"></i> View Details</button>
-            </>
-          ) : (
-            <button className="btn btn-primary btn-small order-view-btn" onClick={() => onViewDetails(order)}><i className="fas fa-search"></i> View Details</button>
+          {delivered && order.refundStatus && <RefundBadge status={order.refundStatus} />}
+          {order.cancelRequestStatus === 'requested' && (
+            <div className="order-card-refund-timer"><i className="fas fa-hourglass-half"></i><span>Cancel pending</span></div>
           )}
-          {!isGuest && canCustomerCancelOrder(order) && (
-            <button
-              type="button"
-              className="btn order-cancel-btn"
-              onClick={() => openCancelOrder(order)}
-            >
-              <i className="fas fa-ban"></i> Cancel Order
-            </button>
+          {!isGuest && delivered && !order.refundStatus && canRefund && (
+            <div className="order-card-refund-timer"><i className="fas fa-hourglass-half"></i><span>Refund: <strong>{hoursLeft}h left</strong></span></div>
           )}
-          {!isGuest && delivered && (
-            <div className="order-card-actions">
+          {!isGuest && delivered && !order.refundStatus && expired && (
+            <div className="order-card-refund-expired"><i className="fas fa-clock"></i><span>Refund expired</span></div>
+          )}
+
+          <div className="order-card-actions" onClick={(e) => e.stopPropagation()}>
+            {!isGuest && needsPayment ? (
+              <button className="btn btn-continue-payment" onClick={handleContinuePayment} disabled={continuingPayment}>
+                {continuingPayment ? <><i className="fas fa-spinner fa-spin"></i> Pay…</> : <><i className="fas fa-credit-card"></i> Pay</>}
+              </button>
+            ) : (
+              <button type="button" className="btn btn-primary btn-small order-view-btn" onClick={openCardDetails}>
+                <i className="fas fa-eye"></i> Details
+              </button>
+            )}
+            {isLbcOrder(order) && (
+              <button type="button" className="btn lbc-track-btn order-card-lbc-btn" onClick={openLbcTracker}>
+                <i className="fas fa-truck"></i> LBC
+              </button>
+            )}
+            {!isGuest && canCustomerCancelOrder(order) && (
+              <button type="button" className="btn order-cancel-btn" onClick={() => openCancelOrder(order)}>
+                <i className="fas fa-ban"></i> Cancel
+              </button>
+            )}
+            {hasProof && (
               <button
                 type="button"
-                className="btn order-review-btn"
-                onClick={() => {
-                  const item = order.items?.[0];
-                  if (!item) return;
-                  const product = getProductById(item.id) || {
-                    _id: item.id || item.productId,
-                    id: item.id || item.productId,
-                    name: item.name,
-                    price: item.price,
-                    image: item.image,
-                    stock: item.stock,
-                  };
-                  if (onProductClick) onProductClick(product);
-                  else showNotification('Open the product to leave a review.', 'info');
-                }}
+                className="btn order-proof-btn"
+                onClick={() => openLightbox([order.deliveryProofPhoto], 0)}
               >
-                <i className="fas fa-star"></i> Write Review
+                <i className="fas fa-camera"></i> Proof
               </button>
-              {!order.refundStatus && canRefund && (
-                <button className="btn order-refund-btn" onClick={() => setRefundOrder(order)}>
-                  <i className="fas fa-undo-alt"></i> Request Refund
+            )}
+            {showReviewRefund && (
+              <div className="order-card-actions-row">
+                <button
+                  type="button"
+                  className="btn order-review-btn"
+                  onClick={() => {
+                    const item = order.items?.[0];
+                    if (!item) return;
+                    const product = getProductById(item.id) || {
+                      _id: item.id || item.productId,
+                      id: item.id || item.productId,
+                      name: item.name,
+                      price: item.price,
+                      image: item.image,
+                      stock: item.stock,
+                    };
+                    if (onProductClick) onProductClick(product);
+                    else showNotification('Open the product to leave a review.', 'info');
+                  }}
+                >
+                  <i className="fas fa-star"></i> Review
                 </button>
-              )}
-              {order.refundStatus === 'rejected' && canRefund && (
-                <button className="btn order-refund-btn order-refund-retry-btn" onClick={() => setRefundOrder(order)}>
-                  <i className="fas fa-redo"></i> Request Again
-                </button>
-              )}
-              <button className="btn order-remove-btn" onClick={() => setRemoveConfirm(order._id)}>
-                <i className="fas fa-trash-alt"></i> Remove
-              </button>
+                {showRefundBtn && (
+                  <button
+                    type="button"
+                    className={`btn order-refund-btn${order.refundStatus === 'rejected' ? ' order-refund-retry-btn' : ''}`}
+                    onClick={() => setRefundOrder(order)}
+                  >
+                    <i className={`fas ${order.refundStatus === 'rejected' ? 'fa-redo' : 'fa-undo'}`}></i> Refund
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+          {isGuest && delivered && !order.refundStatus && canRefund && (
+            <div className="guest-login-prompt">
+              <i className="fas fa-lock"></i>
+              <span><a href="/login" onClick={(e) => { e.preventDefault(); window.dispatchEvent(new Event('openLoginModal')); }}>Log in</a> to request a refund</span>
             </div>
           )}
-          {isGuest && delivered && !order.refundStatus && canRefund && <div className="guest-login-prompt"><i className="fas fa-lock"></i><span><a href="/login" onClick={e => { e.preventDefault(); window.dispatchEvent(new Event('openLoginModal')); }}>Log in</a> to request a refund</span></div>}
         </div>
       </div>
     );
@@ -1202,12 +1214,12 @@ const TrackOrder = ({ onProductClick }) => {
             <div ref={ordersListRef} className="tab-context-bar"><i className={`fas ${activeTab?.icon}`}></i><span><strong>{activeTab?.label}</strong> — {activeTab?.desc}{filteredOrders.length > 0 && <span className="tab-context-count"> · {filteredOrders.length} order{filteredOrders.length !== 1 ? 's' : ''}</span>}</span></div>
             {filteredOrders.length === 0 ? (
               <div className="orders-empty">
-                <DkIcon name={DK_ICONS.shoppingBag} size={72} className="orders-empty-icon" alt="" />
+                <i className="fas fa-shopping-bag orders-empty-icon" aria-hidden="true"></i>
                 <h3>{filter === 'active' ? 'No Active Orders' : `No ${activeTab?.label} Yet`}</h3>
                 <p>{filter === 'active' && 'No active orders. Delivered and cancelled are under their own tabs.'}{filter === 'delivered' && 'No delivered orders.'}{filter === 'cancelled' && 'No cancelled orders.'}</p>
                 {filter === 'active' && (
                   <button className="btn btn-primary" onClick={() => navigate('/collections')}>
-                    <DkIcon name={DK_ICONS.shoppingBag} size={16} alt="" /> Start Shopping
+                    <i className="fas fa-shopping-bag"></i> Start Shopping
                   </button>
                 )}
               </div>
@@ -1250,18 +1262,6 @@ const TrackOrder = ({ onProductClick }) => {
         )}
         {refundOrder && <RefundModal order={refundOrder} onClose={() => setRefundOrder(null)} onSuccess={handleRefundSuccess} />}
         <Lightbox />
-        {removeConfirm && (
-          <div className="remove-confirm-overlay" onClick={() => setRemoveConfirm(null)}>
-            <div className="remove-confirm-dialog" onClick={e => e.stopPropagation()}>
-              <div className="remove-confirm-icon"><i className="fas fa-trash-alt"></i></div>
-              <h3>Remove Order?</h3><p>Remove this order from your list?</p>
-              <div className="remove-confirm-actions">
-                <button className="btn btn-outline" onClick={() => setRemoveConfirm(null)}>Cancel</button>
-                <button className="btn btn-danger" onClick={() => handleRemoveOrder(removeConfirm)}><i className="fas fa-trash-alt"></i> Remove</button>
-              </div>
-            </div>
-          </div>
-        )}
       </main>
     );
   }
@@ -1535,7 +1535,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
               >
                 <span className="customer-pod-label">
                   <i className="fas fa-camera"></i>
-                  <strong>Proof of Delivery</strong>
+                  <strong>View Successful Delivery Proof</strong>
                 </span>
                 <i className={`fas fa-chevron-${proofExpanded ? 'up' : 'down'}`}></i>
               </button>

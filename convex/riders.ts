@@ -8,6 +8,21 @@ const genSessionId = () =>
 
 /** Always 60s window — resets on every new login request */
 const RIDER_LOGIN_ALERT_TTL_MS = 60 * 1000;
+const RIDER_LOGIN_BROADCAST_TTL_MS = 10 * 60 * 1000;
+
+function makeRiderLoginBroadcast(
+  kind: "request" | "opened" | "blocked",
+  alert: { sessionId?: string; deviceName?: string; location?: string },
+  now = Date.now(),
+) {
+  return {
+    kind,
+    sessionId: String(alert?.sessionId || ""),
+    deviceName: String(alert?.deviceName || "Another device"),
+    location: alert?.location ? String(alert.location) : undefined,
+    at: now,
+  };
+}
 /** Notify admin once when rider GPS is within this distance of the customer pin. */
 const ARRIVAL_GEOFENCE_KM = 0.12; // ~120 meters
 
@@ -74,11 +89,39 @@ async function maybeNotifyAdminRiderArrived(
 }
 
 // ── Generate DKMerch Rider ID: DKR-YYYY-XXXX ──
-const generateDkRiderId = (sequence: number): string => {
-  const year = new Date().getFullYear();
+const generateDkRiderId = (sequence: number, year = new Date().getFullYear()): string => {
   const seq = String(sequence).padStart(4, '0');
   return `DKR-${year}-${seq}`;
 };
+
+/** Parse DKR-YYYY-NNNN → { year, seq } or null. */
+function parseDkRiderId(id: string | undefined | null): { year: number; seq: number } | null {
+  const m = String(id || '').trim().match(/^DKR-(\d{4})-(\d+)$/i);
+  if (!m) return null;
+  return { year: Number(m[1]), seq: Number(m[2]) };
+}
+
+/** Next unique ID based on max existing sequence for the current year (not count). */
+async function allocateNextDkRiderId(db: any): Promise<string> {
+  const year = new Date().getFullYear();
+  const allRiders = await db.query("riderApplications").collect();
+  let maxSeq = 0;
+  const used = new Set<string>();
+  for (const r of allRiders) {
+    const id = String(r.dkRiderId || '').trim().toUpperCase();
+    if (!id) continue;
+    used.add(id);
+    const parsed = parseDkRiderId(id);
+    if (parsed && parsed.year === year && parsed.seq > maxSeq) maxSeq = parsed.seq;
+  }
+  let next = maxSeq + 1;
+  let candidate = generateDkRiderId(next, year);
+  while (used.has(candidate)) {
+    next += 1;
+    candidate = generateDkRiderId(next, year);
+  }
+  return candidate;
+}
 
 export const getAllRiders = query(async ({ db }) => {
   return await db.query("riderApplications").order("desc").collect();
@@ -149,11 +192,14 @@ export const createRiderApplication = mutation({
 export const approveRider = mutation({
   args: { id: v.id("riderApplications") },
   handler: async ({ db }, { id }) => {
-    const allRiders = await db.query("riderApplications").collect();
-    const approvedCount = allRiders.filter(r => r.dkRiderId).length;
-    const nextSeq = approvedCount + 1;
-    const dkRiderId = generateDkRiderId(nextSeq);
-
+    const rider = await db.get(id);
+    if (!rider) throw new Error("Rider not found");
+    // Keep existing unique ID if already assigned
+    if (rider.dkRiderId) {
+      await db.patch(id, { status: "approved" });
+      return { success: true, dkRiderId: rider.dkRiderId };
+    }
+    const dkRiderId = await allocateNextDkRiderId(db);
     await db.patch(id, {
       status: "approved",
       dkRiderId,
@@ -186,9 +232,7 @@ export const adminCreateRider = mutation({
       return { success: false, message: "A rider with this email already exists." };
     }
 
-    const allRiders = await db.query("riderApplications").collect();
-    const approvedCount = allRiders.filter(r => r.dkRiderId).length;
-    const dkRiderId = generateDkRiderId(approvedCount + 1);
+    const dkRiderId = await allocateNextDkRiderId(db);
 
     const id = await db.insert("riderApplications", {
       fullName: args.fullName.trim(),
@@ -207,6 +251,61 @@ export const adminCreateRider = mutation({
     });
 
     return { success: true, id, dkRiderId, email, fullName: args.fullName.trim() };
+  },
+});
+
+/** Fix duplicate / missing rider IDs (safe to call repeatedly). */
+export const repairDuplicateRiderIds = mutation({
+  args: {},
+  handler: async ({ db }) => {
+    const year = new Date().getFullYear();
+    const riders = await db.query("riderApplications").collect();
+    riders.sort((a: any, b: any) => {
+      const ta = Date.parse(a.appliedAt || a.dkRiderIdGeneratedAt || "") || a._creationTime || 0;
+      const tb = Date.parse(b.appliedAt || b.dkRiderIdGeneratedAt || "") || b._creationTime || 0;
+      return ta - tb;
+    });
+
+    const used = new Set<string>();
+    let maxSeq = 0;
+    let fixed = 0;
+
+    // First pass: keep first occurrence of each ID, clear duplicates
+    for (const r of riders) {
+      const id = String(r.dkRiderId || "").trim().toUpperCase();
+      if (!id) continue;
+      if (used.has(id)) {
+        await db.patch(r._id, { dkRiderId: undefined });
+        (r as any).dkRiderId = undefined;
+        fixed += 1;
+        continue;
+      }
+      used.add(id);
+      const parsed = parseDkRiderId(id);
+      if (parsed && parsed.year === year && parsed.seq > maxSeq) maxSeq = parsed.seq;
+    }
+
+    // Second pass: assign IDs to anyone missing one (approved or previously duplicated)
+    for (const r of riders) {
+      if (r.dkRiderId) continue;
+      // Only assign to approved / active riders (or anyone that had an ID cleared)
+      if (r.status !== "approved" && r.status !== "active") continue;
+      let next = maxSeq + 1;
+      let candidate = generateDkRiderId(next, year);
+      while (used.has(candidate)) {
+        next += 1;
+        candidate = generateDkRiderId(next, year);
+      }
+      used.add(candidate);
+      maxSeq = next;
+      await db.patch(r._id, {
+        dkRiderId: candidate,
+        dkRiderIdGeneratedAt: new Date().toISOString(),
+      });
+      fixed += 1;
+    }
+
+    return { success: true, fixed };
   },
 });
 
@@ -478,7 +577,10 @@ export const loginRider = mutation({
         status: "pending" as const,
         resolved: false,
       };
-      await db.patch(rider._id, { loginAlert: alert } as any);
+      await db.patch(rider._id, {
+        loginAlert: alert,
+        loginBroadcast: makeRiderLoginBroadcast("request", alert, now),
+      } as any);
       try {
         await scheduler.runAfter(RIDER_LOGIN_ALERT_TTL_MS, internal.riders.expireRiderLoginAlert, {
           email: String(rider.email),
@@ -508,7 +610,10 @@ export const loginRider = mutation({
       status: "pending" as const,
       resolved: false,
     };
-    await db.patch(rider._id, { loginAlert: alert } as any);
+    await db.patch(rider._id, {
+      loginAlert: alert,
+      loginBroadcast: makeRiderLoginBroadcast("request", alert, now),
+    } as any);
 
     try {
       await scheduler.runAfter(RIDER_LOGIN_ALERT_TTL_MS, internal.riders.expireRiderLoginAlert, {
@@ -602,6 +707,22 @@ export const getPendingRiderLoginAlert = query({
   },
 });
 
+/** Fan-out sign-in notice for every rider device on this account. */
+export const getRiderLoginBroadcast = query({
+  args: { email: v.string() },
+  handler: async ({ db }, { email }) => {
+    const rider = await db
+      .query("riderApplications")
+      .withIndex("by_email", (q) => q.eq("email", email))
+      .first();
+    if (!rider) return null;
+    const b = (rider as any).loginBroadcast;
+    if (!b?.at || !b?.kind) return null;
+    if (Date.now() - Number(b.at) > RIDER_LOGIN_BROADCAST_TTL_MS) return null;
+    return b;
+  },
+});
+
 export const getRiderLoginApprovalStatus = query({
   args: {
     email: v.string(),
@@ -656,6 +777,7 @@ export const confirmRiderLoginAlert = mutation({
     if (isRiderLoginAlertExpired(alert)) {
       await db.patch(rider._id, {
         loginAlert: { ...alert, status: "denied", resolved: true },
+        loginBroadcast: makeRiderLoginBroadcast("blocked", alert),
       } as any);
       return { success: false, message: "Login request timed out." };
     }
@@ -664,15 +786,17 @@ export const confirmRiderLoginAlert = mutation({
     const ids = getRiderSessionIds(rider);
     if (prevId && !ids.includes(prevId)) ids.push(prevId);
     if (newId && !ids.includes(newId)) ids.push(newId);
+    const now = Date.now();
     await db.patch(rider._id, {
       activeSessionId: prevId || newId,
       activeSessionIds: [...new Set(ids.filter(Boolean))],
-      activeDeviceAt: Date.now(),
+      activeDeviceAt: now,
       activeDeviceName: (rider as any).activeDeviceName || alert.deviceName,
       activeDeviceLocation: (rider as any).activeDeviceLocation || alert.location,
       activeDevicePlatform: (rider as any).activeDevicePlatform || alert.platform,
       kickedAt: undefined,
       loginAlert: { ...alert, status: "approved", resolved: true },
+      loginBroadcast: makeRiderLoginBroadcast("opened", alert, now),
     } as any);
     return { success: true };
   },
@@ -692,9 +816,11 @@ export const denyRiderLoginAlert = mutation({
     const alert = (rider as any).loginAlert;
     const neu = String(newSessionId || "").trim();
     if (!neu) return { success: false, message: "Invalid session." };
+    const now = Date.now();
     if (alert && String(alert.sessionId) === neu) {
       await db.patch(rider._id, {
         loginAlert: { ...alert, status: "denied", resolved: true },
+        loginBroadcast: makeRiderLoginBroadcast("blocked", alert, now),
       } as any);
     }
     if (rider.email) {

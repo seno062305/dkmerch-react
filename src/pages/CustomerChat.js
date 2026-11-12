@@ -12,6 +12,7 @@ const CustomerChat = () => {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [preview, setPreview] = useState(null);
+  const [presenceTick, setPresenceTick] = useState(0);
   const fileRef = useRef(null);
   const messagesRef = useRef(null);
 
@@ -25,6 +26,17 @@ const CustomerChat = () => {
   const sendCustomerMessage = useMutation(api.supportChat.sendCustomerMessage);
   const generateUploadUrl = useMutation(api.supportChat.generateChatUploadUrl);
   const markRead = useMutation(api.supportChat.markThreadReadByCustomer);
+  const heartbeatPresence = useMutation(api.supportChat.heartbeatPresence);
+
+  const ONLINE_MS = 45000;
+  const adminOnline = !!(thread?.adminOnlineAt && Date.now() - thread.adminOnlineAt < ONLINE_MS);
+  const adminLastReadAt = thread?.adminLastReadAt || 0;
+  void presenceTick;
+
+  useEffect(() => {
+    const id = setInterval(() => setPresenceTick((n) => n + 1), 15000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     if (!isReady) return;
@@ -103,6 +115,23 @@ const CustomerChat = () => {
   }, [email, thread?._id, thread?.unreadByCustomer, markRead]);
 
   useEffect(() => {
+    if (!email || !isAuthenticated || role === 'admin' || role === 'rider') return undefined;
+    const ping = () => {
+      heartbeatPresence({ role: 'customer', customerEmail: email }).catch(() => {});
+    };
+    ping();
+    const id = setInterval(ping, 20000);
+    const onVis = () => {
+      if (document.visibilityState === 'visible') ping();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, [email, isAuthenticated, role, heartbeatPresence]);
+
+  useEffect(() => {
     const box = messagesRef.current;
     if (!box) return;
     box.scrollTop = box.scrollHeight;
@@ -124,8 +153,10 @@ const CustomerChat = () => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      setError('Please choose an image file.');
+    if (!file.type.startsWith('image/') || file.type === 'image/gif' || /\.gif$/i.test(file.name || '')) {
+      setError(file.type === 'image/gif' || /\.gif$/i.test(file.name || '')
+        ? 'GIF images are not allowed. Please upload JPG or PNG.'
+        : 'Please choose an image file.');
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
@@ -184,7 +215,10 @@ const CustomerChat = () => {
             <img src="/images/dklogo.jpg" alt="DKMerch" />
             <div>
               <strong>Chat with Admin</strong>
-              <span>Ask about orders, shipping, or support</span>
+              <span className={`customer-chat-presence ${adminOnline ? 'is-online' : 'is-offline'}`}>
+                <i className="fas fa-circle"></i>
+                {adminOnline ? 'Admin online' : 'Admin offline'}
+              </span>
             </div>
           </div>
         </header>
@@ -196,25 +230,34 @@ const CustomerChat = () => {
               <p>No messages yet. Say hi to DKMerch admin.</p>
             </div>
           )}
-          {messages.map((msg) => (
-            <div
-              key={msg._id}
-              className={`customer-chat-bubble ${msg.senderRole === 'customer' ? 'mine' : 'admin'}`}
-            >
-              <div className="customer-chat-meta">
-                {msg.senderRole === 'admin' ? 'Admin' : 'You'} ·{' '}
-                {new Date(msg.createdAt).toLocaleString('en-PH', {
-                  month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
-                })}
+          {messages.map((msg) => {
+            const isMine = msg.senderRole === 'customer';
+            const seen = isMine && adminLastReadAt >= msg.createdAt;
+            return (
+              <div
+                key={msg._id}
+                className={`customer-chat-bubble ${isMine ? 'mine' : 'admin'}`}
+              >
+                <div className="customer-chat-meta">
+                  {isMine ? 'You' : 'Admin'} ·{' '}
+                  {new Date(msg.createdAt).toLocaleString('en-PH', {
+                    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+                  })}
+                </div>
+                {msg.body && <div className="customer-chat-text">{msg.body}</div>}
+                {msg.imageUrl && (
+                  <a href={msg.imageUrl} target="_blank" rel="noreferrer" className="customer-chat-image-wrap">
+                    <img src={msg.imageUrl} alt="Attachment" />
+                  </a>
+                )}
+                {isMine && (
+                  <div className={`customer-chat-seen ${seen ? 'is-seen' : ''}`}>
+                    {seen ? <><i className="fas fa-check-double"></i> Seen</> : <><i className="fas fa-check"></i> Sent</>}
+                  </div>
+                )}
               </div>
-              {msg.body && <div className="customer-chat-text">{msg.body}</div>}
-              {msg.imageUrl && (
-                <a href={msg.imageUrl} target="_blank" rel="noreferrer" className="customer-chat-image-wrap">
-                  <img src={msg.imageUrl} alt="Attachment" />
-                </a>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {preview && (
@@ -229,7 +272,7 @@ const CustomerChat = () => {
         {error && <div className="customer-chat-error">{error}</div>}
 
         <form className="customer-chat-composer" onSubmit={handleSend}>
-          <input ref={fileRef} type="file" accept="image/*" hidden onChange={handlePickImage} />
+          <input ref={fileRef} type="file" accept="image/jpeg,image/jpg,image/png,image/webp" hidden onChange={handlePickImage} />
           <button type="button" className="customer-chat-attach" onClick={() => fileRef.current?.click()} title="Upload image">
             <i className="fas fa-image"></i>
           </button>

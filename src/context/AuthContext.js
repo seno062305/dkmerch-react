@@ -156,12 +156,30 @@ export const AuthProvider = ({ children }) => {
       : "skip"
   );
 
+  const loginBroadcast = useQuery(
+    api.users.getLoginBroadcast,
+    isAuthenticated
+      && user?._id
+      && (user.role === "user" || user.role === "admin")
+      ? { userId: String(user._id) }
+      : "skip"
+  );
+
   const pendingRiderLoginAlert = useQuery(
     api.riders.getPendingRiderLoginAlert,
     isAuthenticated && user?.role === "rider" && user?.email
       ? { email: String(user.email) }
       : "skip"
   );
+
+  const riderLoginBroadcast = useQuery(
+    api.riders.getRiderLoginBroadcast,
+    isAuthenticated && user?.role === "rider" && user?.email
+      ? { email: String(user.email) }
+      : "skip"
+  );
+
+  const seenLoginBroadcastRef = useRef("");
 
   useEffect(() => {
     seedAdminMutation({}).catch(() => {});
@@ -411,7 +429,7 @@ export const AuthProvider = ({ children }) => {
     } catch { /* ignore */ }
   };
 
-  // Show FB-style alert after PIN unlock only — never interrupt the PIN page
+  // Show FB-style alert on EVERY device still signed into this account
   useEffect(() => {
     const current = userRef.current;
     const customerLoading =
@@ -428,13 +446,15 @@ export const AuthProvider = ({ children }) => {
 
     const pending = pendingLoginAlert || pendingRiderLoginAlert || null;
     if (!pending) {
-      // Don't wipe a held confirmation; only clear live pending UI
+      // Don't wipe a held confirmation (approved/denied local UI); only clear live pending
       setSecurityAlert((prev) => (prev?.mode === "pending" ? null : prev));
       return;
     }
     if (holdLogoutConfirmRef.current) return;
     // Show above PIN too (modal z-index is higher) so the notice never "disappears"
     if (!current) return;
+    // Don't show Yes/No on the device that is waiting for approval
+    if (String(current.sessionId || "") === String(pending.sessionId || "")) return;
     try { clearAuthGate(); } catch { /* ignore */ }
     let shouldToast = false;
     setSecurityAlert((prev) => {
@@ -455,13 +475,54 @@ export const AuthProvider = ({ children }) => {
           showNotification(
             `New login request from ${pending.deviceName || "another device"}. Confirm if this was you.`,
             "warning",
-            { duration: 8000, dedupeKey: "login-alert-pending" }
+            { duration: 8000, dedupeKey: `login-alert-pending:${pending.sessionId}` }
           );
         } catch { /* ignore */ }
       });
     }
     clearLoginAlertDeepLink();
   }, [pendingLoginAlert, pendingRiderLoginAlert, isAuthenticated, showNotification]);
+
+  // Fan-out toast on ALL devices when account is requested / opened / blocked
+  useEffect(() => {
+    const broadcast = loginBroadcast || riderLoginBroadcast || null;
+    if (!broadcast?.kind || !broadcast?.at) return;
+    const current = userRef.current;
+    if (!current || !isAuthenticated) return;
+    // Waiting new device already has its own pending-approval UI
+    if (String(current.sessionId || "") === String(broadcast.sessionId || "")) return;
+
+    const key = `${broadcast.kind}:${broadcast.sessionId}:${broadcast.at}`;
+    if (seenLoginBroadcastRef.current === key) return;
+    seenLoginBroadcastRef.current = key;
+
+    const device = broadcast.deviceName || "another device";
+    const where = broadcast.location ? ` · ${broadcast.location}` : "";
+
+    queueMicrotask(() => {
+      try {
+        if (broadcast.kind === "request") {
+          showNotification(
+            `Sign-in request on ${device}${where}. Confirm on this device if it was you.`,
+            "warning",
+            { duration: 8000, dedupeKey: key }
+          );
+        } else if (broadcast.kind === "opened") {
+          showNotification(
+            `Your account was opened on ${device}${where}.`,
+            "info",
+            { duration: 7000, dedupeKey: key }
+          );
+        } else if (broadcast.kind === "blocked") {
+          showNotification(
+            `A sign-in on ${device} was blocked.`,
+            "success",
+            { duration: 6000, dedupeKey: key }
+          );
+        }
+      } catch { /* ignore */ }
+    });
+  }, [loginBroadcast, riderLoginBroadcast, isAuthenticated, showNotification]);
 
   // Push tap — open Yes/No as soon as pending alert is available (even over PIN)
   useEffect(() => {

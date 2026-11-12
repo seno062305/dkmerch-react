@@ -61,6 +61,21 @@ export default defineSchema({
       )),
       resolved: v.optional(v.boolean()),
     })),
+    /**
+     * Fan-out sign-in notice for EVERY active device on this account
+     * (request / opened / blocked). Clients toast + in-app bell.
+     */
+    loginBroadcast: v.optional(v.object({
+      kind: v.union(
+        v.literal("request"),
+        v.literal("opened"),
+        v.literal("blocked"),
+      ),
+      sessionId: v.string(),
+      deviceName: v.string(),
+      location: v.optional(v.string()),
+      at: v.number(),
+    })),
     /** Last time the customer changed username (7-day cooldown). */
     usernameChangedAt:        v.optional(v.number()),
   })
@@ -307,6 +322,17 @@ export default defineSchema({
       )),
       resolved: v.optional(v.boolean()),
     })),
+    loginBroadcast: v.optional(v.object({
+      kind: v.union(
+        v.literal("request"),
+        v.literal("opened"),
+        v.literal("blocked"),
+      ),
+      sessionId: v.string(),
+      deviceName: v.string(),
+      location: v.optional(v.string()),
+      at: v.number(),
+    })),
     riderPhoto: v.optional(v.union(v.string(), v.null())),
     validId1: v.optional(v.union(v.string(), v.null())),
     validId2: v.optional(v.union(v.string(), v.null())),
@@ -514,6 +540,10 @@ export default defineSchema({
     unreadByCustomer: v.number(),
     status: v.string(), // open | closed
     archivedAt: v.optional(v.number()),
+    customerOnlineAt: v.optional(v.number()),
+    adminOnlineAt: v.optional(v.number()),
+    customerLastReadAt: v.optional(v.number()),
+    adminLastReadAt: v.optional(v.number()),
     updatedAt: v.number(),
     createdAt: v.number(),
   })

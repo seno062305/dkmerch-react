@@ -361,7 +361,7 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
                           <i className="fas fa-star rewards-star-icon"></i>
                           My Rewards
                           <span className="rewards-pts-badge">
-                            ⭐ {totalPoints} pts
+                            <i className="fas fa-star"></i> {totalPoints} pts
                           </span>
                         </button>
 

@@ -234,6 +234,119 @@ export const markOrderPaid = mutation({
   },
 });
 
+/** Refund the original PayMongo payment for an order. Returns { refunded, refundId, error? }. */
+async function refundPaymongoPayment(order: any, amount: number, notes: string) {
+  const secretKey = process.env.PAYMONGO_SECRET_KEY;
+  if (!secretKey) return { refunded: false, refundId: "", error: "Refund service unavailable. Please try again later." };
+  if (!order.paymentLinkId) {
+    return {
+      refunded: false,
+      refundId: "",
+      error: "Cannot auto-refund this payment. Process refund manually then try again.",
+    };
+  }
+
+  const encoded = toBase64(`${secretKey}:`);
+  try {
+    const sessionRes = await fetch(
+      `https://api.paymongo.com/v1/checkout_sessions/${order.paymentLinkId}`,
+      { headers: { Authorization: `Basic ${encoded}` } }
+    );
+    if (!sessionRes.ok) {
+      return { refunded: false, refundId: "", error: "Could not verify payment for refund. Try again." };
+    }
+    const sessionData = await sessionRes.json();
+    const payments: any[] = sessionData?.data?.attributes?.payments ?? [];
+    const paidPayment =
+      payments.find((p: any) => p?.attributes?.status === "paid") || payments[0];
+    const paymentId = paidPayment?.id;
+    if (!paymentId) {
+      return { refunded: false, refundId: "", error: "Payment record not found for refund. Contact support." };
+    }
+
+    const refundRes = await fetch("https://api.paymongo.com/v1/refunds", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Basic ${encoded}`,
+      },
+      body: JSON.stringify({
+        data: {
+          attributes: {
+            amount: Math.round(amount * 100),
+            payment_id: paymentId,
+            reason: "requested_by_customer",
+            notes,
+          },
+        },
+      }),
+    });
+
+    if (!refundRes.ok) {
+      const errBody = await refundRes.json().catch(() => ({}));
+      console.error("PayMongo refund error:", JSON.stringify(errBody));
+      const detail =
+        errBody?.errors?.[0]?.detail ||
+        errBody?.errors?.[0]?.title ||
+        "Refund failed";
+      return { refunded: false, refundId: "", error: `Refund failed: ${detail}` };
+    }
+
+    const refundData = await refundRes.json();
+    return { refunded: true, refundId: refundData?.data?.id || "", error: "" };
+  } catch (err: any) {
+    console.error("PayMongo refund exception:", err);
+    return { refunded: false, refundId: "", error: "Refund request failed. Please try again." };
+  }
+}
+
+/**
+ * Admin pays damage refund back via PayMongo (same wallet path as customer payment).
+ */
+export const approveDamageRefund = action({
+  args: {
+    orderId: v.string(),
+    adminNote: v.optional(v.string()),
+  },
+  handler: async (ctx, { orderId, adminNote }) => {
+    const order = await ctx.runQuery(api.orders.getOrderById, { orderId });
+    if (!order) return { success: false, error: "Order not found." };
+    if (order.refundStatus !== "requested") {
+      return { success: false, error: "No pending refund request for this order." };
+    }
+
+    const amount = Number(order.finalTotal ?? order.total ?? order.refundAmount ?? 0);
+    if (!(amount > 0)) return { success: false, error: "Invalid refund amount." };
+
+    const pay = await refundPaymongoPayment(order, amount, `Damage refund ${orderId}`);
+    if (!pay.refunded) {
+      return { success: false, error: pay.error || "PayMongo refund failed." };
+    }
+
+    const result = await ctx.runMutation(api.orders.resolveRefund, {
+      orderId,
+      refundStatus: "approved",
+      refundAdminNote: adminNote || `PayMongo refund ${pay.refundId}`,
+    });
+
+    if (!result?.success) {
+      return {
+        success: false,
+        error: "PayMongo refund succeeded but order update failed. Contact support.",
+        refunded: true,
+        refundId: pay.refundId,
+      };
+    }
+
+    return {
+      success: true,
+      refunded: true,
+      refundAmount: amount,
+      refundId: pay.refundId,
+    };
+  },
+});
+
 /**
  * Admin approves a customer cancel request.
  * If paid → refund via PayMongo, then finalize cancel.
@@ -262,87 +375,19 @@ export const approveCustomerCancel = action({
     let refunded = false;
     let refundId = "";
 
-    if (wasPaid && !proofPhotoId) {
-      return {
-        success: false,
-        error: "Upload a screenshot proof that the refund was sent before approving.",
-      };
-    }
-
     if (wasPaid && amount > 0) {
-      const secretKey = process.env.PAYMONGO_SECRET_KEY;
-      if (!secretKey) {
-        return { success: false, error: "Refund service unavailable. Please try again later." };
-      }
-      if (!order.paymentLinkId) {
-        return {
-          success: false,
-          error: "Cannot auto-refund this payment. Process refund manually then try again, or contact support.",
-        };
-      }
-
-      const encoded = toBase64(`${secretKey}:`);
-      try {
-        const sessionRes = await fetch(
-          `https://api.paymongo.com/v1/checkout_sessions/${order.paymentLinkId}`,
-          { headers: { Authorization: `Basic ${encoded}` } }
-        );
-        if (!sessionRes.ok) {
-          return { success: false, error: "Could not verify payment for refund. Try again." };
-        }
-        const sessionData = await sessionRes.json();
-        const payments: any[] = sessionData?.data?.attributes?.payments ?? [];
-        const paidPayment =
-          payments.find((p: any) => p?.attributes?.status === "paid") || payments[0];
-        const paymentId = paidPayment?.id;
-        if (!paymentId) {
+      const pay = await refundPaymongoPayment(order, amount, `Admin approved cancel ${orderId}`);
+      if (!pay.refunded) {
+        // Allow manual proof fallback when PayMongo auto-refund is unavailable
+        if (!proofPhotoId) {
           return {
             success: false,
-            error: "Payment record not found for refund. Contact support.",
+            error: pay.error || "PayMongo refund failed. Upload proof or try again.",
           };
         }
-
-        const refundAmountCentavos = Math.round(amount * 100);
-        const refundRes = await fetch("https://api.paymongo.com/v1/refunds", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Basic ${encoded}`,
-          },
-          body: JSON.stringify({
-            data: {
-              attributes: {
-                amount: refundAmountCentavos,
-                payment_id: paymentId,
-                reason: "requested_by_customer",
-                notes: `Admin approved cancel ${orderId}`,
-              },
-            },
-          }),
-        });
-
-        if (!refundRes.ok) {
-          const errBody = await refundRes.json().catch(() => ({}));
-          console.error("PayMongo refund error:", JSON.stringify(errBody));
-          const detail =
-            errBody?.errors?.[0]?.detail ||
-            errBody?.errors?.[0]?.title ||
-            "Refund failed";
-          return {
-            success: false,
-            error: `Refund failed: ${detail}. Order was not cancelled.`,
-          };
-        }
-
-        const refundData = await refundRes.json();
-        refundId = refundData?.data?.id || "";
+      } else {
         refunded = true;
-      } catch (err: any) {
-        console.error("PayMongo refund exception:", err);
-        return {
-          success: false,
-          error: "Refund request failed. Please try again.",
-        };
+        refundId = pay.refundId;
       }
     }
 

@@ -8,9 +8,6 @@ import { clearUpdatePromptDismiss } from '../utils/appUpdate';
 import { goToCustomerTab } from '../utils/navScroll';
 import './CustomerNotificationBell.css';
 
-const INITIAL_VISIBLE = 3;
-const EXPANDED_VISIBLE = 80;
-
 function isStoreNotif(type) {
   const t = String(type || '');
   return t === 'app_update' || t === 'shipping_fee' || t === 'promo' || t === 'update';
@@ -21,12 +18,10 @@ function timeAgo(ts) {
   if (!t) return '';
   const mins = Math.floor((Date.now() - t) / 60000);
   if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m`;
+  if (mins < 60) return `${mins}m ago`;
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days}d`;
-  return `${Math.floor(days / 7)}w`;
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
 }
 
 function typeBadge(type) {
@@ -45,38 +40,7 @@ function typeBadge(type) {
   }
 }
 
-function startOfTodayMs() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
-
-function groupNotifications(list) {
-  const todayStart = startOfTodayMs();
-  const newItems = [];
-  const todayItems = [];
-  const earlierItems = [];
-
-  for (const n of list) {
-    const t = typeof n.createdAt === 'number' ? n.createdAt : new Date(n.createdAt).getTime();
-    if (!n.read) {
-      newItems.push(n);
-    } else if (t >= todayStart) {
-      todayItems.push(n);
-    } else {
-      earlierItems.push(n);
-    }
-  }
-
-  return [
-    { key: 'new', label: 'New', items: newItems, showSeeAll: true },
-    { key: 'today', label: 'Today', items: todayItems, showSeeAll: false },
-    { key: 'earlier', label: 'Earlier', items: earlierItems, showSeeAll: false },
-  ].filter((g) => g.items.length > 0);
-}
-
-/** Resolve deep-link target from notification type / payload. */
-function resolveNotificationTarget(n) {
+export function resolveNotificationTarget(n) {
   const type = String(n?.type || '');
   const url = String(n?.url || '');
   const orderId = String(n?.orderId || '').trim();
@@ -98,9 +62,7 @@ function resolveNotificationTarget(n) {
     return '/?appUpdate=1';
   }
 
-  if (type === 'shipping_fee') {
-    return '/collections';
-  }
+  if (type === 'shipping_fee') return '/collections';
 
   if (
     orderId
@@ -122,19 +84,26 @@ function resolveNotificationTarget(n) {
   return url || null;
 }
 
-/**
- * Customer notification center — Facebook-style dropdown (no settings).
- */
-const CustomerNotificationBell = ({ email }) => {
+function useIsMobileNotif() {
+  const [mobile, setMobile] = useState(() => {
+    try { return window.matchMedia('(max-width: 768px)').matches; } catch { return false; }
+  });
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)');
+    const onChange = () => setMobile(mq.matches);
+    onChange();
+    mq.addEventListener?.('change', onChange);
+    return () => mq.removeEventListener?.('change', onChange);
+  }, []);
+  return mobile;
+}
+
+/** Shared notification list — checklist toolbar (desktop dropdown + mobile page). */
+export function CustomerNotificationPanel({ email, variant = 'dropdown', onNavigate }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { confirm } = useConfirm();
-  const [open, setOpen] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [filter, setFilter] = useState('all'); // all | unread
-  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
-  const wrapRef = useRef(null);
-  const menuRef = useRef(null);
+  const [selected, setSelected] = useState(() => new Set());
   const listRef = useRef(null);
 
   const emailKey = String(email || '').trim().toLowerCase();
@@ -151,56 +120,15 @@ const CustomerNotificationBell = ({ email }) => {
   const markAllRead = useMutation(api.customerNotifications.markAllRead);
   const clearAll = useMutation(api.customerNotifications.clearAll);
 
-  const { release } = useCloseOnHistoryBack(open, () => {
-    setMenuOpen(false);
-    setOpen(false);
-  }, 'customerNotifs');
-
-  useEffect(() => {
-    if (!open) {
-      setMenuOpen(false);
-      setFilter('all');
-      setVisibleCount(INITIAL_VISIBLE);
-    }
-  }, [open]);
-
-  useEffect(() => {
-    const onDoc = (e) => {
-      if (!wrapRef.current?.contains(e.target)) {
-        setMenuOpen(false);
-        setOpen(false);
-      }
-    };
-    if (open) document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, [open]);
-
-  const filtered = useMemo(() => {
-    if (filter === 'unread') return notifications.filter((n) => !n.read);
-    return notifications;
-  }, [notifications, filter]);
-
-  const visible = useMemo(
-    () => filtered.slice(0, visibleCount),
-    [filtered, visibleCount]
-  );
-
-  const groups = useMemo(() => groupNotifications(visible), [visible]);
-  const hasMore = filtered.length > visibleCount;
-
-  if (!emailKey) return null;
-
-  const toggleOpen = () => {
-    setOpen((o) => !o);
-  };
+  const allIds = notifications.map((n) => n._id);
+  const allSelected = allIds.length > 0 && allIds.every((id) => selected.has(id));
+  const selectedIds = [...selected];
 
   const openItem = async (n) => {
     if (!n.read) {
       await markMany({ email: emailKey, ids: [n._id], read: true }).catch(() => {});
     }
-    release();
-    setMenuOpen(false);
-    setOpen(false);
+    onNavigate?.();
     const target = resolveNotificationTarget(n);
     if (!target) return;
     if (String(n?.type || '') === 'shipping_fee' || target === '/collections') {
@@ -210,34 +138,33 @@ const CustomerNotificationBell = ({ email }) => {
     navigate(target);
   };
 
-  const handleMarkAllRead = async () => {
-    setMenuOpen(false);
-    await markAllRead({ email: emailKey }).catch(() => {});
-  };
-
-  const handleOpenNotifications = () => {
-    setMenuOpen(false);
-    setFilter('all');
-    setVisibleCount(Math.max(filtered.length, EXPANDED_VISIBLE));
-    requestAnimationFrame(() => {
-      listRef.current?.scrollTo?.({ top: 0, behavior: 'smooth' });
+  const toggleOne = (id) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
     });
   };
 
-  const handleSeePrevious = () => {
-    setVisibleCount((c) => Math.min(filtered.length, Math.max(c + INITIAL_VISIBLE, filtered.length)));
+  const toggleSelectAll = () => {
+    if (allSelected) setSelected(new Set());
+    else setSelected(new Set(allIds));
   };
 
-  const handleSeeAll = () => {
-    setFilter('all');
-    setVisibleCount(Math.max(filtered.length, notifications.length, EXPANDED_VISIBLE));
-    requestAnimationFrame(() => {
-      listRef.current?.scrollTo?.({ top: 0, behavior: 'smooth' });
-    });
+  const applyMark = async (read) => {
+    const ids = selectedIds.length > 0
+      ? selectedIds
+      : allIds.filter((id) => {
+        const row = notifications.find((n) => n._id === id);
+        return read ? row && !row.read : row && row.read;
+      });
+    if (!ids.length) return;
+    await markMany({ email: emailKey, ids, read }).catch(() => {});
+    setSelected(new Set());
   };
 
   const handleClearAll = async () => {
-    setMenuOpen(false);
     const ok = await confirm({
       title: 'Clear all notifications?',
       message: 'This permanently removes every notification from your list.',
@@ -247,6 +174,162 @@ const CustomerNotificationBell = ({ email }) => {
     });
     if (!ok) return;
     await clearAll({ email: emailKey }).catch(() => {});
+    setSelected(new Set());
+  };
+
+  if (!emailKey) {
+    return (
+      <div className={`cust-bell-panel cust-bell-panel--${variant}`}>
+        <div className="cust-bell-empty">
+          <span>Please log in to see notifications</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`cust-bell-panel cust-bell-panel--${variant}`}>
+      <div className="cust-bell-header">
+        <div className="cust-bell-title-row">
+          <span className="cust-bell-title">Notifications</span>
+          {unreadCount > 0 && <span className="cust-bell-unread-pill">{unreadCount} new</span>}
+        </div>
+      </div>
+
+      {notifications.length > 0 && (
+        <div className="cust-bell-toolbar">
+          <label className="cust-bell-select-all">
+            <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} />
+            <span>Select all</span>
+          </label>
+          <div className="cust-bell-toolbar-actions">
+            <button
+              type="button"
+              onClick={() => applyMark(true)}
+              disabled={!selectedIds.length && unreadCount === 0}
+            >
+              Mark read
+            </button>
+            <button
+              type="button"
+              onClick={() => applyMark(false)}
+              disabled={!selectedIds.length}
+            >
+              Mark unread
+            </button>
+            <button
+              type="button"
+              className="cust-bell-mark-all"
+              onClick={() => markAllRead({ email: emailKey }).catch(() => {})}
+              disabled={unreadCount === 0}
+            >
+              All read
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="cust-bell-list" ref={listRef}>
+        {notifications.length === 0 ? (
+          <div className="cust-bell-empty">
+            <img src="/images/dklogo.jpg" alt="" className="cust-bell-empty-logo" />
+            <span>No notifications yet</span>
+          </div>
+        ) : (
+          notifications.map((n) => {
+            const badge = typeBadge(n.type);
+            const store = isStoreNotif(n.type);
+            return (
+              <div
+                key={n._id}
+                className={`cust-bell-item ${!n.read ? 'is-unread' : ''} ${selected.has(n._id) ? 'is-selected' : ''}`}
+              >
+                <label className="cust-bell-check" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={selected.has(n._id)}
+                    onChange={() => toggleOne(n._id)}
+                  />
+                </label>
+                <button type="button" className="cust-bell-item-main" onClick={() => openItem(n)}>
+                  <span className="cust-bell-avatar-wrap" aria-hidden="true">
+                    <img
+                      src="/images/dklogo.jpg"
+                      alt="DKMerch"
+                      className="cust-bell-avatar"
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = '/images/dklogo2-removebg-preview.png';
+                      }}
+                    />
+                    {!store && (
+                      <span className={`cust-bell-type-badge tone-${badge.tone}`}>
+                        <i className={`fas ${badge.icon}`} />
+                      </span>
+                    )}
+                  </span>
+                  <span className="cust-bell-item-body">
+                    <span className="cust-bell-item-title">{n.title}</span>
+                    <span className="cust-bell-item-msg">{n.body}</span>
+                    <span className="cust-bell-item-time">{timeAgo(n.createdAt)}</span>
+                    {String(n.type || '') === 'shipping_fee' && (
+                      <span className="cust-bell-cta">Shop now</span>
+                    )}
+                  </span>
+                  {!n.read && <span className="cust-bell-dot" aria-hidden="true" />}
+                </button>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {notifications.length > 0 && (
+        <div className="cust-bell-footer">
+          <button type="button" className="cust-bell-clear" onClick={handleClearAll}>
+            Clear all
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Header bell — desktop dropdown with checklist; mobile goes to /notifications tab.
+ */
+const CustomerNotificationBell = ({ email }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+  const isMobile = useIsMobileNotif();
+
+  const emailKey = String(email || '').trim().toLowerCase();
+  const unreadCount = useQuery(
+    api.customerNotifications.getUnreadCountForEmail,
+    emailKey ? { email: emailKey } : 'skip'
+  ) ?? 0;
+
+  const { release } = useCloseOnHistoryBack(open, () => setOpen(false), 'customerNotifs');
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDoc = (e) => {
+      if (!wrapRef.current?.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+
+  if (!emailKey) return null;
+
+  const onBellClick = () => {
+    if (isMobile) {
+      goToCustomerTab(navigate, location.pathname, '/notifications');
+      return;
+    }
+    setOpen((o) => !o);
   };
 
   return (
@@ -254,7 +337,7 @@ const CustomerNotificationBell = ({ email }) => {
       <button
         type="button"
         className="header-action-item cust-bell-btn"
-        onClick={toggleOpen}
+        onClick={onBellClick}
         aria-label="Notifications"
         title="Notifications"
         aria-expanded={open}
@@ -268,165 +351,21 @@ const CustomerNotificationBell = ({ email }) => {
         <span>Notifications</span>
       </button>
 
-      {open && (
+      {open && !isMobile && (
         <div className="cust-bell-dropdown" role="dialog" aria-label="Notifications">
-          <div className="cust-bell-header">
-            <h2 className="cust-bell-title">Notifications</h2>
-            <div className="cust-bell-header-actions" ref={menuRef}>
-              <button
-                type="button"
-                className={`cust-bell-more ${menuOpen ? 'is-open' : ''}`}
-                onClick={() => setMenuOpen((v) => !v)}
-                aria-label="More options"
-                aria-expanded={menuOpen}
-              >
-                <i className="fas fa-ellipsis-h" aria-hidden="true" />
-              </button>
-              {menuOpen && (
-                <div className="cust-bell-menu" role="menu">
-                  <button
-                    type="button"
-                    className="cust-bell-menu-item"
-                    role="menuitem"
-                    onClick={handleMarkAllRead}
-                    disabled={unreadCount === 0}
-                  >
-                    <span className="cust-bell-menu-icon" aria-hidden="true">
-                      <i className="fas fa-check" />
-                    </span>
-                    <span>Mark all as read</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="cust-bell-menu-item"
-                    role="menuitem"
-                    onClick={handleOpenNotifications}
-                  >
-                    <span className="cust-bell-menu-icon" aria-hidden="true">
-                      <i className="fas fa-desktop" />
-                    </span>
-                    <span>Open Notifications</span>
-                  </button>
-                  {notifications.length > 0 && (
-                    <button
-                      type="button"
-                      className="cust-bell-menu-item is-danger"
-                      role="menuitem"
-                      onClick={handleClearAll}
-                    >
-                      <span className="cust-bell-menu-icon" aria-hidden="true">
-                        <i className="fas fa-trash-alt" />
-                      </span>
-                      <span>Clear all</span>
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="cust-bell-tabs" role="tablist" aria-label="Notification filter">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={filter === 'all'}
-              className={`cust-bell-tab ${filter === 'all' ? 'is-active' : ''}`}
-              onClick={() => setFilter('all')}
-            >
-              All
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={filter === 'unread'}
-              className={`cust-bell-tab ${filter === 'unread' ? 'is-active' : ''}`}
-              onClick={() => setFilter('unread')}
-            >
-              Unread
-            </button>
-          </div>
-
-          <div className="cust-bell-list" ref={listRef}>
-            {filtered.length === 0 ? (
-              <div className="cust-bell-empty">
-                <span className="cust-bell-empty-icon" aria-hidden="true">
-                  <i className="far fa-bell-slash" />
-                </span>
-                <span>
-                  {filter === 'unread' ? 'No unread notifications' : 'No notifications yet'}
-                </span>
-              </div>
-            ) : (
-              groups.map((group) => (
-                <section key={group.key} className="cust-bell-group">
-                  <div className="cust-bell-group-head">
-                    <h3 className="cust-bell-group-label">{group.label}</h3>
-                    {group.key === 'new' && hasMore && (
-                      <button
-                        type="button"
-                        className="cust-bell-see-all"
-                        onClick={handleSeeAll}
-                      >
-                        See all
-                      </button>
-                    )}
-                  </div>
-                  {group.items.map((n) => {
-                    const badge = typeBadge(n.type);
-                    const store = isStoreNotif(n.type);
-                    return (
-                      <button
-                        key={n._id}
-                        type="button"
-                        className={`cust-bell-item ${!n.read ? 'is-unread' : ''}`}
-                        onClick={() => openItem(n)}
-                      >
-                        <span className="cust-bell-avatar-wrap" aria-hidden="true">
-                          <img
-                            src="/images/dklogo.jpg"
-                            alt="DKMerch"
-                            className="cust-bell-avatar"
-                            onError={(e) => {
-                              e.currentTarget.onerror = null;
-                              e.currentTarget.src = '/images/dklogo2-removebg-preview.png';
-                            }}
-                          />
-                          {!store && (
-                            <span className={`cust-bell-type-badge tone-${badge.tone}`}>
-                              <i className={`fas ${badge.icon}`} />
-                            </span>
-                          )}
-                        </span>
-                        <span className="cust-bell-item-body">
-                          <span className="cust-bell-item-text">
-                            <strong>{n.title}</strong>
-                            {n.body ? ` ${n.body}` : ''}
-                          </span>
-                          {String(n.type || '') === 'shipping_fee' && (
-                            <span className="cust-bell-cta">Shop now</span>
-                          )}
-                          <span className="cust-bell-item-time">{timeAgo(n.createdAt)}</span>
-                        </span>
-                        {!n.read && <span className="cust-bell-dot" aria-hidden="true" />}
-                      </button>
-                    );
-                  })}
-                </section>
-              ))
-            )}
-          </div>
-
-          {filtered.length > 0 && (
-            <div className="cust-bell-footer">
-              <button
-                type="button"
-                className="cust-bell-see-prev"
-                onClick={hasMore ? handleSeeAll : handleOpenNotifications}
-              >
-                {hasMore ? 'See all notifications' : 'You’re all caught up'}
-              </button>
-            </div>
-          )}
+          <button
+            type="button"
+            className="cust-bell-close"
+            onClick={() => { release(); setOpen(false); }}
+            aria-label="Close"
+          >
+            <i className="fas fa-times" />
+          </button>
+          <CustomerNotificationPanel
+            email={emailKey}
+            variant="dropdown"
+            onNavigate={() => { release(); setOpen(false); }}
+          />
         </div>
       )}
     </div>

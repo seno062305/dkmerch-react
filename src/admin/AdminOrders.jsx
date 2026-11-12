@@ -12,6 +12,7 @@ import { isLbcOrder } from '../utils/deliveryUtils';
 import { formatOrderShortId } from '../utils/orderId';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
 import { getOverlayRoot } from '../utils/scrollLock';
+import { validateImageFile, IMAGE_ACCEPT_NO_GIF } from '../utils/imageUpload';
 import './AdminOrders.css';
 
 const SITE_URL = 'https://dkmerchwebsite.vercel.app';
@@ -492,6 +493,7 @@ const AdminOrders = () => {
   const resolveRefundMutation     = useMutation(api.orders.resolveRefund);
   const rejectCustomerCancelMutation = useMutation(api.orders.rejectCustomerCancel);
   const approveCustomerCancelAction  = useAction(api.payments.approveCustomerCancel);
+  const approveDamageRefundAction    = useAction(api.payments.approveDamageRefund);
 
   const validOrders = orders.filter(o => o.orderId && o.items?.length > 0);
   const refundCount = validOrders.filter(o => o.refundStatus === 'requested').length;
@@ -639,15 +641,44 @@ const AdminOrders = () => {
   const handleResolveRefund = async (orderId, refundStatus, adminNote) => {
     const shortId = formatOrderShortId(orderId);
     if (refundStatus === 'approved') {
+      const amount = selectedOrder?.finalTotal ?? selectedOrder?.total ?? 0;
       const ok = await confirm({
-        title: 'Approve this refund?',
-        message: `Approve the refund for order #${shortId}?\n\nThis marks the refund as approved/paid for the customer.`,
-        confirmLabel: 'Approve Refund',
+        title: 'Pay refund via PayMongo?',
+        message: `Refund ₱${Number(amount).toLocaleString('en-PH')} for order #${shortId}?\n\nPayMongo will return the payment to the customer’s GCash/Maya — same flow as their checkout payment.`,
+        confirmLabel: 'Continue to PayMongo',
         cancelLabel: 'Cancel',
         variant: 'primary',
-        icon: 'fa-hand-holding-usd',
+        icon: 'fa-credit-card',
       });
       if (!ok) return;
+      try {
+        const result = await approveDamageRefundAction({
+          orderId,
+          adminNote: adminNote || undefined,
+        });
+        if (!result?.success) {
+          showNotification(result?.error || 'PayMongo refund failed.', 'error');
+          return;
+        }
+        showNotification(
+          `Refund ₱${Number(result.refundAmount || amount).toLocaleString('en-PH')} sent via PayMongo.`,
+          'success'
+        );
+        if (selectedOrder?.orderId === orderId) {
+          setSelectedOrder((prev) => ({
+            ...prev,
+            refundStatus: 'approved',
+            refundAdminNote: adminNote,
+            refundResolvedAt: new Date().toISOString(),
+            refundAmount: result.refundAmount || amount,
+            refundPaidAt: new Date().toISOString(),
+          }));
+        }
+      } catch (err) {
+        console.error('Failed to approve refund via PayMongo:', err);
+        showNotification(err?.data || err?.message || 'PayMongo refund failed.', 'error');
+      }
+      return;
     }
     try {
       await resolveRefundMutation({ orderId, refundStatus, refundAdminNote: adminNote });
@@ -656,7 +687,6 @@ const AdminOrders = () => {
         setSelectedOrder(prev => ({
           ...prev, refundStatus, refundAdminNote: adminNote,
           refundResolvedAt: new Date().toISOString(), refundAmount,
-          ...(refundStatus === 'approved' ? { refundPaidAt: new Date().toISOString() } : {}),
         }));
       }
     } catch (err) {
@@ -973,12 +1003,10 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
   const handleCancelProofChange = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      setCancelProofError('Please upload an image (screenshot of GCash/Maya/PayMongo refund).');
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      setCancelProofError('Image must be less than 5MB.');
+    const check = validateImageFile(file);
+    if (!check.ok) {
+      setCancelProofError(check.error);
+      e.target.value = '';
       return;
     }
     setCancelProofError('');
@@ -999,12 +1027,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
     setResolvingCancel(true);
     try {
       let proofPhotoId;
-      if (decision === 'approved' && isPaid) {
-        if (!cancelProofFile) {
-          setCancelProofError('Upload a screenshot proof that the refund was sent (GCash / Maya / PayMongo).');
-          setResolvingCancel(false);
-          return;
-        }
+      if (decision === 'approved' && isPaid && cancelProofFile) {
         const uploadUrl = await generateRefundUploadUrl();
         const uploadRes = await fetch(uploadUrl, {
           method: 'POST',
@@ -1217,8 +1240,13 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                           <span>Customer</span>
                           <strong>{order.customerName || '—'}</strong>
                         </div>
+                        <div className="admin-paymongo-brands">
+                          <img src="/images/payments/gcash.svg" alt="GCash" />
+                          <img src="/images/payments/maya.svg" alt="Maya" />
+                          <span>Secured by PayMongo</span>
+                        </div>
                         <p className="admin-cancel-paymongo-hint">
-                          Refund via PayMongo to the original GCash/Maya payment, then upload a screenshot proof below before approving.
+                          Approving opens PayMongo refund to the customer’s original GCash/Maya — same payment rails as checkout.
                         </p>
                       </div>
                     )}
@@ -1226,7 +1254,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                       <i className="fas fa-info-circle"></i>
                       <span>
                         Approving will cancel the order
-                        {isPaid ? ` and process the ₱${finalTotal.toLocaleString('en-PH', { minimumFractionDigits: 2 })} PayMongo refund` : ''}.
+                        {isPaid ? ` and return ₱${finalTotal.toLocaleString('en-PH', { minimumFractionDigits: 2 })} via PayMongo` : ''}.
                       </span>
                     </div>
                     {isPaid && (
@@ -1237,7 +1265,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                         <input
                           ref={cancelProofInputRef}
                           type="file"
-                          accept="image/*"
+                          accept={IMAGE_ACCEPT_NO_GIF}
                           onChange={handleCancelProofChange}
                           style={{ display: 'none' }}
                         />
@@ -1248,7 +1276,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                             onClick={() => cancelProofInputRef.current?.click()}
                             disabled={resolvingCancel}
                           >
-                            <i className="fas fa-cloud-upload-alt"></i> Upload GCash / Maya / PayMongo screenshot
+                            <i className="fas fa-cloud-upload-alt"></i> Optional screenshot (JPG/PNG · no GIF)
                           </button>
                         ) : (
                           <div className="admin-cancel-proof-preview">
@@ -1286,9 +1314,12 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                       <button
                         className="admin-refund-approve-btn"
                         onClick={() => handleCancelRequestResolve('approved')}
-                        disabled={resolvingCancel || (isPaid && !cancelProofFile)}
+                        disabled={resolvingCancel}
                       >
-                        {resolvingCancel ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-check-circle"></i>} Approve Cancel
+                        {resolvingCancel
+                          ? <i className="fas fa-spinner fa-spin"></i>
+                          : <i className="fas fa-credit-card"></i>}
+                        {isPaid ? 'PayMongo Refund & Cancel' : 'Approve Cancel'}
                       </button>
                     </div>
                   </div>
@@ -1350,7 +1381,53 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                 )}
                 {order.refundStatus === 'requested' && (
                   <div className="admin-refund-action">
-                    <div className="admin-refund-confirm-notice"><i className="fas fa-info-circle"></i><span>Approving will refund <strong>₱{refundAmount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</strong> to customer's {REFUND_METHOD_LABELS[order.refundMethod]?.label || 'account'}{order.refundAccountNumber ? ` (${order.refundAccountNumber})` : ''}. Send money first before approving.</span></div>
+                    <div className="admin-cancel-paymongo-card admin-refund-paymongo-card">
+                      <div className="admin-cancel-paymongo-head">
+                        <i className="fas fa-credit-card"></i>
+                        <strong>PayMongo refund · pay customer back</strong>
+                      </div>
+                      <div className="admin-cancel-paymongo-row">
+                        <span>Amount to return</span>
+                        <strong>₱{refundAmount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</strong>
+                      </div>
+                      <div className="admin-cancel-paymongo-row">
+                        <span>Return via</span>
+                        <strong className="admin-refund-method-cell">
+                          <PaymentMethodMark
+                            pm={REFUND_METHOD_LABELS[order.refundMethod] || getPaymentMethodLabel(order)}
+                            size={18}
+                          />
+                          <span style={{ color: (REFUND_METHOD_LABELS[order.refundMethod] || getPaymentMethodLabel(order))?.color }}>
+                            {(REFUND_METHOD_LABELS[order.refundMethod] || getPaymentMethodLabel(order))?.label || 'GCash / Maya'}
+                          </span>
+                        </strong>
+                      </div>
+                      <div className="admin-cancel-paymongo-row">
+                        <span>Account</span>
+                        <strong>
+                          {order.refundAccountName || '—'}
+                          {order.refundAccountNumber ? ` · ${order.refundAccountNumber}` : ''}
+                        </strong>
+                      </div>
+                      <div className="admin-paymongo-brands">
+                        <img src="/images/payments/gcash.svg" alt="GCash" />
+                        <img src="/images/payments/maya.svg" alt="Maya" />
+                        <span>Secured by PayMongo</span>
+                      </div>
+                      <p className="admin-cancel-paymongo-hint">
+                        Same as customer checkout: PayMongo returns the paid amount to their original GCash/Maya wallet.
+                      </p>
+                      <button
+                        type="button"
+                        className="admin-paymongo-pay-btn"
+                        onClick={() => handleRefundResolve('approved')}
+                        disabled={resolvingRefund}
+                      >
+                        {resolvingRefund
+                          ? <><i className="fas fa-spinner fa-spin"></i> Processing PayMongo…</>
+                          : <><i className="fas fa-lock"></i> Continue to PayMongo Refund</>}
+                      </button>
+                    </div>
                     <label className="admin-refund-note-label"><i className="fas fa-comment-alt"></i> Response note <span style={{ color: '#9ca3af', fontWeight: 400 }}>(optional)</span></label>
                     <textarea
                       className="admin-refund-note-input"
@@ -1369,7 +1446,6 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                     />
                     <div className="admin-refund-action-btns">
                       <button className="admin-refund-reject-btn" onClick={() => setShowRejectConfirm(true)} disabled={resolvingRefund}>{resolvingRefund ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-times-circle"></i>} Reject</button>
-                      <button className="admin-refund-approve-btn" onClick={() => handleRefundResolve('approved')} disabled={resolvingRefund}>{resolvingRefund ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-check-circle"></i>} Approve & Mark Paid</button>
                     </div>
                   </div>
                 )}

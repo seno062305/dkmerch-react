@@ -291,6 +291,17 @@
   min-width: 0;
   overflow: hidden;
 }
+.ab-store-shipping-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+  gap: 14px;
+  margin: 0 0 16px;
+  align-items: stretch;
+}
+.ab-store-shipping-row .ab-card {
+  min-width: 0;
+  height: 100%;
+}
 .ab-store-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -311,6 +322,7 @@
 }
 @media (max-width: 980px) {
   .ab-maint-grid { grid-template-columns: 1fr; }
+  .ab-store-shipping-row { grid-template-columns: 1fr; }
   .ab-store-grid { grid-template-columns: 1fr; }
 }
 

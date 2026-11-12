@@ -645,19 +645,26 @@ header {
   transition: all 0.2s ease;
   cursor: pointer;
   border: none;
+  border-left: 3px solid transparent;
   background: none;
   width: 100%;
   text-align: left;
   font-size: 0.95rem;
   position: relative;
+  box-sizing: border-box;
 }
 
-.preorder-dropdown-item i.fa-clock { width: 20px; text-align: center; font-size: 1.1rem; color: #7c3aed; }
+.preorder-dropdown-item > span:not(.preorder-available-badge),
+.preorder-dropdown-item {
+  justify-content: flex-start;
+}
+
+.preorder-dropdown-item i.fa-clock { width: 20px; text-align: center; font-size: 1.1rem; color: #7c3aed; flex-shrink: 0; }
 .preorder-dropdown-item:hover { background: #f8f9fa; color: #9c27b0; }
 
 .preorder-dropdown-item.has-available {
   background: linear-gradient(135deg, #fff0f9, #f5f0ff);
-  border-left: 3px solid #fc1268;
+  border-left-color: #fc1268;
 }
 
 .preorder-dropdown-item.has-available:hover {
@@ -722,6 +729,16 @@ header {
    REWARDS DROPDOWN ITEM
 ══════════════════════════════════════════ */
 
+.account-dropdown-menu .dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border-left: 3px solid transparent;
+  box-sizing: border-box;
+  text-align: left;
+  justify-content: flex-start;
+}
+
 .rewards-dropdown-item {
   display: flex;
   align-items: center;
@@ -737,6 +754,7 @@ header {
   text-align: left;
   font-size: 0.95rem;
   border-left: 3px solid #fc1268;
+  box-sizing: border-box;
 }
 
 .rewards-dropdown-item:hover {
@@ -753,6 +771,9 @@ header {
 
 .rewards-pts-badge {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 11px;
   font-weight: 700;
   color: #fc1268;
@@ -761,4 +782,9 @@ header {
   border-radius: 10px;
   border: 1px solid rgba(252, 18, 104, 0.2);
   white-space: nowrap;
+}
+.rewards-pts-badge i {
+  font-size: 10px;
+  color: #f5a623;
+  width: auto;
 }

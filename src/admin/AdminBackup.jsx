@@ -1731,6 +1731,140 @@ const AdminBackup = () => {
         </button>
       </div>
 
+      <div className="ab-store-shipping-row">
+        <div className="ab-card">
+          <div className="ab-card-title">
+            <i className="fas fa-map-marker-alt" style={{ background: '#fff1f5', color: '#fc1268' }}></i>
+            <h3>Store / Pickup Location</h3>
+          </div>
+          <div className="ab-store-grid">
+            <div className="ab-store-field">
+              <label className="ab-password-label" htmlFor="ab-store-name">Store Name</label>
+              <input
+                id="ab-store-name"
+                className="ab-oracle-input"
+                type="text"
+                name="storeName"
+                value={storeForm.storeName}
+                onChange={handleStoreFormChange}
+                placeholder="DKMerch Store"
+              />
+            </div>
+            <div className="ab-store-field">
+              <label className="ab-password-label" htmlFor="ab-store-address">Store Address</label>
+              <input
+                id="ab-store-address"
+                className="ab-oracle-input"
+                type="text"
+                name="storeAddress"
+                value={storeForm.storeAddress}
+                onChange={handleStoreFormChange}
+                placeholder="Full store address"
+              />
+            </div>
+            <div className="ab-store-field">
+              <label className="ab-password-label" htmlFor="ab-store-lat">Latitude</label>
+              <input
+                id="ab-store-lat"
+                className="ab-oracle-input"
+                type="number"
+                name="storeLat"
+                value={storeForm.storeLat}
+                onChange={handleStoreFormChange}
+                placeholder="e.g. 14.5995"
+                step="0.00001"
+              />
+            </div>
+            <div className="ab-store-field">
+              <label className="ab-password-label" htmlFor="ab-store-lng">Longitude</label>
+              <input
+                id="ab-store-lng"
+                className="ab-oracle-input"
+                type="number"
+                name="storeLng"
+                value={storeForm.storeLng}
+                onChange={handleStoreFormChange}
+                placeholder="e.g. 120.9842"
+                step="0.00001"
+              />
+            </div>
+          </div>
+          <div className="ab-store-actions">
+            <button
+              type="button"
+              className="ab-btn-outline"
+              onClick={handleDetectLocation}
+              disabled={storeLocating}
+            >
+              <i className={storeLocating ? 'fas fa-spinner fa-spin' : 'fas fa-crosshairs'}></i>{' '}
+              {storeLocating ? 'Detecting…' : 'Detect My Location'}
+            </button>
+            <button
+              type="button"
+              className="ab-btn-primary"
+              onClick={handleSaveStoreSettings}
+              style={storeFormSaved ? { background: '#16a34a' } : undefined}
+            >
+              <i className={storeFormSaved ? 'fas fa-check' : 'fas fa-save'}></i>{' '}
+              {storeFormSaved ? 'Saved!' : 'Save Location'}
+            </button>
+          </div>
+        </div>
+
+        <div className="ab-card">
+          <div className="ab-card-title">
+            <i className="fas fa-truck" style={{ background: '#eff6ff', color: '#2563eb' }}></i>
+            <h3>Shipping Fee</h3>
+          </div>
+          <p style={{ margin: '0 0 12px', color: '#64748b', fontSize: 13, lineHeight: 1.45 }}>
+            Base delivery fare used at checkout (distance / extras still add on top).
+            Saving a new amount asks for confirmation and notifies customers in-app only.
+          </p>
+          <div className="ab-store-grid">
+            <div className="ab-store-field">
+              <label className="ab-password-label" htmlFor="ab-shipping-base">
+                Base shipping fee (₱)
+              </label>
+              <input
+                id="ab-shipping-base"
+                className="ab-oracle-input"
+                type="number"
+                name="shippingBaseFare"
+                min="0"
+                step="1"
+                value={storeForm.shippingBaseFare}
+                onChange={handleStoreFormChange}
+                placeholder="49"
+              />
+            </div>
+          </div>
+          <div className="ab-store-actions">
+            <button
+              type="button"
+              className="ab-btn-primary"
+              onClick={handleSaveShippingFee}
+              disabled={shippingSaving}
+              style={shippingSaved ? { background: '#16a34a' } : undefined}
+            >
+              <i
+                className={
+                  shippingSaving
+                    ? 'fas fa-spinner fa-spin'
+                    : shippingSaved
+                      ? 'fas fa-check'
+                      : 'fas fa-save'
+                }
+              ></i>{' '}
+              {shippingSaving
+                ? 'Saving…'
+                : shippingSaved
+                  ? 'Saved & notified!'
+                  : 'Save Shipping Fee'}
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div className="ab-stat-grid">
         <div className="ab-stat-card ab-stat-card--ok">
           <div className="ab-stat-card-label">System health <i className="fas fa-wifi"></i></div>
@@ -2090,137 +2224,6 @@ const AdminBackup = () => {
             </div>
           </div>
 
-          <div className="ab-card">
-            <div className="ab-card-title">
-              <i className="fas fa-map-marker-alt" style={{ background: '#fff1f5', color: '#fc1268' }}></i>
-              <h3>Store / Pickup Location</h3>
-            </div>
-            <div className="ab-store-grid">
-              <div className="ab-store-field">
-                <label className="ab-password-label" htmlFor="ab-store-name">Store Name</label>
-                <input
-                  id="ab-store-name"
-                  className="ab-oracle-input"
-                  type="text"
-                  name="storeName"
-                  value={storeForm.storeName}
-                  onChange={handleStoreFormChange}
-                  placeholder="DKMerch Store"
-                />
-              </div>
-              <div className="ab-store-field">
-                <label className="ab-password-label" htmlFor="ab-store-address">Store Address</label>
-                <input
-                  id="ab-store-address"
-                  className="ab-oracle-input"
-                  type="text"
-                  name="storeAddress"
-                  value={storeForm.storeAddress}
-                  onChange={handleStoreFormChange}
-                  placeholder="Full store address"
-                />
-              </div>
-              <div className="ab-store-field">
-                <label className="ab-password-label" htmlFor="ab-store-lat">Latitude</label>
-                <input
-                  id="ab-store-lat"
-                  className="ab-oracle-input"
-                  type="number"
-                  name="storeLat"
-                  value={storeForm.storeLat}
-                  onChange={handleStoreFormChange}
-                  placeholder="e.g. 14.5995"
-                  step="0.00001"
-                />
-              </div>
-              <div className="ab-store-field">
-                <label className="ab-password-label" htmlFor="ab-store-lng">Longitude</label>
-                <input
-                  id="ab-store-lng"
-                  className="ab-oracle-input"
-                  type="number"
-                  name="storeLng"
-                  value={storeForm.storeLng}
-                  onChange={handleStoreFormChange}
-                  placeholder="e.g. 120.9842"
-                  step="0.00001"
-                />
-              </div>
-            </div>
-            <div className="ab-store-actions">
-              <button
-                type="button"
-                className="ab-btn-outline"
-                onClick={handleDetectLocation}
-                disabled={storeLocating}
-              >
-                <i className={storeLocating ? 'fas fa-spinner fa-spin' : 'fas fa-crosshairs'}></i>{' '}
-                {storeLocating ? 'Detecting…' : 'Detect My Location'}
-              </button>
-              <button
-                type="button"
-                className="ab-btn-primary"
-                onClick={handleSaveStoreSettings}
-                style={storeFormSaved ? { background: '#16a34a' } : undefined}
-              >
-                <i className={storeFormSaved ? 'fas fa-check' : 'fas fa-save'}></i>{' '}
-                {storeFormSaved ? 'Saved!' : 'Save Location'}
-              </button>
-            </div>
-          </div>
-
-          <div className="ab-card" style={{ marginTop: 16 }}>
-            <div className="ab-card-title">
-              <i className="fas fa-truck" style={{ background: '#eff6ff', color: '#2563eb' }}></i>
-              <h3>Shipping Fee</h3>
-            </div>
-            <p style={{ margin: '0 0 12px', color: '#64748b', fontSize: 13, lineHeight: 1.45 }}>
-              Base delivery fare used at checkout (distance / extras still add on top).
-              Saving a new amount asks for confirmation and notifies customers in-app only.
-            </p>
-            <div className="ab-store-grid">
-              <div className="ab-store-field">
-                <label className="ab-password-label" htmlFor="ab-shipping-base">
-                  Base shipping fee (₱)
-                </label>
-                <input
-                  id="ab-shipping-base"
-                  className="ab-oracle-input"
-                  type="number"
-                  name="shippingBaseFare"
-                  min="0"
-                  step="1"
-                  value={storeForm.shippingBaseFare}
-                  onChange={handleStoreFormChange}
-                  placeholder="49"
-                />
-              </div>
-            </div>
-            <div className="ab-store-actions">
-              <button
-                type="button"
-                className="ab-btn-primary"
-                onClick={handleSaveShippingFee}
-                disabled={shippingSaving}
-                style={shippingSaved ? { background: '#16a34a' } : undefined}
-              >
-                <i
-                  className={
-                    shippingSaving
-                      ? 'fas fa-spinner fa-spin'
-                      : shippingSaved
-                        ? 'fas fa-check'
-                        : 'fas fa-save'
-                  }
-                ></i>{' '}
-                {shippingSaving
-                  ? 'Saving…'
-                  : shippingSaved
-                    ? 'Saved & notified!'
-                    : 'Save Shipping Fee'}
-              </button>
-            </div>
-          </div>
           </div>
         </div>
       </section>

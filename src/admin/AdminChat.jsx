@@ -35,6 +35,7 @@ const AdminChat = () => {
   const [error, setError] = useState('');
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [holdMenu, setHoldMenu] = useState(null); // { thread, x, y }
+  const [presenceTick, setPresenceTick] = useState(0);
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return false;
     return window.matchMedia(MOBILE_CHAT_MQ).matches;
@@ -66,8 +67,19 @@ const AdminChat = () => {
   const sendAdminMessage = useMutation(api.supportChat.sendAdminMessage);
   const generateUploadUrl = useMutation(api.supportChat.generateChatUploadUrl);
   const markRead = useMutation(api.supportChat.markThreadReadByAdmin);
+  const heartbeatPresence = useMutation(api.supportChat.heartbeatPresence);
   const archiveThread = useMutation(api.supportChat.archiveThread);
   const unarchiveThread = useMutation(api.supportChat.unarchiveThread);
+
+  const ONLINE_MS = 45000;
+  const customerOnline = !!(activeThread?.customerOnlineAt && Date.now() - activeThread.customerOnlineAt < ONLINE_MS);
+  const customerLastReadAt = activeThread?.customerLastReadAt || 0;
+  void presenceTick;
+
+  useEffect(() => {
+    const id = setInterval(() => setPresenceTick((n) => n + 1), 15000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return undefined;
@@ -100,6 +112,23 @@ const AdminChat = () => {
     if (!activeId) return;
     markRead({ threadId: activeId }).catch(() => {});
   }, [activeId, markRead, messages.length]);
+
+  useEffect(() => {
+    if (!activeId) return undefined;
+    const ping = () => {
+      heartbeatPresence({ role: 'admin', threadId: activeId }).catch(() => {});
+    };
+    ping();
+    const id = setInterval(ping, 20000);
+    const onVis = () => {
+      if (document.visibilityState === 'visible') ping();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, [activeId, heartbeatPresence]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -228,8 +257,10 @@ const AdminChat = () => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      setError('Please choose an image file.');
+    if (!file.type.startsWith('image/') || file.type === 'image/gif' || /\.gif$/i.test(file.name || '')) {
+      setError(file.type === 'image/gif' || /\.gif$/i.test(file.name || '')
+        ? 'GIF images are not allowed. Please upload JPG or PNG.'
+        : 'Please choose an image file.');
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
@@ -298,7 +329,12 @@ const AdminChat = () => {
         onMouseLeave={onThreadPointerUp}
         onMouseMove={onThreadPointerMove}
       >
-        <div className="admin-chat-avatar">{(t.customerName || 'C').charAt(0).toUpperCase()}</div>
+        <div className="admin-chat-avatar-wrap">
+          <div className="admin-chat-avatar">{(t.customerName || 'C').charAt(0).toUpperCase()}</div>
+          {t.customerOnlineAt && Date.now() - t.customerOnlineAt < ONLINE_MS && (
+            <span className="admin-chat-online-dot" title="Online" />
+          )}
+        </div>
         <div className="admin-chat-thread-main">
           <div className="admin-chat-thread-top">
             <strong>{t.customerName || 'Customer'}</strong>
@@ -442,12 +478,18 @@ const AdminChat = () => {
                 >
                   <i className="fas fa-chevron-left"></i>
                 </button>
-                <div className="admin-chat-avatar large">
-                  {(activeThread.customerName || 'C').charAt(0).toUpperCase()}
+                <div className="admin-chat-avatar-wrap">
+                  <div className="admin-chat-avatar large">
+                    {(activeThread.customerName || 'C').charAt(0).toUpperCase()}
+                  </div>
+                  {customerOnline && <span className="admin-chat-online-dot" title="Online" />}
                 </div>
                 <div className="admin-chat-convo-head-text">
                   <strong>{activeThread.customerName || 'Customer'}</strong>
-                  <span>{activeThread.customerEmail}</span>
+                  <span className={`admin-chat-presence ${customerOnline ? 'is-online' : 'is-offline'}`}>
+                    <i className="fas fa-circle"></i>
+                    {customerOnline ? 'Online' : 'Offline'} · {activeThread.customerEmail}
+                  </span>
                 </div>
                 <button
                   type="button"
@@ -460,25 +502,34 @@ const AdminChat = () => {
               </div>
 
               <div className="admin-chat-messages">
-                {messages.map((msg) => (
-                  <div
-                    key={msg._id}
-                    className={`admin-chat-bubble ${msg.senderRole === 'admin' ? 'mine' : 'customer'}`}
-                  >
-                    <div className="admin-chat-meta">
-                      {msg.senderRole === 'admin' ? 'You' : msg.senderName} ·{' '}
-                      {new Date(msg.createdAt).toLocaleString('en-PH', {
-                        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
-                      })}
+                {messages.map((msg) => {
+                  const isMine = msg.senderRole === 'admin';
+                  const seen = isMine && customerLastReadAt >= msg.createdAt;
+                  return (
+                    <div
+                      key={msg._id}
+                      className={`admin-chat-bubble ${isMine ? 'mine' : 'customer'}`}
+                    >
+                      <div className="admin-chat-meta">
+                        {isMine ? 'You' : msg.senderName} ·{' '}
+                        {new Date(msg.createdAt).toLocaleString('en-PH', {
+                          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+                        })}
+                      </div>
+                      {msg.body && <div className="admin-chat-text">{msg.body}</div>}
+                      {msg.imageUrl && (
+                        <a href={msg.imageUrl} target="_blank" rel="noreferrer">
+                          <img src={msg.imageUrl} alt="Attachment" />
+                        </a>
+                      )}
+                      {isMine && (
+                        <div className={`admin-chat-seen ${seen ? 'is-seen' : ''}`}>
+                          {seen ? <><i className="fas fa-check-double"></i> Seen</> : <><i className="fas fa-check"></i> Sent</>}
+                        </div>
+                      )}
                     </div>
-                    {msg.body && <div className="admin-chat-text">{msg.body}</div>}
-                    {msg.imageUrl && (
-                      <a href={msg.imageUrl} target="_blank" rel="noreferrer">
-                        <img src={msg.imageUrl} alt="Attachment" />
-                      </a>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
                 <div ref={bottomRef} />
               </div>
 
@@ -493,7 +544,7 @@ const AdminChat = () => {
               {error && <div className="admin-chat-error">{error}</div>}
 
               <form className="admin-chat-composer" onSubmit={handleSend}>
-                <input ref={fileRef} type="file" accept="image/*" hidden onChange={handlePickImage} />
+                <input ref={fileRef} type="file" accept="image/jpeg,image/jpg,image/png,image/webp" hidden onChange={handlePickImage} />
                 <button type="button" className="admin-chat-attach" onClick={() => fileRef.current?.click()}>
                   <i className="fas fa-image"></i>
                 </button>

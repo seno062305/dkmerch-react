@@ -4,9 +4,10 @@ import './AdminUsers.css';
 import { useQuery, useMutation, useAction, useConvex } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useConfirm } from '../context/ConfirmContext';
-import DkIcon, { DK_ICONS } from '../components/DkIcon';
 import AdminPager, { fixedPageStyle } from './AdminPager';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
+import { formatPlateNumber, formatLicenseNumber, PLATE_REGEX, LICENSE_REGEX } from '../utils/riderIdFormat';
+import { IMAGE_ACCEPT_NO_GIF, validateImageFile } from '../utils/imageUpload';
 
 /** Safe archives fetch — avoids hard crash if Convex hasn't deployed listUserArchives yet. */
 function useUserArchivesSafe(enabled) {
@@ -56,9 +57,11 @@ const RiderViewModal = ({ rider, onClose, onPhotoUpdated }) => {
   const [photoBusy, setPhotoBusy] = useState(false);
   const [localPhoto, setLocalPhoto] = useState(rider.riderPhoto || null);
   const [photoMsg, setPhotoMsg] = useState('');
+  const [showRiderPassword, setShowRiderPassword] = useState(false);
 
   useEffect(() => {
     setLocalPhoto(rider.riderPhoto || null);
+    setShowRiderPassword(false);
   }, [rider._id, rider.riderPhoto]);
 
   const handlePrint = () => {
@@ -110,7 +113,7 @@ const RiderViewModal = ({ rider, onClose, onPhotoUpdated }) => {
         <div ref={cardRef}>
           <div className="au-dk-id-card">
             <div className="au-dk-id-header">
-              <span className="au-dk-id-logo">🛵</span>
+              <span className="au-dk-id-logo"><i className="fas fa-motorcycle"></i></span>
               <div>
                 <div className="au-dk-id-brand">DKMerch</div>
                 <div className="au-dk-id-brand-sub">Official Delivery Rider</div>
@@ -119,16 +122,16 @@ const RiderViewModal = ({ rider, onClose, onPhotoUpdated }) => {
             <div className="au-dk-id-body">
               {localPhoto
                 ? <img src={localPhoto} alt={rider.fullName} className="au-dk-id-photo" />
-                : <div className="au-dk-id-photo-placeholder">👤</div>}
+                : <div className="au-dk-id-photo-placeholder"><i className="fas fa-user"></i></div>}
               <div className="au-dk-id-info">
                 <div className="au-dk-id-name">{rider.fullName}</div>
                 <div className="au-dk-id-role">Delivery Rider · Motorcycle</div>
                 <div className="au-dk-id-details">
-                  <div>📞 {rider.phone || '—'}</div>
-                  <div>✉️ {rider.email || '—'}</div>
-                  {rider.plateNumber && <div>🔢 Plate Number: {rider.plateNumber}</div>}
-                  {rider.licenseNumber && <div>🪪 License: {rider.licenseNumber}</div>}
-                  {rider.address && <div>📍 {rider.address}</div>}
+                  <div><i className="fas fa-phone"></i> {rider.phone || '—'}</div>
+                  <div><i className="fas fa-envelope"></i> {rider.email || '—'}</div>
+                  {rider.plateNumber && <div><i className="fas fa-car"></i> Plate: {rider.plateNumber}</div>}
+                  {rider.licenseNumber && <div><i className="fas fa-id-card"></i> License: {rider.licenseNumber}</div>}
+                  {rider.address && <div><i className="fas fa-map-marker-alt"></i> {rider.address}</div>}
                 </div>
               </div>
             </div>
@@ -177,6 +180,29 @@ const RiderViewModal = ({ rider, onClose, onPhotoUpdated }) => {
           <span className={`au-rider-view-status status-${rider.status}`}>{rider.status}</span>
           {rider.vehicleType && <span>Vehicle: Motorcycle</span>}
         </div>
+
+        {rider.password && (
+          <div className="au-rider-view-password">
+            <span className="au-pending-label">Login Password</span>
+            <div className="au-pw-row">
+              <input
+                type={showRiderPassword ? 'text' : 'password'}
+                value={rider.password}
+                readOnly
+                autoComplete="off"
+              />
+              <button
+                type="button"
+                className="au-pw-toggle"
+                onClick={() => setShowRiderPassword((v) => !v)}
+                aria-label={showRiderPassword ? 'Hide password' : 'Show password'}
+                title={showRiderPassword ? 'Hide password' : 'Show password'}
+              >
+                <i className={`fas ${showRiderPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="au-rider-view-actions">
           {rider.dkRiderId && (
@@ -310,7 +336,9 @@ const AdminUsers = () => {
   const adminCreateRider      = useMutation(api.riders.adminCreateRider);
   const approveRiderMutation  = useMutation(api.riders.approveRider);
   const rejectRiderMutation   = useMutation(api.riders.rejectRiderApplication);
+  const repairDuplicateRiderIds = useMutation(api.riders.repairDuplicateRiderIds);
   const sendRiderApprovedEmail = useAction(api.sendEmail.sendRiderApprovedEmail);
+  const riderIdsRepairedRef = useRef(false);
 
   const [searchTerm, setSearchTerm]     = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -357,6 +385,15 @@ const AdminUsers = () => {
   const [pendingAppDetail, setPendingAppDetail] = useState(null);
   const [showRiderPw, setShowRiderPw]     = useState(false);
   const [viewingRider, setViewingRider]   = useState(null);
+
+  useEffect(() => {
+    if (activeTab !== 'riders' && activeTab !== 'applications') return;
+    if (riderIdsRepairedRef.current) return;
+    riderIdsRepairedRef.current = true;
+    repairDuplicateRiderIds({}).catch(() => {
+      riderIdsRepairedRef.current = false;
+    });
+  }, [activeTab, repairDuplicateRiderIds]);
 
   useBodyScrollLock(
     !!(
@@ -437,6 +474,8 @@ const AdminUsers = () => {
     const { name, value } = e.target;
     let next = value;
     if (name === 'phone') next = value.replace(/\D/g, '').slice(0, 11);
+    if (name === 'plateNumber') next = formatPlateNumber(value);
+    if (name === 'licenseNumber') next = formatLicenseNumber(value);
     if (name === 'password' || name === 'confirmPassword') next = value.slice(0, 10);
     setRiderForm(prev => ({ ...prev, [name]: next }));
     setRiderFormError('');
@@ -464,6 +503,14 @@ const AdminUsers = () => {
     }
     if (password !== confirmPassword) {
       setRiderFormError('Passwords do not match.');
+      return;
+    }
+    if (plateNumber.trim() && !PLATE_REGEX.test(plateNumber.trim())) {
+      setRiderFormError('Plate number must look like ABC 1234.');
+      return;
+    }
+    if (licenseNumber.trim() && !LICENSE_REGEX.test(licenseNumber.trim())) {
+      setRiderFormError('License number must look like N01-23-456789.');
       return;
     }
 
@@ -776,11 +823,11 @@ const AdminUsers = () => {
   const getStatusDisplay = (status) => {
     const s = status || 'active';
     switch (s) {
-      case 'active':           return { label: 'Active',      dkIcon: DK_ICONS.userActive };
-      case 'suspended':        return { label: 'Suspended',   dkIcon: DK_ICONS.userSuspendedDeleted };
-      case 'self_deactivated': return { label: 'Deactivated', dkIcon: DK_ICONS.userDeactivated };
-      case 'deleted':          return { label: 'Deleted',     dkIcon: DK_ICONS.userSuspendedDeleted };
-      default:                 return { label: s,             dkIcon: null };
+      case 'active':           return { label: 'Active',      faIcon: 'fa-check-circle' };
+      case 'suspended':        return { label: 'Suspended',   faIcon: 'fa-ban' };
+      case 'self_deactivated': return { label: 'Deactivated', faIcon: 'fa-user-slash' };
+      case 'deleted':          return { label: 'Deleted',     faIcon: 'fa-trash-alt' };
+      default:                 return { label: s,             faIcon: 'fa-circle' };
     }
   };
 
@@ -858,7 +905,7 @@ const AdminUsers = () => {
         ) : (
           <>
             <div className="au-stat-card">
-              <div className="au-stat-icon au-stat-icon--green"><DkIcon name={DK_ICONS.userActive} size={22} /></div>
+              <div className="au-stat-icon au-stat-icon--green"><i className="fas fa-user-check"></i></div>
               <div className="au-stat-info">
                 <div className="au-stat-label">ACTIVE</div>
                 <div className="au-stat-number">{activeUsers}</div>
@@ -866,7 +913,7 @@ const AdminUsers = () => {
               </div>
             </div>
             <div className="au-stat-card">
-              <div className="au-stat-icon au-stat-icon--red"><DkIcon name={DK_ICONS.userSuspendedDeleted} size={22} /></div>
+              <div className="au-stat-icon au-stat-icon--red"><i className="fas fa-user-slash"></i></div>
               <div className="au-stat-info">
                 <div className="au-stat-label">SUSPENDED / DELETED</div>
                 <div className="au-stat-number">{suspendedUsers + deletedUsers}</div>
@@ -879,7 +926,7 @@ const AdminUsers = () => {
               </div>
             </div>
             <div className="au-stat-card">
-              <div className="au-stat-icon au-stat-icon--yellow"><DkIcon name={DK_ICONS.userDeactivated} size={22} /></div>
+              <div className="au-stat-icon au-stat-icon--yellow"><i className="fas fa-user-clock"></i></div>
               <div className="au-stat-info">
                 <div className="au-stat-label">DEACTIVATED</div>
                 <div className="au-stat-number">{deactivatedUsers}</div>
@@ -951,7 +998,7 @@ const AdminUsers = () => {
                 </thead>
                 <tbody>
                   {pagedUsers.map(user => {
-                    const { label: statusLabel, dkIcon: statusDkIcon } = getStatusDisplay(user.status);
+                    const { label: statusLabel, faIcon: statusFaIcon } = getStatusDisplay(user.status);
                     const isActive      = (user.status || 'active') === 'active';
                     const isSuspended   = user.status === 'suspended';
                     const isDeactivated = user.status === 'self_deactivated';
@@ -972,9 +1019,7 @@ const AdminUsers = () => {
                         <td data-label="Status">
                           <div className="status-cell">
                             <span className={getStatusBadgeClass(user.status)}>
-                              {statusDkIcon
-                                ? <DkIcon name={statusDkIcon} size={12} />
-                                : <i className="fas fa-circle"></i>}
+                              <i className={`fas ${statusFaIcon || 'fa-circle'}`}></i>
                               {statusLabel}
                             </span>
 
@@ -1294,11 +1339,27 @@ const AdminUsers = () => {
                 </div>
                 <div className="form-group">
                   <label>Plate Number</label>
-                  <input name="plateNumber" value={riderForm.plateNumber} onChange={handleRiderFormChange} placeholder="PRO 1234" />
+                  <input
+                    name="plateNumber"
+                    value={riderForm.plateNumber}
+                    onChange={handleRiderFormChange}
+                    placeholder="PRO 1234"
+                    autoCapitalize="characters"
+                    style={{ textTransform: 'uppercase' }}
+                  />
+                  <small className="au-field-hint">Auto: ABC 1234 · caps + space</small>
                 </div>
                 <div className="form-group">
                   <label>License Number</label>
-                  <input name="licenseNumber" value={riderForm.licenseNumber} onChange={handleRiderFormChange} placeholder="N01-23-456789" />
+                  <input
+                    name="licenseNumber"
+                    value={riderForm.licenseNumber}
+                    onChange={handleRiderFormChange}
+                    placeholder="N01-23-456789"
+                    autoCapitalize="characters"
+                    style={{ textTransform: 'uppercase' }}
+                  />
+                  <small className="au-field-hint">Auto: N01-23-456789 · caps + dashes</small>
                 </div>
                 <div className="form-group au-rider-form-span2">
                   <label>Address</label>
@@ -1317,18 +1378,15 @@ const AdminUsers = () => {
                         <i className="fas fa-camera"></i> {riderForm.riderPhoto ? 'Change Photo' : 'Upload Photo'}
                         <input
                           type="file"
-                          accept="image/jpeg,image/png,image/webp"
+                          accept={IMAGE_ACCEPT_NO_GIF}
                           hidden
                           onChange={async (e) => {
                             const file = e.target.files?.[0];
                             e.target.value = '';
                             if (!file) return;
-                            if (!file.type.startsWith('image/')) {
-                              setRiderFormError('Please choose a JPG or PNG image.');
-                              return;
-                            }
-                            if (file.size > 5 * 1024 * 1024) {
-                              setRiderFormError('Photo must be under 5MB.');
+                            const check = validateImageFile(file);
+                            if (!check.ok) {
+                              setRiderFormError(check.error || 'Please choose a JPG or PNG image.');
                               return;
                             }
                             try {
@@ -1362,23 +1420,42 @@ const AdminUsers = () => {
                       value={riderForm.password}
                       onChange={handleRiderFormChange}
                       placeholder="@rider1"
+                      autoComplete="new-password"
                       required
                     />
-                    <button type="button" className="au-pw-toggle" onClick={() => setShowRiderPw(p => !p)}>
+                    <button
+                      type="button"
+                      className="au-pw-toggle"
+                      onClick={() => setShowRiderPw((p) => !p)}
+                      aria-label={showRiderPw ? 'Hide password' : 'Show password'}
+                      title={showRiderPw ? 'Hide password' : 'Show password'}
+                    >
                       <i className={`fas ${showRiderPw ? 'fa-eye-slash' : 'fa-eye'}`}></i>
                     </button>
                   </div>
                 </div>
                 <div className="form-group">
                   <label>Confirm Password *</label>
-                  <input
-                    name="confirmPassword"
-                    type={showRiderPw ? 'text' : 'password'}
-                    value={riderForm.confirmPassword}
-                    onChange={handleRiderFormChange}
-                    placeholder="Repeat password"
-                    required
-                  />
+                  <div className="au-pw-row">
+                    <input
+                      name="confirmPassword"
+                      type={showRiderPw ? 'text' : 'password'}
+                      value={riderForm.confirmPassword}
+                      onChange={handleRiderFormChange}
+                      placeholder="Repeat password"
+                      autoComplete="new-password"
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="au-pw-toggle"
+                      onClick={() => setShowRiderPw((p) => !p)}
+                      aria-label={showRiderPw ? 'Hide password' : 'Show password'}
+                      title={showRiderPw ? 'Hide password' : 'Show password'}
+                    >
+                      <i className={`fas ${showRiderPw ? 'fa-eye-slash' : 'fa-eye'}`}></i>
+                    </button>
+                  </div>
                 </div>
               </div>
               {riderFormError && (

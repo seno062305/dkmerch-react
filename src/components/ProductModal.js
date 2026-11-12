@@ -643,7 +643,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
                         <span>Pre-Order Now</span>
                       </button>
                       <button type="button" className="btn-fav-outline" onClick={handleWishlistClick} title="Add to Favorites" aria-label="Add to favorites">
-                        <i className="fas fa-heart" aria-hidden="true"></i>
+                        <i className="fas fa-star" aria-hidden="true"></i>
                       </button>
                     </>
                   ) : (
@@ -659,7 +659,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
                         </button>
                       )}
                       <button type="button" className="btn-fav-outline" onClick={handleWishlistClick} title="Add to Favorites" aria-label="Add to favorites">
-                        <i className="fas fa-heart" aria-hidden="true"></i>
+                        <i className="fas fa-star" aria-hidden="true"></i>
                       </button>
                     </>
                   )}

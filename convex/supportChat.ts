@@ -261,7 +261,13 @@ export const markThreadReadByAdmin = mutation({
   handler: async ({ db }, { threadId }) => {
     const thread = await db.get(threadId);
     if (!thread) return { success: false };
-    await db.patch(threadId, { unreadByAdmin: 0, updatedAt: Date.now() });
+    const now = Date.now();
+    await db.patch(threadId, {
+      unreadByAdmin: 0,
+      adminLastReadAt: now,
+      adminOnlineAt: now,
+      updatedAt: now,
+    });
     return { success: true };
   },
 });
@@ -272,7 +278,38 @@ export const markThreadReadByCustomer = mutation({
     const email = normalizeEmail(customerEmail);
     const thread = await findThreadByEmail(db, email);
     if (!thread) return { success: false };
-    await db.patch(thread._id, { unreadByCustomer: 0, updatedAt: Date.now() });
+    const now = Date.now();
+    await db.patch(thread._id, {
+      unreadByCustomer: 0,
+      customerLastReadAt: now,
+      customerOnlineAt: now,
+      updatedAt: now,
+    });
+    return { success: true };
+  },
+});
+
+/** Keep presence fresh while chat page is open (call every ~20s). */
+export const heartbeatPresence = mutation({
+  args: {
+    role: v.union(v.literal("customer"), v.literal("admin")),
+    customerEmail: v.optional(v.string()),
+    threadId: v.optional(v.id("supportThreads")),
+  },
+  handler: async ({ db }, args) => {
+    const now = Date.now();
+    if (args.role === "customer") {
+      const email = normalizeEmail(args.customerEmail || "");
+      if (!email) return { success: false };
+      const thread = await findThreadByEmail(db, email);
+      if (!thread) return { success: false };
+      await db.patch(thread._id, { customerOnlineAt: now, updatedAt: now });
+      return { success: true };
+    }
+    if (!args.threadId) return { success: false };
+    const thread = await db.get(args.threadId);
+    if (!thread) return { success: false };
+    await db.patch(args.threadId, { adminOnlineAt: now, updatedAt: now });
     return { success: true };
   },
 });

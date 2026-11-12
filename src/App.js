@@ -28,6 +28,7 @@ import Collections from './pages/Collections';
 import PreOrder from './pages/PreOrder';
 import TrackOrder from './pages/TrackOrder';
 import Help from './pages/Help';
+import Notifications from './pages/Notifications';
 import Settings from './pages/Settings';
 import MoreSettings from './pages/MoreSettings';
 import CustomerChat from './pages/CustomerChat';
@@ -430,6 +431,7 @@ function AppContent() {
             <Route path="/preorder"      element={<PreOrder />} />
             <Route path="/track-order"   element={<TrackOrder onProductClick={(p) => { setCurrentProduct(p); setShowProductModal(true); }} />} />
             <Route path="/help"          element={<Help />} />
+            <Route path="/notifications" element={<Notifications />} />
             <Route path="/wishlist"      element={<WishlistPage onProductClick={(p) => { setCurrentProduct(p); setShowProductModal(true); }} />} />
             <Route path="/checkout"      element={<Checkout />} />
             <Route path="/settings"      element={<Settings />} />

@@ -56,7 +56,7 @@
   color: #111827;
 }
 
-.customer-chat-brand span {
+.customer-chat-brand > div > span:not(.customer-chat-presence) {
   display: block;
   font-size: 12px;
   color: #64748b;
@@ -112,6 +112,40 @@
   opacity: 0.75;
   margin-bottom: 4px;
   font-weight: 600;
+}
+
+.customer-chat-presence {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #94a3b8;
+}
+.customer-chat-presence i {
+  font-size: 8px;
+}
+.customer-chat-presence.is-online {
+  color: #16a34a;
+}
+.customer-chat-presence.is-online i {
+  color: #22c55e;
+}
+.customer-chat-presence.is-offline i {
+  color: #cbd5e1;
+}
+
+.customer-chat-seen {
+  margin-top: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  opacity: 0.8;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.customer-chat-seen.is-seen {
+  opacity: 1;
 }
 
 .customer-chat-text {

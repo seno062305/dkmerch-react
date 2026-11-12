@@ -1017,6 +1017,47 @@
   color: #0369a1;
   line-height: 1.4;
 }
+.admin-paymongo-brands {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+.admin-paymongo-brands img {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+.admin-paymongo-brands span {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+}
+.admin-paymongo-pay-btn {
+  width: 100%;
+  margin-top: 6px;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #fc1268, #7c3aed);
+}
+.admin-paymongo-pay-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+.admin-refund-paymongo-card {
+  margin-bottom: 10px;
+}
 .admin-cancel-proof-upload { display: flex; flex-direction: column; gap: 8px; }
 .admin-cancel-proof-btn {
   display: flex;

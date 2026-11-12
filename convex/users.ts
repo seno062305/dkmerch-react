@@ -2,6 +2,7 @@
 import { query, mutation, internalQuery, internalMutation } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
+import { insertCustomerNotification } from "./customerNotifications";
 
 // ── RATE LIMIT CONFIG ─────────────────────────────
 const RATE_LIMIT_WINDOW_MS = 2 * 60 * 1000; // 2 minutes
@@ -271,11 +272,27 @@ export const hasLoginPin = query({
 
 /** Pending Yes/No login request auto-denies after this (always 60s, even on re-request). */
 const LOGIN_ALERT_TTL_MS = 60 * 1000;
+/** How long other devices keep showing a fan-out sign-in toast. */
+const LOGIN_BROADCAST_TTL_MS = 10 * 60 * 1000;
 
 function isLoginAlertExpired(alert: any, now = Date.now()) {
   if (!alert) return true;
   const expiresAt = Number(alert.expiresAt) || (Number(alert.at) || 0) + LOGIN_ALERT_TTL_MS;
   return expiresAt > 0 && now >= expiresAt;
+}
+
+function makeLoginBroadcast(
+  kind: "request" | "opened" | "blocked",
+  alert: { sessionId?: string; deviceName?: string; location?: string },
+  now = Date.now(),
+) {
+  return {
+    kind,
+    sessionId: String(alert?.sessionId || ""),
+    deviceName: String(alert?.deviceName || "Another device"),
+    location: alert?.location ? String(alert.location) : undefined,
+    at: now,
+  };
 }
 
 function getActiveSessionIds(user: any): string[] {
@@ -479,7 +496,10 @@ export const startUserSession = mutation({
         status: "pending" as const,
         resolved: false,
       };
-      await db.patch(args.userId, { loginAlert: alert } as any);
+      await db.patch(args.userId, {
+        loginAlert: alert,
+        loginBroadcast: makeLoginBroadcast("request", alert, now),
+      } as any);
       try {
         await scheduler.runAfter(LOGIN_ALERT_TTL_MS, internal.users.expireLoginAlert, {
           userId: String(args.userId),
@@ -508,9 +528,10 @@ export const startUserSession = mutation({
       status: "pending" as const,
       resolved: false,
     };
-    // Keep owner sessions intact — only store the pending request
+    // Keep ALL owner sessions intact — notice fans out to every logged-in device
     await db.patch(args.userId, {
       loginAlert: alert,
+      loginBroadcast: makeLoginBroadcast("request", alert, now),
       activeSessionId: previousSessionId,
       activeSessionIds: existingIds,
       // Don't refresh activeDeviceAt from the NEW device — owner stays "primary"
@@ -524,6 +545,15 @@ export const startUserSession = mutation({
     } catch { /* optional */ }
 
     if (user.email) {
+      try {
+        await insertCustomerNotification(db, {
+          email: String(user.email),
+          type: "login_alert",
+          title: "New sign-in request",
+          body: `${deviceName} · ${location}. Confirm on any logged-in device if this was you.`,
+          url: "/?open=loginAlert",
+        });
+      } catch { /* optional */ }
       try {
         await scheduler.runAfter(0, internal.webPush.sendToEmail, {
           email: String(user.email).toLowerCase(),
@@ -941,6 +971,27 @@ export const getPendingLoginAlert = query({
   },
 });
 
+/**
+ * Fan-out sign-in notice for every device currently using this account.
+ * Survives after Yes/No so other devices still learn the account was opened/blocked.
+ */
+export const getLoginBroadcast = query({
+  args: { userId: v.string() },
+  handler: async ({ db }, { userId }) => {
+    const id = String(userId || "").trim();
+    if (!id) return null;
+    try {
+      const user = await db.get(id as any) as any;
+      const b = user?.loginBroadcast;
+      if (!b?.at || !b?.kind) return null;
+      if (Date.now() - Number(b.at) > LOGIN_BROADCAST_TTL_MS) return null;
+      return b;
+    } catch {
+      return null;
+    }
+  },
+});
+
 /** New device polls approval status for its provisional session. */
 export const getLoginApprovalStatus = query({
   args: {
@@ -985,7 +1036,7 @@ export const confirmLoginAlert = mutation({
     /** Owner device session — always keep this signed in after Yes */
     keepSessionId: v.optional(v.string()),
   },
-  handler: async ({ db }, { userId, sessionId, keepSessionId }) => {
+  handler: async ({ db, scheduler }, { userId, sessionId, keepSessionId }) => {
     const user = await db.get(userId as any) as any;
     if (!user) return { success: false, message: "Account not found." };
     const alert = user.loginAlert;
@@ -998,6 +1049,7 @@ export const confirmLoginAlert = mutation({
     if (isLoginAlertExpired(alert)) {
       await db.patch(user._id, {
         loginAlert: { ...alert, status: "denied", resolved: true },
+        loginBroadcast: makeLoginBroadcast("blocked", alert),
       } as any);
       return { success: false, message: "Login request timed out." };
     }
@@ -1010,8 +1062,9 @@ export const confirmLoginAlert = mutation({
     const ids = getActiveSessionIds(user);
     if (prevId && !ids.includes(prevId)) ids.push(prevId);
     if (newId && !ids.includes(newId)) ids.push(newId);
-    // Both devices stay active — owner session stays primary so they never get kicked
+    // Keep EVERY existing session + the new one — all devices stay signed in & get the notice
     const now = Date.now();
+    const openedBroadcast = makeLoginBroadcast("opened", alert, now);
     await db.patch(user._id, {
       activeSessionId: prevId || newId,
       activeSessionIds: [...new Set(ids.filter(Boolean))],
@@ -1020,6 +1073,7 @@ export const confirmLoginAlert = mutation({
       activeDeviceLocation: user.activeDeviceLocation || alert.location,
       activeDevicePlatform: user.activeDevicePlatform || alert.platform,
       loginAlert: { ...alert, status: "approved", resolved: true },
+      loginBroadcast: openedBroadcast,
     } as any);
     if (prevId) {
       await upsertUserSession(db, {
@@ -1041,6 +1095,25 @@ export const confirmLoginAlert = mutation({
         now,
       });
     }
+    if (user.email) {
+      try {
+        await insertCustomerNotification(db, {
+          email: String(user.email),
+          type: "login_opened",
+          title: "Account opened on another device",
+          body: `Your DKMerch account was opened on ${alert.deviceName || "another device"}${alert.location ? ` · ${alert.location}` : ""}.`,
+          url: "/",
+        });
+      } catch { /* optional */ }
+      try {
+        await scheduler.runAfter(0, internal.webPush.sendToEmail, {
+          email: String(user.email).toLowerCase(),
+          title: "Account opened on another device",
+          body: `${alert.deviceName || "Another device"}${alert.location ? ` · ${alert.location}` : ""}.`,
+          url: "/",
+        });
+      } catch { /* optional */ }
+    }
     return { success: true };
   },
 });
@@ -1059,14 +1132,25 @@ export const denyLoginAlert = mutation({
     const alert = user.loginAlert;
     const neu = String(newSessionId || "").trim();
     if (!neu) return { success: false, message: "Invalid session." };
+    const now = Date.now();
 
     if (alert && String(alert.sessionId) === neu) {
       await db.patch(user._id, {
         loginAlert: { ...alert, status: "denied", resolved: true },
+        loginBroadcast: makeLoginBroadcast("blocked", alert, now),
       } as any);
     }
 
     if (user.email) {
+      try {
+        await insertCustomerNotification(db, {
+          email: String(user.email),
+          type: "login_blocked",
+          title: "Login blocked",
+          body: "A sign-in attempt was denied on your account. If this wasn't you, change your password.",
+          url: "/",
+        });
+      } catch { /* optional */ }
       try {
         await scheduler.runAfter(0, internal.webPush.sendToEmail, {
           email: String(user.email).toLowerCase(),

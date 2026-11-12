@@ -1406,19 +1406,17 @@ const Checkout = () => {
                       </div>
                     )}
                     {addressCoords && !isOutsideNCR && (
-                      <div className="info-display-item info-display-full" style={{ background: '#eff6ff', borderColor: '#bfdbfe' }}>
-                        <span className="info-label" style={{ color: '#1e40af' }}><i className="fas fa-map-marker-alt"></i> Map Pin</span>
-                        <span className="info-value" style={{ fontSize: '13px', color: '#1e3a8a' }}>
-                          <i className="fas fa-check-circle" style={{ color: '#3b82f6', marginRight: '6px' }}></i>
+                      <div className="info-display-item info-display-full info-display-pin info-display-pin--ok">
+                        <span className="info-label"><i className="fas fa-map-marker-alt"></i> Map Pin</span>
+                        <span className="info-value">
                           Exact location saved — rider will navigate to your pin
                         </span>
                       </div>
                     )}
                     {addressCoords && isOutsideNCR && (
-                      <div className="info-display-item info-display-full" style={{ background: '#fff7ed', borderColor: '#fdba74' }}>
-                        <span className="info-label" style={{ color: '#9a3412' }}><i className="fas fa-map-marker-alt"></i> Map Pin</span>
-                        <span className="info-value" style={{ fontSize: '13px', color: '#9a3412' }}>
-                          <i className="fas fa-check-circle" style={{ color: '#ea580c', marginRight: '6px' }}></i>
+                      <div className="info-display-item info-display-full info-display-pin info-display-pin--lbc">
+                        <span className="info-label"><i className="fas fa-map-marker-alt"></i> Map Pin</span>
+                        <span className="info-value">
                           Location saved — package will ship via LBC Express
                         </span>
                       </div>
@@ -1498,19 +1496,19 @@ const Checkout = () => {
                     </span>
                   </div>
                 )}
-                <div className="payment-info-notice" style={{ marginTop: rewardOrder ? '12px' : '0' }}>
+                <div className="payment-info-notice" style={{ marginTop: rewardOrder ? '8px' : '0' }}>
                   <i className="fas fa-shield-alt"></i>
                   <span>You will be redirected to a secure <strong>PayMongo</strong> page where you can choose to pay via <strong>GCash</strong> or <strong>Maya</strong>.</span>
                 </div>
-                <div className="payment-brands-row" style={{ display: 'flex', gap: '12px', marginTop: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <div className="payment-icon-wrap payment-icon-gcash" style={{ width: '40px', height: '40px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', padding: 0 }}>
-                    <img src="/images/payments/gcash.svg" alt="GCash" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <div className="payment-brands-row">
+                  <div className="payment-icon-wrap payment-icon-gcash">
+                    <img src="/images/payments/gcash.svg" alt="GCash" />
                   </div>
-                  <span style={{ fontSize: '14px', fontWeight: 600 }}>GCash</span>
-                  <div className="payment-icon-wrap payment-icon-paymaya" style={{ width: '40px', height: '40px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: '8px', overflow: 'hidden', padding: 0 }}>
-                    <img src="/images/payments/maya.svg" alt="Maya" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <span>GCash</span>
+                  <div className="payment-icon-wrap payment-icon-paymaya">
+                    <img src="/images/payments/maya.svg" alt="Maya" />
                   </div>
-                  <span style={{ fontSize: '14px', fontWeight: 600 }}>Maya</span>
+                  <span>Maya</span>
                 </div>
               </div>
 
