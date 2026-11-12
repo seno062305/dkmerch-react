@@ -49,6 +49,34 @@ const fileToDataUrl = (file) =>
     reader.readAsDataURL(file);
   });
 
+/** Shrink photo so Convex document insert stays under ~1MB. */
+const compressImageDataUrl = (dataUrl, { maxEdge = 720, quality = 0.8 } = {}) =>
+  new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        let { width, height } = img;
+        const scale = Math.min(1, maxEdge / Math.max(width, height, 1));
+        width = Math.max(1, Math.round(width * scale));
+        height = Math.max(1, Math.round(height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(dataUrl);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      } catch (err) {
+        reject(err);
+      }
+    };
+    img.onerror = () => reject(new Error('Could not process image.'));
+    img.src = dataUrl;
+  });
+
 const RiderViewModal = ({ rider, onClose, onPhotoUpdated }) => {
   useBodyScrollLock(true);
   const cardRef = useRef();
@@ -613,19 +641,27 @@ const AdminUsers = () => {
 
     setRiderFormLoading(true);
     try {
-      const result = await adminCreateRider({
+      let photo = riderPhoto;
+      if (photo && String(photo).length > 400_000) {
+        try {
+          photo = await compressImageDataUrl(photo, { maxEdge: 640, quality: 0.72 });
+        } catch { /* keep original; server will reject if still too big */ }
+      }
+      const payload = {
         fullName: fullName.trim(),
-        email: email.trim(),
+        email: email.trim().toLowerCase(),
         phone: phone.trim(),
-        address: address.trim() || undefined,
         vehicleType: 'motorcycle',
-        plateNumber: plateNumber.trim() || undefined,
-        licenseNumber: licenseNumber.trim() || undefined,
         password,
-        riderPhoto,
-      });
-      if (!result.success) {
-        setRiderFormError(result.message || 'Failed to create rider.');
+        riderPhoto: photo || null,
+      };
+      if (address.trim()) payload.address = address.trim();
+      if (plateNumber.trim()) payload.plateNumber = plateNumber.trim();
+      if (licenseNumber.trim()) payload.licenseNumber = licenseNumber.trim();
+
+      const result = await adminCreateRider(payload);
+      if (!result?.success) {
+        setRiderFormError(result?.message || 'Failed to create rider.');
         return;
       }
       try {
@@ -650,7 +686,16 @@ const AdminUsers = () => {
       setRiderFilterStatus('all');
     } catch (err) {
       console.error(err);
-      setRiderFormError('Failed to create rider. Please try again.');
+      const raw = String(err?.data || err?.message || '');
+      if (/too large|ArgumentValidation|Value is too large|1,?000,?000/i.test(raw)) {
+        setRiderFormError('Rider photo is too large. Re-upload a smaller JPG/PNG, then try again.');
+      } else if (/already exists|already registered/i.test(raw)) {
+        setRiderFormError('A rider with this email already exists.');
+      } else if (/verify the email|OTP/i.test(raw)) {
+        setRiderFormError(raw);
+      } else {
+        setRiderFormError(raw && raw.length < 180 ? raw : 'Failed to create rider. Please try again.');
+      }
     } finally {
       setRiderFormLoading(false);
     }
@@ -1523,11 +1568,12 @@ const AdminUsers = () => {
                               return;
                             }
                             try {
-                              const dataUrl = await fileToDataUrl(file);
+                              const raw = await fileToDataUrl(file);
+                              const dataUrl = await compressImageDataUrl(raw);
                               setRiderForm(prev => ({ ...prev, riderPhoto: dataUrl }));
                               setRiderFormError('');
                             } catch {
-                              setRiderFormError('Failed to read photo.');
+                              setRiderFormError('Failed to read photo. Try a smaller JPG/PNG.');
                             }
                           }}
                         />

@@ -244,27 +244,38 @@ export const adminCreateRider = mutation({
 
     const dkRiderId = await allocateNextDkRiderId(db);
 
-    const id = await db.insert("riderApplications", {
+    // Never pass explicit `undefined` — Convex rejects those on insert.
+    const doc: Record<string, unknown> = {
       fullName: args.fullName.trim(),
       email,
       phone: args.phone.trim(),
-      address: args.address?.trim() || undefined,
       vehicleType: args.vehicleType || "motorcycle",
-      plateNumber: args.plateNumber?.trim() || undefined,
-      licenseNumber: args.licenseNumber?.trim() || undefined,
       password: args.password,
-      riderPhoto: args.riderPhoto || undefined,
       status: "approved",
       appliedAt: new Date().toISOString(),
       dkRiderId,
       dkRiderIdGeneratedAt: new Date().toISOString(),
-      // Brand-new account — no sessions / login alerts yet
-      activeSessionId: undefined,
-      activeSessionIds: [],
-      activeDeviceAt: undefined,
-      loginAlert: undefined,
-      loginBroadcast: undefined,
-    });
+      activeSessionIds: [] as string[],
+    };
+    const address = args.address?.trim();
+    const plateNumber = args.plateNumber?.trim();
+    const licenseNumber = args.licenseNumber?.trim();
+    const riderPhoto = args.riderPhoto || null;
+    if (address) doc.address = address;
+    if (plateNumber) doc.plateNumber = plateNumber;
+    if (licenseNumber) doc.licenseNumber = licenseNumber;
+    if (riderPhoto) {
+      // Soft guard — Convex docs max ~1MB; huge data-URLs fail the whole create
+      if (String(riderPhoto).length > 900_000) {
+        return {
+          success: false,
+          message: "Rider photo is too large. Please upload a smaller JPG/PNG (under ~500KB).",
+        };
+      }
+      doc.riderPhoto = riderPhoto;
+    }
+
+    const id = await db.insert("riderApplications", doc as any);
 
     if (verified.row?._id) {
       try { await db.delete(verified.row._id); } catch { /* optional */ }
