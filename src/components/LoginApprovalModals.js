@@ -11,9 +11,11 @@ export function WaitingApprovalModal({ onClose, onTimeout, expiresAt, secondsTot
   const timedOutRef = useRef(false);
   const onTimeoutRef = useRef(onTimeout);
   onTimeoutRef.current = onTimeout;
-  const clampSecs = (n) => Math.max(0, Math.min(secondsTotal, Math.ceil(Number(n) || 0)));
+  // Do NOT clamp to secondsTotal — that froze the UI at "60s" when TTL was longer (e.g. 120s).
+  const remainingFromExpiry = (exp) =>
+    Math.max(0, Math.ceil((Number(exp) - Date.now()) / 1000));
   const [secondsLeft, setSecondsLeft] = useState(() => {
-    if (expiresAt) return clampSecs((Number(expiresAt) - Date.now()) / 1000);
+    if (expiresAt) return remainingFromExpiry(expiresAt);
     return secondsTotal;
   });
 
@@ -26,14 +28,14 @@ export function WaitingApprovalModal({ onClose, onTimeout, expiresAt, secondsTot
     };
 
     if (expiresAt) {
-      setSecondsLeft(clampSecs((Number(expiresAt) - Date.now()) / 1000));
+      setSecondsLeft(remainingFromExpiry(expiresAt));
     } else {
       setSecondsLeft(secondsTotal);
     }
 
     const id = setInterval(() => {
       if (expiresAt) {
-        const left = clampSecs((Number(expiresAt) - Date.now()) / 1000);
+        const left = remainingFromExpiry(expiresAt);
         setSecondsLeft(left);
         if (left <= 0) {
           clearInterval(id);

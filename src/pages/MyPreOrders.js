@@ -205,31 +205,45 @@ const MyPreOrders = () => {
             </div>
           </div>
 
-          <div className="mpo-tabs">
+          <div className="mpo-tabs" role="tablist" aria-label="Pre-order filters">
             <button
+              type="button"
+              role="tab"
               className={`mpo-tab ${activeTab === 'all' ? 'active' : ''}`}
               onClick={() => handleTabChange('all')}
             >
               All <span className="mpo-tab-count">{myPreOrders.length}</span>
             </button>
             <button
+              type="button"
+              role="tab"
               className={`mpo-tab ${activeTab === 'upcoming' ? 'active' : ''}`}
               onClick={() => handleTabChange('upcoming')}
             >
-              Upcoming <span className="mpo-tab-count">{upcomingCount}</span>
+              <span className="mpo-tab-text mpo-tab-text--full">Upcoming</span>
+              <span className="mpo-tab-text mpo-tab-text--short">Soon</span>
+              <span className="mpo-tab-count">{upcomingCount}</span>
             </button>
             <button
+              type="button"
+              role="tab"
               className={`mpo-tab mpo-tab--available ${activeTab === 'available' ? 'active' : ''}`}
               onClick={() => handleTabChange('available')}
             >
               {availableCount > 0 && <span className="mpo-tab-dot"></span>}
-              Available <span className="mpo-tab-count">{availableCount}</span>
+              <span className="mpo-tab-text mpo-tab-text--full">Available</span>
+              <span className="mpo-tab-text mpo-tab-text--short">Ready</span>
+              <span className="mpo-tab-count">{availableCount}</span>
             </button>
             <button
+              type="button"
+              role="tab"
               className={`mpo-tab ${activeTab === 'added' ? 'active' : ''}`}
               onClick={() => handleTabChange('added')}
             >
-              Added to Cart <span className="mpo-tab-count">{addedCount}</span>
+              <span className="mpo-tab-text mpo-tab-text--full">Added to Cart</span>
+              <span className="mpo-tab-text mpo-tab-text--short">Cart</span>
+              <span className="mpo-tab-count">{addedCount}</span>
             </button>
           </div>
 

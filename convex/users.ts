@@ -271,7 +271,7 @@ export const hasLoginPin = query({
 });
 
 /** Pending Yes/No login request auto-denies after this (even on re-request). */
-const LOGIN_ALERT_TTL_MS = 2 * 60 * 1000;
+const LOGIN_ALERT_TTL_MS = 60 * 1000;
 /** How long other devices keep showing a fan-out sign-in toast. */
 const LOGIN_BROADCAST_TTL_MS = 10 * 60 * 1000;
 /**

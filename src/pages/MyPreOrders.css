@@ -78,40 +78,50 @@
 /* ── Tabs ── */
 .mpo-tabs {
   display: flex;
-  gap: 6px;
+  gap: 4px;
   margin-bottom: 28px;
   border-bottom: 2px solid #e5e7eb;
   padding-bottom: 0;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  width: 100%;
+  overflow: hidden;
 }
 
 .mpo-tab {
   background: none;
   border: none;
-  padding: 10px 18px;
-  font-size: 14px;
+  padding: 10px 10px;
+  font-size: 13px;
   font-weight: 600;
   color: #6b7280;
   cursor: pointer;
   border-bottom: 3px solid transparent;
   margin-bottom: -2px;
-  transition: all 0.2s;
-  display: flex;
+  transition: color 0.2s, border-color 0.2s;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: 4px;
   position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .mpo-tab:hover { color: #1a1a1a; }
 .mpo-tab.active { color: var(--primary-color); border-bottom-color: var(--primary-color); }
 
+.mpo-tab-text--short { display: none; }
+.mpo-tab-text--full { display: inline; }
+
 .mpo-tab-count {
   background: #f3f4f6;
   color: #374151;
   border-radius: 20px;
-  padding: 1px 7px;
-  font-size: 11px;
+  padding: 1px 6px;
+  font-size: 10px;
   font-weight: 700;
+  flex-shrink: 0;
 }
 
 .mpo-tab.active .mpo-tab-count {
@@ -449,8 +459,20 @@
   .mpo-stat { padding: 10px 4px; border-radius: 10px; gap: 4px; }
   .mpo-stat-num { font-size: 16px; }
   .mpo-stat-label { font-size: 9px; letter-spacing: 0; }
-  .mpo-tabs { margin-bottom: 14px; gap: 2px; overflow-x: auto; flex-wrap: nowrap; }
-  .mpo-tab { padding: 8px 12px; font-size: 12px; white-space: nowrap; }
+  .mpo-tabs {
+    margin-bottom: 14px;
+    gap: 0;
+    overflow: hidden;
+    flex-wrap: nowrap;
+  }
+  .mpo-tab {
+    padding: 8px 4px;
+    font-size: 11px;
+    gap: 3px;
+  }
+  .mpo-tab-text--full { display: none; }
+  .mpo-tab-text--short { display: inline; }
+  .mpo-tab-count { font-size: 9px; padding: 1px 5px; }
   .mpo-grid {
     grid-template-columns: 1fr;
     gap: 8px;
@@ -458,21 +480,32 @@
   }
   .mpo-card {
     flex-direction: row;
-    align-items: stretch;
+    align-items: flex-start;
     border-radius: 12px;
     min-height: 0;
   }
   .mpo-card:hover { transform: none; }
   .mpo-card-image {
-    width: 88px;
-    min-width: 88px;
-    aspect-ratio: auto;
-    height: auto;
-    padding: 8px;
+    width: 92px;
+    min-width: 92px;
+    height: 92px;
+    max-height: 92px;
+    aspect-ratio: 1 / 1;
+    padding: 6px;
+    margin: 10px 0 10px 10px;
     flex-shrink: 0;
+    align-self: center;
+    border-radius: 10px;
+    box-sizing: border-box;
   }
-  .mpo-card-image img { object-fit: contain; }
-  .mpo-card-info { padding: 10px 10px 10px 0; gap: 4px; min-width: 0; }
+  .mpo-card-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    object-position: center;
+    display: block;
+  }
+  .mpo-card-info { padding: 10px 10px 10px 8px; gap: 4px; min-width: 0; flex: 1; }
   .mpo-card-name { font-size: 13px; -webkit-line-clamp: 2; }
   .mpo-card-price { font-size: 14px; }
   .mpo-status-badge {
@@ -500,7 +533,15 @@
   .mpo-stat-num { font-size: 15px; }
   .mpo-stat-label { font-size: 8px; }
   .mpo-empty-state { padding: 40px 14px; }
-  .mpo-card-image { width: 76px; min-width: 76px; padding: 6px; }
+  .mpo-card-image {
+    width: 80px;
+    min-width: 80px;
+    height: 80px;
+    max-height: 80px;
+    padding: 5px;
+    margin: 8px 0 8px 8px;
+  }
+  .mpo-tab { font-size: 10px; padding: 7px 2px; }
   .mpo-card-name { font-size: 12px; }
   .mpo-card-price { font-size: 13px; }
 }

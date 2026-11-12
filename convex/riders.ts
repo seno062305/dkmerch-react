@@ -7,7 +7,7 @@ const genSessionId = () =>
   `${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${Math.random().toString(36).slice(2, 10)}`;
 
 /** Yes/No window — resets on every new login request */
-const RIDER_LOGIN_ALERT_TTL_MS = 2 * 60 * 1000;
+const RIDER_LOGIN_ALERT_TTL_MS = 60 * 1000;
 const RIDER_LOGIN_BROADCAST_TTL_MS = 10 * 60 * 1000;
 
 function makeRiderLoginBroadcast(
