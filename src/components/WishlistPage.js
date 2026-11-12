@@ -162,7 +162,7 @@ const WishlistPage = ({ onProductClick }) => {
       <div className="container">
         <section className="wishlist-page">
           {count === 0 ? (
-            <div className="orders-empty">
+            <div className="wishlist-empty">
               <i className="fas fa-star" style={{ fontSize: 48, color: '#f5a623' }} aria-hidden="true"></i>
               <h3>No favorites yet</h3>
               <p>Click the star on any product to save it here.</p>
@@ -172,7 +172,6 @@ const WishlistPage = ({ onProductClick }) => {
             </div>
           ) : (
             <>
-              {/* ✅ Count bar with x/10 indicator */}
               <div className="wishlist-count-bar">
                 <i className="fas fa-star" style={{ color: '#f5a623' }} aria-hidden="true"></i>
                 <span>{count} favorite{count !== 1 ? 's' : ''}</span>
@@ -186,7 +185,7 @@ const WishlistPage = ({ onProductClick }) => {
                 </span>
               </div>
 
-              <div className="orders-grid">
+              <div className="wishlist-grid">
                 {displayItems.map(item => {
                   const oos = Number(item.stock) <= 0;
                   const showSale = shouldShowSaleBadge(item);
@@ -194,7 +193,7 @@ const WishlistPage = ({ onProductClick }) => {
                   return (
                   <div
                     key={item.productId}
-                    className={`order-card wishlist-card-clickable${oos ? ' wishlist-card-oos' : ''}`}
+                    className={`wishlist-card${oos ? ' wishlist-card-oos' : ''}`}
                     role="button"
                     tabIndex={0}
                     onClick={() => openProduct(item)}
@@ -206,7 +205,7 @@ const WishlistPage = ({ onProductClick }) => {
                     }}
                   >
                     <div
-                      className="order-card-img"
+                      className="wishlist-card-img"
                       onClick={(e) => {
                         e.stopPropagation();
                         openProduct(item);
@@ -215,7 +214,7 @@ const WishlistPage = ({ onProductClick }) => {
                     >
                       {item.image
                         ? <img src={item.image} alt={item.name} />
-                        : <i className="fas fa-box order-no-img"></i>
+                        : <i className="fas fa-box wishlist-no-img"></i>
                       }
                       {(showSale || showPreOrder) && (
                         <div className="wishlist-badge-stack">
@@ -238,14 +237,16 @@ const WishlistPage = ({ onProductClick }) => {
                       {oos && <div className="wishlist-oos-overlay">Out of Stock</div>}
                     </div>
 
-                    <div className="order-card-info">
-                      <p className="order-card-name" style={{ minHeight: 'unset', marginBottom: '6px' }}>
-                        {item.name}
-                      </p>
-                      <div className="order-card-price-row" style={{ marginBottom: '8px' }}>
-                        <span className={`order-card-price${showSale ? ' sale' : ''}`}>₱{item.price?.toLocaleString()}</span>
+                    <div className="wishlist-card-info">
+                      <p className="wishlist-card-name">{item.name}</p>
+                      <div className="wishlist-card-price-row">
+                        <span className={`wishlist-card-price${showSale ? ' sale' : ''}`}>
+                          ₱{item.price?.toLocaleString()}
+                        </span>
                         {showSale && hasDiscountedPrice(item) && (
-                          <span className="order-card-price-original">₱{Number(item.originalPrice).toLocaleString()}</span>
+                          <span className="wishlist-card-price-original">
+                            ₱{Number(item.originalPrice).toLocaleString()}
+                          </span>
                         )}
                       </div>
                       <p className={`wishlist-stock-line ${oos ? 'out' : ''}`}>
@@ -271,7 +272,7 @@ const WishlistPage = ({ onProductClick }) => {
                       </div>
                       <button
                         type="button"
-                        className="order-remove-btn"
+                        className="wishlist-remove-btn"
                         onClick={(e) => { e.stopPropagation(); handleRemoveFromWishlist(item.productId, item.name); }}
                       >
                         <i className="fas fa-trash-alt"></i> Remove
@@ -296,8 +297,8 @@ const WishlistPage = ({ onProductClick }) => {
       </div>
 
       {lightboxImg && (
-        <div className="order-lightbox" onClick={() => setLightboxImg(null)}>
-          <button className="lightbox-close" onClick={() => setLightboxImg(null)}>
+        <div className="wishlist-lightbox" onClick={() => setLightboxImg(null)}>
+          <button className="wishlist-lightbox-close" onClick={() => setLightboxImg(null)}>
             <i className="fas fa-times"></i>
           </button>
           <img src={lightboxImg} alt="Product" onClick={e => e.stopPropagation()} />
