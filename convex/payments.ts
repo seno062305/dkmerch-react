@@ -312,6 +312,66 @@ export const assertOrderStock = mutation({
   },
 });
 
+/**
+ * Restore stock taken by unpaid orders under the old "deduct at checkout" path.
+ * New orders (after stock-on-pay) never hold stock until paid — so unpaid must
+ * not block other customers. Safe to re-run (stockLegacyRestored guard).
+ */
+export const repairUnpaidLegacyStockHolds = mutation({
+  args: {
+    /** Re-restore unpaid holds even if stockLegacyRestored was set (cutoff false-positive). */
+    force: v.optional(v.boolean()),
+  },
+  handler: async ({ db }, { force }) => {
+    // Old checkout deducted stock before pay without stockDeducted.
+    // Unpaid orders must not keep stock away from new buyers.
+    const orders = await db.query("orders").collect();
+    let restoredOrders = 0;
+    let units = 0;
+    let skipped = 0;
+    for (const order of orders) {
+      if (order.stockDeducted) { skipped += 1; continue; }
+      if (String(order.paymentStatus || "").toLowerCase() === "paid") {
+        if (!(order as any).stockLegacyRestored) {
+          await db.patch(order._id, { stockLegacyRestored: true });
+        }
+        skipped += 1;
+        continue;
+      }
+      const status = String(order.orderStatus || order.status || "").toLowerCase().replace(/\s+/g, "_");
+      if (status.includes("cancel")) {
+        if (!(order as any).stockLegacyRestored) {
+          await db.patch(order._id, { stockLegacyRestored: true });
+        }
+        skipped += 1;
+        continue;
+      }
+      if (order.isRewardOrder) {
+        if (!(order as any).stockLegacyRestored) {
+          await db.patch(order._id, { stockLegacyRestored: true });
+        }
+        skipped += 1;
+        continue;
+      }
+      if ((order as any).stockLegacyRestored && !force) { skipped += 1; continue; }
+
+      for (const item of order.items || []) {
+        const qty = Number(item.quantity || item.qty || 1);
+        if (qty <= 0) continue;
+        const product = await findProductForOrderItem(db, item);
+        if (!product || typeof (product as any).stock !== "number") continue;
+        await db.patch(product._id, {
+          stock: Number((product as any).stock) + qty,
+        });
+        units += qty;
+      }
+      await db.patch(order._id, { stockLegacyRestored: true });
+      restoredOrders += 1;
+    }
+    return { restoredOrders, units, skipped, forced: !!force };
+  },
+});
+
 // Marks order as paid + deducts stock once + saves exact payment method
 export const markOrderPaid = mutation({
   args: {

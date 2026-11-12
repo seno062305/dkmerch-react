@@ -383,10 +383,6 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
       showNotification('Product is out of stock — you can still favorite it.', 'warning');
       return;
     }
-    if (!onAddToCart) {
-      showNotification('Unable to checkout right now.', 'error');
-      return;
-    }
     const priceDisplay = appliedPromo
       ? `₱${discountedPrice.toLocaleString()} (${appliedPromo.discount}% off)`
       : `₱${product.price.toLocaleString()}`;
@@ -409,21 +405,15 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
     const qty = Math.max(1, Math.min(maxBuyQty, Math.floor(Number(buyNowQty) || 1)));
     setShowBuyNowQty(false);
     const productId = String(product._id || product.id);
-    const result = await onAddToCart({
-      ...product,
-      qty,
-      appliedPromo,
-      finalPrice: discountedPrice,
-    });
+    // Buy Now goes straight to checkout — do not touch the cart
     onClose?.();
     navigate('/checkout', {
       state: {
-        selectedCartIds: result?.cartItemId ? [result.cartItemId] : undefined,
         buyNowProductId: productId,
         buyNowPromoCode: appliedPromo?.code || null,
         appliedPromo: appliedPromo || null,
         buyNowItem: {
-          _id: result?.cartItemId || `buynow-${productId}`,
+          _id: `buynow-${productId}`,
           productId,
           name: product.name,
           price: product.price,

@@ -699,23 +699,18 @@ const Checkout = () => {
     }
   }, [location.state]);
 
+  const isBuyNowCheckout = !!(buyNowFilter?.item || buyNowFilter?.productId);
+
   const checkoutItems = (() => {
     if (rewardOrder) return [];
+    // Buy Now is checkout-only — never pull / merge from cart
+    if (buyNowFilter?.item) {
+      const qty = Math.max(1, Number(buyNowFilter.item.qty) || 1);
+      return [{ ...buyNowFilter.item, qty }];
+    }
     if (selectedCartIds?.length) {
       const matched = cartItems.filter(i => selectedCartIds.includes(i._id));
       if (matched.length) return matched;
-    }
-    if (buyNowFilter?.productId) {
-      const matched = cartItems.filter(i => {
-        if (String(i.productId) !== String(buyNowFilter.productId)) return false;
-        if (buyNowFilter.promoCode) return i.promoCode === buyNowFilter.promoCode;
-        return !i.promoCode;
-      });
-      if (matched.length) return matched;
-      if (buyNowFilter.item) {
-        const qty = Math.max(1, Number(buyNowFilter.item.qty) || 1);
-        return [{ ...buyNowFilter.item, qty }];
-      }
     }
     return [];
   })();
@@ -1216,8 +1211,8 @@ const Checkout = () => {
         } catch (emailErr) { console.warn('Email failed:', emailErr); }
       }
 
-      // ── Remove checked-out items only (keep unselected in cart) ────────
-      if (!rewardOrder) {
+      // ── Remove checked-out cart items only (Buy Now never touches cart) ─
+      if (!rewardOrder && !isBuyNowCheckout) {
         const idsToRemove = selectedCartIds?.length
           ? selectedCartIds
           : checkoutItems.map(i => i._id).filter(Boolean);

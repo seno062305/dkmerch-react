@@ -984,7 +984,7 @@ const TrackOrder = ({ onProductClick }) => {
           setContinuingPayment(false);
           return;
         }
-        if (order.paymentLinkUrl) { window.location.href = order.paymentLinkUrl; return; }
+        // Always mint a fresh link after stock check (don't reuse a stale PayMongo session)
         const result = await createPaymentLink({ orderId: order.orderId, amount: order.finalTotal ?? order.total, description: `DKMerch Order ${order.orderId}`, customerName: order.customerName, customerEmail: order.email, customerPhone: order.phone });
         window.location.href = result.paymentLinkUrl;
       } catch (err) {
@@ -1430,7 +1430,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
         setContinuingPayment(false);
         return;
       }
-      if (order.paymentLinkUrl) { window.location.href = order.paymentLinkUrl; return; }
+      // Always mint a fresh link after stock check (don't reuse a stale PayMongo session)
       const result = await createPaymentLink({ orderId: order.orderId, amount: order.finalTotal ?? order.total, description: `DKMerch Order ${order.orderId}`, customerName: order.customerName, customerEmail: order.email, customerPhone: order.phone });
       window.location.href = result.paymentLinkUrl;
     } catch (err) {

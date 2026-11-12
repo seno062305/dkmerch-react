@@ -250,6 +250,8 @@ export default defineSchema({
     /** True after stock was deducted on successful payment (restore only if set). */
     stockDeducted: v.optional(v.boolean()),
     stockIssue: v.optional(v.boolean()),
+    /** Unpaid order had stock restored after legacy checkout-hold bug */
+    stockLegacyRestored: v.optional(v.boolean()),
     confirmedAt: v.optional(v.string()),
     shippedAt: v.optional(v.string()),
     outForDeliveryAt: v.optional(v.string()),

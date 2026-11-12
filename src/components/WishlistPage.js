@@ -122,21 +122,12 @@ const WishlistPage = ({ onProductClick }) => {
     });
     if (!ok) return;
     const productId = String(item.productId);
-    const result = await addToCart({
-      id: productId,
-      _id: productId,
-      name: item.name,
-      price: item.price,
-      image: item.image,
-      stock: item.stock,
-      qty: 1,
-    });
+    // Buy Now goes straight to checkout — do not touch the cart
     navigate('/checkout', {
       state: {
-        selectedCartIds: result?.cartItemId ? [result.cartItemId] : undefined,
         buyNowProductId: productId,
         buyNowItem: {
-          _id: result?.cartItemId || `buynow-${productId}`,
+          _id: `buynow-${productId}`,
           productId,
           name: item.name,
           price: item.price,
