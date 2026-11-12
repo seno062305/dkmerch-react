@@ -248,6 +248,12 @@ export const adminCreateRider = mutation({
       appliedAt: new Date().toISOString(),
       dkRiderId,
       dkRiderIdGeneratedAt: new Date().toISOString(),
+      // Brand-new account — no sessions / login alerts yet
+      activeSessionId: undefined,
+      activeSessionIds: [],
+      activeDeviceAt: undefined,
+      loginAlert: undefined,
+      loginBroadcast: undefined,
     });
 
     return { success: true, id, dkRiderId, email, fullName: args.fullName.trim() };
@@ -416,6 +422,18 @@ function getRiderSessionIds(rider: any): string[] {
   return fromArr;
 }
 
+/** Session counts as "open on another device" only if recently active. */
+const RIDER_SESSION_ACTIVE_MS = 5 * 60 * 1000;
+
+function hasLiveRiderSession(rider: any, now = Date.now()): boolean {
+  const ids = getRiderSessionIds(rider);
+  if (ids.length === 0) return false;
+  const at = Number(rider?.activeDeviceAt) || 0;
+  // Never heartbeated / missing timestamp → treat as not open (new or stale account)
+  if (!at) return false;
+  return now - at < RIDER_SESSION_ACTIVE_MS;
+}
+
 function activateRiderSessionPatch(
   sessionId: string,
   now: number,
@@ -436,6 +454,7 @@ function activateRiderSessionPatch(
     activeDevicePlatform: platform || undefined,
     kickedAt: undefined,
     loginAlert: undefined,
+    loginBroadcast: undefined,
   };
 }
 
@@ -533,7 +552,7 @@ export const loginRider = mutation({
     }
 
     const sessionId = genSessionId();
-    const hasOtherSession = existingIds.length > 0;
+    const otherDeviceLive = hasLiveRiderSession(rider, now);
     const STUCK_PENDING_MS = 15 * 60 * 1000;
     const pendingAlert = (rider as any).loginAlert;
     const pendingAge = pendingAlert?.at ? now - Number(pendingAlert.at) : 0;
@@ -543,12 +562,12 @@ export const loginRider = mutation({
       && !pendingAlert.resolved
       && pendingAge > STUCK_PENDING_MS;
 
-    // First login / stuck pending → take over
-    if (!hasOtherSession || stuckPending) {
-      await db.patch(
-        rider._id,
-        activateRiderSessionPatch(sessionId, now, deviceName, location, platform) as any,
-      );
+    // First login / no other device actively open / stuck pending → open directly
+    if (!otherDeviceLive || stuckPending) {
+      await db.patch(rider._id, {
+        ...activateRiderSessionPatch(sessionId, now, deviceName, location, platform),
+        loginBroadcast: undefined,
+      } as any);
       return {
         success: true,
         riderExists: true,

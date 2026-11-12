@@ -656,12 +656,18 @@ export const AuthProvider = ({ children }) => {
       // ══════════════════════════════════════════
       if (mode === "rider") {
         const device = await collectLoginDeviceInfo({ fast: true });
+        const storedAuth = readAuthUser();
+        const reuseSessionId = String(
+          (storedAuth?.role === "rider" && storedAuth?.email === identifier && storedAuth?.sessionId)
+          || ""
+        ).trim();
         const riderResult = await loginRiderMutation({
           email: identifier,
           password,
           deviceName: device.deviceName,
           location: device.location,
           platform: device.platform,
+          currentSessionId: reuseSessionId || undefined,
         });
 
         if (!riderResult.riderExists) {
@@ -811,12 +817,18 @@ export const AuthProvider = ({ children }) => {
 
         // Legacy fallback to rider
         const device = await collectLoginDeviceInfo({ fast: true });
+        const storedAuth = readAuthUser();
+        const reuseSessionId = String(
+          (storedAuth?.role === "rider" && storedAuth?.email === identifier && storedAuth?.sessionId)
+          || ""
+        ).trim();
         const riderResult = await loginRiderMutation({
           email: identifier,
           password,
           deviceName: device.deviceName,
           location: device.location,
           platform: device.platform,
+          currentSessionId: reuseSessionId || undefined,
         });
 
         if (riderResult.riderExists) {

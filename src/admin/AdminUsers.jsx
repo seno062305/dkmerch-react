@@ -370,7 +370,7 @@ const AdminUsers = () => {
   const [userToActivate, setUserToActivate]           = useState(null);
 
   const [riderSearch, setRiderSearch]             = useState('');
-  const [riderFilterStatus, setRiderFilterStatus] = useState('all');
+  const [riderFilterStatus, setRiderFilterStatus] = useState('all'); // all | rejected | suspended
 
   const [showRiderDeleteModal, setShowRiderDeleteModal] = useState(false);
   const [riderDeleteStep, setRiderDeleteStep]           = useState(STEP_CONFIGURE);
@@ -546,7 +546,7 @@ const AdminUsers = () => {
       setRiderForm(EMPTY_RIDER_FORM);
       showNotification(`Rider created: ${result.dkRiderId}`, 'success');
       setActiveTab('riders');
-      setRiderFilterStatus('approved');
+      setRiderFilterStatus('all');
     } catch (err) {
       console.error(err);
       setRiderFormError('Failed to create rider. Please try again.');
@@ -1234,7 +1234,7 @@ const AdminUsers = () => {
               {riderSearch && <button className="clear-search" onClick={() => setRiderSearch('')}><i className="fas fa-times"></i></button>}
             </div>
             <div className="status-filter">
-              {['all', 'pending', 'approved', 'rejected', 'suspended'].map(s => (
+              {['all', 'rejected', 'suspended'].map(s => (
                 <button key={s} className={`filter-btn ${riderFilterStatus === s ? 'active' : ''}`} onClick={() => setRiderFilterStatus(s)}>
                   {s.charAt(0).toUpperCase() + s.slice(1)}
                 </button>

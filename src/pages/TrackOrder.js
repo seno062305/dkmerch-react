@@ -922,10 +922,8 @@ const TrackOrder = ({ onProductClick }) => {
   };
 
   const handleFilterClick = (key) => {
+    // Keep viewport fixed — don't scroll the page when switching tabs
     setFilter(key);
-    setTimeout(() => {
-      ordersListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 40);
   };
 
   const getPreOrderReleaseDate = (order) => {
