@@ -748,13 +748,17 @@
   font-weight: 600;
 }
 .bento-kpi-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 999px;
+  width: 32px;
+  height: 32px;
+  border-radius: 0;
+  background: transparent !important;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+}
+.bento-kpi-icon .dk-icon {
+  filter: invert(28%) sepia(98%) saturate(3200%) hue-rotate(320deg) brightness(100%) contrast(105%);
 }
 
 .bento-layout {

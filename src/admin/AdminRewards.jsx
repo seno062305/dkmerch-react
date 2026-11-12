@@ -12,15 +12,15 @@ const REWARDS = {
   accessories: { label: 'Accessories', icon: '🎀' },
 };
 
-const REWARDS_PAGE_SIZES = [8, 16, 24, 32, 40];
+const REWARDS_PAGE_SIZES = [5, 10, 15, 20, 25];
 
 const AdminRewards = () => {
   const [redemptionSearch, setRedemptionSearch] = useState('');
   const [pointsSearch, setPointsSearch] = useState('');
 
-  const [redemptionPageSize, setRedemptionPageSize] = useState(8);
+  const [redemptionPageSize, setRedemptionPageSize] = useState(5);
   const [redemptionPage, setRedemptionPage] = useState(0);
-  const [pointsPageSize, setPointsPageSize] = useState(8);
+  const [pointsPageSize, setPointsPageSize] = useState(5);
   const [pointsPage, setPointsPage] = useState(0);
 
   const redemptions = useQuery(api.rewards.getAllRedemptions);
@@ -103,66 +103,65 @@ const AdminRewards = () => {
             {filteredRedemptions.length === 0 ? (
               <div
                 className="ar-empty dk-fixed-page dk-fixed-page--cards"
-                style={fixedPageStyle(redemptionPageSize, { '--dk-row-h': '132px', '--dk-gap': '10px' })}
+                style={fixedPageStyle(redemptionPageSize, { '--dk-row-h': '110px', '--dk-gap': '8px' })}
               >
                 <i className="fas fa-history"></i>
                 <p>No redemptions found.</p>
               </div>
             ) : (
-              <>
-                <div
-                  className="ar-redemptions-list dk-fixed-page dk-fixed-page--cards"
-                  style={fixedPageStyle(redemptionPageSize, { '--dk-row-h': '132px', '--dk-gap': '10px' })}
-                >
-                  {pagedRedemptions.map((r) => {
-                    const reward = REWARDS[r.rewardType] || { label: r.rewardType, icon: '🎁' };
-                    return (
-                      <div key={r._id} className="ar-redemption-card">
-                        <div className="ar-card-top">
-                          <div className="ar-card-reward">
-                            <span className="ar-reward-icon">{reward.icon}</span>
-                            <div>
-                              <span className="ar-reward-name">{reward.label}</span>
-                              <span className="ar-ticket-code">{r.ticketCode}</span>
-                            </div>
+              <div
+                className="ar-redemptions-list dk-fixed-page dk-fixed-page--cards"
+                style={fixedPageStyle(redemptionPageSize, { '--dk-row-h': '110px', '--dk-gap': '8px' })}
+              >
+                {pagedRedemptions.map((r) => {
+                  const reward = REWARDS[r.rewardType] || { label: r.rewardType, icon: '🎁' };
+                  return (
+                    <div key={r._id} className="ar-redemption-card">
+                      <div className="ar-card-top">
+                        <div className="ar-card-reward">
+                          <span className="ar-reward-icon">{reward.icon}</span>
+                          <div>
+                            <span className="ar-reward-name">{reward.label}</span>
+                            <span className="ar-ticket-code">{r.ticketCode}</span>
                           </div>
-                          <span className="ar-badge ar-badge-redeemed">
-                            <i className="fas fa-check-circle"></i> Redeemed
-                          </span>
                         </div>
+                        <span className="ar-badge ar-badge-redeemed">
+                          <i className="fas fa-check-circle"></i> Redeemed
+                        </span>
+                      </div>
 
-                        <div className="ar-card-details">
-                          <div className="ar-detail-row">
-                            <i className="fas fa-user"></i>
-                            <span>{r.userName}</span>
-                          </div>
-                          <div className="ar-detail-row">
-                            <i className="fas fa-envelope"></i>
-                            <span>{r.email}</span>
-                          </div>
-                          <div className="ar-detail-row">
-                            <i className="fas fa-star"></i>
-                            <span>{r.pointsSpent} points spent</span>
-                          </div>
-                          <div className="ar-detail-row">
-                            <i className="fas fa-calendar-alt"></i>
-                            <span>{new Date(r.requestedAt).toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                          </div>
+                      <div className="ar-card-details">
+                        <div className="ar-detail-row">
+                          <i className="fas fa-user"></i>
+                          <span>{r.userName}</span>
+                        </div>
+                        <div className="ar-detail-row">
+                          <i className="fas fa-envelope"></i>
+                          <span>{r.email}</span>
+                        </div>
+                        <div className="ar-detail-row">
+                          <i className="fas fa-star"></i>
+                          <span>{r.pointsSpent} points spent</span>
+                        </div>
+                        <div className="ar-detail-row">
+                          <i className="fas fa-calendar-alt"></i>
+                          <span>{new Date(r.requestedAt).toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-                <AdminPager
-                  total={filteredRedemptions.length}
-                  page={safeRedemptionPage}
-                  pageSize={redemptionPageSize}
-                  onPageChange={setRedemptionPage}
-                  onPageSizeChange={setRedemptionPageSize}
-                  pageSizeOptions={REWARDS_PAGE_SIZES}
-                />
-              </>
+                    </div>
+                  );
+                })}
+              </div>
             )}
+            <AdminPager
+              total={filteredRedemptions.length}
+              page={safeRedemptionPage}
+              pageSize={redemptionPageSize}
+              onPageChange={setRedemptionPage}
+              onPageSizeChange={setRedemptionPageSize}
+              pageSizeOptions={REWARDS_PAGE_SIZES}
+              alwaysShow
+            />
           </div>
         </section>
 
@@ -196,47 +195,46 @@ const AdminRewards = () => {
                 <p>No users have earned points yet.</p>
               </div>
             ) : (
-              <>
-                <div
-                  className="ar-points-table-wrap dk-fixed-page dk-fixed-page--table"
-                  style={fixedPageStyle(pointsPageSize, { '--dk-row-h': '57px', '--dk-head-h': '44px' })}
-                >
-                  <table className="ar-points-table">
-                    <thead>
-                      <tr>
-                        <th>Customer</th>
-                        <th>Available</th>
-                        <th>Lifetime</th>
-                        <th>Orders</th>
+              <div
+                className="ar-points-table-wrap dk-fixed-page dk-fixed-page--table"
+                style={fixedPageStyle(pointsPageSize, { '--dk-row-h': '57px', '--dk-head-h': '44px' })}
+              >
+                <table className="ar-points-table">
+                  <thead>
+                    <tr>
+                      <th>Customer</th>
+                      <th>Available</th>
+                      <th>Lifetime</th>
+                      <th>Orders</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pagedPoints.map((p, i) => (
+                      <tr key={p.email || i}>
+                        <td>
+                          <div className="ar-user-cell">
+                            <span className="ar-user-name">{p.userName}</span>
+                            <span className="ar-user-email">{p.email}</span>
+                          </div>
+                        </td>
+                        <td><span className="ar-pts-available">⭐ {p.totalPoints}</span></td>
+                        <td><span className="ar-pts-lifetime">{p.lifetimePoints}</span></td>
+                        <td><span className="ar-pts-orders">{p.history?.length ?? 0}</span></td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {pagedPoints.map((p, i) => (
-                        <tr key={p.email || i}>
-                          <td>
-                            <div className="ar-user-cell">
-                              <span className="ar-user-name">{p.userName}</span>
-                              <span className="ar-user-email">{p.email}</span>
-                            </div>
-                          </td>
-                          <td><span className="ar-pts-available">⭐ {p.totalPoints}</span></td>
-                          <td><span className="ar-pts-lifetime">{p.lifetimePoints}</span></td>
-                          <td><span className="ar-pts-orders">{p.history?.length ?? 0}</span></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <AdminPager
-                  total={filteredPoints.length}
-                  page={safePointsPage}
-                  pageSize={pointsPageSize}
-                  onPageChange={setPointsPage}
-                  onPageSizeChange={setPointsPageSize}
-                  pageSizeOptions={REWARDS_PAGE_SIZES}
-                />
-              </>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
+            <AdminPager
+              total={filteredPoints.length}
+              page={safePointsPage}
+              pageSize={pointsPageSize}
+              onPageChange={setPointsPage}
+              onPageSizeChange={setPointsPageSize}
+              pageSizeOptions={REWARDS_PAGE_SIZES}
+              alwaysShow
+            />
           </div>
         </section>
       </div>

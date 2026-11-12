@@ -368,7 +368,7 @@ const ProductModal = ({
 // ══════════════════════════════════════════════════════════════════════════
 //  CATEGORIES & K-POP GROUPS MANAGER
 // ══════════════════════════════════════════════════════════════════════════
-const CATALOG_PAGE_SIZES = [7, 14, 21, 28];
+const CATALOG_PAGE_SIZES = [5, 10, 15, 20, 25];
 
 const CatalogManager = ({
   products = [],
@@ -388,8 +388,8 @@ const CatalogManager = ({
   const [msg, setMsg] = useState('');
   const [catPage, setCatPage] = useState(0);
   const [groupPage, setGroupPage] = useState(0);
-  const [catPageSize, setCatPageSize] = useState(7);
-  const [groupPageSize, setGroupPageSize] = useState(7);
+  const [catPageSize, setCatPageSize] = useState(5);
+  const [groupPageSize, setGroupPageSize] = useState(5);
   const groupLogoInputRef = useRef(null);
   const replaceLogoInputRef = useRef(null);
   const logoTargetRef = useRef('');
@@ -832,9 +832,16 @@ const StockPanelList = ({
   </div>
 );
 
-const StockManagement = ({ products, updateProduct, onAddProduct, categories = FALLBACK_CATEGORIES }) => {
+const StockManagement = ({
+  products,
+  updateProduct,
+  onAddProduct,
+  categories = FALLBACK_CATEGORIES,
+  groups = FALLBACK_GROUPS,
+}) => {
   const [searchTerm, setSearchTerm]         = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
+  const [filterGroup, setFilterGroup]       = useState('all');
   const [editingStock, setEditingStock]     = useState(null);
   const [stockValue, setStockValue]         = useState('');
   const [stockError, setStockError]         = useState('');
@@ -848,7 +855,10 @@ const StockManagement = ({ products, updateProduct, onAddProduct, categories = F
       p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.kpopGroup?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchCat = filterCategory === 'all' || p.category === filterCategory;
-    return matchSearch && matchCat;
+    const matchGroup =
+      filterGroup === 'all'
+      || String(p.kpopGroup || '').trim().toLowerCase() === String(filterGroup).trim().toLowerCase();
+    return matchSearch && matchCat && matchGroup;
   });
 
   const sortedFiltered   = [...filteredProducts].sort((a, b) => (a.stock ?? 0) - (b.stock ?? 0));
@@ -857,8 +867,8 @@ const StockManagement = ({ products, updateProduct, onAddProduct, categories = F
   const totalStock       = products.reduce((s, p) => s + (p.stock || 0), 0);
   const outOfStockCount  = products.filter(p => p.stock === 0).length;
 
-  useEffect(() => { setAllPage(0); }, [searchTerm, filterCategory, allPageSize, products.length]);
-  useEffect(() => { setLowPage(0); }, [searchTerm, filterCategory, lowPageSize, products.length]);
+  useEffect(() => { setAllPage(0); }, [searchTerm, filterCategory, filterGroup, allPageSize, products.length]);
+  useEffect(() => { setLowPage(0); }, [searchTerm, filterCategory, filterGroup, lowPageSize, products.length]);
 
   const startEdit  = (productId, currentStock) => { setEditingStock(productId); setStockValue(String(currentStock)); setStockError(''); };
   const cancelEdit = () => { setEditingStock(null); setStockValue(''); setStockError(''); };
@@ -915,7 +925,7 @@ const StockManagement = ({ products, updateProduct, onAddProduct, categories = F
       </div>
 
       <div className="stock-filters">
-        <div className="search-box">
+        <div className="search-box stock-search">
           <i className="fas fa-search"></i>
           <input type="text" placeholder="Search products..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
         </div>
@@ -923,6 +933,12 @@ const StockManagement = ({ products, updateProduct, onAddProduct, categories = F
           <option value="all">All Categories</option>
           {categories.map((c) => (
             <option key={c.value} value={c.value}>{c.label}</option>
+          ))}
+        </select>
+        <select value={filterGroup} onChange={e => setFilterGroup(e.target.value)} className="filter-select">
+          <option value="all">All K-Pop Groups</option>
+          {groups.map((g) => (
+            <option key={g.value} value={g.value}>{g.label}</option>
           ))}
         </select>
       </div>
@@ -1304,6 +1320,7 @@ const AdminProducts = () => {
           updateProduct={updateProduct}
           onAddProduct={openAdd}
           categories={categories}
+          groups={groups}
         />
       )}
 

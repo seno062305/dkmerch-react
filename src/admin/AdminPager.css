@@ -15,20 +15,35 @@
   --dk-head-h: 44px;
   --dk-row-h: 57px;
   --dk-gap: 0px;
+  display: block;
+}
+.dk-fixed-page--table > table {
+  height: auto !important;
 }
 .dk-fixed-page--stack {
   --dk-row-h: 72px;
   --dk-gap: 10px;
   display: flex;
   flex-direction: column;
+  justify-content: flex-start;
+  align-items: stretch;
   gap: var(--dk-gap);
 }
+.dk-fixed-page--stack > * {
+  flex: 0 0 auto;
+}
 .dk-fixed-page--cards {
-  --dk-row-h: 168px;
-  --dk-gap: 12px;
+  --dk-row-h: 132px;
+  --dk-gap: 10px;
   display: flex;
   flex-direction: column;
+  justify-content: flex-start;
+  align-items: stretch;
   gap: var(--dk-gap);
+}
+.dk-fixed-page--cards > * {
+  flex: 0 0 auto;
+  height: auto;
 }
 .dk-fixed-page--grid {
   --dk-page-rows: 2;

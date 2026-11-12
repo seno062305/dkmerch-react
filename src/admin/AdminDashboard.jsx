@@ -253,7 +253,7 @@ const AdminDashboard = () => {
             }}
           >
             <div className="stat-card-top">
-              <div className="stat-icon-chip" style={{ background: `${card.color}18`, color: card.color }}>
+              <div className="stat-icon-chip" style={{ color: card.color }}>
                 <DkIcon name={card.icon} size={26} />
               </div>
               <div className="stat-card-copy">

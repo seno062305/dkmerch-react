@@ -4,15 +4,14 @@ import './AdminRiders.css';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import DkIcon, { DK_ICONS } from '../components/DkIcon';
-import AdminPager, { fixedGridPageStyle } from './AdminPager';
+import AdminPager, { fixedPageStyle } from './AdminPager';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
 const SITE_URL = process.env.REACT_APP_SITE_URL || 'https://dkmerchwebsite.vercel.app';
 
 const toDateStr = (ms) => new Date(ms).toISOString().split('T')[0];
 const todayStr  = toDateStr(Date.now());
 
-const ACTIVE_PAGE_SIZES = [6, 12, 18, 24, 30];
-const COMPLETED_PAGE_SIZES = [18, 36, 54, 72, 90];
+const DELIVERY_PAGE_SIZES = [5, 10, 15, 20, 25];
 
 const getRiderInfo = (order) => {
   const pickupReq = order._pickupReq || {};
@@ -826,72 +825,61 @@ const CompletedDeliveryDetailModal = ({ order, onClose, onRemove }) => {
 // ─────────────────────────────────────────────────────────────
 // Active Order Card
 // ─────────────────────────────────────────────────────────────
-const ActiveOrderCard = ({ order, onViewDetails }) => {
+const ActiveOrderRow = ({ order, onViewDetails }) => {
   const riderInfo = getRiderInfo(order);
-
   return (
-    <div className="ar-order-card ar-card-compact">
-      <div className="ar-order-header">
-        <div className="ar-order-id-block">
+    <button type="button" className="ar-list-row" onClick={() => onViewDetails(order)}>
+      <div className="ar-list-main">
+        <div className="ar-list-id-line">
           <span className="ar-order-id">#{order.orderId?.slice(-8).toUpperCase()}</span>
           <StatusBadge order={order} />
           <LiveBadge orderId={order.orderId} />
         </div>
-      </div>
-
-      <div className="ar-card-preview">
-        <div className="ar-compact-row"><span className="ar-cl">Customer</span><span className="ar-cv">{order.customerName || '—'}</span></div>
-        <div className="ar-compact-row"><span className="ar-cl">Total</span><span className="ar-cv ar-total">₱{(order.finalTotal ?? order.total ?? 0).toLocaleString()}</span></div>
-        <div className="ar-compact-row">
-          <span className="ar-cl">Rider</span>
-          <span className="ar-cv">{riderInfo.name?.trim() ? `🛵 ${riderInfo.name}` : 'Awaiting rider'}</span>
+        <div className="ar-list-meta">
+          <span>{order.customerName || '—'}</span>
+          <span className="ar-list-dot">·</span>
+          <span className="ar-total">₱{(order.finalTotal ?? order.total ?? 0).toLocaleString()}</span>
+          <span className="ar-list-dot">·</span>
+          <span>{riderInfo.name?.trim() ? riderInfo.name : 'Awaiting rider'}</span>
         </div>
       </div>
-
-      <div className="ar-card-actions">
-        <button type="button" className="ar-view-details-btn" onClick={() => onViewDetails(order)}>
-          <i className="fas fa-search"></i> View Details
-        </button>
-      </div>
-    </div>
+      <i className="fas fa-chevron-right ar-list-chevron" aria-hidden="true"></i>
+    </button>
   );
 };
 
-const CompletedOrderCard = ({ order, onViewDetails }) => {
+const CompletedOrderRow = ({ order, onViewDetails }) => {
   const riderInfo = order.riderInfo || {};
   const deliveredAt = order.deliveryConfirmedAt
     ? new Date(order.deliveryConfirmedAt).toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
     : null;
   return (
-    <div className="ar-order-card ar-completed-card ar-card-compact">
-      <div className="ar-order-header ar-completed-header">
-        <div className="ar-order-id-block">
+    <button type="button" className="ar-list-row ar-list-row--completed" onClick={() => onViewDetails(order)}>
+      <div className="ar-list-main">
+        <div className="ar-list-id-line">
           <span className="ar-order-id">#{order.orderId?.slice(-8).toUpperCase()}</span>
           <StatusBadge order={order} />
         </div>
+        <div className="ar-list-meta">
+          <span>{order.customerName || '—'}</span>
+          <span className="ar-list-dot">·</span>
+          <span className="ar-total">₱{(order.finalTotal ?? order.total ?? 0).toLocaleString()}</span>
+          {riderInfo.name && (
+            <>
+              <span className="ar-list-dot">·</span>
+              <span>{riderInfo.name}{riderInfo.plate ? ` · ${riderInfo.plate}` : ''}</span>
+            </>
+          )}
+          {deliveredAt && (
+            <>
+              <span className="ar-list-dot">·</span>
+              <span className="ar-delivered-time">{deliveredAt}</span>
+            </>
+          )}
+        </div>
       </div>
-      <div className="ar-card-preview">
-        <div className="ar-compact-row"><span className="ar-cl">Customer</span><span className="ar-cv">{order.customerName || '—'}</span></div>
-        <div className="ar-compact-row"><span className="ar-cl">Total</span><span className="ar-cv ar-total">₱{(order.finalTotal ?? order.total ?? 0).toLocaleString()}</span></div>
-        {riderInfo.name && (
-          <div className="ar-compact-row">
-            <span className="ar-cl">Rider</span>
-            <span className="ar-cv">🛵 {riderInfo.name}{riderInfo.plate ? ` · ${riderInfo.plate}` : ''}</span>
-          </div>
-        )}
-        {deliveredAt && (
-          <div className="ar-compact-row">
-            <span className="ar-cl">Delivered</span>
-            <span className="ar-cv ar-delivered-time">✅ {deliveredAt}</span>
-          </div>
-        )}
-      </div>
-      <div className="ar-card-actions">
-        <button type="button" className="ar-view-details-btn" onClick={() => onViewDetails(order)}>
-          <i className="fas fa-search"></i> View Details
-        </button>
-      </div>
-    </div>
+      <i className="fas fa-chevron-right ar-list-chevron" aria-hidden="true"></i>
+    </button>
   );
 };
 
@@ -905,12 +893,11 @@ const AdminRiders = () => {
   const [detailOrder,     setDetailOrder]     = useState(null);
   const [detailKind,      setDetailKind]      = useState(null); // 'active' | 'completed'
   const [hiddenCompleted, setHiddenCompleted] = useState([]);
-  const [tab, setTab] = useState('delivery');
 
   const [activePage, setActivePage] = useState(0);
-  const [activePageSize, setActivePageSize] = useState(ACTIVE_PAGE_SIZES[0]);
+  const [activePageSize, setActivePageSize] = useState(DELIVERY_PAGE_SIZES[0]);
   const [completedPage, setCompletedPage] = useState(0);
-  const [completedPageSize, setCompletedPageSize] = useState(COMPLETED_PAGE_SIZES[0]);
+  const [completedPageSize, setCompletedPageSize] = useState(DELIVERY_PAGE_SIZES[0]);
 
   const [startDate, setStartDate] = useState('');
   const [endDate,   setEndDate]   = useState('');
@@ -1000,83 +987,96 @@ const AdminRiders = () => {
     </div>
   );
 
-  const tabs = [
-    { key: 'delivery',  label: 'Active Delivery', icon: DK_ICONS.activeDelivery, count: activeDeliveryItems.length },
-    { key: 'completed', label: 'Completed', icon: DK_ICONS.completed, count: completedOrders.length, green: true },
-  ];
-
   return (
     <div className="admin-riders">
-      <div className="riders-tabs-row">
-        <div className="riders-tabs">
-          {tabs.map(t => (
-            <button key={t.key} className={`riders-tab-btn ${tab === t.key ? 'active' : ''}`} onClick={() => setTab(t.key)}>
-              <DkIcon name={t.icon} size={15} className="ar-tab-icon" />
-              {t.label}
-              {t.count > 0 && <span className={`riders-tab-count-badge ${t.green ? 'riders-tab-count-badge--green' : ''}`}>{t.count}</span>}
-            </button>
-          ))}
+      <div className="ar-delivery-toolbar">
+        <div className="ar-delivery-toolbar-left">
+          <h2 className="ar-delivery-title">Deliveries</h2>
+          <DateFilter />
         </div>
         <div className="ar-bell-tab-slot"><NotificationBell /></div>
       </div>
 
-      {tab === 'delivery' && (
-        <>
-          <DateFilter />
-          {activeDeliveryItems.length === 0
-            ? <div className="ar-empty"><div className="ar-empty-icon"><DkIcon name={DK_ICONS.activeDelivery} size={40} /></div><p>No active deliveries{(startDate || endDate) ? ' for selected dates' : ''}.</p><span>Orders claimed by riders after waybill scan appear here.</span></div>
-            : (
-              <>
-                <div
-                  className="ar-orders-list dk-fixed-page dk-fixed-page--grid"
-                  style={fixedGridPageStyle(activePageSize, 3, { '--dk-row-h': '220px', '--dk-gap': '14px' })}
-                >
-                  {pagedActive.map(o => (
-                    <ActiveOrderCard key={o._id} order={o} onViewDetails={openActiveDetails} />
-                  ))}
-                </div>
-                <AdminPager
-                  total={activeDeliveryItems.length}
-                  page={activePage}
-                  pageSize={activePageSize}
-                  onPageChange={setActivePage}
-                  onPageSizeChange={setActivePageSize}
-                  pageSizeOptions={ACTIVE_PAGE_SIZES}
-                />
-              </>
-            )
-          }
-        </>
-      )}
+      <div className="ar-delivery-split">
+        <section className="ar-delivery-panel ar-delivery-panel--active">
+          <div className="ar-delivery-panel-head">
+            <h3>
+              <DkIcon name={DK_ICONS.activeDelivery} size={16} className="ar-panel-icon" />
+              Active Delivery
+            </h3>
+            <span className="ar-panel-count">{activeDeliveryItems.length}</span>
+          </div>
+          <div className="ar-delivery-panel-body">
+            {activeDeliveryItems.length === 0 ? (
+              <div
+                className="ar-empty ar-empty--panel dk-fixed-page dk-fixed-page--stack"
+                style={fixedPageStyle(activePageSize, { '--dk-row-h': '68px', '--dk-gap': '8px' })}
+              >
+                <div className="ar-empty-icon"><DkIcon name={DK_ICONS.activeDelivery} size={36} /></div>
+                <p>No active deliveries{(startDate || endDate) ? ' for selected dates' : ''}.</p>
+                <span>Orders claimed by riders after waybill scan appear here.</span>
+              </div>
+            ) : (
+              <div
+                className="ar-list-view dk-fixed-page dk-fixed-page--stack"
+                style={fixedPageStyle(activePageSize, { '--dk-row-h': '68px', '--dk-gap': '8px' })}
+              >
+                {pagedActive.map((o) => (
+                  <ActiveOrderRow key={o._id} order={o} onViewDetails={openActiveDetails} />
+                ))}
+              </div>
+            )}
+            <AdminPager
+              total={activeDeliveryItems.length}
+              page={activePage}
+              pageSize={activePageSize}
+              onPageChange={setActivePage}
+              onPageSizeChange={setActivePageSize}
+              pageSizeOptions={DELIVERY_PAGE_SIZES}
+              alwaysShow
+            />
+          </div>
+        </section>
 
-      {tab === 'completed' && (
-        <>
-          <DateFilter />
-          {completedOrders.length === 0
-            ? <div className="ar-empty"><div className="ar-empty-icon"><DkIcon name={DK_ICONS.completed} size={40} /></div><p>No completed deliveries{(startDate || endDate) ? ' for selected dates' : ''} yet.</p></div>
-            : (
-              <>
-                <div
-                  className="ar-orders-list dk-fixed-page dk-fixed-page--grid"
-                  style={fixedGridPageStyle(completedPageSize, 3, { '--dk-row-h': '200px', '--dk-gap': '14px' })}
-                >
-                  {pagedCompleted.map(o => (
-                    <CompletedOrderCard key={o._id} order={o} onViewDetails={openCompletedDetails} />
-                  ))}
-                </div>
-                <AdminPager
-                  total={completedOrders.length}
-                  page={completedPage}
-                  pageSize={completedPageSize}
-                  onPageChange={setCompletedPage}
-                  onPageSizeChange={setCompletedPageSize}
-                  pageSizeOptions={COMPLETED_PAGE_SIZES}
-                />
-              </>
-            )
-          }
-        </>
-      )}
+        <section className="ar-delivery-panel ar-delivery-panel--completed">
+          <div className="ar-delivery-panel-head">
+            <h3>
+              <DkIcon name={DK_ICONS.completed} size={16} className="ar-panel-icon" />
+              Completed
+            </h3>
+            <span className="ar-panel-count">{completedOrders.length}</span>
+          </div>
+          <div className="ar-delivery-panel-body">
+            {completedOrders.length === 0 ? (
+              <div
+                className="ar-empty ar-empty--panel dk-fixed-page dk-fixed-page--stack"
+                style={fixedPageStyle(completedPageSize, { '--dk-row-h': '68px', '--dk-gap': '8px' })}
+              >
+                <div className="ar-empty-icon"><DkIcon name={DK_ICONS.completed} size={36} /></div>
+                <p>No completed deliveries{(startDate || endDate) ? ' for selected dates' : ''} yet.</p>
+              </div>
+            ) : (
+              <div
+                className="ar-list-view dk-fixed-page dk-fixed-page--stack"
+                style={fixedPageStyle(completedPageSize, { '--dk-row-h': '68px', '--dk-gap': '8px' })}
+              >
+                {pagedCompleted.map((o) => (
+                  <CompletedOrderRow key={o._id} order={o} onViewDetails={openCompletedDetails} />
+                ))}
+              </div>
+            )}
+            <AdminPager
+              total={completedOrders.length}
+              page={completedPage}
+              pageSize={completedPageSize}
+              onPageChange={setCompletedPage}
+              onPageSizeChange={setCompletedPageSize}
+              pageSizeOptions={DELIVERY_PAGE_SIZES}
+              alwaysShow
+            />
+          </div>
+        </section>
+      </div>
 
       {detailKind === 'active' && detailOrder && (
         <ActiveDeliveryDetailModal order={detailOrder} onClose={closeDetails} onOpenMap={openMap} />

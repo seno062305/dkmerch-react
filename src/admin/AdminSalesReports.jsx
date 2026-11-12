@@ -565,7 +565,7 @@ export const SalesAnalyticsPanel = ({ recentOrders = [] }) => {
                 <div className="bento-kpi-value">{m.value}</div>
                 {m.hint && <div className="bento-kpi-hint">{m.hint}</div>}
               </div>
-              <div className="bento-kpi-icon" style={{ background: `${m.color}18`, color: m.color }}>
+              <div className="bento-kpi-icon" style={{ color: m.color }}>
                 <DkIcon name={m.icon} size={18} />
               </div>
             </div>

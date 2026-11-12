@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import './AdminPager.css';
 
-export const PAGE_SIZES = [5, 10, 15, 20];
+export const PAGE_SIZES = [5, 10, 15, 20, 25];
 
 /** CSS vars for `.dk-fixed-page` — keep card height tied to rows-per-page. */
 export function fixedPageStyle(pageSize, extra = {}) {
@@ -52,12 +52,13 @@ const AdminPager = ({
   onPageChange,
   onPageSizeChange,
   pageSizeOptions = PAGE_SIZES,
+  alwaysShow = false,
 }) => {
   const totalPages = Math.max(1, Math.ceil((total || 0) / pageSize) || 1);
   const safePage = Math.min(Math.max(0, page), totalPages - 1);
   const pageList = useMemo(() => buildPageList(safePage, totalPages), [safePage, totalPages]);
 
-  if (!total || total <= 0) return null;
+  if ((!total || total <= 0) && !alwaysShow) return null;
 
   return (
     <div className="dk-pager">
