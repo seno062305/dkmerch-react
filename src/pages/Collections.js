@@ -179,13 +179,13 @@ const Collections = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleAddToCart = async (product) => {
+  const handleAddToCart = async (product, opts = {}) => {
     if (Number(product.stock) <= 0) {
-      showNotification('Product is out of stock — you can still favorite it.', 'warning');
+      showNotification('Out of stock — favorite still available', 'warning');
       return;
     }
     const result = await addToCartMutation(product);
-    showNotification(`${product.name} added to cart!`, 'success');
+    if (!opts.silent) showNotification('Added to cart!', 'success');
     return result;
   };
 
@@ -215,12 +215,12 @@ const Collections = () => {
     if (!ok) return;
     await toggleWishlistMutation(product);
     showNotification(
-      alreadyWishlisted ? `${product.name} removed from favorites!` : `${product.name} added to favorites!`,
+      alreadyWishlisted ? 'Removed from favorites!' : 'Added to favorites!',
       'success'
     );
   };
 
-  const handleAddToWishlist = async (product) => {
+  const handleAddToWishlist = async (product, opts = {}) => {
     if (!isAuthenticated) {
       showNotification('Please login to add to favorites', 'error', { dedupeKey: 'login-required' });
       setSelectedProduct(null);
@@ -229,26 +229,31 @@ const Collections = () => {
     }
     const alreadyWishlisted = isWishlisted(product);
     if (!alreadyWishlisted && wishlistItems.length >= MAX_WISHLIST) {
-      showNotification(`Favorites limit reached (max ${MAX_WISHLIST}). Remove an item first.`, 'error');
+      showNotification(`Favorites full (max ${MAX_WISHLIST})`, 'error');
       return;
     }
-    const ok = await confirm({
-      title: alreadyWishlisted ? 'Remove favorite?' : 'Add to favorites?',
-      message: alreadyWishlisted
-        ? `Remove "${product.name}" from Favorites?`
-        : `Add "${product.name}" to Favorites?`,
-      confirmLabel: alreadyWishlisted ? 'Remove' : 'Add',
-      variant: alreadyWishlisted ? 'danger' : 'primary',
-      icon: 'fa-star',
-      rememberKey: shopActionConfirmRememberKey(),
-      rememberLabel: "Don't show again",
-    });
-    if (!ok) return;
+    // Inside product modal: skip confirm + global toast (modal shows pill toast)
+    if (!opts.silent) {
+      const ok = await confirm({
+        title: alreadyWishlisted ? 'Remove favorite?' : 'Add to favorites?',
+        message: alreadyWishlisted
+          ? `Remove "${product.name}" from Favorites?`
+          : `Add "${product.name}" to Favorites?`,
+        confirmLabel: alreadyWishlisted ? 'Remove' : 'Add',
+        variant: alreadyWishlisted ? 'danger' : 'primary',
+        icon: 'fa-star',
+        rememberKey: shopActionConfirmRememberKey(),
+        rememberLabel: "Don't show again",
+      });
+      if (!ok) return;
+    }
     await toggleWishlistMutation(product);
-    showNotification(
-      alreadyWishlisted ? `${product.name} removed from favorites!` : `${product.name} added to favorites!`,
-      'success'
-    );
+    if (!opts.silent) {
+      showNotification(
+        alreadyWishlisted ? 'Removed from favorites!' : 'Added to favorites!',
+        'success'
+      );
+    }
   };
 
   return (

@@ -259,18 +259,18 @@ const Home = () => {
   // ── Add to Cart ──
   // NOTE: No window.confirm here — ProductModal already handles confirmation.
   // This is only called via ProductModal's onAddToCart prop.
-  const handleAddToCart = async (product) => {
+  const handleAddToCart = async (product, opts = {}) => {
     if (Number(product.stock) <= 0) {
-      showNotification('Product is out of stock — you can still favorite it.', 'warning');
+      showNotification('Out of stock — favorite still available', 'warning');
       return;
     }
     const result = await addToCartMutation(product);
-    showNotification(`${product.name} added to cart!`, 'success');
+    if (!opts.silent) showNotification('Added to cart!', 'success');
     return result;
   };
 
   // ── Add to Wishlist — with confirmation ──
-  const handleAddToWishlist = async (product) => {
+  const handleAddToWishlist = async (product, opts = {}) => {
     if (!isAuthenticated) {
       showNotification('Please login to add to favorites', 'error', { dedupeKey: 'login-required' });
       setSelectedProduct(null);
@@ -278,25 +278,27 @@ const Home = () => {
       return;
     }
     const alreadyWishlisted = isWishlisted(product);
-    const ok = await confirm({
-      title: alreadyWishlisted ? 'Remove favorite?' : 'Add to favorites?',
-      message: alreadyWishlisted
-        ? `Remove "${product.name}" from Favorites?`
-        : `Add "${product.name}" to Favorites?`,
-      confirmLabel: alreadyWishlisted ? 'Remove' : 'Add',
-      variant: alreadyWishlisted ? 'danger' : 'primary',
-      icon: 'fa-star',
-      rememberKey: shopActionConfirmRememberKey(),
-      rememberLabel: "Don't show again",
-    });
-    if (!ok) return;
+    if (!opts.silent) {
+      const ok = await confirm({
+        title: alreadyWishlisted ? 'Remove favorite?' : 'Add to favorites?',
+        message: alreadyWishlisted
+          ? `Remove "${product.name}" from Favorites?`
+          : `Add "${product.name}" to Favorites?`,
+        confirmLabel: alreadyWishlisted ? 'Remove' : 'Add',
+        variant: alreadyWishlisted ? 'danger' : 'primary',
+        icon: 'fa-star',
+        rememberKey: shopActionConfirmRememberKey(),
+        rememberLabel: "Don't show again",
+      });
+      if (!ok) return;
+    }
     await toggleWishlistMutation(product);
-    showNotification(
-      alreadyWishlisted
-        ? `${product.name} removed from wishlist!`
-        : `${product.name} added to wishlist!`,
-      'success'
-    );
+    if (!opts.silent) {
+      showNotification(
+        alreadyWishlisted ? 'Removed from favorites!' : 'Added to favorites!',
+        'success'
+      );
+    }
   };
 
   return (

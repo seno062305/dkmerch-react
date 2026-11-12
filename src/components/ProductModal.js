@@ -30,6 +30,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
   const [appliedPromo, setAppliedPromo]         = useState(null);
   const [showLightbox, setShowLightbox]         = useState(false);
   const [cartToast, setCartToast]               = useState(false);
+  const [favToast, setFavToast]                 = useState(null); // string | null
   const [expandedReviews, setExpandedReviews]   = useState({});
   const [showAllReviews, setShowAllReviews]     = useState(false);
   const [reviewStarFilter, setReviewStarFilter] = useState('all'); // 'all' | 1..5
@@ -332,8 +333,15 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
   };
 
   const triggerCartToast = () => {
+    setFavToast(null);
     setCartToast(true);
-    setTimeout(() => setCartToast(false), 2200);
+    setTimeout(() => setCartToast(false), 1800);
+  };
+
+  const triggerFavToast = (message) => {
+    setCartToast(false);
+    setFavToast(message);
+    setTimeout(() => setFavToast(null), 1800);
   };
 
   const stockQty = Number(product.stock) || 0;
@@ -369,7 +377,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
       rememberLabel: "Don't show again",
     });
     if (!ok) return;
-    onAddToCart({ ...product, appliedPromo, finalPrice: discountedPrice });
+    await onAddToCart?.({ ...product, appliedPromo, finalPrice: discountedPrice }, { silent: true });
     triggerCartToast();
   };
 
@@ -450,18 +458,21 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
       rememberLabel: "Don't show again",
     });
     if (!ok) return;
-    onAddToCart({ ...product, appliedPromo, finalPrice: discountedPrice });
+    await onAddToCart?.({ ...product, appliedPromo, finalPrice: discountedPrice }, { silent: true });
     triggerCartToast();
   };
 
   const isFavorited = useIsInWishlist(product);
 
-  const handleWishlistClick = () => {
+  const handleWishlistClick = async () => {
     if (!isAuthenticated) {
       requireLogin('Please login to add to favorites');
       return;
     }
-    onAddToWishlist(product);
+    if (!onAddToWishlist) return;
+    const wasFavorited = isFavorited;
+    await onAddToWishlist(product, { silent: true });
+    triggerFavToast(wasFavorited ? 'Removed from favorites!' : 'Added to favorites!');
   };
 
   useBodyScrollLock(true);
@@ -488,6 +499,12 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
             <div className="modal-cart-toast">
               <i className="fas fa-check-circle"></i>
               <span>Added to cart!</span>
+            </div>
+          )}
+          {favToast && (
+            <div className="modal-cart-toast modal-fav-toast">
+              <i className="fas fa-star"></i>
+              <span>{favToast}</span>
             </div>
           )}
 

@@ -125,9 +125,7 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
     if (!ok) return;
     await toggleWishlist(product);
     showNotification(
-      alreadyWishlisted
-        ? `${product.name} removed from favorites!`
-        : `${product.name} added to favorites!`,
+      alreadyWishlisted ? 'Removed from favorites!' : 'Added to favorites!',
       'success'
     );
   };

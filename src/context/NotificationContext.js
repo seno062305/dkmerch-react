@@ -11,10 +11,17 @@ const ICONS = {
 };
 
 const DEFAULT_MS = {
-  success: 4500,
-  info: 4500,
-  warning: 5500,
-  error: 6000,
+  success: 2600,
+  info: 2800,
+  warning: 3200,
+  error: 3500,
+};
+
+/** Keep toast text short so it stays pill-sized on mobile/desktop. */
+const shortenToast = (text, max = 72) => {
+  const t = String(text || '').replace(/\s+/g, ' ').trim();
+  if (t.length <= max) return t;
+  return `${t.slice(0, max - 1).trim()}…`;
 };
 
 const guessType = (message) => {
@@ -46,26 +53,25 @@ export const NotificationProvider = ({ children }) => {
 
   const showNotification = useCallback((message, type = 'info', options = {}) => {
     const safeType = ICONS[type] ? type : 'info';
-    const text = String(message || '');
-    const dedupeKey = options.dedupeKey || `${safeType}:${text}`;
+    const full = String(message || '');
+    const text = options.fullText ? full : shortenToast(full, options.maxLen || 72);
+    const dedupeKey = options.dedupeKey || `${safeType}:${full}`;
     // Always auto-dismiss unless explicitly set to 0 / Infinity
     const rawDuration = options.duration;
     const duration = rawDuration === 0 || rawDuration === Infinity
       ? 0
-      : Math.max(1200, Number(rawDuration ?? DEFAULT_MS[safeType] ?? 4500) || 4500);
+      : Math.max(1400, Number(rawDuration ?? DEFAULT_MS[safeType] ?? 2800) || 2800);
 
-    // Generate id outside setState so the dismiss timer always gets a real id
     let createdId = null;
-    let skipped = false;
     setToasts((prev) => {
       const existing = prev.find((t) => t.dedupeKey === dedupeKey);
       if (existing) {
-        skipped = true;
         createdId = existing.id;
         return prev;
       }
       createdId = ++idRef.current;
-      return [...prev.slice(-4), { id: createdId, message: text, type: safeType, dedupeKey }];
+      // Keep stack tiny so toasts don't cover the screen
+      return [...prev.slice(-1), { id: createdId, message: text, type: safeType, dedupeKey }];
     });
 
     if (createdId != null && duration > 0) {

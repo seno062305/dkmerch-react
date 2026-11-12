@@ -555,8 +555,8 @@ function AppContent() {
             <ProductModal
               product={currentProduct}
               onClose={() => setShowProductModal(false)}
-              onAddToCart={(product) => addToCart(product)}
-              onAddToWishlist={(product) => toggleWishlist(product)}
+              onAddToCart={async (product) => addToCart(product)}
+              onAddToWishlist={async (product) => toggleWishlist(product)}
               onRequireLogin={() => setShowLoginModal(true)}
             />
           )}

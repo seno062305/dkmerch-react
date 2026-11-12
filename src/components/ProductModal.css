@@ -134,6 +134,11 @@ body.product-modal-open .main-header {
 
 .modal-cart-toast i { font-size: 16px; }
 
+.modal-fav-toast {
+  background: linear-gradient(135deg, #f59e0b, #f5a623);
+  box-shadow: 0 4px 20px rgba(245, 166, 35, 0.4);
+}
+
 @keyframes toastPop {
   from { opacity: 0; transform: translateX(-50%) translateY(-8px) scale(0.92); }
   to   { opacity: 1; transform: translateX(-50%) translateY(0)    scale(1); }

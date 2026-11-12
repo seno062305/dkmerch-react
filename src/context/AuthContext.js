@@ -530,21 +530,21 @@ export const AuthProvider = ({ children }) => {
       try {
         if (broadcast.kind === "request") {
           showNotification(
-            `Sign-in request on ${device}${where}. Confirm on this device if it was you.`,
+            `Sign-in request · ${device}`,
             "warning",
-            { duration: 8000, dedupeKey: key }
+            { duration: 3200, dedupeKey: key }
           );
         } else if (broadcast.kind === "opened") {
           showNotification(
-            `Your account was opened on ${device}${where}.`,
+            `Opened on ${device}`,
             "info",
-            { duration: 5000, dedupeKey: key }
+            { duration: 2600, dedupeKey: key }
           );
         } else if (broadcast.kind === "blocked") {
           showNotification(
-            `A sign-in on ${device} was blocked.`,
+            `Sign-in blocked · ${device}`,
             "success",
-            { duration: 4500, dedupeKey: key }
+            { duration: 2600, dedupeKey: key }
           );
         }
       } catch { /* ignore */ }
@@ -598,12 +598,12 @@ export const AuthProvider = ({ children }) => {
       : "";
     const kickMsg =
       sessionCheck.reason === "new_device_logged_in"
-        ? `Your account was opened on ${device}${where}. You’ve been signed out here.`
-        : `You’ve been signed out on this device (${device}${where}).`;
+        ? `Signed out · opened on ${device}`
+        : `Signed out · ${device}`;
     voidMicrotask(() => {
       try {
         showNotification(kickMsg, "warning", {
-          duration: 5500,
+          duration: 3200,
           dedupeKey: `session-kick:${sessionCheck.reason}:${device}`,
         });
       } catch { /* ignore */ }
@@ -650,9 +650,9 @@ export const AuthProvider = ({ children }) => {
     setSecurityAlert((s) => (s ? { ...s, mode: "approved" } : s));
     const device = alert.deviceName || "the other device";
     showNotification(
-      `Login approved on ${device}. You’re still signed in here — both devices can use the account.`,
+      `Login approved · ${device}`,
       "success",
-      { duration: 5000, dedupeKey: "login-alert-yes" }
+      { duration: 2600, dedupeKey: "login-alert-yes" }
     );
   };
 
@@ -691,9 +691,9 @@ export const AuthProvider = ({ children }) => {
     }
     setSecurityAlert((s) => (s ? { ...s, mode: "denied" } : s));
     showNotification(
-      "Login blocked. You’re still signed in on this device.",
+      "Login blocked · still signed in here",
       "success",
-      { duration: 5000, dedupeKey: "login-alert-no" }
+      { duration: 2600, dedupeKey: "login-alert-no" }
     );
   };
 
