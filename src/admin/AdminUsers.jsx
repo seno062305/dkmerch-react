@@ -1,45 +1,13 @@
 // src/admin/AdminUsers.jsx
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import './AdminUsers.css';
-import { useQuery, useMutation, useAction, useConvex } from 'convex/react';
+import { useQuery, useMutation, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useConfirm } from '../context/ConfirmContext';
 import AdminPager, { fixedPageStyle } from './AdminPager';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
 import { formatPlateNumber, formatLicenseNumber, PLATE_REGEX, LICENSE_REGEX } from '../utils/riderIdFormat';
 import { IMAGE_ACCEPT_NO_GIF, validateImageFile } from '../utils/imageUpload';
-
-/** Safe archives fetch — avoids hard crash if Convex hasn't deployed listUserArchives yet. */
-function useUserArchivesSafe(enabled) {
-  const convex = useConvex();
-  const [rows, setRows] = useState([]);
-  const [deployNeeded, setDeployNeeded] = useState(false);
-
-  const refresh = useCallback(async () => {
-    try {
-      const data = await convex.query(api.users.listUserArchives, {});
-      setRows(Array.isArray(data) ? data : []);
-      setDeployNeeded(false);
-    } catch (err) {
-      const msg = String(err?.message || err || '');
-      if (msg.includes('listUserArchives') || msg.includes('Could not find public function')) {
-        setDeployNeeded(true);
-        setRows([]);
-        return;
-      }
-      setRows([]);
-    }
-  }, [convex]);
-
-  useEffect(() => {
-    if (!enabled) return undefined;
-    refresh();
-    const t = setInterval(refresh, 8000);
-    return () => clearInterval(t);
-  }, [enabled, refresh]);
-
-  return { userArchives: rows, archivesDeployNeeded: deployNeeded, refreshArchives: refresh };
-}
 
 const fileToDataUrl = (file) =>
   new Promise((resolve, reject) => {
@@ -351,15 +319,9 @@ const AdminUsers = () => {
 
   const users  = useQuery(api.users.getAllUsers)   ?? [];
   const riders = useQuery(api.riders.getAllRiders) ?? [];
-  const { userArchives, archivesDeployNeeded, refreshArchives } = useUserArchivesSafe(
-    activeTab === 'archives' || activeTab === 'users' || activeTab === 'pending'
-  );
 
   const suspendUserMutation   = useMutation(api.users.suspendUser);
   const unsuspendUserMutation = useMutation(api.users.unsuspendUser);
-  const deleteUserMutation    = useMutation(api.users.deleteUser);
-  const permanentDeleteArchiveMutation = useMutation(api.users.permanentDeleteUserArchive);
-  const activateUserMutation  = useMutation(api.users.activateUser);
   const deleteRiderMutation   = useMutation(api.riders.deleteRider);
   const adminCreateRider      = useMutation(api.riders.adminCreateRider);
   const approveRiderMutation  = useMutation(api.riders.approveRider);
@@ -373,16 +335,6 @@ const AdminUsers = () => {
   const [pageSize, setPageSize]         = useState(5);
   const [page, setPage]                 = useState(0);
 
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [userToDelete, setUserToDelete]           = useState(null);
-  const [deleteConfirmTyped, setDeleteConfirmTyped] = useState('');
-  const [deleteBusy, setDeleteBusy]               = useState(false);
-  const [archiveToWipe, setArchiveToWipe]         = useState(null);
-  const [wipeConfirmTyped, setWipeConfirmTyped]   = useState('');
-  const [wipeBusy, setWipeBusy]                   = useState(false);
-  const [hiddenUserIds, setHiddenUserIds]         = useState(() => new Set());
-  const DELETE_CONFIRM_WORD = 'DELETE';
-
   const [showSuspendModal, setShowSuspendModal] = useState(false);
   const [suspendStep, setSuspendStep]           = useState(STEP_CONFIGURE);
   const [userToSuspend, setUserToSuspend]       = useState(null);
@@ -393,9 +345,6 @@ const AdminUsers = () => {
 
   const [showUnsuspendConfirm, setShowUnsuspendConfirm] = useState(false);
   const [userToUnsuspend, setUserToUnsuspend]           = useState(null);
-
-  const [showActivateConfirm, setShowActivateConfirm] = useState(false);
-  const [userToActivate, setUserToActivate]           = useState(null);
 
   const [riderSearch, setRiderSearch]             = useState('');
   const [riderFilterStatus, setRiderFilterStatus] = useState('all'); // all | rejected | suspended
@@ -436,10 +385,7 @@ const AdminUsers = () => {
     !!(
       showSuspendModal
       || showUnsuspendConfirm
-      || showActivateConfirm
-      || showDeleteConfirm
       || showRiderDeleteModal
-      || archiveToWipe
       || viewingRider
       || pendingAppDetail
     )
@@ -452,12 +398,10 @@ const AdminUsers = () => {
     setTimeout(() => setNotification({ show: false, message: '', type: '' }), 6000);
   };
 
-  const pendingUsers = users.filter(
-    (u) => u.status === 'pending_activation' && !hiddenUserIds.has(u._id)
-  );
-  // regularUsers includes self_deactivated — they're real accounts, not pending
-  const regularUsers = users.filter(
-    (u) => u.status !== 'pending_activation' && !hiddenUserIds.has(u._id)
+  // Live statuses only: active, suspended, deactivated
+  const ALLOWED_USER_STATUSES = new Set(['active', 'suspended', 'self_deactivated']);
+  const regularUsers = users.filter((u) =>
+    ALLOWED_USER_STATUSES.has(u.status || 'active')
   );
 
   const byNewest = (a, b) =>
@@ -482,16 +426,6 @@ const AdminUsers = () => {
     const start = page * pageSize;
     return filteredUsers.slice(start, start + pageSize);
   }, [filteredUsers, page, pageSize]);
-
-  const filteredPending = pendingUsers.filter(u => {
-    if (!searchTerm.trim()) return true;
-    const q = searchTerm.toLowerCase();
-    return (
-      u.name?.toLowerCase().includes(q) ||
-      u.username?.toLowerCase().includes(q) ||
-      u.email?.toLowerCase().includes(q)
-    );
-  }).sort(byNewest);
 
   const filteredRiders = riders.filter(r => {
     if (riderFilterStatus !== 'all' && r.status !== riderFilterStatus) return false;
@@ -823,87 +757,6 @@ const AdminUsers = () => {
     setUserToUnsuspend(null);
   };
 
-  const openDeleteConfirm = (user) => {
-    setUserToDelete(user);
-    setDeleteConfirmTyped('');
-    setShowDeleteConfirm(true);
-  };
-
-  const closeDeleteConfirm = (force = false) => {
-    if (deleteBusy && !force) return;
-    setShowDeleteConfirm(false);
-    setUserToDelete(null);
-    setDeleteConfirmTyped('');
-    setDeleteBusy(false);
-  };
-
-  const confirmDeleteUser = async () => {
-    if (!userToDelete || deleteConfirmTyped.trim() !== DELETE_CONFIRM_WORD) return;
-    const targetId = userToDelete._id;
-    const targetName = userToDelete.name;
-    setDeleteBusy(true);
-    try {
-      // Only `id` — matches current cloud deleteUser AND newer archive-capable deploy.
-      const result = await deleteUserMutation({ id: targetId });
-      if (result?.success === false) {
-        showNotification(result.message || 'Failed to remove user.', 'error');
-        return;
-      }
-      // Instantly hide from list (query refresh follows)
-      setHiddenUserIds((prev) => new Set(prev).add(targetId));
-      showNotification(
-        result?.message ||
-          `${targetName} removed from live users (unregistered).`,
-        'success'
-      );
-      closeDeleteConfirm(true);
-      refreshArchives();
-    } catch (err) {
-      const msg = String(err?.message || err || '');
-      if (msg.includes('userArchives') || msg.includes('Could not find') || msg.includes('ArgumentValidation')) {
-        showNotification(
-          'Delete failed on Convex. Run npx convex dev in your project folder, then try again.',
-          'error'
-        );
-      } else {
-        showNotification(msg.slice(0, 160) || 'Failed to remove user.', 'error');
-      }
-    } finally {
-      setDeleteBusy(false);
-    }
-  };
-
-  const confirmWipeArchive = async () => {
-    if (!archiveToWipe || wipeConfirmTyped.trim() !== DELETE_CONFIRM_WORD) return;
-    setWipeBusy(true);
-    try {
-      const result = await permanentDeleteArchiveMutation({ archiveId: archiveToWipe._id });
-      if (result?.success === false) {
-        showNotification(result.message || 'Failed to wipe archive.', 'error');
-      } else {
-        showNotification('Archive permanently deleted.', 'success');
-        setArchiveToWipe(null);
-        setWipeConfirmTyped('');
-      }
-    } catch {
-      showNotification('Failed to wipe archive.', 'error');
-    } finally {
-      setWipeBusy(false);
-    }
-  };
-
-  const confirmActivate = async () => {
-    if (!userToActivate) return;
-    try {
-      await activateUserMutation({ id: userToActivate._id });
-      showNotification(`${userToActivate.name} has been activated successfully.`, 'success');
-    } catch {
-      showNotification('Failed to activate user.', 'error');
-    }
-    setShowActivateConfirm(false);
-    setUserToActivate(null);
-  };
-
   const openRiderDeleteModal = (rider) => {
     setRiderToDelete(rider);
     setRiderDeleteReason('');
@@ -957,11 +810,10 @@ const AdminUsers = () => {
     return map[status] || 'rider-status-badge pending';
   };
 
-  // ── Status badge class — handles self_deactivated ─────────────────────────
+  // ── Status badge class — active / suspended / deactivated only ────────────
   const getStatusBadgeClass = (status) => {
     const s = status || 'active';
     if (s === 'self_deactivated') return 'status-badge self-deactivated';
-    if (s === 'deleted')          return 'status-badge deleted';
     return `status-badge ${s}`;
   };
 
@@ -970,9 +822,8 @@ const AdminUsers = () => {
     const s = status || 'active';
     switch (s) {
       case 'active':           return { label: 'Active',      faIcon: 'fa-check-circle' };
-      case 'suspended':        return { label: 'Suspended',   faIcon: 'fa-ban' };
-      case 'self_deactivated': return { label: 'Deactivated', faIcon: 'fa-user-slash' };
-      case 'deleted':          return { label: 'Deleted',     faIcon: 'fa-trash-alt' };
+      case 'suspended':        return { label: 'Suspended',   faIcon: 'fa-user-slash' };
+      case 'self_deactivated': return { label: 'Deactivated', faIcon: 'fa-user-clock' };
       default:                 return { label: s,             faIcon: 'fa-circle' };
     }
   };
@@ -1001,7 +852,6 @@ const AdminUsers = () => {
   const activeUsers       = regularUsers.filter(u => (u.status || 'active') === 'active').length;
   const suspendedUsers    = regularUsers.filter(u => u.status === 'suspended').length;
   const deactivatedUsers  = regularUsers.filter(u => u.status === 'self_deactivated').length;
-  const deletedUsers      = regularUsers.filter(u => u.status === 'deleted').length;
   const totalRiders       = riders.length;
   const approvedRiders    = riders.filter(r => r.status === 'approved').length;
   const pendingRiders     = riders.filter(r => r.status === 'pending').length;
@@ -1061,13 +911,10 @@ const AdminUsers = () => {
             <div className="au-stat-card">
               <div className="au-stat-icon au-stat-icon--red"><i className="fas fa-user-slash"></i></div>
               <div className="au-stat-info">
-                <div className="au-stat-label">SUSPENDED / DELETED</div>
-                <div className="au-stat-number">{suspendedUsers + deletedUsers}</div>
+                <div className="au-stat-label">SUSPENDED</div>
+                <div className="au-stat-number">{suspendedUsers}</div>
                 <div className="au-stat-sub">
-                  {suspendedUsers > 0 && `${suspendedUsers} suspended`}
-                  {suspendedUsers > 0 && deletedUsers > 0 && ' · '}
-                  {deletedUsers > 0 && `${deletedUsers} deleted`}
-                  {suspendedUsers === 0 && deletedUsers === 0 && 'none'}
+                  {suspendedUsers === 0 ? 'none' : 'suspended accounts'}
                 </div>
               </div>
             </div>
@@ -1089,17 +936,6 @@ const AdminUsers = () => {
           <i className="fas fa-user"></i>
           <span className="tab-label">Users</span>
           <span className="au-tab-badge">{totalUsers}</span>
-        </button>
-        <button className={`tab-btn ${activeTab === 'pending' ? 'active' : ''}`} onClick={() => setActiveTab('pending')}>
-          <i className="fas fa-user-clock"></i>
-          <span className="tab-label tab-label--long">Pending Activation</span>
-          <span className="tab-label tab-label--short">Pending</span>
-          <span className="au-tab-badge">{pendingUsers.length}</span>
-        </button>
-        <button className={`tab-btn ${activeTab === 'archives' ? 'active' : ''}`} onClick={() => setActiveTab('archives')}>
-          <i className="fas fa-archive"></i>
-          <span className="tab-label">Archives</span>
-          <span className="au-tab-badge">{userArchives.length}</span>
         </button>
         <button className={`tab-btn ${activeTab === 'riders' ? 'active' : ''}`} onClick={() => setActiveTab('riders')}>
           <i className="fas fa-motorcycle"></i>
@@ -1125,7 +961,7 @@ const AdminUsers = () => {
               {searchTerm && <button className="clear-search" onClick={() => setSearchTerm('')}><i className="fas fa-times"></i></button>}
             </div>
             <div className="status-filter">
-              {['all', 'active', 'suspended', 'self_deactivated', 'deleted'].map(s => (
+              {['all', 'active', 'suspended', 'self_deactivated'].map(s => (
                 <button key={s} className={`filter-btn ${filterStatus === s ? 'active' : ''}`} onClick={() => setFilterStatus(s)}>
                   {s === 'self_deactivated' ? 'Deactivated' : s.charAt(0).toUpperCase() + s.slice(1)}
                 </button>
@@ -1148,7 +984,6 @@ const AdminUsers = () => {
                     const isActive      = (user.status || 'active') === 'active';
                     const isSuspended   = user.status === 'suspended';
                     const isDeactivated = user.status === 'self_deactivated';
-                    const isDeleted     = user.status === 'deleted';
                     const isAdmin       = user.email === 'admin' || user.role === 'admin';
 
                     return (
@@ -1169,7 +1004,6 @@ const AdminUsers = () => {
                               {statusLabel}
                             </span>
 
-                            {/* Suspended meta chips */}
                             {isSuspended && (
                               <span className="suspend-meta">
                                 <span className="suspend-duration-chip">
@@ -1181,17 +1015,9 @@ const AdminUsers = () => {
                               </span>
                             )}
 
-                            {/* Deactivated info chip */}
                             {isDeactivated && (
                               <span className="deactivated-chip">
                                 <i className="fas fa-info-circle"></i>Self-deactivated · Can reactivate via login
-                              </span>
-                            )}
-
-                            {/* Deleted info chip */}
-                            {isDeleted && (
-                              <span className="deleted-chip">
-                                <i className="fas fa-trash-alt"></i>Self-deleted · Use trash to unregister permanently
                               </span>
                             )}
                           </div>
@@ -1199,14 +1025,12 @@ const AdminUsers = () => {
                         <td className="actions-cell" data-label="Actions">
                           {!isAdmin && (
                             <>
-                              {/* Active — can suspend */}
                               {isActive && (
                                 <button className="btn-suspend" onClick={() => openSuspendModal(user)} title="Suspend user">
-                                  <i className="fas fa-ban"></i>
+                                  <i className="fas fa-user-slash"></i>
                                 </button>
                               )}
 
-                              {/* Suspended — can unsuspend */}
                               {isSuspended && (
                                 <button className="btn-suspend btn-activate"
                                   onClick={() => { setUserToUnsuspend(user); setShowUnsuspendConfirm(true); }}
@@ -1215,21 +1039,11 @@ const AdminUsers = () => {
                                 </button>
                               )}
 
-                              {/* Deactivated — customer can still reactivate; admin may delete */}
                               {isDeactivated && (
                                 <span className="au-no-action-tip" title="Customer can reactivate via login OTP">
                                   <i className="fas fa-info-circle"></i>
                                 </span>
                               )}
-
-                              {/* Delete / unregister — frees email & username for new signup */}
-                              <button
-                                className="btn-delete"
-                                onClick={() => openDeleteConfirm(user)}
-                                title="Archive & unregister account"
-                              >
-                                <i className="fas fa-trash"></i>
-                              </button>
                             </>
                           )}
                         </td>
@@ -1247,124 +1061,6 @@ const AdminUsers = () => {
               onPageChange={setPage}
               onPageSizeChange={setPageSize}
             />
-          </div>
-        </>
-      )}
-
-      {/* ══ PENDING ACTIVATION TAB ═════════════════════════════════════════════ */}
-      {activeTab === 'pending' && (
-        <>
-          <div className="users-controls">
-            <div className="search-box">
-              <i className="fas fa-search"></i>
-              <input type="text" placeholder="Search pending users..."
-                value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-              {searchTerm && <button className="clear-search" onClick={() => setSearchTerm('')}><i className="fas fa-times"></i></button>}
-            </div>
-            <div style={{ color: '#e53e3e', fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <i className="fas fa-shield-alt"></i>
-              These accounts were flagged as suspicious and require manual activation.
-            </div>
-          </div>
-          <div className="users-table-container">
-            {filteredPending.length === 0 ? (
-              <div className="no-users">
-                <i className="fas fa-check-circle" style={{ color: '#28a745' }}></i>
-                <p>No pending activations — no suspicious registrations detected!</p>
-              </div>
-            ) : (
-              <table className="users-table">
-                <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Registered</th><th>Reason</th><th>Actions</th></tr></thead>
-                <tbody>
-                  {filteredPending.map(user => (
-                    <tr key={user._id}>
-                      <td className="user-name" data-label="Name"><i className="fas fa-user-clock" style={{ color: '#ed8936' }}></i>{user.name}</td>
-                      <td data-label="Username">@{user.username}</td>
-                      <td data-label="Email">{user.email}</td>
-                      <td className="date-cell" data-label="Registered">{formatDate(user.registeredAt)}</td>
-                      <td data-label="Reason">
-                        <span style={{ background: '#fff3cd', color: '#856404', padding: '4px 10px', borderRadius: 12, fontSize: 11, fontWeight: 700 }}>
-                          <i className="fas fa-robot" style={{ marginRight: 4 }}></i>
-                          {user.suspendReason === 'spam_registration' ? 'Spam/Bot Detection' : user.suspendReason || 'Flagged'}
-                        </span>
-                      </td>
-                      <td className="actions-cell" data-label="Actions">
-                        <button className="btn-suspend btn-activate" title="Activate"
-                          onClick={() => { setUserToActivate(user); setShowActivateConfirm(true); }}>
-                          <i className="fas fa-check-circle"></i>
-                        </button>
-                        <button className="btn-delete" title="Archive & unregister"
-                          onClick={() => openDeleteConfirm(user)}>
-                          <i className="fas fa-trash"></i>
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </>
-      )}
-
-      {/* ══ USER ARCHIVES TAB ═════════════════════════════════════════════════ */}
-      {activeTab === 'archives' && (
-        <>
-          <div className="users-controls">
-            <div style={{ color: '#64748b', fontSize: 13, lineHeight: 1.45 }}>
-              <i className="fas fa-archive" style={{ marginRight: 6, color: '#fc1268' }}></i>
-              Deleted accounts are archived here (audit). Live email/username are free to register again. Permanent wipe removes the archive only.
-            </div>
-          </div>
-          {archivesDeployNeeded && (
-            <div className="au-deploy-banner">
-              <i className="fas fa-cloud-upload-alt"></i>
-              <div>
-                <strong>Convex deploy needed.</strong> New archive APIs are in the code but not on your cloud yet.
-                In a terminal run: <code>npx convex dev</code> (or <code>npx convex deploy</code>), then refresh.
-              </div>
-            </div>
-          )}
-          <div className="users-table-container">
-            {userArchives.length === 0 ? (
-              <div className="no-users">
-                <i className="fas fa-archive" style={{ color: '#94a3b8' }}></i>
-                <p>{archivesDeployNeeded ? 'Archives unavailable until Convex is deployed.' : 'No archived accounts yet.'}</p>
-              </div>
-            ) : (
-              <table className="users-table">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Username</th>
-                    <th>Email</th>
-                    <th>Archived</th>
-                    <th>By</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {userArchives.map((row) => (
-                    <tr key={row._id}>
-                      <td className="user-name" data-label="Name"><i className="fas fa-archive"></i>{row.name}</td>
-                      <td data-label="Username">@{row.username}</td>
-                      <td data-label="Email">{row.email}</td>
-                      <td className="date-cell" data-label="Archived">{formatDate(row.archivedAt)}</td>
-                      <td data-label="By">{row.archivedBy || 'admin'}</td>
-                      <td className="actions-cell" data-label="Actions">
-                        <button
-                          className="btn-delete"
-                          title="Permanently wipe archive"
-                          onClick={() => { setArchiveToWipe(row); setWipeConfirmTyped(''); }}
-                        >
-                          <i className="fas fa-skull-crossbones"></i>
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
           </div>
         </>
       )}
@@ -1719,7 +1415,7 @@ const AdminUsers = () => {
             {suspendStep === STEP_CONFIGURE && (
               <>
                 <div className="modal-header suspend-modal-header">
-                  <h2><i className="fas fa-ban"></i> Suspend Account</h2>
+                  <h2><i className="fas fa-user-slash"></i> Suspend Account</h2>
                   <button className="close-btn" onClick={closeSuspendModal}><i className="fas fa-times"></i></button>
                 </div>
                 <div className="suspend-modal-body">
@@ -1792,7 +1488,7 @@ const AdminUsers = () => {
                 </div>
                 <div className="suspend-modal-body">
                   <div className="suspend-confirm-summary">
-                    <div className="suspend-confirm-icon"><i className="fas fa-ban"></i></div>
+                    <div className="suspend-confirm-icon"><i className="fas fa-user-slash"></i></div>
                     <p className="suspend-confirm-headline">You are about to suspend <strong>{userToSuspend?.name}</strong></p>
                     <p className="suspend-confirm-sub">{userToSuspend?.email}</p>
                     <div className="suspend-confirm-details">
@@ -1830,7 +1526,7 @@ const AdminUsers = () => {
                       <i className="fas fa-arrow-left"></i> Go Back
                     </button>
                     <button className="btn-suspend-confirm" onClick={handleConfirmSuspend} disabled={suspendLoading}>
-                      {suspendLoading ? <><i className="fas fa-spinner fa-spin"></i> Suspending...</> : <><i className="fas fa-ban"></i> Yes, Suspend Account</>}
+                      {suspendLoading ? <><i className="fas fa-spinner fa-spin"></i> Suspending...</> : <><i className="fas fa-user-slash"></i> Yes, Suspend Account</>}
                     </button>
                   </div>
                 </div>
@@ -1852,110 +1548,6 @@ const AdminUsers = () => {
               <button className="btn-cancel" onClick={() => setShowUnsuspendConfirm(false)}>Cancel</button>
               <button className="btn-activate-confirm" onClick={confirmUnsuspend}>
                 <i className="fas fa-check-circle"></i> Unsuspend
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ══ ACTIVATE CONFIRM ═══════════════════════════════════════════════════ */}
-      {showActivateConfirm && (
-        <div className="modal-overlay" onClick={() => setShowActivateConfirm(false)}>
-          <div className="modal-content confirm-modal" onClick={e => e.stopPropagation()}>
-            <div className="confirm-icon activate"><i className="fas fa-user-check"></i></div>
-            <h2>Activate Account?</h2>
-            <p>Activate <strong>{userToActivate?.name}</strong>'s account?</p>
-            <p className="success-text">They will be able to log in immediately after activation.</p>
-            <div className="modal-actions">
-              <button className="btn-cancel" onClick={() => setShowActivateConfirm(false)}>Cancel</button>
-              <button className="btn-activate-confirm" onClick={confirmActivate}><i className="fas fa-check-circle"></i> Activate</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ══ DELETE / ARCHIVE USER — type-to-confirm ═══════════════════════════ */}
-      {showDeleteConfirm && userToDelete && (
-        <div className="modal-overlay" onClick={closeDeleteConfirm}>
-          <div className="modal-content confirm-modal au-type-confirm" onClick={e => e.stopPropagation()}>
-            <div className="confirm-icon suspend"><i className="fas fa-archive"></i></div>
-            <h2>Archive &amp; Unregister?</h2>
-            <p>
-              Move <strong>{userToDelete.name}</strong>
-              {userToDelete.email ? <> (<strong>{userToDelete.email}</strong>)</> : null} out of live users into <strong>Archives</strong>.
-            </p>
-            <p className="warning-text">
-              Email/username become free to register again. Cart/wishlist cleared. Snapshot stays in Archives until you permanently wipe it.
-            </p>
-            <div className="au-type-banner">
-              Type <strong>{DELETE_CONFIRM_WORD}</strong> exactly below to continue.
-            </div>
-            <label className="au-type-label" htmlFor="au-delete-confirm">Confirmation phrase</label>
-            <input
-              id="au-delete-confirm"
-              className={`au-type-input ${deleteConfirmTyped.trim() === DELETE_CONFIRM_WORD ? 'au-type-input--ok' : ''}`}
-              type="text"
-              autoFocus
-              autoComplete="off"
-              spellCheck={false}
-              disabled={deleteBusy}
-              value={deleteConfirmTyped}
-              placeholder={`Type ${DELETE_CONFIRM_WORD}`}
-              onChange={(e) => setDeleteConfirmTyped(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && deleteConfirmTyped.trim() === DELETE_CONFIRM_WORD && !deleteBusy) {
-                  e.preventDefault();
-                  confirmDeleteUser();
-                }
-              }}
-            />
-            <div className="modal-actions">
-              <button className="btn-cancel" onClick={closeDeleteConfirm} disabled={deleteBusy}>Cancel</button>
-              <button
-                className="btn-suspend-confirm"
-                onClick={confirmDeleteUser}
-                disabled={deleteBusy || deleteConfirmTyped.trim() !== DELETE_CONFIRM_WORD}
-              >
-                <i className="fas fa-archive"></i> {deleteBusy ? 'Archiving…' : 'Archive Account'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ══ WIPE USER ARCHIVE — type-to-confirm ════════════════════════════════ */}
-      {archiveToWipe && (
-        <div className="modal-overlay" onClick={() => !wipeBusy && setArchiveToWipe(null)}>
-          <div className="modal-content confirm-modal au-type-confirm" onClick={e => e.stopPropagation()}>
-            <div className="confirm-icon suspend"><i className="fas fa-skull-crossbones"></i></div>
-            <h2>Permanently Wipe Archive?</h2>
-            <p>
-              Delete archived snapshot of <strong>{archiveToWipe.name}</strong> ({archiveToWipe.email}). No restore after this.
-            </p>
-            <div className="au-type-banner">
-              Type <strong>{DELETE_CONFIRM_WORD}</strong> exactly below to continue.
-            </div>
-            <label className="au-type-label" htmlFor="au-wipe-confirm">Confirmation phrase</label>
-            <input
-              id="au-wipe-confirm"
-              className={`au-type-input ${wipeConfirmTyped.trim() === DELETE_CONFIRM_WORD ? 'au-type-input--ok' : ''}`}
-              type="text"
-              autoFocus
-              autoComplete="off"
-              spellCheck={false}
-              disabled={wipeBusy}
-              value={wipeConfirmTyped}
-              placeholder={`Type ${DELETE_CONFIRM_WORD}`}
-              onChange={(e) => setWipeConfirmTyped(e.target.value)}
-            />
-            <div className="modal-actions">
-              <button className="btn-cancel" onClick={() => { setArchiveToWipe(null); setWipeConfirmTyped(''); }} disabled={wipeBusy}>Cancel</button>
-              <button
-                className="btn-suspend-confirm"
-                onClick={confirmWipeArchive}
-                disabled={wipeBusy || wipeConfirmTyped.trim() !== DELETE_CONFIRM_WORD}
-              >
-                <i className="fas fa-trash"></i> {wipeBusy ? 'Wiping…' : 'Wipe Forever'}
               </button>
             </div>
           </div>
@@ -2054,7 +1646,7 @@ const AdminUsers = () => {
                 </div>
                 <div className="suspend-modal-body">
                   <div className="suspend-confirm-summary">
-                    <div className="suspend-confirm-icon" style={{ background: 'linear-gradient(135deg,#dc2626,#b91c1c)' }}>
+                    <div className="suspend-confirm-icon">
                       <i className="fas fa-trash"></i>
                     </div>
                     <p className="suspend-confirm-headline">Permanently delete <strong>{riderToDelete.fullName}</strong>?</p>

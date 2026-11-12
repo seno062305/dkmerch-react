@@ -487,14 +487,18 @@
 }
 
 .remove-confirm-icon {
-  width: 60px; height: 60px;
-  border-radius: 50%;
-  background: #ffebee;
-  display: flex; align-items: center; justify-content: center;
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   margin: 0 auto 16px;
+  padding: 0;
 }
 
-.remove-confirm-icon i { font-size: 24px; color: #e53935; }
+.remove-confirm-icon i { font-size: 28px; color: #e53935; }
 .remove-confirm-dialog h3 { font-size: 20px; color: var(--dark-color); margin-bottom: 10px; }
 .remove-confirm-dialog p { font-size: 14px; color: var(--gray-color); margin-bottom: 24px; line-height: 1.6; }
 

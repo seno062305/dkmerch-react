@@ -8,7 +8,7 @@
 }
 
 /* ══════════════════════════
-   SPLIT: Paid Priority | All Orders
+   SPLIT: Request Refunds | Refunded (Refunds tab only)
 ══════════════════════════ */
 .orders-split {
   display: grid;
@@ -16,6 +16,57 @@
   gap: 14px;
   align-items: stretch;
   width: 100%;
+}
+
+.orders-container--full {
+  width: 100%;
+}
+
+.orders-list-caption {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 14px 18px 10px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #42011e;
+  box-sizing: border-box;
+}
+
+.orders-list-caption i { color: #fc1268; }
+
+/* Brand-tint custom refund icons (assets are black glyphs) */
+.orders-dk-icon.dk-icon {
+  filter: brightness(0) saturate(100%) invert(18%) sepia(97%) saturate(6400%) hue-rotate(325deg) brightness(98%) contrast(102%);
+}
+
+/* Tabs: match slate like FA icons; pink only when active */
+.tab-btn .orders-dk-icon.dk-icon {
+  margin-right: 2px;
+  filter: brightness(0) saturate(100%) invert(48%) sepia(8%) saturate(650%) hue-rotate(176deg) brightness(93%) contrast(88%);
+  opacity: 1;
+  transition: filter 0.2s ease;
+}
+.tab-btn:hover .orders-dk-icon.dk-icon {
+  filter: brightness(0) saturate(100%) invert(10%) sepia(8%) saturate(500%) hue-rotate(180deg) brightness(95%) contrast(95%);
+}
+.tab-btn.active .orders-dk-icon.dk-icon,
+.tab-btn-refund.active .orders-dk-icon.dk-icon {
+  filter: brightness(0) saturate(100%) invert(18%) sepia(97%) saturate(6400%) hue-rotate(325deg) brightness(98%) contrast(102%);
+}
+
+.orders-row-actions {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.orders-row-actions .view-btn,
+.orders-row-actions .orders-priority-confirm {
+  width: 100%;
+  justify-content: center;
 }
 
 .orders-split-left {
@@ -34,7 +85,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 12px 14px;
+  padding: 14px 18px;
   border-bottom: 1px solid #e2e8f0;
   background: linear-gradient(180deg, #fff7fb 0%, #fff 100%);
   min-height: 52px;
@@ -48,7 +99,7 @@
   color: #42011e;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .orders-priority-head h2 i { color: #fc1268; }
@@ -121,7 +172,6 @@
 .orders-priority-card:last-child { border-bottom: none; }
 .orders-priority-card.is-awaiting { background: #fffbeb; }
 .orders-priority-card.is-processing { background: #f0f9ff; }
-.orders-priority-card.has-refund { box-shadow: inset 3px 0 0 #ef4444; }
 
 .orders-priority-main {
   flex: 1;
@@ -372,6 +422,19 @@
   outline: none;
   border-color: #fc1268;
   box-shadow: 0 0 0 3px rgba(252, 18, 104, 0.1);
+}
+
+.status-filter-group {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.status-filter-select {
+  width: auto;
+  min-width: 160px;
+  max-width: 220px;
+  cursor: pointer;
 }
 
 /* ══════════════════════════
@@ -1412,7 +1475,19 @@
 /* Reject confirm dialog */
 .reject-confirm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65); display: flex; align-items: center; justify-content: center; z-index: 999999; padding: 20px; }
 .reject-confirm-dialog { background: white; border-radius: 16px; width: 100%; max-width: 460px; padding: 28px 24px; text-align: center; box-shadow: 0 24px 64px rgba(0,0,0,0.25); }
-.reject-confirm-icon { width: 56px; height: 56px; background: #fff7ed; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 26px; color: #f97316; margin: 0 auto 16px; }
+.reject-confirm-icon {
+  width: auto;
+  height: auto;
+  background: transparent;
+  border-radius: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  color: #f97316;
+  margin: 0 auto 16px;
+  padding: 0;
+}
 .reject-confirm-dialog h3 { font-size: 18px; font-weight: 700; color: #1a1f36; margin: 0 0 10px; }
 .reject-confirm-dialog p { font-size: 14px; color: #64748b; margin: 0 0 16px; line-height: 1.6; }
 .reject-confirm-details { background: #f8f9fa; border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; text-align: left; display: flex; flex-direction: column; gap: 8px; }
@@ -1489,6 +1564,13 @@
   }
   .tab-btn.active i,
   .tab-btn-refund.active i { color: #fc1268 !important; }
+  .tab-btn .orders-dk-icon.dk-icon {
+    filter: brightness(0) saturate(100%) invert(48%) sepia(8%) saturate(650%) hue-rotate(176deg) brightness(93%) contrast(88%);
+  }
+  .tab-btn.active .orders-dk-icon.dk-icon,
+  .tab-btn-refund.active .orders-dk-icon.dk-icon {
+    filter: brightness(0) saturate(100%) invert(18%) sepia(97%) saturate(6400%) hue-rotate(325deg) brightness(98%) contrast(102%);
+  }
   .tab-count-badge { min-width: 18px; height: 18px; font-size: 10px; }
   .tab-btn.active .tab-count-badge {
     background: #fc1268;
@@ -1514,6 +1596,14 @@
     width: 100%;
     max-width: 100%;
     box-sizing: border-box;
+  }
+  .status-filter-group {
+    width: 100%;
+  }
+  .status-filter-select {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
   }
   .date-filter-group {
     width: 100%;

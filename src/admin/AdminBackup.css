@@ -1047,15 +1047,16 @@
 }
 
 .ab-confirm-icon {
-  width: auto;
+  width: fit-content;
   height: auto;
   border-radius: 0;
-  background: transparent;
-  display: flex;
+  background: transparent !important;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   margin: 0 auto 14px;
-  font-size: 26px;
+  padding: 0;
+  font-size: 28px;
   color: #fc1268;
 }
 
@@ -1292,11 +1293,11 @@
 .ab-wipe-btn:hover { background: #ffe4ef; }
 
 .ab-confirm-icon--lock {
-  background: linear-gradient(135deg, #fc1268, #e0105a) !important;
-  color: #fff !important;
+  background: transparent !important;
+  color: #fc1268 !important;
 }
 .ab-confirm-icon--danger {
-  background: #fee2e2 !important;
+  background: transparent !important;
   color: #dc2626 !important;
 }
 .ab-password-form { text-align: left; width: 100%; }

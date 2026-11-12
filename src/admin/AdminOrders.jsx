@@ -481,6 +481,7 @@ const AdminOrders = () => {
   const [activeTab,     setActiveTab]     = useState('all');
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [searchTerm,    setSearchTerm]    = useState('');
+  const [statusFilter,  setStatusFilter]  = useState('all');
   const [startDate,     setStartDate]     = useState('');
   const [endDate,       setEndDate]       = useState('');
   const [pageSize,      setPageSize]      = useState(10);
@@ -498,64 +499,185 @@ const AdminOrders = () => {
   const approveDamageRefundAction    = useAction(api.payments.approveDamageRefund);
 
   const validOrders = orders.filter(o => o.orderId && o.items?.length > 0);
-  const refundCount = validOrders.filter(o => o.refundStatus === 'requested').length;
-  const cancelReqCount = validOrders.filter(o => o.cancelRequestStatus === 'requested').length;
-  const refundTabCount = refundCount + cancelReqCount;
+
+  const orderTimeMs = (o) =>
+    o._creationTime || new Date(o.createdAt || 0).getTime() || 0;
+
+  /** Prefer store order number when both have it; else creation time (FIFO). */
+  const cmpFifo = (a, b) => {
+    const aSeq = Number(a.orderSeq) || 0;
+    const bSeq = Number(b.orderSeq) || 0;
+    if (aSeq > 0 && bSeq > 0) return aSeq - bSeq;
+    return orderTimeMs(a) - orderTimeMs(b);
+  };
+
+  const paidTimeMs = (o) => {
+    if (o.paidAt) {
+      const t = new Date(o.paidAt).getTime();
+      if (!Number.isNaN(t)) return t;
+    }
+    return orderTimeMs(o);
+  };
 
   const isPendingStatus = (o) => {
     const st = String(o.orderStatus || 'pending').toLowerCase();
     return !o.orderStatus || st === 'pending';
   };
 
-  const tabCounts = {
-    // All Orders = pending only (hide completed / cancelled / out for delivery)
-    all:       validOrders.filter(isPendingStatus).length,
-    paid:      validOrders.filter(o => o.paymentStatus === 'paid' && isPendingStatus(o)).length,
-    pending:   validOrders.filter(o => o.orderStatus === 'pending').length,
-    confirmed: validOrders.filter(o => o.orderStatus === 'confirmed').length,
-    completed: validOrders.filter(o => o.orderStatus === 'completed').length,
-    refund:    refundTabCount,
+  const isProcessingStatus = (o) =>
+    String(o.orderStatus || '').toLowerCase() === 'confirmed';
+
+  const isShippedStatus = (o) => {
+    const st = String(o.orderStatus || '').toLowerCase();
+    return st === 'shipped' || st === 'out_for_delivery' || st === 'completed';
   };
 
-  useEffect(() => { setPage(0); }, [activeTab, searchTerm, startDate, endDate, pageSize]);
+  const isCancelledStatus = (o) =>
+    String(o.orderStatus || '').toLowerCase() === 'cancelled';
+
+  const hasRefundRequest = (o) => o.refundStatus === 'requested';
+  const isRefundResolved = (o) =>
+    o.refundStatus === 'approved' || o.refundStatus === 'rejected';
+  const hasAnyRefund = (o) => !!o.refundStatus;
+
+  const hasCancelRequest = (o) => o.cancelRequestStatus === 'requested';
+  const hasAnyCancelRequest = (o) => !!o.cancelRequestStatus;
+
+  const matchesSearchDate = (order) => {
+    const matchesSearch = !searchTerm || [order.orderId, order.customerName, order.email].some((f) =>
+      f?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    let matchesDate = true;
+    if (startDate || endDate) {
+      const orderDate = new Date(order._creationTime || order.createdAt || 0);
+      if (startDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        if (orderDate < start) matchesDate = false;
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        if (orderDate > end) matchesDate = false;
+      }
+    }
+    return matchesSearch && matchesDate;
+  };
+
+  /** FIFO: earliest order first. On Pending, paid float to top (who paid first first). */
+  const sortOrdersForTab = (list, tab) => {
+    const rows = [...list];
+    if (tab === 'pending') {
+      return rows.sort((a, b) => {
+        const aPaid = a.paymentStatus === 'paid' ? 0 : 1;
+        const bPaid = b.paymentStatus === 'paid' ? 0 : 1;
+        if (aPaid !== bPaid) return aPaid - bPaid;
+        if (aPaid === 0) return paidTimeMs(a) - paidTimeMs(b);
+        return cmpFifo(a, b);
+      });
+    }
+    if (tab === 'refunds') {
+      return rows.sort((a, b) => {
+        const aTime = a.refundRequestedAt ? new Date(a.refundRequestedAt).getTime() : 0;
+        const bTime = b.refundRequestedAt ? new Date(b.refundRequestedAt).getTime() : 0;
+        if (aTime && bTime) return aTime - bTime;
+        return cmpFifo(a, b);
+      });
+    }
+    if (tab === 'cancelled') {
+      return rows.sort((a, b) => {
+        const aTime = a.cancelRequestedAt ? new Date(a.cancelRequestedAt).getTime() : 0;
+        const bTime = b.cancelRequestedAt ? new Date(b.cancelRequestedAt).getTime() : 0;
+        if (aTime && bTime) return aTime - bTime;
+        return cmpFifo(a, b);
+      });
+    }
+    return rows.sort(cmpFifo);
+  };
+
+  const tabCounts = {
+    all:        validOrders.length,
+    // Cancel requests are handled under Canceled → Request Cancel (not Pending)
+    pending:    validOrders.filter((o) => isPendingStatus(o) && !hasCancelRequest(o)).length,
+    confirmed:  validOrders.filter((o) => isProcessingStatus(o) && !hasCancelRequest(o)).length,
+    shipped:    validOrders.filter((o) => isShippedStatus(o) && !hasCancelRequest(o)).length,
+    refunds:    validOrders.filter(hasAnyRefund).length,
+    cancelled:  validOrders.filter((o) => isCancelledStatus(o) || hasAnyCancelRequest(o)).length,
+  };
+
+  const showStatusFilter = ['all', 'pending', 'confirmed', 'shipped'].includes(activeTab);
+
+  const statusFilterOptions = useMemo(() => {
+    if (activeTab === 'pending' || activeTab === 'confirmed') {
+      return [
+        { value: 'all', label: 'All Statuses' },
+        { value: 'paid', label: 'Paid' },
+        { value: 'unpaid', label: 'Unpaid' },
+      ];
+    }
+    if (activeTab === 'shipped') {
+      return [
+        { value: 'all', label: 'All Statuses' },
+        { value: 'shipped', label: 'Shipped' },
+        { value: 'out_for_delivery', label: 'Out for Delivery' },
+        { value: 'completed', label: 'Delivered' },
+      ];
+    }
+    return [
+      { value: 'all', label: 'All Statuses' },
+      { value: 'pending', label: 'Pending' },
+      { value: 'confirmed', label: 'Processing' },
+      { value: 'shipped', label: 'Shipped' },
+      { value: 'out_for_delivery', label: 'Out for Delivery' },
+      { value: 'completed', label: 'Delivered' },
+      { value: 'cancelled', label: 'Canceled' },
+    ];
+  }, [activeTab]);
+
+  useEffect(() => { setPage(0); }, [activeTab, searchTerm, statusFilter, startDate, endDate, pageSize]);
+
+  // Migrate removed tabs to closest match
+  useEffect(() => {
+    if (activeTab === 'paid') setActiveTab('pending');
+    if (activeTab === 'completed') setActiveTab('shipped');
+    if (activeTab === 'refund') setActiveTab('refunds');
+  }, [activeTab]);
+
+  useEffect(() => {
+    setStatusFilter('all');
+  }, [activeTab]);
+
+  const matchesStatusFilter = (order) => {
+    if (!showStatusFilter || statusFilter === 'all') return true;
+    if (statusFilter === 'paid') return order.paymentStatus === 'paid';
+    if (statusFilter === 'unpaid') return order.paymentStatus !== 'paid';
+    const st = String(order.orderStatus || 'pending').toLowerCase();
+    return st === statusFilter;
+  };
 
   const filteredOrders = useMemo(() => {
-    return validOrders.filter(order => {
-      let matchesTab = true;
+    const list = validOrders.filter((order) => {
+      let matchesTab = false;
       if (activeTab === 'all') {
-        // Only pending — hide completed, cancelled, out_for_delivery, etc.
-        const st = String(order.orderStatus || 'pending').toLowerCase();
-        matchesTab = !order.orderStatus || st === 'pending';
-      } else if (activeTab === 'paid') {
-        matchesTab = order.paymentStatus === 'paid' && (!order.orderStatus || order.orderStatus === 'pending');
-      } else if (activeTab === 'refund') {
-        matchesTab = !!order.refundStatus || !!order.cancelRequestStatus;
-      } else if (activeTab !== 'all') {
-        matchesTab = order.orderStatus === activeTab;
+        matchesTab = true;
+      } else if (activeTab === 'pending') {
+        // Keep open cancel requests out of Pending — they live in Canceled → Request Cancel
+        matchesTab = isPendingStatus(order) && !hasCancelRequest(order);
+      } else if (activeTab === 'confirmed') {
+        matchesTab = isProcessingStatus(order) && !hasCancelRequest(order);
+      } else if (activeTab === 'shipped') {
+        matchesTab = isShippedStatus(order) && !hasCancelRequest(order);
+      } else if (activeTab === 'refunds') {
+        // Right list = resolved refunds (approved / rejected)
+        matchesTab = isRefundResolved(order);
+      } else if (activeTab === 'cancelled') {
+        // Right list = canceled orders only (requests sit in left panel)
+        matchesTab = isCancelledStatus(order);
       }
-      const matchesSearch = !searchTerm || [order.orderId, order.customerName, order.email].some(f => f?.toLowerCase().includes(searchTerm.toLowerCase()));
-      let matchesDate = true;
-      if (startDate || endDate) {
-        const orderDate = new Date(order._creationTime || order.createdAt || 0);
-        if (startDate) { const start = new Date(startDate); start.setHours(0,0,0,0); if (orderDate < start) matchesDate = false; }
-        if (endDate)   { const end   = new Date(endDate);   end.setHours(23,59,59,999); if (orderDate > end) matchesDate = false; }
-      }
-      return matchesTab && matchesSearch && matchesDate;
-    }).sort((a, b) => {
-      if (activeTab === 'refund') {
-        const aTime = Math.max(
-          a.refundRequestedAt ? new Date(a.refundRequestedAt).getTime() : 0,
-          a.cancelRequestedAt ? new Date(a.cancelRequestedAt).getTime() : 0,
-        );
-        const bTime = Math.max(
-          b.refundRequestedAt ? new Date(b.refundRequestedAt).getTime() : 0,
-          b.cancelRequestedAt ? new Date(b.cancelRequestedAt).getTime() : 0,
-        );
-        return bTime - aTime;
-      }
-      return (b._creationTime || 0) - (a._creationTime || 0);
+      return matchesTab && matchesSearchDate(order) && matchesStatusFilter(order);
     });
-  }, [validOrders, activeTab, searchTerm, startDate, endDate]);
+    return sortOrdersForTab(list, activeTab);
+  }, [validOrders, activeTab, searchTerm, statusFilter, startDate, endDate]);
 
   const pagedOrders = useMemo(() => {
     const start = page * pageSize;
@@ -568,25 +690,32 @@ const AdminOrders = () => {
   };
 
   const getStatusLabel = (status) => {
-    const labels = { pending: 'Pending', confirmed: 'Processing', shipped: 'Shipped', out_for_delivery: 'Out for Delivery', completed: 'Completed', cancelled: 'Cancelled' };
+    const labels = {
+      pending: 'Pending',
+      confirmed: 'Processing',
+      shipped: 'Shipped',
+      out_for_delivery: 'Out for Delivery',
+      completed: 'Shipped',
+      cancelled: 'Canceled',
+    };
     return labels[status] || status || 'Pending';
   };
 
-  /** Paid priority queue — awaiting confirm + confirmed (shown as Processing). */
-  const paidPriorityOrders = useMemo(() => {
-    return validOrders
-      .filter((o) => {
-        if (o.paymentStatus !== 'paid') return false;
-        const st = String(o.orderStatus || 'pending').toLowerCase();
-        return st === 'pending' || st === 'confirmed' || !o.orderStatus;
-      })
-      .sort((a, b) => {
-        const aPending = !a.orderStatus || a.orderStatus === 'pending' ? 0 : 1;
-        const bPending = !b.orderStatus || b.orderStatus === 'pending' ? 0 : 1;
-        if (aPending !== bPending) return aPending - bPending;
-        return (b._creationTime || 0) - (a._creationTime || 0);
-      });
-  }, [validOrders]);
+  /** Refunds tab left panel — open refund requests only. */
+  const refundRequestOrders = useMemo(() => {
+    return sortOrdersForTab(
+      validOrders.filter((o) => hasRefundRequest(o) && matchesSearchDate(o)),
+      'refunds'
+    );
+  }, [validOrders, searchTerm, startDate, endDate]);
+
+  /** Canceled tab left panel — open cancel requests only. */
+  const cancelRequestOrders = useMemo(() => {
+    return sortOrdersForTab(
+      validOrders.filter((o) => hasCancelRequest(o) && matchesSearchDate(o)),
+      'cancelled'
+    );
+  }, [validOrders, searchTerm, startDate, endDate]);
 
   const mapStatusToTrackingStatus = (adminStatus) => {
     const statusMap = { pending: 'Processing', confirmed: 'Confirmed', shipped: 'Shipped', out_for_delivery: 'Out for Delivery', completed: 'Delivered', cancelled: 'Cancelled' };
@@ -794,18 +923,31 @@ const AdminOrders = () => {
 
   const tabs = [
     { key: 'all',       icon: 'fa-list',         label: 'All Orders' },
-    { key: 'paid',      icon: 'fa-peso-sign',     label: 'Paid & Awaiting' },
     { key: 'pending',   icon: 'fa-clock',         label: 'Pending' },
     { key: 'confirmed', icon: 'fa-spinner',       label: 'Processing' },
-    { key: 'completed', icon: 'fa-check-double',  label: 'Completed' },
-    { key: 'refund',    icon: 'fa-undo-alt',      label: 'Refunds / Cancel' },
+    { key: 'shipped',   icon: 'fa-shipping-fast', label: 'Shipped' },
+    { key: 'refunds',   dkIcon: DK_ICONS.ordersRefunds, label: 'Refunds' },
+    { key: 'cancelled', icon: 'fa-ban',           label: 'Canceled' },
   ];
+
+  const emptyCopy = {
+    all: 'No orders found',
+    pending: 'No pending orders',
+    confirmed: 'No processing orders',
+    shipped: 'No shipped orders',
+    refunds: 'No refunded orders yet',
+    cancelled: 'No canceled orders',
+  };
 
   const renderOrdersTable = () => (
     filteredOrders.length === 0 ? (
       <div className="empty-orders">
-        <i className={`fas ${activeTab === 'refund' ? 'fa-undo-alt' : 'fa-inbox'}`}></i>
-        <p>{activeTab === 'refund' ? 'No refund or cancel requests found' : 'No orders found'}</p>
+        {activeTab === 'refunds' ? (
+          <DkIcon name={DK_ICONS.ordersRefunded} className="orders-dk-icon" size={28} alt="" />
+        ) : (
+          <i className={`fas ${activeTab === 'cancelled' ? 'fa-ban' : 'fa-inbox'}`}></i>
+        )}
+        <p>{emptyCopy[activeTab] || 'No orders found'}</p>
       </div>
     ) : (
       <div className="orders-table-container">
@@ -815,7 +957,7 @@ const AdminOrders = () => {
               <tr>
                 <th>ORDER ID</th><th>CUSTOMER</th><th>ITEMS</th><th>TOTAL</th>
                 <th>PAYMENT</th><th>METHOD</th><th>STATUS</th>
-                {activeTab === 'refund' && <th>REQUEST</th>}
+                {activeTab === 'refunds' && <th>REQUEST</th>}
                 <th>RIDER</th><th>DATE</th><th>ACTIONS</th>
               </tr>
             </thead>
@@ -825,6 +967,11 @@ const AdminOrders = () => {
                 const refundRequested = order.refundStatus === 'requested';
                 const cancelRequested = order.cancelRequestStatus === 'requested';
                 const pendingRow = refundRequested || cancelRequested;
+                const canConfirm =
+                  activeTab === 'pending'
+                  && order.paymentStatus === 'paid'
+                  && isPendingStatus(order)
+                  && order.cancelRequestStatus !== 'requested';
                 return (
                   <tr key={order.orderId} className={pendingRow ? 'row-refund-pending' : ''}>
                     <td data-label="Order ID">
@@ -851,12 +998,8 @@ const AdminOrders = () => {
                     <td data-label="Payment"><span className={`payment-badge ${order.paymentStatus === 'paid' ? 'paid' : 'pending'}`}>{order.paymentStatus === 'paid' ? 'Paid' : 'Pending'}</span></td>
                     <td data-label="Method"><span className="method-badge" style={{ color: pm.color, display: 'inline-flex', alignItems: 'center', gap: 6 }}><PaymentMethodMark pm={pm} /> {pm.label}</span></td>
                     <td data-label="Status"><span className="status-badge" style={{ backgroundColor: getStatusColor(order.orderStatus) }}>{getStatusLabel(order.orderStatus)}</span></td>
-                    {activeTab === 'refund' && (
+                    {activeTab === 'refunds' && (
                       <td data-label="Request">
-                        {order.cancelRequestStatus === 'requested' && <span className="refund-table-badge refund-table-pending"><i className="fas fa-ban"></i> Cancel Pending</span>}
-                        {order.cancelRequestStatus === 'approved' && <span className="refund-table-badge refund-table-approved"><i className="fas fa-check-circle"></i> Cancel Approved</span>}
-                        {order.cancelRequestStatus === 'rejected' && <span className="refund-table-badge refund-table-rejected"><i className="fas fa-times-circle"></i> Cancel Declined</span>}
-                        {order.refundStatus === 'requested' && <span className="refund-table-badge refund-table-pending"><i className="fas fa-clock"></i> Refund Pending</span>}
                         {order.refundStatus === 'approved'  && <span className="refund-table-badge refund-table-approved"><i className="fas fa-check-circle"></i> Refund Approved</span>}
                         {order.refundStatus === 'rejected'  && <span className="refund-table-badge refund-table-rejected"><i className="fas fa-times-circle"></i> Refund Rejected</span>}
                       </td>
@@ -878,7 +1021,20 @@ const AdminOrders = () => {
                           })
                         : 'N/A'}
                     </td>
-                    <td data-label="Actions"><button className="view-btn" onClick={() => setSelectedOrder(order)}><i className="fas fa-eye"></i> View</button></td>
+                    <td data-label="Actions">
+                      <div className="orders-row-actions">
+                        <button className="view-btn" onClick={() => setSelectedOrder(order)}><i className="fas fa-eye"></i> View</button>
+                        {canConfirm && (
+                          <button
+                            type="button"
+                            className="orders-priority-confirm"
+                            onClick={() => handleUpdateStatus(order.orderId, 'confirmed')}
+                          >
+                            <i className="fas fa-check"></i> Confirm
+                          </button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
@@ -902,35 +1058,24 @@ const AdminOrders = () => {
       <div className="orders-tabs">
         {tabs.map((t) => {
           const count = tabCounts[t.key] ?? 0;
-          const isRefund = t.key === 'refund';
+          const isAlert = t.key === 'refunds' || t.key === 'cancelled';
           return (
             <button
               key={t.key}
-              className={`tab-btn ${activeTab === t.key ? 'active' : ''} ${isRefund ? 'tab-btn-refund' : ''}`}
+              className={`tab-btn ${activeTab === t.key ? 'active' : ''} ${isAlert ? 'tab-btn-refund' : ''}`}
               onClick={() => setActiveTab(t.key)}
             >
-              <i className={`fas ${t.icon}`}></i>{t.label}
+              {t.dkIcon
+                ? <DkIcon name={t.dkIcon} className="orders-dk-icon" size={15} alt="" />
+                : <i className={`fas ${t.icon}`}></i>}
+              {t.label}
               {count > 0 && (
-                <span className={`tab-count-badge ${isRefund ? 'tab-count-badge--refund' : ''}`}>{count}</span>
+                <span className={`tab-count-badge ${isAlert ? 'tab-count-badge--refund' : ''}`}>{count}</span>
               )}
             </button>
           );
         })}
       </div>
-
-      {activeTab === 'refund' && refundTabCount > 0 && (
-        <div className="admin-refund-info-banner">
-          <i className="fas fa-exclamation-circle"></i>
-          <span>
-            <strong>
-              {refundCount > 0 && `${refundCount} pending refund${refundCount > 1 ? 's' : ''}`}
-              {refundCount > 0 && cancelReqCount > 0 ? ' · ' : ''}
-              {cancelReqCount > 0 && `${cancelReqCount} cancel request${cancelReqCount > 1 ? 's' : ''}`}
-            </strong>
-            {' '}— review each below.
-          </span>
-        </div>
-      )}
 
       <div className="orders-filters">
         <div className="filter-group">
@@ -960,94 +1105,124 @@ const AdminOrders = () => {
             )}
           </div>
         </div>
+        {showStatusFilter && (
+          <div className="status-filter-group">
+            <select
+              id="orderStatusFilter"
+              className="filter-select status-filter-select"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              aria-label="Filter by status"
+            >
+              {statusFilterOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
-      <div className="orders-split">
-        {/* LEFT — Paid priority (aligned with All Orders rows) */}
-        <aside className="orders-split-left">
-          <div className="orders-priority-head">
-            <div>
-              <h2><i className="fas fa-bolt"></i> Paid Priority</h2>
-              <p>Awaiting confirm → Processing</p>
+      {activeTab === 'refunds' || activeTab === 'cancelled' ? (
+        <div className="orders-split">
+          <aside className="orders-split-left">
+            <div className="orders-priority-head">
+              <div>
+                {activeTab === 'refunds' ? (
+                  <>
+                    <h2>
+                      <DkIcon name={DK_ICONS.ordersRefunds} className="orders-dk-icon" size={16} alt="" />
+                      Request Refunds
+                    </h2>
+                    <p>Pending customer refund requests</p>
+                  </>
+                ) : (
+                  <>
+                    <h2><i className="fas fa-ban"></i> Request Cancel</h2>
+                    <p>Pending customer cancel requests</p>
+                  </>
+                )}
+              </div>
+              <span className="orders-priority-count">
+                {(activeTab === 'refunds' ? refundRequestOrders : cancelRequestOrders).length}
+              </span>
             </div>
-            <span className="orders-priority-count">{paidPriorityOrders.length}</span>
-          </div>
 
-          {paidPriorityOrders.length === 0 ? (
-            <div className="orders-priority-empty">
-              <i className="fas fa-check-circle"></i>
-              <p>No paid orders in queue</p>
-            </div>
-          ) : (
-            <div className="orders-priority-list">
-              {paidPriorityOrders.map((order) => {
-                const st = String(order.orderStatus || 'pending').toLowerCase();
-                const awaiting = st === 'pending' || !order.orderStatus;
-                const canConfirm = awaiting && order.cancelRequestStatus !== 'requested';
-                const refundRequested = order.refundStatus === 'requested';
-                const cancelRequested = order.cancelRequestStatus === 'requested';
-                const pm = getPaymentMethodLabel(order);
-                return (
-                  <div
-                    key={order.orderId}
-                    className={`orders-priority-card ${awaiting ? 'is-awaiting' : 'is-processing'}${refundRequested || cancelRequested ? ' has-refund' : ''}`}
-                  >
-                    <div className="orders-priority-main">
-                      <div className="orders-priority-card-top">
-                        <strong>#{formatOrderShortId(order)}</strong>
-                        <span
-                          className="status-badge"
-                          style={{ backgroundColor: getStatusColor(awaiting ? 'pending' : 'confirmed') }}
-                        >
-                          {awaiting ? 'Awaiting' : 'Processing'}
-                        </span>
-                        {refundRequested && (
-                          <span className="orders-refund-flag"><i className="fas fa-undo-alt"></i> Refund</span>
-                        )}
-                        {cancelRequested && (
-                          <span className="orders-refund-flag orders-refund-flag--cancel"><i className="fas fa-ban"></i> Cancel</span>
-                        )}
+            {(activeTab === 'refunds' ? refundRequestOrders : cancelRequestOrders).length === 0 ? (
+              <div className="orders-priority-empty">
+                <i className="fas fa-check-circle"></i>
+                <p>{activeTab === 'refunds' ? 'No refund requests' : 'No cancel requests'}</p>
+              </div>
+            ) : (
+              <div className="orders-priority-list">
+                {(activeTab === 'refunds' ? refundRequestOrders : cancelRequestOrders).map((order) => {
+                  const pm = getPaymentMethodLabel(order);
+                  const isCancelPanel = activeTab === 'cancelled';
+                  return (
+                    <div
+                      key={order.orderId}
+                      className={`orders-priority-card is-awaiting has-refund${isCancelPanel ? ' is-cancel-request' : ''}`}
+                    >
+                      <div className="orders-priority-main">
+                        <div className="orders-priority-card-top">
+                          <strong>#{formatOrderShortId(order)}</strong>
+                          {isCancelPanel ? (
+                            <span className="orders-refund-flag orders-refund-flag--cancel">
+                              <i className="fas fa-ban"></i> Requested
+                            </span>
+                          ) : (
+                            <span className="orders-refund-flag">
+                              <i className="fas fa-undo-alt"></i> Requested
+                            </span>
+                          )}
+                        </div>
+                        <div className="orders-priority-customer">
+                          <span>{order.customerName || 'Customer'}</span>
+                          <small>{order.email || ''}</small>
+                        </div>
+                        <div className="orders-priority-meta">
+                          <span>₱{(order.finalTotal ?? order.total ?? order.refundAmount ?? 0).toLocaleString('en-PH')}</span>
+                          <span className="orders-priority-method" style={{ color: pm.color }}>
+                            <PaymentMethodMark pm={pm} /> {pm.label}
+                          </span>
+                          <span>{order.items?.length || 0} item(s)</span>
+                        </div>
                       </div>
-                      <div className="orders-priority-customer">
-                        <span>{order.customerName || 'Customer'}</span>
-                        <small>{order.email || ''}</small>
-                      </div>
-                      <div className="orders-priority-meta">
-                        <span>₱{(order.finalTotal ?? order.total ?? 0).toLocaleString('en-PH')}</span>
-                        <span className="orders-priority-method" style={{ color: pm.color }}>
-                          <PaymentMethodMark pm={pm} /> {pm.label}
-                        </span>
-                        <span>{order.items?.length || 0} item(s)</span>
-                      </div>
-                    </div>
-                    <div className="orders-priority-actions">
-                      <button type="button" className="view-btn" onClick={() => setSelectedOrder(order)}>
-                        <i className="fas fa-eye"></i> View
-                      </button>
-                      {canConfirm && (
-                        <button
-                          type="button"
-                          className="orders-priority-confirm"
-                          onClick={() => handleUpdateStatus(order.orderId, 'confirmed')}
-                        >
-                          <i className="fas fa-check"></i> Confirm
+                      <div className="orders-priority-actions">
+                        <button type="button" className="view-btn" onClick={() => setSelectedOrder(order)}>
+                          <i className="fas fa-eye"></i> Review
                         </button>
-                      )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </aside>
+                  );
+                })}
+              </div>
+            )}
+          </aside>
 
-        {/* RIGHT — All orders table */}
-        <section className="orders-split-right">
-          <div className="orders-container">
-            {renderOrdersTable()}
-          </div>
-        </section>
-      </div>
+          <section className="orders-split-right">
+            <div className="orders-container">
+              <div className="orders-list-caption">
+                {activeTab === 'refunds' ? (
+                  <>
+                    <DkIcon name={DK_ICONS.ordersRefunded} className="orders-dk-icon" size={16} alt="" />
+                    Refunded
+                  </>
+                ) : (
+                  <>
+                    <i className="fas fa-ban"></i>
+                    Canceled
+                  </>
+                )}
+              </div>
+              {renderOrdersTable()}
+            </div>
+          </section>
+        </div>
+      ) : (
+        <div className="orders-container orders-container--full">
+          {renderOrdersTable()}
+        </div>
+      )}
 
       {selectedOrder && (
         <OrderModal
@@ -1242,7 +1417,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
               <i className="fas fa-ban"></i>
               <div>
                 <strong>Customer requested cancellation</strong>
-                <p>Review their reason below in Refunds / Cancel before confirming this order.</p>
+                <p>Review this under Canceled → Request Cancel before confirming the order.</p>
               </div>
             </div>
           )}

@@ -658,7 +658,19 @@ const ImportTab = () => {
 const BackupTab = () => null;
 
 // ── Convex status + storage health ────────────────────────────────────────────
-const SLICE_COLORS = ['#fc1268', '#e0105a', '#db2777', '#be185d', '#f472b6', '#fb7185', '#42011e', '#9f1239', '#ec4899', '#f43f5e'];
+/** Distinct categorical colors — readable at a glance (not all pink). */
+const SLICE_COLORS = [
+  '#fc1268', // brand pink
+  '#0ea5e9', // sky
+  '#10b981', // emerald
+  '#f59e0b', // amber
+  '#6366f1', // indigo
+  '#14b8a6', // teal
+  '#ef4444', // red
+  '#8b5cf6', // violet
+  '#64748b', // slate
+  '#84cc16', // lime
+];
 
 const TableFootprintProbe = ({ table, onSample }) => {
   const rows = useQuery(table.query);

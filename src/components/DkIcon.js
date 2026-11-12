@@ -24,6 +24,8 @@ export const DK_ICONS = {
   userSuspendedDeleted: 'user-suspended-deleted',
   userActive: 'user-active',
   shoppingBag: 'shopping-bag',
+  ordersRefunds: 'orders-refunds',
+  ordersRefunded: 'orders-refunded',
 };
 
 const DkIcon = ({
