@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../context/ConfirmContext';
 import { useNotification } from '../context/NotificationContext';
-import { useProducts, usePreOrderProducts, useUpdateProduct, useCollectionProducts } from '../utils/productStorage';
+import { useProducts, usePreOrderProducts, useCollectionProducts } from '../utils/productStorage';
 import { useCreateOrder } from '../utils/orderStorage';
 import { useCart, useClearCart, useRemoveFromCartById } from '../context/cartUtils';
 import { useMutation, useQuery, useAction } from 'convex/react';
@@ -613,7 +613,6 @@ const Checkout = () => {
   const createOrder        = useCreateOrder();
   const clearCart          = useClearCart();
   const removeFromCartById = useRemoveFromCartById();
-  const updateProduct      = useUpdateProduct();
 
   const storeSettings    = useQuery(api.settings.getSettings);
   const hasStoreLocation = !!(storeSettings?.storeLat && storeSettings?.storeLng);
@@ -1178,19 +1177,8 @@ const Checkout = () => {
         }
       }
 
-      // ── Stock update — skip for reward orders ──────────────────────────
-      if (!rewardOrder) {
-        for (const item of checkoutItems) {
-          const product = getProductById(item.productId || item.id);
-          if (product) {
-            try {
-              await updateProduct({ id: product._id, stock: product.stock - getQty(item) });
-            } catch (stockErr) {
-              console.warn('Stock update failed for', product.name, stockErr);
-            }
-          }
-        }
-      }
+      // Stock is deducted only after successful payment (markOrderPaid) —
+      // so other customers still see available stock until PayMongo succeeds.
 
       // ── Save profile coords ────────────────────────────────────────────
       if (addressCoords) {

@@ -1068,17 +1068,21 @@ export const applyCustomerCancel = mutation({
       ];
     }
 
-    for (const item of order.items || []) {
-      const qty = Number(item.quantity || 1);
-      if (!item?.id || qty <= 0) continue;
-      try {
-        const product = await db.get(item.id as any);
-        if (product && typeof (product as any).stock === "number") {
-          await db.patch(product._id, {
-            stock: Number((product as any).stock) + qty,
-          });
-        }
-      } catch { /* ignore */ }
+    // Restore stock only if it was deducted on payment
+    if (order.stockDeducted) {
+      for (const item of order.items || []) {
+        const qty = Number(item.quantity || 1);
+        if (!item?.id || qty <= 0) continue;
+        try {
+          const product = await db.get(item.id as any);
+          if (product && typeof (product as any).stock === "number") {
+            await db.patch(product._id, {
+              stock: Number((product as any).stock) + qty,
+            });
+          }
+        } catch { /* ignore */ }
+      }
+      (patch as any).stockDeducted = false;
     }
 
     await db.patch(order._id, patch);

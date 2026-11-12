@@ -958,6 +958,7 @@ const TrackOrder = ({ onProductClick }) => {
   const OrderCard = ({ order, onViewDetails, isGuest = false, highlighted = false }) => {
     const [continuingPayment, setContinuingPayment] = useState(false);
     const createPaymentLink = useAction(api.payments.createPaymentLink);
+    const assertOrderStock = useMutation(api.payments.assertOrderStock);
 
     const ordDate      = order._creationTime ? new Date(order._creationTime) : null;
     const orderStatus  = getDisplayStatus(order);
@@ -976,10 +977,24 @@ const TrackOrder = ({ onProductClick }) => {
       e?.stopPropagation?.();
       setContinuingPayment(true);
       try {
+        // Always re-check stock — another customer may have paid first
+        const stock = await assertOrderStock({ orderId: order.orderId });
+        if (stock && stock.ok === false) {
+          showNotification(stock.message || 'Items are out of stock.', 'error');
+          setContinuingPayment(false);
+          return;
+        }
         if (order.paymentLinkUrl) { window.location.href = order.paymentLinkUrl; return; }
         const result = await createPaymentLink({ orderId: order.orderId, amount: order.finalTotal ?? order.total, description: `DKMerch Order ${order.orderId}`, customerName: order.customerName, customerEmail: order.email, customerPhone: order.phone });
         window.location.href = result.paymentLinkUrl;
-      } catch { showNotification('Failed. Please try again.', 'error'); setContinuingPayment(false); }
+      } catch (err) {
+        const msg = String(err?.message || err?.data || '');
+        showNotification(
+          /out of stock/i.test(msg) ? msg : 'Failed. Please try again.',
+          'error'
+        );
+        setContinuingPayment(false);
+      }
     };
 
     const openCardDetails = () => onViewDetails(order);
@@ -1341,6 +1356,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
   useCloseOnHistoryBack(true, onClose, 'trackingModal');
   const { showNotification } = useNotification();
   const createPaymentLink = useAction(api.payments.createPaymentLink);
+  const assertOrderStock = useMutation(api.payments.assertOrderStock);
   const [localOtp,          setLocalOtp]          = useState(order.deliveryOtp || null);
   const [continuingPayment, setContinuingPayment] = useState(false);
   const [proofExpanded,     setProofExpanded]     = useState(true);
@@ -1408,10 +1424,23 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
   const handleContinuePayment = async () => {
     setContinuingPayment(true);
     try {
+      const stock = await assertOrderStock({ orderId: order.orderId });
+      if (stock && stock.ok === false) {
+        showNotification(stock.message || 'Items are out of stock.', 'error');
+        setContinuingPayment(false);
+        return;
+      }
       if (order.paymentLinkUrl) { window.location.href = order.paymentLinkUrl; return; }
       const result = await createPaymentLink({ orderId: order.orderId, amount: order.finalTotal ?? order.total, description: `DKMerch Order ${order.orderId}`, customerName: order.customerName, customerEmail: order.email, customerPhone: order.phone });
       window.location.href = result.paymentLinkUrl;
-    } catch { showNotification('Failed. Please try again.', 'error'); setContinuingPayment(false); }
+    } catch (err) {
+      const msg = String(err?.message || err?.data || '');
+      showNotification(
+        /out of stock/i.test(msg) ? msg : 'Failed. Please try again.',
+        'error'
+      );
+      setContinuingPayment(false);
+    }
   };
 
   return createPortal(

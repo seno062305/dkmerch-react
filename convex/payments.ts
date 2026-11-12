@@ -1,7 +1,84 @@
 // convex/payments.ts
-import { action, mutation } from "./_generated/server";
+import { action, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { api } from "./_generated/api";
+
+async function findProductForOrderItem(db: any, item: any) {
+  const raw = item?.id || item?.productId;
+  if (!raw) return null;
+  try {
+    const byId = await db.get(raw as any);
+    if (byId && typeof (byId as any).stock === "number") return byId;
+  } catch { /* not a doc id */ }
+  const all = await db.query("products").collect();
+  const key = String(raw);
+  return (
+    all.find(
+      (p: any) =>
+        String(p._id) === key
+        || String(p.id || "") === key
+        || String(p._id) === String(item?.productId || "")
+    ) || null
+  );
+}
+
+/** Check if unpaid order can still take stock (for continue payment). */
+export async function evaluateOrderStock(db: any, order: any) {
+  if (!order) return { ok: false, message: "Order not found.", shortages: [] as any[] };
+  if (String(order.paymentStatus || "").toLowerCase() === "paid") {
+    return { ok: true, message: "Already paid.", shortages: [] as any[] };
+  }
+  if (order.isRewardOrder) {
+    return { ok: true, message: "Reward order.", shortages: [] as any[] };
+  }
+  const shortages: { name: string; needed: number; available: number }[] = [];
+  for (const item of order.items || []) {
+    const qty = Number(item.quantity || item.qty || 1);
+    if (qty <= 0) continue;
+    const product = await findProductForOrderItem(db, item);
+    if (!product) continue;
+    const stock = Number((product as any).stock);
+    if (!Number.isFinite(stock)) continue;
+    if (stock < qty) {
+      shortages.push({
+        name: String(item.name || (product as any).name || "Item"),
+        needed: qty,
+        available: Math.max(0, stock),
+      });
+    }
+  }
+  if (shortages.length) {
+    const detail = shortages
+      .map((s) => `${s.name} (need ${s.needed}, left ${s.available})`)
+      .join("; ");
+    return {
+      ok: false,
+      message: `Out of stock: ${detail}. Another customer paid first.`,
+      shortages,
+    };
+  }
+  return { ok: true, message: "Stock available.", shortages: [] as any[] };
+}
+
+async function deductStockForPaidOrder(db: any, order: any) {
+  if (!order || order.stockDeducted) return { deducted: false, skipped: true };
+  if (order.isRewardOrder) {
+    await db.patch(order._id, { stockDeducted: true, stockIssue: false });
+    return { deducted: false, skipped: true };
+  }
+  let stockIssue = false;
+  for (const item of order.items || []) {
+    const qty = Number(item.quantity || item.qty || 1);
+    if (qty <= 0) continue;
+    const product = await findProductForOrderItem(db, item);
+    if (!product || typeof (product as any).stock !== "number") continue;
+    const stock = Number((product as any).stock);
+    if (stock < qty) stockIssue = true;
+    await db.patch(product._id, { stock: Math.max(0, stock - qty) });
+  }
+  await db.patch(order._id, { stockDeducted: true, stockIssue });
+  return { deducted: true, stockIssue };
+}
 
 // ✅ Works in both Node.js and Convex edge runtime (no Buffer dependency)
 function toBase64(str: string): string {
@@ -40,6 +117,12 @@ export const createPaymentLink = action({
     cancelUrl: v.optional(v.string()),
   },
   handler: async (ctx, { orderId, amount, description, customerName, customerEmail, customerPhone, remarks, paymentMethodType, successUrl, cancelUrl }) => {
+    // Re-check stock before opening / refreshing PayMongo (continue payment race)
+    const stockCheck = await ctx.runQuery(api.payments.checkOrderStock, { orderId });
+    if (stockCheck && stockCheck.ok === false) {
+      throw new Error(stockCheck.message || "Items are out of stock.");
+    }
+
     const secretKey = process.env.PAYMONGO_SECRET_KEY;
     if (!secretKey) throw new Error("PayMongo secret key not configured");
 
@@ -205,7 +288,31 @@ export const checkPaymentStatus = action({
   },
 });
 
-// Marks order as paid + saves exact payment method
+/** Client: can this unpaid order still be paid? (continue payment / Pay Now) */
+export const checkOrderStock = query({
+  args: { orderId: v.string() },
+  handler: async ({ db }, { orderId }) => {
+    const order = await db
+      .query("orders")
+      .withIndex("by_orderId", (q) => q.eq("orderId", orderId))
+      .first();
+    return await evaluateOrderStock(db, order);
+  },
+});
+
+/** Same check as mutation — for click handlers (continue payment). */
+export const assertOrderStock = mutation({
+  args: { orderId: v.string() },
+  handler: async ({ db }, { orderId }) => {
+    const order = await db
+      .query("orders")
+      .withIndex("by_orderId", (q) => q.eq("orderId", orderId))
+      .first();
+    return await evaluateOrderStock(db, order);
+  },
+});
+
+// Marks order as paid + deducts stock once + saves exact payment method
 export const markOrderPaid = mutation({
   args: {
     orderId:       v.string(),
@@ -218,7 +325,9 @@ export const markOrderPaid = mutation({
       .first();
     if (!order) return { success: false };
 
-    if (order.paymentStatus !== "paid") {
+    const alreadyPaid = order.paymentStatus === "paid";
+
+    if (!alreadyPaid) {
       const updates: any = {
         paymentStatus: "paid",
         paidAt:        new Date().toISOString(),
@@ -228,6 +337,10 @@ export const markOrderPaid = mutation({
     } else if (paymentMethod && !order.paymentMethod) {
       await db.patch(order._id, { paymentMethod });
     }
+
+    // Deduct stock only after successful payment (idempotent)
+    const refreshed = await db.get(order._id);
+    await deductStockForPaidOrder(db, refreshed);
 
     // Points are claimable only after delivery is verified (see rewards.claimOrderPoints)
     return { success: true };
