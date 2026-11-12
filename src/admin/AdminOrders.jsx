@@ -500,9 +500,15 @@ const AdminOrders = () => {
   const cancelReqCount = validOrders.filter(o => o.cancelRequestStatus === 'requested').length;
   const refundTabCount = refundCount + cancelReqCount;
 
+  const isPendingStatus = (o) => {
+    const st = String(o.orderStatus || 'pending').toLowerCase();
+    return !o.orderStatus || st === 'pending';
+  };
+
   const tabCounts = {
-    all:       validOrders.length,
-    paid:      validOrders.filter(o => o.paymentStatus === 'paid' && (!o.orderStatus || o.orderStatus === 'pending')).length,
+    // All Orders = pending only (hide completed / cancelled / out for delivery)
+    all:       validOrders.filter(isPendingStatus).length,
+    paid:      validOrders.filter(o => o.paymentStatus === 'paid' && isPendingStatus(o)).length,
     pending:   validOrders.filter(o => o.orderStatus === 'pending').length,
     confirmed: validOrders.filter(o => o.orderStatus === 'confirmed').length,
     completed: validOrders.filter(o => o.orderStatus === 'completed').length,
@@ -514,7 +520,11 @@ const AdminOrders = () => {
   const filteredOrders = useMemo(() => {
     return validOrders.filter(order => {
       let matchesTab = true;
-      if (activeTab === 'paid') {
+      if (activeTab === 'all') {
+        // Only pending — hide completed, cancelled, out_for_delivery, etc.
+        const st = String(order.orderStatus || 'pending').toLowerCase();
+        matchesTab = !order.orderStatus || st === 'pending';
+      } else if (activeTab === 'paid') {
         matchesTab = order.paymentStatus === 'paid' && (!order.orderStatus || order.orderStatus === 'pending');
       } else if (activeTab === 'refund') {
         matchesTab = !!order.refundStatus || !!order.cancelRequestStatus;
@@ -810,10 +820,26 @@ const AdminOrders = () => {
             <tbody>
               {pagedOrders.map((order) => {
                 const pm = getPaymentMethodLabel(order);
-                const pendingRow = order.refundStatus === 'requested' || order.cancelRequestStatus === 'requested';
+                const refundRequested = order.refundStatus === 'requested';
+                const cancelRequested = order.cancelRequestStatus === 'requested';
+                const pendingRow = refundRequested || cancelRequested;
                 return (
                   <tr key={order.orderId} className={pendingRow ? 'row-refund-pending' : ''}>
-                    <td data-label="Order ID"><strong>#{formatOrderShortId(order)}</strong></td>
+                    <td data-label="Order ID">
+                      <div className="order-id-cell">
+                        <strong>#{formatOrderShortId(order)}</strong>
+                        {refundRequested && (
+                          <span className="orders-refund-flag" title="Refund requested">
+                            <i className="fas fa-undo-alt"></i> Refund
+                          </span>
+                        )}
+                        {cancelRequested && (
+                          <span className="orders-refund-flag orders-refund-flag--cancel" title="Cancel requested">
+                            <i className="fas fa-ban"></i> Cancel
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td data-label="Customer"><div className="customer-info"><strong>{order.customerName || 'N/A'}</strong><small>{order.email || 'N/A'}</small></div></td>
                     <td data-label="Items">{order.items.length} item(s)</td>
                     <td data-label="Total">
@@ -871,13 +897,76 @@ const AdminOrders = () => {
 
   return (
     <div className="admin-orders-page">
+      <div className="orders-tabs">
+        {tabs.map((t) => {
+          const count = tabCounts[t.key] ?? 0;
+          const isRefund = t.key === 'refund';
+          return (
+            <button
+              key={t.key}
+              className={`tab-btn ${activeTab === t.key ? 'active' : ''} ${isRefund ? 'tab-btn-refund' : ''}`}
+              onClick={() => setActiveTab(t.key)}
+            >
+              <i className={`fas ${t.icon}`}></i>{t.label}
+              {count > 0 && (
+                <span className={`tab-count-badge ${isRefund ? 'tab-count-badge--refund' : ''}`}>{count}</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {activeTab === 'refund' && refundTabCount > 0 && (
+        <div className="admin-refund-info-banner">
+          <i className="fas fa-exclamation-circle"></i>
+          <span>
+            <strong>
+              {refundCount > 0 && `${refundCount} pending refund${refundCount > 1 ? 's' : ''}`}
+              {refundCount > 0 && cancelReqCount > 0 ? ' · ' : ''}
+              {cancelReqCount > 0 && `${cancelReqCount} cancel request${cancelReqCount > 1 ? 's' : ''}`}
+            </strong>
+            {' '}— review each below.
+          </span>
+        </div>
+      )}
+
+      <div className="orders-filters">
+        <div className="filter-group">
+          <input
+            type="text"
+            className="search-input"
+            placeholder="Search by Order ID, Customer Name, or Email..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <div className="date-filter-group">
+          <div className="date-filter-inputs">
+            <div className="date-filter-item">
+              <label htmlFor="orderStart"><i className="fas fa-calendar"></i></label>
+              <input type="date" id="orderStart" value={startDate} max={endDate || today} onChange={(e) => setStartDate(e.target.value)} />
+            </div>
+            <span className="date-filter-sep">to</span>
+            <div className="date-filter-item">
+              <label htmlFor="orderEnd"><i className="fas fa-calendar"></i></label>
+              <input type="date" id="orderEnd" value={endDate} min={startDate} max={today} onChange={(e) => setEndDate(e.target.value)} />
+            </div>
+            {(startDate || endDate) && (
+              <button className="date-filter-clear" onClick={clearDateFilter}>
+                <i className="fas fa-times"></i> Clear
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
       <div className="orders-split">
-        {/* LEFT — Paid priority */}
+        {/* LEFT — Paid priority (aligned with All Orders rows) */}
         <aside className="orders-split-left">
           <div className="orders-priority-head">
             <div>
               <h2><i className="fas fa-bolt"></i> Paid Priority</h2>
-              <p>Paid orders awaiting confirm, then Processing</p>
+              <p>Awaiting confirm → Processing</p>
             </div>
             <span className="orders-priority-count">{paidPriorityOrders.length}</span>
           </div>
@@ -893,31 +982,41 @@ const AdminOrders = () => {
                 const st = String(order.orderStatus || 'pending').toLowerCase();
                 const awaiting = st === 'pending' || !order.orderStatus;
                 const canConfirm = awaiting && order.cancelRequestStatus !== 'requested';
+                const refundRequested = order.refundStatus === 'requested';
+                const cancelRequested = order.cancelRequestStatus === 'requested';
                 const pm = getPaymentMethodLabel(order);
                 return (
                   <div
                     key={order.orderId}
-                    className={`orders-priority-card ${awaiting ? 'is-awaiting' : 'is-processing'}`}
+                    className={`orders-priority-card ${awaiting ? 'is-awaiting' : 'is-processing'}${refundRequested || cancelRequested ? ' has-refund' : ''}`}
                   >
-                    <div className="orders-priority-card-top">
-                      <strong>#{formatOrderShortId(order)}</strong>
-                      <span
-                        className="status-badge"
-                        style={{ backgroundColor: getStatusColor(awaiting ? 'pending' : 'confirmed') }}
-                      >
-                        {awaiting ? 'Awaiting' : 'Processing'}
-                      </span>
-                    </div>
-                    <div className="orders-priority-customer">
-                      <span>{order.customerName || 'Customer'}</span>
-                      <small>{order.email || ''}</small>
-                    </div>
-                    <div className="orders-priority-meta">
-                      <span>₱{(order.finalTotal ?? order.total ?? 0).toLocaleString('en-PH')}</span>
-                      <span className="orders-priority-method" style={{ color: pm.color }}>
-                        <PaymentMethodMark pm={pm} /> {pm.label}
-                      </span>
-                      <span>{order.items?.length || 0} item(s)</span>
+                    <div className="orders-priority-main">
+                      <div className="orders-priority-card-top">
+                        <strong>#{formatOrderShortId(order)}</strong>
+                        <span
+                          className="status-badge"
+                          style={{ backgroundColor: getStatusColor(awaiting ? 'pending' : 'confirmed') }}
+                        >
+                          {awaiting ? 'Awaiting' : 'Processing'}
+                        </span>
+                        {refundRequested && (
+                          <span className="orders-refund-flag"><i className="fas fa-undo-alt"></i> Refund</span>
+                        )}
+                        {cancelRequested && (
+                          <span className="orders-refund-flag orders-refund-flag--cancel"><i className="fas fa-ban"></i> Cancel</span>
+                        )}
+                      </div>
+                      <div className="orders-priority-customer">
+                        <span>{order.customerName || 'Customer'}</span>
+                        <small>{order.email || ''}</small>
+                      </div>
+                      <div className="orders-priority-meta">
+                        <span>₱{(order.finalTotal ?? order.total ?? 0).toLocaleString('en-PH')}</span>
+                        <span className="orders-priority-method" style={{ color: pm.color }}>
+                          <PaymentMethodMark pm={pm} /> {pm.label}
+                        </span>
+                        <span>{order.items?.length || 0} item(s)</span>
+                      </div>
                     </div>
                     <div className="orders-priority-actions">
                       <button type="button" className="view-btn" onClick={() => setSelectedOrder(order)}>
@@ -940,71 +1039,8 @@ const AdminOrders = () => {
           )}
         </aside>
 
-        {/* RIGHT — All orders */}
+        {/* RIGHT — All orders table */}
         <section className="orders-split-right">
-          <div className="orders-tabs">
-            {tabs.map((t) => {
-              const count = tabCounts[t.key] ?? 0;
-              const isRefund = t.key === 'refund';
-              return (
-                <button
-                  key={t.key}
-                  className={`tab-btn ${activeTab === t.key ? 'active' : ''} ${isRefund ? 'tab-btn-refund' : ''}`}
-                  onClick={() => setActiveTab(t.key)}
-                >
-                  <i className={`fas ${t.icon}`}></i>{t.label}
-                  {count > 0 && (
-                    <span className={`tab-count-badge ${isRefund ? 'tab-count-badge--refund' : ''}`}>{count}</span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          {activeTab === 'refund' && refundTabCount > 0 && (
-            <div className="admin-refund-info-banner">
-              <i className="fas fa-exclamation-circle"></i>
-              <span>
-                <strong>
-                  {refundCount > 0 && `${refundCount} pending refund${refundCount > 1 ? 's' : ''}`}
-                  {refundCount > 0 && cancelReqCount > 0 ? ' · ' : ''}
-                  {cancelReqCount > 0 && `${cancelReqCount} cancel request${cancelReqCount > 1 ? 's' : ''}`}
-                </strong>
-                {' '}— review each below.
-              </span>
-            </div>
-          )}
-
-          <div className="orders-filters">
-            <div className="filter-group">
-              <input
-                type="text"
-                className="search-input"
-                placeholder="Search by Order ID, Customer Name, or Email..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            <div className="date-filter-group">
-              <div className="date-filter-inputs">
-                <div className="date-filter-item">
-                  <label htmlFor="orderStart"><i className="fas fa-calendar"></i></label>
-                  <input type="date" id="orderStart" value={startDate} max={endDate || today} onChange={(e) => setStartDate(e.target.value)} />
-                </div>
-                <span className="date-filter-sep">to</span>
-                <div className="date-filter-item">
-                  <label htmlFor="orderEnd"><i className="fas fa-calendar"></i></label>
-                  <input type="date" id="orderEnd" value={endDate} min={startDate} max={today} onChange={(e) => setEndDate(e.target.value)} />
-                </div>
-                {(startDate || endDate) && (
-                  <button className="date-filter-clear" onClick={clearDateFilter}>
-                    <i className="fas fa-times"></i> Clear
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-
           <div className="orders-container">
             {renderOrdersTable()}
           </div>
