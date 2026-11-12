@@ -8,11 +8,69 @@ const genSessionId = () =>
 
 /** Always 60s window — resets on every new login request */
 const RIDER_LOGIN_ALERT_TTL_MS = 60 * 1000;
+/** Notify admin once when rider GPS is within this distance of the customer pin. */
+const ARRIVAL_GEOFENCE_KM = 0.12; // ~120 meters
 
 function isRiderLoginAlertExpired(alert: any, now = Date.now()) {
   if (!alert) return true;
   const expiresAt = Number(alert.expiresAt) || (Number(alert.at) || 0) + RIDER_LOGIN_ALERT_TTL_MS;
   return expiresAt > 0 && now >= expiresAt;
+}
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/** One-shot admin bell: rider reached customer location (proof of attempt). */
+async function maybeNotifyAdminRiderArrived(
+  db: any,
+  args: {
+    orderId: string;
+    riderName: string;
+    lat: number;
+    lng: number;
+    arrivedNotifiedAt?: number | null;
+  }
+) {
+  if (args.arrivedNotifiedAt) return false;
+  if (!Number.isFinite(args.lat) || !Number.isFinite(args.lng) || args.lat === 0 || args.lng === 0) {
+    return false;
+  }
+  const order = await db
+    .query("orders")
+    .withIndex("by_orderId", (q: any) => q.eq("orderId", args.orderId))
+    .first();
+  if (!order) return false;
+  const destLat = Number(order.addressLat);
+  const destLng = Number(order.addressLng);
+  if (!Number.isFinite(destLat) || !Number.isFinite(destLng) || destLat === 0 || destLng === 0) {
+    return false;
+  }
+  const km = haversineKm(args.lat, args.lng, destLat, destLng);
+  if (km > ARRIVAL_GEOFENCE_KM) return false;
+
+  const shortId = String(args.orderId).slice(-8).toUpperCase();
+  const customer = order.customerName || "Customer";
+  await db.insert("riderNotifications", {
+    type: "rider_at_customer",
+    orderId: String(args.orderId),
+    customerName: String(customer),
+    total: Number(order.finalTotal ?? order.total ?? 0),
+    message:
+      `🛵 ${args.riderName || "Rider"} is at ${customer}'s location (Order #${shortId}). ` +
+      `Proof of arrival — customer may not be answering the call.`,
+    createdAt: new Date().toISOString(),
+    read: false,
+  });
+  return true;
 }
 
 // ── Generate DKMerch Rider ID: DKR-YYYY-XXXX ──
@@ -811,16 +869,30 @@ export const updateRiderLocation = mutation({
       }
     }
 
+    let locId = existing?._id;
     if (existing) {
       await db.patch(existing._id, patch);
     } else {
-      await db.insert("riderLocations", {
+      locId = await db.insert("riderLocations", {
         orderId:    args.orderId,
         riderEmail: args.riderEmail,
         riderName:  args.riderName,
         lastKnownAddress: args.lastKnownAddress ?? null,
         ...patch,
       });
+    }
+
+    if (isRealPosition && locId) {
+      const notified = await maybeNotifyAdminRiderArrived(db, {
+        orderId: args.orderId,
+        riderName: args.riderName,
+        lat: args.lat,
+        lng: args.lng,
+        arrivedNotifiedAt: existing?.arrivedNotifiedAt,
+      });
+      if (notified) {
+        await db.patch(locId, { arrivedNotifiedAt: now });
+      }
     }
 
     return { success: true };
@@ -907,15 +979,28 @@ export const updateRiderLocationsBatch = mutation({
           patch.lastKnownAddress = args.lastKnownAddress;
         }
       }
+      let locId = existing?._id;
       if (existing) await db.patch(existing._id, patch);
       else {
-        await db.insert("riderLocations", {
+        locId = await db.insert("riderLocations", {
           orderId,
           riderEmail: args.riderEmail,
           riderName: args.riderName,
           lastKnownAddress: args.lastKnownAddress ?? null,
           ...patch,
         });
+      }
+      if (isRealPosition && locId) {
+        const notified = await maybeNotifyAdminRiderArrived(db, {
+          orderId,
+          riderName: args.riderName,
+          lat: args.lat,
+          lng: args.lng,
+          arrivedNotifiedAt: existing?.arrivedNotifiedAt,
+        });
+        if (notified) {
+          await db.patch(locId, { arrivedNotifiedAt: now });
+        }
       }
     }
     return { success: true, count: args.orderIds.length };

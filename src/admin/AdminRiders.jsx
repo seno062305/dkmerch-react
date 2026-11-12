@@ -271,7 +271,9 @@ const NotificationBell = () => {
               ? <div className="ar-bell-empty"><span>🔕</span><span>No notifications yet</span></div>
               : notifications.map(n => (
                   <div key={n._id} className={`ar-bell-item ${!n.read ? 'ar-bell-item--unread' : ''}`}>
-                    <div className="ar-bell-item-icon">{n.type === 'rider_link_reopened' ? '🔄' : '🛵'}</div>
+                    <div className="ar-bell-item-icon">
+                      {n.type === 'rider_at_customer' ? '📍' : n.type === 'rider_link_reopened' ? '🔄' : '🛵'}
+                    </div>
                     <div className="ar-bell-item-body">
                       <div className="ar-bell-item-msg">{n.message || `Rider opened link for Order #${n.orderId?.slice(-8).toUpperCase()}`}</div>
                       <div className="ar-bell-item-time">{timeAgoStr(n.createdAt)}</div>

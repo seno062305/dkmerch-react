@@ -1619,7 +1619,8 @@ const OrderItemsListModal = ({ order, onClose }) => {
 
 const CANCEL_PRESETS = [
   'Item is out of stock', 'Customer requested cancellation', 'Duplicate order',
-  'Payment issue / not verified', 'Rider unavailable in the area',
+  'Payment issue / not verified',
+  'Hindi kinuna ni customer or hindi sumasagot sa tawag ni rider',
   'Incorrect order details', 'Fraudulent order detected', 'Other reason',
 ];
 

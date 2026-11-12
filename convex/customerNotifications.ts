@@ -58,7 +58,18 @@ export const getRecentForEmail = query({
       .withIndex("by_email_created", (q) => q.eq("email", key))
       .order("desc")
       .take(take);
-    return rows;
+    if (rows.length) return rows;
+
+    // Legacy rows may have mixed-case email before normalize
+    const raw = String(email || "").trim();
+    if (raw && raw !== key) {
+      return await db
+        .query("customerNotifications")
+        .withIndex("by_email_created", (q) => q.eq("email", raw))
+        .order("desc")
+        .take(take);
+    }
+    return [];
   },
 });
 
@@ -71,7 +82,16 @@ export const getUnreadCountForEmail = query({
       .query("customerNotifications")
       .withIndex("by_email_read", (q) => q.eq("email", key).eq("read", false))
       .collect();
-    return unread.length;
+    if (unread.length) return unread.length;
+    const raw = String(email || "").trim();
+    if (raw && raw !== key) {
+      const legacy = await db
+        .query("customerNotifications")
+        .withIndex("by_email_read", (q) => q.eq("email", raw).eq("read", false))
+        .collect();
+      return legacy.length;
+    }
+    return 0;
   },
 });
 

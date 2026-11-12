@@ -8,8 +8,13 @@ import { clearUpdatePromptDismiss } from '../utils/appUpdate';
 import { goToCustomerTab } from '../utils/navScroll';
 import './CustomerNotificationBell.css';
 
-const INITIAL_VISIBLE = 12;
-const EXPANDED_VISIBLE = 40;
+const INITIAL_VISIBLE = 3;
+const EXPANDED_VISIBLE = 80;
+
+function isStoreNotif(type) {
+  const t = String(type || '');
+  return t === 'app_update' || t === 'shipping_fee' || t === 'promo' || t === 'update';
+}
 
 function timeAgo(ts) {
   const t = typeof ts === 'number' ? ts : new Date(ts).getTime();
@@ -132,13 +137,14 @@ const CustomerNotificationBell = ({ email }) => {
   const menuRef = useRef(null);
   const listRef = useRef(null);
 
+  const emailKey = String(email || '').trim().toLowerCase();
   const notifications = useQuery(
     api.customerNotifications.getRecentForEmail,
-    email ? { email, limit: 80 } : 'skip'
+    emailKey ? { email: emailKey, limit: 80 } : 'skip'
   ) ?? [];
   const unreadCount = useQuery(
     api.customerNotifications.getUnreadCountForEmail,
-    email ? { email } : 'skip'
+    emailKey ? { email: emailKey } : 'skip'
   ) ?? 0;
 
   const markMany = useMutation(api.customerNotifications.markMany);
@@ -182,7 +188,7 @@ const CustomerNotificationBell = ({ email }) => {
   const groups = useMemo(() => groupNotifications(visible), [visible]);
   const hasMore = filtered.length > visibleCount;
 
-  if (!email) return null;
+  if (!emailKey) return null;
 
   const toggleOpen = () => {
     setOpen((o) => !o);
@@ -190,7 +196,7 @@ const CustomerNotificationBell = ({ email }) => {
 
   const openItem = async (n) => {
     if (!n.read) {
-      await markMany({ email, ids: [n._id], read: true }).catch(() => {});
+      await markMany({ email: emailKey, ids: [n._id], read: true }).catch(() => {});
     }
     release();
     setMenuOpen(false);
@@ -206,25 +212,28 @@ const CustomerNotificationBell = ({ email }) => {
 
   const handleMarkAllRead = async () => {
     setMenuOpen(false);
-    await markAllRead({ email }).catch(() => {});
+    await markAllRead({ email: emailKey }).catch(() => {});
   };
 
   const handleOpenNotifications = () => {
     setMenuOpen(false);
     setFilter('all');
-    setVisibleCount(EXPANDED_VISIBLE);
+    setVisibleCount(Math.max(filtered.length, EXPANDED_VISIBLE));
     requestAnimationFrame(() => {
       listRef.current?.scrollTo?.({ top: 0, behavior: 'smooth' });
     });
   };
 
   const handleSeePrevious = () => {
-    setVisibleCount((c) => Math.min(filtered.length, c + INITIAL_VISIBLE));
+    setVisibleCount((c) => Math.min(filtered.length, Math.max(c + INITIAL_VISIBLE, filtered.length)));
   };
 
-  const handleSeeAllNew = () => {
-    setFilter('unread');
-    setVisibleCount(EXPANDED_VISIBLE);
+  const handleSeeAll = () => {
+    setFilter('all');
+    setVisibleCount(Math.max(filtered.length, notifications.length, EXPANDED_VISIBLE));
+    requestAnimationFrame(() => {
+      listRef.current?.scrollTo?.({ top: 0, behavior: 'smooth' });
+    });
   };
 
   const handleClearAll = async () => {
@@ -237,7 +246,7 @@ const CustomerNotificationBell = ({ email }) => {
       variant: 'danger',
     });
     if (!ok) return;
-    await clearAll({ email }).catch(() => {});
+    await clearAll({ email: emailKey }).catch(() => {});
   };
 
   return (
@@ -256,7 +265,7 @@ const CustomerNotificationBell = ({ email }) => {
             <span className="notif-count">{unreadCount > 9 ? '9+' : unreadCount}</span>
           )}
         </span>
-        <span>Alerts</span>
+        <span>Notifications</span>
       </button>
 
       {open && (
@@ -352,11 +361,11 @@ const CustomerNotificationBell = ({ email }) => {
                 <section key={group.key} className="cust-bell-group">
                   <div className="cust-bell-group-head">
                     <h3 className="cust-bell-group-label">{group.label}</h3>
-                    {group.showSeeAll && group.key === 'new' && unreadCount > 0 && (
+                    {group.key === 'new' && hasMore && (
                       <button
                         type="button"
                         className="cust-bell-see-all"
-                        onClick={handleSeeAllNew}
+                        onClick={handleSeeAll}
                       >
                         See all
                       </button>
@@ -364,6 +373,7 @@ const CustomerNotificationBell = ({ email }) => {
                   </div>
                   {group.items.map((n) => {
                     const badge = typeBadge(n.type);
+                    const store = isStoreNotif(n.type);
                     return (
                       <button
                         key={n._id}
@@ -374,12 +384,18 @@ const CustomerNotificationBell = ({ email }) => {
                         <span className="cust-bell-avatar-wrap" aria-hidden="true">
                           <img
                             src="/images/dklogo.jpg"
-                            alt=""
+                            alt="DKMerch"
                             className="cust-bell-avatar"
+                            onError={(e) => {
+                              e.currentTarget.onerror = null;
+                              e.currentTarget.src = '/images/dklogo2-removebg-preview.png';
+                            }}
                           />
-                          <span className={`cust-bell-type-badge tone-${badge.tone}`}>
-                            <i className={`fas ${badge.icon}`} />
-                          </span>
+                          {!store && (
+                            <span className={`cust-bell-type-badge tone-${badge.tone}`}>
+                              <i className={`fas ${badge.icon}`} />
+                            </span>
+                          )}
                         </span>
                         <span className="cust-bell-item-body">
                           <span className="cust-bell-item-text">
@@ -405,9 +421,9 @@ const CustomerNotificationBell = ({ email }) => {
               <button
                 type="button"
                 className="cust-bell-see-prev"
-                onClick={hasMore ? handleSeePrevious : handleOpenNotifications}
+                onClick={hasMore ? handleSeeAll : handleOpenNotifications}
               >
-                {hasMore ? 'See previous notifications' : 'You’re all caught up'}
+                {hasMore ? 'See all notifications' : 'You’re all caught up'}
               </button>
             </div>
           )}

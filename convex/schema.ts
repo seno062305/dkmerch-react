@@ -108,9 +108,12 @@ export default defineSchema({
     rating: v.number(),
     review: v.string(),
     createdAt: v.string(),
+    /** Delivered order this review belongs to — allows one review per order. */
+    orderId: v.optional(v.string()),
   })
     .index("by_product", ["productId"])
-    .index("by_product_user", ["productId", "userEmail"]),
+    .index("by_product_user", ["productId", "userEmail"])
+    .index("by_product_order", ["productId", "orderId"]),
 
   products: defineTable({
     name: v.string(),
@@ -367,6 +370,8 @@ export default defineSchema({
     lastKnownLng:     v.optional(v.number()),
     lastKnownAt:      v.optional(v.number()),
     lastKnownAddress: v.optional(v.union(v.string(), v.null())),
+    /** Set once when rider GPS enters customer geofence — admin proof of attempt. */
+    arrivedNotifiedAt: v.optional(v.number()),
   })
     .index("by_orderId", ["orderId"])
     .index("by_riderEmail", ["riderEmail"]),

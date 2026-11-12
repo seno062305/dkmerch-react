@@ -110,10 +110,6 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
     return Date.now() >= releaseMs;
   })();
 
-  const hasUserReviewed = isAuthenticated && user
-    ? convexReviews.some(r => r.userEmail === user.email)
-    : false;
-
   useEffect(() => {
     setRating(0);
     setReview('');
@@ -268,7 +264,8 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
                 <i key={s} className={`fas fa-star ${s <= rev.rating ? 'filled' : ''}`}></i>
               ))}
             </div>
-            {isAuthenticated && user?.email === rev.userEmail && (
+            {isAuthenticated && user?.email
+              && String(user.email).toLowerCase() === String(rev.userEmail || '').toLowerCase() && (
               <button
                 className="modal-left-review-delete"
                 onClick={() => handleDeleteReview(rev._id)}
@@ -324,7 +321,7 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
         rating,
         review: review.trim(),
       });
-      showNotification(result.updated ? 'Review updated!' : 'Review submitted!', 'success');
+      showNotification('Review submitted!', 'success');
       setRating(0);
       setReview('');
     } catch (err) {
