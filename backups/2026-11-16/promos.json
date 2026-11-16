@@ -1,0 +1,32 @@
+[
+  {
+    "_creationTime": 1794319263958.4639,
+    "_id": "jh74bf8j6wjjyjw18esj55hf498hzf4j",
+    "code": "NOX",
+    "discount": 25,
+    "endDate": "2026-11-10",
+    "endTime": "22:10",
+    "isActive": true,
+    "maxDiscount": 999999,
+    "name": "NEWJEANS",
+    "startDate": "2026-11-10",
+    "startTime": "22:05",
+    "type": "percentage",
+    "usedCount": 0
+  },
+  {
+    "_creationTime": 1794340029140.5803,
+    "_id": "jh731mm81wmarnxgawby26q4fx8hz4q0",
+    "code": "KRAM456",
+    "discount": 33,
+    "endDate": "2026-11-11",
+    "endTime": "03:55",
+    "isActive": true,
+    "maxDiscount": 999999,
+    "name": "BLACKPINK",
+    "startDate": "2026-11-11",
+    "startTime": "03:50",
+    "type": "percentage",
+    "usedCount": 0
+  }
+]
