@@ -6,10 +6,21 @@ import { appendActivityLog } from "../admin/lib/localActivityLog";
 import {
   saveDeviceUnlock,
   clearDeviceUnlock,
+  clearRiderDeviceUnlock,
   getDeviceUnlock,
+  getRiderDeviceUnlock,
   markExplicitLogout,
+  markRiderExplicitLogout,
   clearExplicitLogoutFlag,
+  clearRiderExplicitLogoutFlag,
 } from "../lib/deviceUnlock";
+import {
+  parkRiderSession,
+  getParkedRider,
+  clearParkedRider,
+  clearRiderBrowsingFlag,
+  isRiderBrowsingShop,
+} from "../lib/parkedRider";
 import { readAuthGate, isAuthGateLocked, clearAuthGate } from "../lib/authGate";
 import { collectLoginDeviceInfo } from "../utils/deviceInfo";
 import { consumeKeepSessionAfterUpdate } from "../utils/appUpdate";
@@ -241,6 +252,7 @@ export const AuthProvider = ({ children }) => {
     const alive = isSessionAlive();
     const pwa = isStandalonePwa();
     const unlock = getDeviceUnlock(); // null after explicit logout
+    const riderUnlock = getRiderDeviceUnlock();
     const loggedOut = wasExplicitLogout();
     const gate = readAuthGate();
     const gateLocked = isAuthGateLocked(gate);
@@ -307,14 +319,19 @@ export const AuthProvider = ({ children }) => {
       return;
     }
 
-    const canPinUnlock =
-      !storedUser.role
-      || storedUser.role === "user"
-      || storedUser.role === "admin";
-    const hasUnlock =
-      canPinUnlock
+    const isRiderStored = storedUser.role === "rider";
+    const hasCustomerUnlock =
+      (!storedUser.role || storedUser.role === "user" || storedUser.role === "admin")
       && unlock?._id
       && String(unlock._id) === String(storedUser._id);
+    const hasRiderUnlock =
+      isRiderStored
+      && riderUnlock?._id
+      && (
+        String(riderUnlock._id) === String(storedUser._id)
+        || String(riderUnlock.email || "").toLowerCase() === String(storedUser.email || "").toLowerCase()
+      );
+    const hasUnlock = isRiderStored ? hasRiderUnlock : hasCustomerUnlock;
 
     // Already unlocked in this browser session (incl. hard refresh on dashboard/home/rider)
     // → stay on the same page; do NOT force PIN again
@@ -334,13 +351,6 @@ export const AuthProvider = ({ children }) => {
 
     // Browser tab with stored auth but no unlock profile → stay logged in
     if (!pwa && !gateLocked) {
-      restoreSession(false);
-      setIsReady(true);
-      return;
-    }
-
-    // Rider (or any role) with stored auth after soft reload — stay signed in
-    if (storedUser.role === "rider" && !gateLocked) {
       restoreSession(false);
       setIsReady(true);
       return;
@@ -430,8 +440,16 @@ export const AuthProvider = ({ children }) => {
     try { clearAuthGate(); } catch { /* ignore */ }
     writeAuthUser(sessionUser);
     markSessionAlive();
-    if (sessionUser.role === "user" || sessionUser.role === "admin") {
+    if (
+      sessionUser.role === "user"
+      || sessionUser.role === "admin"
+      || sessionUser.role === "rider"
+    ) {
       saveDeviceUnlock(sessionUser);
+    }
+    if (sessionUser.role === "rider") {
+      try { clearRiderExplicitLogoutFlag(); } catch { /* ignore */ }
+      try { clearParkedRider(); } catch { /* ignore */ }
     }
     setUser(sessionUser);
     setRole(sessionUser.role);
@@ -818,7 +836,12 @@ export const AuthProvider = ({ children }) => {
           actorRole: "rider",
           details: "Rider login success",
         });
-        return { success: true, role: "rider" };
+        return {
+          success: true,
+          role: "rider",
+          user: sessionRider,
+          needsPinSetup: !riderResult.hasPin,
+        };
       }
 
       // ══════════════════════════════════════════
@@ -1134,12 +1157,18 @@ export const AuthProvider = ({ children }) => {
         }).catch(() => {});
       }
     }
+    const wasRider = prev?.role === "rider";
     clearAuthUser();
     clearSessionAlive();
     clearPendingLogin();
+    try { clearParkedRider(); } catch { /* ignore */ }
     try { localStorage.removeItem(LAST_ACTIVE_KEY); } catch { /* ignore */ }
     if (keepUnlock) {
       // Stay on PIN chrome — do not mark explicit logout / wipe unlock profile
+      setNeedsDeviceUnlock(false);
+    } else if (wasRider) {
+      markRiderExplicitLogout();
+      clearRiderDeviceUnlock();
       setNeedsDeviceUnlock(false);
     } else {
       markExplicitLogout();
@@ -1153,6 +1182,83 @@ export const AuthProvider = ({ children }) => {
   };
 
   const clearDeviceUnlockPrompt = () => setNeedsDeviceUnlock(false);
+
+  /** After rider PIN verify — restore session without password / new-device alert. */
+  const completeRiderPinUnlock = async (riderProfile) => {
+    const email = String(riderProfile?.email || "").trim().toLowerCase();
+    if (!email) return { success: false, message: "Missing rider profile." };
+    const sessionId = String(riderProfile.sessionId || "").trim();
+    let nextSessionId = sessionId;
+    try {
+      const touch = await touchRiderSession({
+        email,
+        sessionId: sessionId || undefined,
+      });
+      if (touch?.sessionId) nextSessionId = String(touch.sessionId);
+    } catch { /* optional */ }
+    const sessionRider = {
+      _id: riderProfile._id || riderProfile.id,
+      id: riderProfile._id || riderProfile.id,
+      name: riderProfile.name || "Rider",
+      email,
+      role: "rider",
+      ...(nextSessionId ? { sessionId: nextSessionId } : {}),
+    };
+    applySession(sessionRider);
+    return { success: true, role: "rider", user: sessionRider };
+  };
+
+  /**
+   * Rider → Shop: park rider session (keep server session) and clear active auth
+   * so the customer homepage / login can load without bouncing back to /rider.
+   */
+  const switchRiderToShop = () => {
+    const prev = userRef.current;
+    if (!prev || prev.role !== "rider") return { success: false, message: "Not a rider session." };
+    parkRiderSession(prev);
+    // Soft-clear active auth only — do NOT endRiderSession
+    clearAuthUser();
+    clearSessionAlive();
+    setUser(null);
+    setRole(null);
+    setIsAuthenticated(false);
+    setNeedsDeviceUnlock(false);
+    return { success: true, parked: getParkedRider() };
+  };
+
+  /** Restore parked rider into active auth and open rider dashboard (no re-login). */
+  const restoreParkedRider = () => {
+    const parked = getParkedRider();
+    if (!parked?.email) return { success: false, message: "No parked rider session." };
+    const sessionUser = {
+      _id: parked._id || parked.id,
+      id: parked._id || parked.id,
+      name: parked.name || "Rider",
+      email: parked.email,
+      role: "rider",
+      ...(parked.sessionId ? { sessionId: String(parked.sessionId) } : {}),
+    };
+    clearRiderBrowsingFlag();
+    clearParkedRider();
+    applySession(sessionUser);
+    return { success: true, user: sessionUser };
+  };
+
+  // Keep parked rider server session alive while browsing shop
+  useEffect(() => {
+    if (isAuthenticated) return undefined;
+    const tick = () => {
+      const parked = getParkedRider();
+      if (!parked?.email) return;
+      touchRiderSession({
+        email: String(parked.email),
+        sessionId: parked.sessionId ? String(parked.sessionId) : undefined,
+      }).catch(() => {});
+    };
+    tick();
+    const id = window.setInterval(tick, 20_000);
+    return () => window.clearInterval(id);
+  }, [isAuthenticated, touchRiderSession]);
 
   return (
     <AuthContext.Provider
@@ -1169,6 +1275,11 @@ export const AuthProvider = ({ children }) => {
         register,
         logout,
         updateUser,
+        switchRiderToShop,
+        restoreParkedRider,
+        getParkedRider,
+        isRiderBrowsingShop,
+        completeRiderPinUnlock,
       }}
     >
       {children}
@@ -1199,5 +1310,10 @@ export const useAuth = () => {
     register: async () => ({ success: false, message: "Auth not ready." }),
     logout: () => {},
     updateUser: () => {},
+    switchRiderToShop: () => ({ success: false }),
+    restoreParkedRider: () => ({ success: false }),
+    getParkedRider: () => null,
+    isRiderBrowsingShop: () => false,
+    completeRiderPinUnlock: async () => ({ success: false }),
   };
 };

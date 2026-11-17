@@ -340,6 +340,11 @@ export default defineSchema({
     password: v.optional(v.string()),
     /** Previous rider passwords — cannot be reused on reset */
     passwordHistory: v.optional(v.array(v.string())),
+    /** Rider login PIN (cold-start unlock, like customers) */
+    pin: v.optional(v.string()),
+    pinLength: v.optional(v.number()),
+    loginOtp: v.optional(v.string()),
+    loginOtpExpiresAt: v.optional(v.number()),
     name: v.optional(v.string()),
     activeSessionId: v.optional(v.string()),
     activeSessionIds: v.optional(v.array(v.string())),

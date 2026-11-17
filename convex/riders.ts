@@ -4,6 +4,7 @@ import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { validatePersonName, validateAddress } from "./lib/personValidation";
 import { assertPasswordNotReused, nextPasswordHistory } from "./lib/passwordPolicy";
+import { hashPin, isPlainPin, PIN_RE, PIN_SET_RE } from "./lib/pinHash";
 
 const genSessionId = () =>
   `${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${Math.random().toString(36).slice(2, 10)}`;
@@ -708,6 +709,7 @@ export const loginRider = mutation({
     const previousSessionId = existingIds[0];
     const currentSessionId = String(args.currentSessionId || "").trim();
 
+    const hasPin = !!(rider as any).pin && String((rider as any).pin).length >= 4;
     const safeRider = {
       _id: rider._id,
       name: rider.fullName,
@@ -743,6 +745,7 @@ export const loginRider = mutation({
         rider: safeRider,
         sessionId: currentSessionId,
         pendingApproval: false,
+        hasPin,
       };
     }
 
@@ -782,6 +785,7 @@ export const loginRider = mutation({
         sessionId,
         pendingApproval: false,
         tookOver: hadOtherSessions,
+        hasPin,
       };
     }
 
@@ -810,6 +814,7 @@ export const loginRider = mutation({
         sessionId: String(alert.sessionId),
         pendingApproval: true,
         expiresAt,
+        hasPin,
       };
     }
 
@@ -857,6 +862,7 @@ export const loginRider = mutation({
       sessionId,
       pendingApproval: true,
       expiresAt,
+      hasPin,
     };
   },
 });
@@ -1776,5 +1782,204 @@ export const resetRiderPasswordByEmail = mutation({
       ),
     });
     return { success: true };
+  },
+});
+
+const toSafeRider = (rider: any) => ({
+  _id: rider._id,
+  name: rider.fullName || rider.name || "Rider",
+  email: rider.email,
+  phone: rider.phone || "",
+  role: "rider" as const,
+  status: rider.status,
+});
+
+/** Whether this rider already has a login PIN. */
+export const hasRiderLoginPin = query({
+  args: { email: v.string() },
+  handler: async ({ db }, { email }) => {
+    const em = String(email || "").trim().toLowerCase();
+    if (!em) return { hasPin: false, pinLength: 6 };
+    const rider = await db
+      .query("riderApplications")
+      .withIndex("by_email", (q) => q.eq("email", em))
+      .first() as any;
+    if (!rider) return { hasPin: false, pinLength: 6 };
+    const pin = rider.pin;
+    const hasPin = !!(pin && String(pin).length >= 4);
+    const len = Number(rider.pinLength);
+    const pinLength = Number.isFinite(len) && len >= 4 && len <= 6 ? len : 6;
+    return { hasPin, pinLength };
+  },
+});
+
+export const setRiderPin = mutation({
+  args: {
+    email: v.string(),
+    pin: v.string(),
+  },
+  handler: async ({ db }, { email, pin }) => {
+    if (!PIN_SET_RE.test(pin)) {
+      return { success: false, message: "PIN must be exactly 6 digits." };
+    }
+    const em = String(email || "").trim().toLowerCase();
+    const rider = await db
+      .query("riderApplications")
+      .withIndex("by_email", (q) => q.eq("email", em))
+      .first() as any;
+    if (!rider) return { success: false, message: "Rider account not found." };
+    const pinHash = await hashPin(pin);
+    await db.patch(rider._id, {
+      pin: pinHash,
+      pinLength: 6,
+      loginOtp: undefined,
+      loginOtpExpiresAt: undefined,
+    } as any);
+    return { success: true, rider: toSafeRider(rider), pinLength: 6 };
+  },
+});
+
+export const verifyRiderLoginPin = mutation({
+  args: {
+    email: v.string(),
+    pin: v.string(),
+  },
+  handler: async ({ db }, { email, pin }) => {
+    const em = String(email || "").trim().toLowerCase();
+    const rider = await db
+      .query("riderApplications")
+      .withIndex("by_email", (q) => q.eq("email", em))
+      .first() as any;
+    if (!rider) return { success: false, message: "Rider account not found." };
+    if (rider.status === "rejected" || rider.status === "suspended") {
+      return { success: false, message: "This rider account cannot sign in right now." };
+    }
+    if (!rider.pin) {
+      return { success: false, message: "No PIN set. Sign in with password first.", needsPinSetup: true };
+    }
+    if (!PIN_RE.test(pin)) return { success: false, message: "Incorrect PIN." };
+    const savedLen = Number(rider.pinLength);
+    if (Number.isFinite(savedLen) && savedLen >= 4 && savedLen <= 6 && pin.length !== savedLen) {
+      return { success: false, message: "Incorrect PIN." };
+    }
+    const pinHash = await hashPin(pin);
+    const match =
+      rider.pin === pinHash
+      || (isPlainPin(rider.pin) && rider.pin === pin);
+    if (!match) return { success: false, message: "Incorrect PIN." };
+    if (isPlainPin(rider.pin)) {
+      await db.patch(rider._id, { pin: pinHash, pinLength: pin.length } as any);
+    } else if (!rider.pinLength) {
+      await db.patch(rider._id, { pinLength: pin.length } as any);
+    }
+    return {
+      success: true,
+      rider: toSafeRider(rider),
+      pinLength: rider.pinLength || pin.length,
+    };
+  },
+});
+
+export const generateRiderLoginOtp = mutation({
+  args: {
+    email: v.string(),
+    resetPin: v.optional(v.boolean()),
+  },
+  handler: async ({ db }, { email, resetPin }) => {
+    const em = String(email || "").trim().toLowerCase();
+    const rider = await db
+      .query("riderApplications")
+      .withIndex("by_email", (q) => q.eq("email", em))
+      .first() as any;
+    if (!rider) return { success: false, message: "Rider account not found." };
+    if (rider.pin && !resetPin) {
+      return { success: false, message: "PIN already set. Use your PIN to sign in." };
+    }
+    if (!rider.pin && !resetPin) {
+      return { success: false, message: "No PIN yet — create one after signing in with your password." };
+    }
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const loginOtpExpiresAt = Date.now() + 1000 * 60 * 3;
+    await db.patch(rider._id, { loginOtp: otp, loginOtpExpiresAt } as any);
+    return {
+      success: true,
+      otp,
+      email: rider.email,
+      name: rider.fullName || rider.name,
+    };
+  },
+});
+
+export const verifyRiderLoginOtp = mutation({
+  args: {
+    email: v.string(),
+    otp: v.string(),
+  },
+  handler: async ({ db }, { email, otp }) => {
+    const em = String(email || "").trim().toLowerCase();
+    const rider = await db
+      .query("riderApplications")
+      .withIndex("by_email", (q) => q.eq("email", em))
+      .first() as any;
+    if (!rider) return { success: false, message: "Rider account not found." };
+    if (!rider.loginOtp || !rider.loginOtpExpiresAt) {
+      return { success: false, message: "No OTP found. Please request a new code." };
+    }
+    if (Date.now() > rider.loginOtpExpiresAt) {
+      return { success: false, message: "OTP has expired. Please request a new code.", expired: true };
+    }
+    if (rider.loginOtp !== otp) {
+      return { success: false, message: "Incorrect OTP. Please try again." };
+    }
+    await db.patch(rider._id, {
+      loginOtp: undefined,
+      loginOtpExpiresAt: undefined,
+      pin: undefined,
+      pinLength: undefined,
+    } as any);
+    return { success: true, rider: toSafeRider(rider), canSetPin: true };
+  },
+});
+
+/** Badge for header while rider is browsing the shop. */
+export const getRiderShopBadge = query({
+  args: { email: v.string() },
+  handler: async ({ db }, { email }) => {
+    const em = String(email || "").trim().toLowerCase();
+    if (!em) return { available: 0, active: 0, lit: false };
+    const [orders, pickups] = await Promise.all([
+      db.query("orders").collect(),
+      db.query("pickupRequests").collect(),
+    ]);
+    const claimedIds = new Set(
+      pickups
+        .filter((p: any) => {
+          const st = String(p.status || "").toLowerCase();
+          return st !== "cancelled" && st !== "canceled" && st !== "completed" && st !== "rejected";
+        })
+        .map((p: any) => String(p.orderId))
+    );
+    let available = 0;
+    for (const o of orders as any[]) {
+      const st = String(o.orderStatus || o.status || "").toLowerCase().replace(/\s+/g, "_");
+      if (st !== "confirmed" && st !== "ready_for_pickup" && st !== "paid") continue;
+      if (claimedIds.has(String(o.orderId))) continue;
+      available += 1;
+    }
+    let active = 0;
+    for (const p of pickups as any[]) {
+      const riderEmail = String(p.riderEmail || p.email || "").toLowerCase();
+      if (riderEmail !== em) continue;
+      const st = String(p.status || "").toLowerCase();
+      if (st === "out_for_delivery" || st === "picked_up" || st === "accepted" || st === "claimed") {
+        active += 1;
+      }
+    }
+    return {
+      available,
+      active,
+      lit: available > 0 || active > 0,
+      total: available + active,
+    };
   },
 });

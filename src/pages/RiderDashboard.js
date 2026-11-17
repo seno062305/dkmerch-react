@@ -907,7 +907,7 @@ const RiderNotifBell = ({ onGoToAvailable }) => {
 // Main dashboard
 // ─────────────────────────────────────────────────────────────────────────────
 const RiderDashboard = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, switchRiderToShop } = useAuth();
   const { confirm } = useConfirm();
   const { showNotification } = useNotification();
   const navigate = useNavigate();
@@ -2102,7 +2102,7 @@ const RiderDashboard = () => {
         )}
       </main>
 
-      <nav className="rider-bottom-nav rider-bottom-nav--4" aria-label="Rider navigation">
+      <nav className="rider-bottom-nav rider-bottom-nav--5" aria-label="Rider navigation">
         <button type="button" className={`rider-bnav-item ${tab === 'available' ? 'active' : ''}`} onClick={() => handleNavClick('available')}>
           <span className="rider-bnav-icon-wrap">
             <i className="fas fa-home"></i>
@@ -2133,6 +2133,36 @@ const RiderDashboard = () => {
             )}
           </span>
           <span>My Orders</span>
+        </button>
+        <button
+          type="button"
+          className="rider-bnav-item"
+          onClick={async () => {
+            const ok = await confirm({
+              title: 'Switch to Shop?',
+              message: 'You’ll open the DKMerch homepage. Your rider session stays parked — tap the Rider icon anytime to return without logging in again. If you don’t have a customer login yet, you’ll need to sign in as a customer to shop.',
+              confirmLabel: 'Go to Shop',
+              cancelLabel: 'Stay on Rider',
+              variant: 'warning',
+              icon: 'fa-store',
+            });
+            if (!ok) return;
+            const result = switchRiderToShop?.();
+            if (!result?.success) {
+              showNotification(result?.message || 'Could not switch to shop.', 'error');
+              return;
+            }
+            navigate('/', { replace: true });
+            // Prompt customer login if no customer session (we're now logged out of rider)
+            try {
+              sessionStorage.setItem('dk_login_customers_only', '1');
+              sessionStorage.setItem('dk_rider_shop_switch', '1');
+            } catch { /* ignore */ }
+            window.dispatchEvent(new CustomEvent('openLoginModal', { detail: { customersOnly: true, fromRiderShop: true } }));
+          }}
+        >
+          <i className="fas fa-store"></i>
+          <span>Shop</span>
         </button>
         <button type="button" className={`rider-bnav-item ${tab === 'profile' ? 'active' : ''}`} onClick={() => handleNavClick('profile')}>
           <DkIcon name={DK_ICONS.customer} size={18} />

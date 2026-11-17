@@ -46,6 +46,7 @@ import WishlistPage from './components/WishlistPage';
 import AppUpdateModal from './components/AppUpdateModal';
 import PointsClaimModal from './components/PointsClaimModal';
 import LoginModal from './components/LoginModal';
+import RiderLoginModal from './components/RiderLoginModal';
 
 import AdminLayout from './admin/AdminLayout';
 import AdminDashboard from './admin/AdminDashboard';
@@ -182,6 +183,7 @@ function AppContent() {
   const wishlistCount  = useWishlistCount();
 
   const [showLoginModal,    setShowLoginModal]    = useState(() => isAuthGateLocked());
+  const [showRiderPinModal, setShowRiderPinModal] = useState(false);
   const [showCartModal,     setShowCartModal]     = useState(false);
   const [showProductModal,  setShowProductModal]  = useState(false);
   const [currentProduct,    setCurrentProduct]    = useState(null);
@@ -247,8 +249,22 @@ function AppContent() {
     if (!isReady || !needsDeviceUnlock) return;
     // Don't inherit a stale /chat redirect from an earlier visit
     try { sessionStorage.removeItem('redirectAfterLogin'); } catch { /* ignore */ }
-    setShowLoginModal(true);
-  }, [isReady, needsDeviceUnlock]);
+    if (role === 'rider') {
+      setShowRiderPinModal(true);
+      setShowLoginModal(false);
+    } else {
+      setShowLoginModal(true);
+      setShowRiderPinModal(false);
+    }
+  }, [isReady, needsDeviceUnlock, role]);
+
+  // Keep rider on /rider while rider PIN gate is up
+  useEffect(() => {
+    if (!isReady || !needsDeviceUnlock || role !== 'rider') return;
+    if (!location.pathname.startsWith('/rider')) {
+      navigate('/rider', { replace: true });
+    }
+  }, [isReady, needsDeviceUnlock, role, location.pathname, navigate]);
 
   // Hard refresh while on Use another account / Reset PIN / PIN gate
   useEffect(() => {
@@ -520,14 +536,17 @@ function AppContent() {
           {showChatBot && !showLoginModal && <DKMerchChatBot />}
           <PointsClaimModal />
 
-          {showLoginModal && (
+          {showLoginModal && !(needsDeviceUnlock && role === 'rider') && (
             <LoginModal
-              preferPinUnlock={!!needsDeviceUnlock}
+              preferPinUnlock={!!needsDeviceUnlock && role !== 'rider'}
               onClearUnlockPrompt={() => clearDeviceUnlockPrompt?.()}
               onClose={() => {
                 // PIN / switch-account / reset-PIN gate — never dismiss to Home
                 if (needsDeviceUnlock || isAuthGateLocked()) return;
-                try { sessionStorage.removeItem('dk_login_customers_only'); } catch { /* ignore */ }
+                try {
+                  sessionStorage.removeItem('dk_login_customers_only');
+                  sessionStorage.removeItem('dk_rider_shop_switch');
+                } catch { /* ignore */ }
                 clearDeviceUnlockPrompt?.();
                 setShowLoginModal(false);
               }}
@@ -538,6 +557,22 @@ function AppContent() {
               onLoginSuccess={(loginRole) => {
                 clearDeviceUnlockPrompt?.();
                 setShowLoginModal(false);
+                try { sessionStorage.removeItem('dk_rider_shop_switch'); } catch { /* ignore */ }
+                handleLoginSuccess(loginRole);
+              }}
+            />
+          )}
+
+          {showRiderPinModal && (
+            <RiderLoginModal
+              preferPinUnlock={!!needsDeviceUnlock && role === 'rider'}
+              onClose={() => {
+                if (needsDeviceUnlock && role === 'rider') return;
+                setShowRiderPinModal(false);
+              }}
+              onLoginSuccess={(loginRole) => {
+                clearDeviceUnlockPrompt?.();
+                setShowRiderPinModal(false);
                 handleLoginSuccess(loginRole);
               }}
             />

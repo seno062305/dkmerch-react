@@ -12,7 +12,7 @@ import RiderLoginModal from './RiderLoginModal';
 import RewardsModal from './RewardsModal';
 import CustomerNotificationBell from './CustomerNotificationBell';
 const Header = ({ cartCount, wishlistCount, onCartClick }) => {
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, logout, restoreParkedRider, getParkedRider } = useAuth();
   const { confirm } = useConfirm();
   const navigate = useNavigate();
   const location = useLocation();
@@ -24,6 +24,26 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
   const [selectedIndex, setSelectedIndex]             = useState(-1);
   const [showRiderModal, setShowRiderModal]           = useState(false);
   const [showRewardsModal, setShowRewardsModal]       = useState(false);
+  const [parkedRider, setParkedRider]                 = useState(() => {
+    try { return getParkedRider?.() || null; } catch { return null; }
+  });
+
+  // Refresh parked rider snapshot when auth changes / window focuses
+  useEffect(() => {
+    const sync = () => {
+      try { setParkedRider(getParkedRider?.() || null); } catch { setParkedRider(null); }
+    };
+    sync();
+    window.addEventListener('focus', sync);
+    return () => window.removeEventListener('focus', sync);
+  }, [isAuthenticated, user, getParkedRider]);
+
+  const riderBadge = useQuery(
+    api.riders.getRiderShopBadge,
+    parkedRider?.email ? { email: String(parkedRider.email) } : 'skip'
+  );
+  const showRiderEntry = !isAuthenticated || !!parkedRider;
+  const riderLit = !!parkedRider && !!riderBadge?.lit;
   const dropdownRef      = useRef(null);
   const lastScrollTarget = useRef(null);
 
@@ -156,7 +176,21 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
 
   const handleRiderLoginSuccess = (role) => {
     setShowRiderModal(false);
+    setParkedRider(null);
     if (role === 'rider') navigate('/rider', { replace: true });
+  };
+
+  const handleRiderIconClick = () => {
+    closeMobileMenu();
+    if (parkedRider?.email) {
+      const res = restoreParkedRider?.();
+      if (res?.success) {
+        setParkedRider(null);
+        navigate('/rider', { replace: true });
+        return;
+      }
+    }
+    setShowRiderModal(true);
   };
 
   const handleHomeClick = (e) => {
@@ -244,14 +278,21 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
                 <li><Link to="/collections" onClick={closeMobileMenu}>Collections</Link></li>
                 <li><Link to="/preorder" onClick={closeMobileMenu}>Pre-Order</Link></li>
                 <li><Link to="/track-order" onClick={closeMobileMenu}>Track Order</Link></li>
-                {!isAuthenticated && (
+                {showRiderEntry && (
                   <li className="mobile-nav-rider-item">
                     <button
-                      className="mobile-nav-rider-btn"
-                      onClick={() => { closeMobileMenu(); setShowRiderModal(true); }}
+                      className={`mobile-nav-rider-btn${riderLit ? ' is-lit' : ''}${parkedRider ? ' is-parked' : ''}`}
+                      onClick={handleRiderIconClick}
                     >
-                      <i className="fas fa-motorcycle"></i>
-                      <span>Rider</span>
+                      <span className="mobile-nav-rider-icon-wrap">
+                        <i className="fas fa-motorcycle"></i>
+                        {riderLit && (
+                          <em className="header-rider-badge">
+                            {riderBadge?.total > 9 ? '9+' : (riderBadge?.total || '!')}
+                          </em>
+                        )}
+                      </span>
+                      <span>{parkedRider ? 'Back to Rider' : 'Rider'}</span>
                     </button>
                   </li>
                 )}
@@ -261,10 +302,21 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
             {/* RIGHT: Actions */}
             <div className="header-actions">
 
-              {!isAuthenticated && (
-                <button className="header-action-item" onClick={() => setShowRiderModal(true)}>
-                  <span className="icon-wrapper"><i className="fas fa-motorcycle"></i></span>
-                  <span>Rider</span>
+              {showRiderEntry && (
+                <button
+                  className={`header-action-item header-rider-action${riderLit ? ' is-lit' : ''}${parkedRider ? ' is-parked' : ''}`}
+                  onClick={handleRiderIconClick}
+                  title={parkedRider ? 'Return to Rider dashboard' : 'Rider login'}
+                >
+                  <span className="icon-wrapper">
+                    <i className="fas fa-motorcycle"></i>
+                    {riderLit && (
+                      <span className="header-rider-badge">
+                        {riderBadge?.total > 9 ? '9+' : (riderBadge?.total || '!')}
+                      </span>
+                    )}
+                  </span>
+                  <span>{parkedRider ? 'Rider' : 'Rider'}</span>
                 </button>
               )}
 

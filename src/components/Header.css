@@ -145,6 +145,43 @@ header {
 .header-action-item span { font-size: 0.75rem; font-weight: 500; }
 .header-action-item:hover { color: #9c27b0; transform: translateY(-2px); }
 
+.header-rider-action.is-parked,
+.header-rider-action.is-lit {
+  color: #7c3aed;
+}
+.header-rider-action.is-lit .icon-wrapper i {
+  color: #fc1268;
+}
+.header-rider-badge {
+  position: absolute;
+  top: -4px;
+  right: -6px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #fc1268;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 16px;
+  text-align: center;
+  box-shadow: 0 0 0 2px #fff;
+}
+.mobile-nav-rider-icon-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.mobile-nav-rider-btn.is-lit,
+.mobile-nav-rider-btn.is-parked {
+  border-left-color: #fc1268;
+  background: linear-gradient(135deg, #fff1f5, #faf5ff);
+}
+.mobile-nav-rider-btn .header-rider-badge {
+  top: -6px;
+  right: -10px;
+}
+
 .favorites-btn { color: #c87d00; }
 .favorites-btn i { color: #f5a623; transition: transform 0.2s ease; }
 .favorites-btn:hover { color: #a86800 !important; }

@@ -24,6 +24,7 @@ import type * as init from "../init.js";
 import type * as lib_orderSeq from "../lib/orderSeq.js";
 import type * as lib_passwordPolicy from "../lib/passwordPolicy.js";
 import type * as lib_personValidation from "../lib/personValidation.js";
+import type * as lib_pinHash from "../lib/pinHash.js";
 import type * as orders from "../orders.js";
 import type * as otpCooldown from "../otpCooldown.js";
 import type * as payments from "../payments.js";
@@ -69,6 +70,7 @@ declare const fullApi: ApiFromModules<{
   "lib/orderSeq": typeof lib_orderSeq;
   "lib/passwordPolicy": typeof lib_passwordPolicy;
   "lib/personValidation": typeof lib_personValidation;
+  "lib/pinHash": typeof lib_pinHash;
   orders: typeof orders;
   otpCooldown: typeof otpCooldown;
   payments: typeof payments;

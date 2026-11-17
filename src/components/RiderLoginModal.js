@@ -15,6 +15,8 @@ import { api } from "../../convex/_generated/api";
 import useBodyScrollLock from "../hooks/useBodyScrollLock";
 import { getOverlayRoot } from "../utils/scrollLock";
 import { WaitingApprovalModal, LoginDeniedModal } from "./LoginApprovalModals";
+import { getRiderDeviceUnlock } from "../lib/deviceUnlock";
+import { writeAuthGate, clearAuthGate } from "../lib/authGate";
 // ── Rate limit helpers ─────────────────────────────────────────────────────
 const RL_KEY_ATTEMPTS = "dkmerch_rider_login_attempts";
 const RL_KEY_LOCKOUT  = "dkmerch_rider_login_lockout_until";
@@ -62,12 +64,161 @@ const PwToggleIcon = ({ show }) => show ? (
   </svg>
 );
 
-const RiderLoginModal = ({ onClose, onLoginSuccess }) => {
-  const { login, finalizePendingLogin } = useAuth();
+const RiderLoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) => {
+  const { login, finalizePendingLogin, logout, completeRiderPinUnlock, user } = useAuth();
   const navigate  = useNavigate();
+  const rememberedRider = (() => {
+    try { return getRiderDeviceUnlock(); } catch { return null; }
+  })();
+  const startPin = !!(preferPinUnlock && rememberedRider?.email);
 
-  // view: "login" | "forgot"
-  const [view, setView] = useState("login");
+  // view: "login" | "forgot" | "pin" | "createPin" | "forgotPin"
+  const [view, setView] = useState(startPin ? "pin" : "login");
+  const [deviceUnlockMode, setDeviceUnlockMode] = useState(startPin);
+  const [switchAccountMode, setSwitchAccountMode] = useState(false);
+  const [pinValue, setPinValue] = useState("");
+  const [pinConfirm, setPinConfirm] = useState("");
+  const [pinError, setPinError] = useState("");
+  const [pinBusy, setPinBusy] = useState(false);
+  const [forgotPinOtp, setForgotPinOtp] = useState("");
+  const [forgotPinSent, setForgotPinSent] = useState("");
+  const [createPinEmail, setCreatePinEmail] = useState(
+    () => String(rememberedRider?.email || user?.email || "")
+  );
+  const pinLen = 6;
+
+  const verifyRiderPin = useMutation(api.riders.verifyRiderLoginPin);
+  const setRiderPin = useMutation(api.riders.setRiderPin);
+  const generateRiderPinOtp = useMutation(api.riders.generateRiderLoginOtp);
+  const verifyRiderPinOtp = useMutation(api.riders.verifyRiderLoginOtp);
+  const riderPinStatus = useQuery(
+    api.riders.hasRiderLoginPin,
+    createPinEmail ? { email: String(createPinEmail).toLowerCase() } : "skip"
+  );
+
+  useEffect(() => {
+    if (startPin) {
+      try { writeAuthGate("pin"); } catch { /* ignore */ }
+    }
+  }, [startPin]);
+
+  const finishRiderUnlock = async (profile) => {
+    try { clearAuthGate(); } catch { /* ignore */ }
+    const res = await completeRiderPinUnlock?.(profile);
+    if (!res?.success) {
+      setPinError(res?.message || "Could not unlock rider session.");
+      return false;
+    }
+    setDeviceUnlockMode(false);
+    if (onLoginSuccess) onLoginSuccess("rider");
+    else { navigate("/rider", { replace: true }); onClose?.(); }
+    return true;
+  };
+
+  const handlePinDigit = (d) => {
+    if (pinBusy) return;
+    setPinError("");
+    setPinValue((prev) => {
+      if (prev.length >= pinLen) return prev;
+      return prev + String(d);
+    });
+  };
+
+  const handlePinBackspace = () => {
+    if (pinBusy) return;
+    setPinError("");
+    setPinValue((prev) => prev.slice(0, -1));
+  };
+
+  // Auto-submit PIN when complete
+  useEffect(() => {
+    if (view !== "pin" || pinValue.length !== pinLen || pinBusy) return;
+    let cancelled = false;
+    const run = async () => {
+      setPinBusy(true);
+      setPinError("");
+      try {
+        const email = String(rememberedRider?.email || "").toLowerCase();
+        const result = await verifyRiderPin({ email, pin: pinValue });
+        if (cancelled) return;
+        if (!result?.success) {
+          setPinError(result?.message || "Incorrect PIN.");
+          setPinValue("");
+          if (result?.needsPinSetup) setView("createPin");
+          return;
+        }
+        await finishRiderUnlock({
+          _id: result.rider?._id || rememberedRider?._id,
+          name: result.rider?.name || rememberedRider?.name,
+          email,
+          sessionId: rememberedRider?.sessionId,
+        });
+      } catch {
+        if (!cancelled) {
+          setPinError("Could not verify PIN.");
+          setPinValue("");
+        }
+      } finally {
+        if (!cancelled) setPinBusy(false);
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pinValue, view]);
+
+  const handleCreateRiderPin = async (e) => {
+    e?.preventDefault?.();
+    setPinError("");
+    if (!/^\d{6}$/.test(pinValue)) {
+      setPinError("PIN must be exactly 6 digits.");
+      return;
+    }
+    if (pinValue !== pinConfirm) {
+      setPinError("PINs do not match.");
+      return;
+    }
+    const email = String(createPinEmail || rememberedRider?.email || user?.email || "").toLowerCase();
+    if (!email) {
+      setPinError("Missing rider email.");
+      return;
+    }
+    setPinBusy(true);
+    try {
+      const result = await setRiderPin({ email, pin: pinValue });
+      if (!result?.success) {
+        setPinError(result?.message || "Could not save PIN.");
+        return;
+      }
+      setPinValue("");
+      setPinConfirm("");
+      if (deviceUnlockMode || preferPinUnlock) {
+        await finishRiderUnlock({
+          _id: result.rider?._id || rememberedRider?._id || user?._id,
+          name: result.rider?.name || rememberedRider?.name || user?.name,
+          email,
+          sessionId: rememberedRider?.sessionId || user?.sessionId,
+        });
+      } else {
+        setView("login");
+        setPinError("");
+      }
+    } catch {
+      setPinError("Could not save PIN.");
+    } finally {
+      setPinBusy(false);
+    }
+  };
+
+  const goUseAnotherRider = () => {
+    try { writeAuthGate("switch"); } catch { /* ignore */ }
+    logout?.({ keepDeviceUnlock: true });
+    setSwitchAccountMode(true);
+    setDeviceUnlockMode(false);
+    setView("login");
+    setPinValue("");
+    setPinError("");
+  };
 
   // ── Login state ──────────────────────────────────────────────
   const [formData, setFormData]           = useState({ email: "", password: "" });
@@ -259,6 +410,15 @@ const RiderLoginModal = ({ onClose, onLoginSuccess }) => {
         return;
       }
 
+      if (result.needsPinSetup) {
+        setCreatePinEmail(String(result.user?.email || formData.email));
+        setDeviceUnlockMode(true);
+        setView("createPin");
+        setPinValue("");
+        setPinConfirm("");
+        return;
+      }
+
       if (onLoginSuccess) { onLoginSuccess("rider"); }
       else { navigate("/rider", { replace: true }); onClose(); }
     } catch {
@@ -405,6 +565,223 @@ const RiderLoginModal = ({ onClose, onLoginSuccess }) => {
           try { onClose?.(); } catch { /* ignore */ }
         }}
       />
+    );
+  }
+
+  // ═══════════════════════════════════════════
+  // PIN UNLOCK / CREATE PIN (rider cold start)
+  // ═══════════════════════════════════════════
+  if (view === "pin" || view === "createPin") {
+    const activePin = view === "createPin" && pinConfirm.length > 0 && pinValue.length >= pinLen
+      ? pinConfirm
+      : pinValue;
+    const creatingSecond = view === "createPin" && pinValue.length >= pinLen;
+    return createPortal(
+      <div className="pin-unlock-screen" role="dialog" aria-modal="true">
+        <div className="pin-unlock-top">
+          <div className="pin-unlock-brand">
+            <img src="/images/dklogo2-removebg-preview.png" alt="" className="pin-unlock-logo" />
+            DKMerch Rider
+          </div>
+          <div className="pin-unlock-avatar"><i className="fas fa-motorcycle" /></div>
+          <div className="pin-unlock-name">
+            {rememberedRider?.name || user?.name || "Rider"}
+          </div>
+          <div className="pin-unlock-email">
+            {rememberedRider?.email || createPinEmail || user?.email || ""}
+          </div>
+        </div>
+        <div className="pin-unlock-mid">
+          <h2 className="pin-unlock-title">
+            {view === "createPin"
+              ? (creatingSecond ? "Confirm your PIN" : "Create a 6-digit PIN")
+              : "Enter your PIN"}
+          </h2>
+          <p className="pin-unlock-hint">
+            {view === "createPin"
+              ? "This PIN unlocks the rider app when you reopen it."
+              : "Welcome back — unlock to open your rider dashboard."}
+          </p>
+          <div className="pin-unlock-dots" aria-hidden="true">
+            {Array.from({ length: pinLen }).map((_, i) => (
+              <span
+                key={i}
+                className={`pin-unlock-dot${i < activePin.length ? " filled" : ""}`}
+              />
+            ))}
+          </div>
+          {pinError && <div className="pin-unlock-error">{pinError}</div>}
+          {pinBusy && <div className="pin-unlock-loading">Checking…</div>}
+        </div>
+        <div className="pin-unlock-pad">
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
+            <button
+              key={n}
+              type="button"
+              className="pin-unlock-key"
+              disabled={pinBusy}
+              onClick={() => {
+                if (view === "createPin" && creatingSecond) {
+                  setPinConfirm((p) => (p.length >= pinLen ? p : p + String(n)));
+                } else {
+                  handlePinDigit(n);
+                }
+              }}
+            >
+              {n}
+            </button>
+          ))}
+          <span className="pin-unlock-key pin-unlock-key--spacer" />
+          <button
+            type="button"
+            className="pin-unlock-key"
+            disabled={pinBusy}
+            onClick={() => {
+              if (view === "createPin" && creatingSecond) {
+                setPinConfirm((p) => (p.length >= pinLen ? p : `${p}0`));
+              } else {
+                handlePinDigit(0);
+              }
+            }}
+          >
+            0
+          </button>
+          <button
+            type="button"
+            className="pin-unlock-key pin-unlock-key--ghost"
+            disabled={pinBusy}
+            onClick={() => {
+              if (view === "createPin" && creatingSecond) {
+                setPinConfirm((p) => p.slice(0, -1));
+              } else {
+                handlePinBackspace();
+              }
+            }}
+            aria-label="Backspace"
+          >
+            ⌫
+          </button>
+        </div>
+        {view === "createPin" && creatingSecond && pinConfirm.length === pinLen && (
+          <button
+            type="button"
+            className="pin-switch-submit"
+            style={{ margin: "12px auto 0", maxWidth: 280 }}
+            disabled={pinBusy}
+            onClick={handleCreateRiderPin}
+          >
+            {pinBusy ? "Saving…" : "Save PIN"}
+          </button>
+        )}
+        <div className="pin-unlock-footer">
+          {view === "pin" && (
+            <>
+              <button
+                type="button"
+                className="pin-unlock-forgot"
+                onClick={async () => {
+                  setPinError("");
+                  const email = String(rememberedRider?.email || "").toLowerCase();
+                  if (!email) return;
+                  setPinBusy(true);
+                  try {
+                    const res = await generateRiderPinOtp({ email, resetPin: true });
+                    if (!res?.success) {
+                      setPinError(res?.message || "Could not send code.");
+                      return;
+                    }
+                    setForgotPinSent(String(res.otp || ""));
+                    try {
+                      await sendPasswordResetCode({
+                        to: email,
+                        code: String(res.otp || ""),
+                      });
+                    } catch { /* email optional if otp shown in-dev */ }
+                    setView("forgotPin");
+                    setForgotPinOtp("");
+                  } catch {
+                    setPinError("Could not start forgot PIN.");
+                  } finally {
+                    setPinBusy(false);
+                  }
+                }}
+              >
+                Forgot PIN?
+              </button>
+              <button type="button" className="pin-unlock-switch" onClick={goUseAnotherRider}>
+                Use another account
+              </button>
+            </>
+          )}
+          {view === "createPin" && !preferPinUnlock && (
+            <button type="button" className="pin-unlock-switch" onClick={() => setView("login")}>
+              Back to login
+            </button>
+          )}
+        </div>
+      </div>,
+      getOverlayRoot() || document.body
+    );
+  }
+
+  if (view === "forgotPin") {
+    return createPortal(
+      <div className="pin-unlock-screen pin-switch-login" role="dialog" aria-modal="true">
+        <button type="button" className="pin-switch-back" onClick={() => { setView("pin"); setPinValue(""); }}>
+          ← Back
+        </button>
+        <div className="pin-unlock-top">
+          <div className="pin-unlock-brand">
+            <img src="/images/dklogo2-removebg-preview.png" alt="" className="pin-unlock-logo" />
+            DKMerch Rider
+          </div>
+          <h2 className="pin-unlock-title pin-switch-welcome">Reset rider PIN</h2>
+          <p className="pin-unlock-hint">Enter the code sent to your rider email, then create a new PIN.</p>
+        </div>
+        <form
+          className="pin-switch-form"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setPinError("");
+            const email = String(rememberedRider?.email || "").toLowerCase();
+            setPinBusy(true);
+            try {
+              const res = await verifyRiderPinOtp({ email, otp: forgotPinOtp });
+              if (!res?.success) {
+                setPinError(res?.message || "Invalid code.");
+                return;
+              }
+              setCreatePinEmail(email);
+              setPinValue("");
+              setPinConfirm("");
+              setView("createPin");
+            } catch {
+              setPinError("Could not verify code.");
+            } finally {
+              setPinBusy(false);
+            }
+          }}
+        >
+          {pinError && <div className="pin-switch-banner">{pinError}</div>}
+          <label className="pin-switch-label" htmlFor="rider-forgot-pin-otp">Verification code</label>
+          <input
+            id="rider-forgot-pin-otp"
+            className="pin-switch-input"
+            value={forgotPinOtp}
+            onChange={(e) => setForgotPinOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            placeholder="6-digit code"
+            inputMode="numeric"
+            required
+          />
+          <button type="submit" className="pin-switch-submit" disabled={pinBusy || forgotPinOtp.length < 6}>
+            {pinBusy ? "Checking…" : "Continue"}
+          </button>
+          <button type="button" className="pin-unlock-switch" onClick={goUseAnotherRider}>
+            Use another account
+          </button>
+        </form>
+      </div>,
+      getOverlayRoot() || document.body
     );
   }
 
