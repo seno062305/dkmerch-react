@@ -1553,7 +1553,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                       </div>
                       <p className="failed-attempt-admin-msg">
                         {a?.reason
-                          ? a.reason
+                          ? `Delivery attempt was unsuccessful : Recipient Request Reschedule Delivery — Reason: ${a.reason}`
                           : 'Delivery attempt was unsuccessful : Recipient Request Reschedule Delivery'}
                       </p>
                       {a?.riderName && (

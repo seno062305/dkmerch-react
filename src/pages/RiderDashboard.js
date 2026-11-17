@@ -1486,7 +1486,7 @@ const RiderDashboard = () => {
         if (result?.requiresReason) {
           setFailReasonOpen(delivery);
           setFailReasonCode('');
-          showNotification('Select a reason for the 3rd failed attempt.', 'warning');
+          showNotification('Select a reason for this failed attempt.', 'warning');
         } else {
           showNotification(result?.message || 'Could not report failed attempt.', 'error');
         }
@@ -1495,9 +1495,7 @@ const RiderDashboard = () => {
       setFailReasonOpen(null);
       setFailReasonCode('');
       showNotification(
-        nextAttempt >= FAILED_ATTEMPT_MAX
-          ? `Failed attempt ${nextAttempt}/${FAILED_ATTEMPT_MAX} reported with reason. Admin & customer notified.`
-          : `Failed attempt ${nextAttempt}/${FAILED_ATTEMPT_MAX} reported. Customer timeline updated — admin has your GPS proof.`,
+        `Failed attempt ${nextAttempt}/${FAILED_ATTEMPT_MAX} reported with reason. Admin & customer notified.`,
         'success'
       );
     } catch (err) {
@@ -1508,52 +1506,35 @@ const RiderDashboard = () => {
     }
   };
 
-  const handleFailedAttemptClick = async (delivery) => {
+  const handleFailedAttemptClick = (delivery) => {
     const order = findOrderLoose(allOrders, delivery.orderId);
     const used = getFailedAttemptCount(order);
     if (used >= FAILED_ATTEMPT_MAX) {
       showNotification('Maximum of 3 failed attempts already reached for this order.', 'warning');
       return;
     }
-    const nextAttempt = used + 1;
-    const shortId = String(delivery.orderId || '').slice(-8).toUpperCase();
-
-    if (nextAttempt >= FAILED_ATTEMPT_MAX) {
-      setFailReasonOpen(delivery);
-      setFailReasonCode('');
-      return;
-    }
-
-    const ok = await confirm({
-      title: `Report failed attempt ${nextAttempt}/${FAILED_ATTEMPT_MAX}?`,
-      message:
-        `Order #${shortId}\n\n` +
-        `This records that you went to the customer location but delivery was unsuccessful.\n` +
-        `Your current GPS pin will be sent to admin as proof.\n` +
-        `Customer timeline: "Delivery attempt was unsuccessful : Recipient Request Reschedule Delivery"`,
-      confirmLabel: 'Report Failed Attempt',
-      cancelLabel: 'Cancel',
-      variant: 'danger',
-      icon: 'fa-exclamation-triangle',
-    });
-    if (!ok) return;
-    await submitFailedAttempt(delivery);
+    setFailReasonOpen(delivery);
+    setFailReasonCode('');
   };
 
-  const confirmThirdFailedAttempt = async () => {
+  const confirmFailedAttemptWithReason = async () => {
     if (!failReasonOpen) return;
     if (!failReasonCode) {
-      showNotification('Select a reason for the 3rd failed attempt.', 'warning');
+      showNotification('Select a reason for this failed attempt.', 'warning');
       return;
     }
+    const order = findOrderLoose(allOrders, failReasonOpen.orderId);
+    const nextAttempt = getFailedAttemptCount(order) + 1;
     const opt = FAILED_REASON_OPTIONS.find((o) => o.code === failReasonCode);
     const shortId = String(failReasonOpen.orderId || '').slice(-8).toUpperCase();
     const ok = await confirm({
-      title: `3rd failed attempt — confirm?`,
+      title: `Failed attempt ${nextAttempt}/${FAILED_ATTEMPT_MAX}?`,
       message:
         `Order #${shortId}\n\nReason: ${opt?.label || failReasonCode}\n\n` +
-        `This reason will show on the customer timeline. Your GPS pin goes to admin.`,
-      confirmLabel: 'Submit 3rd Attempt',
+        `Customer timeline will show:\n` +
+        `"Delivery attempt was unsuccessful : Recipient Request Reschedule Delivery — Reason: ${opt?.label || failReasonCode}"\n\n` +
+        `Your GPS pin goes to admin as proof.`,
+      confirmLabel: 'Submit Failed Attempt',
       cancelLabel: 'Back',
       variant: 'danger',
       icon: 'fa-exclamation-triangle',
@@ -2143,13 +2124,16 @@ const RiderDashboard = () => {
         <div className="rider-fail-reason-overlay" onClick={() => !failingId && setFailReasonOpen(null)}>
           <div className="rider-fail-reason-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="fail-reason-title">
             <div className="rider-fail-reason-header">
-              <h3 id="fail-reason-title"><i className="fas fa-exclamation-triangle"></i> 3rd Failed Attempt</h3>
+              <h3 id="fail-reason-title">
+                <i className="fas fa-exclamation-triangle"></i>{' '}
+                Failed Attempt {(getFailedAttemptCount(findOrderLoose(allOrders, failReasonOpen.orderId)) + 1)}/{FAILED_ATTEMPT_MAX}
+              </h3>
               <button type="button" className="rider-fail-reason-close" onClick={() => !failingId && setFailReasonOpen(null)} aria-label="Close">
                 <i className="fas fa-times"></i>
               </button>
             </div>
             <p className="rider-fail-reason-desc">
-              Order #{String(failReasonOpen.orderId || '').slice(-8).toUpperCase()} — select why delivery failed. This reason will appear on the customer timeline. Your GPS pin is sent to admin as proof.
+              Order #{String(failReasonOpen.orderId || '').slice(-8).toUpperCase()} — select why delivery failed. Reason + reschedule note will appear on the customer timeline. Your GPS pin is sent to admin as proof.
             </p>
             <div className="rider-fail-reason-options">
               {FAILED_REASON_OPTIONS.map((opt) => (
@@ -2173,7 +2157,7 @@ const RiderDashboard = () => {
               <button
                 type="button"
                 className="rider-fail-reason-submit"
-                onClick={confirmThirdFailedAttempt}
+                onClick={confirmFailedAttemptWithReason}
                 disabled={!failReasonCode || !!failingId}
               >
                 {failingId

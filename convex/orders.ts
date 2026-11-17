@@ -534,25 +534,23 @@ export const reportFailedDeliveryAttempt = mutation({
     let reasonCode = args.reasonCode ? String(args.reasonCode).trim() : "";
     let reason = args.reason ? String(args.reason).trim() : "";
 
-    if (attempt >= FAILED_ATTEMPT_MAX) {
-      if (!reasonCode && !reason) {
-        return {
-          success: false,
-          message: "Select a reason for the 3rd failed attempt.",
-          requiresReason: true,
-        };
-      }
-      if (reasonCode && FAILED_ATTEMPT_REASONS[reasonCode]) {
-        reason = FAILED_ATTEMPT_REASONS[reasonCode];
-      }
-      if (!reason) {
-        return { success: false, message: "Select a valid reason for the 3rd attempt." };
-      }
-    } else {
-      // Attempts 1–2 use the standard recipient-request reschedule message (no rider reason)
-      reasonCode = "";
-      reason = "";
+    // Every attempt (1–3) requires a rider reason
+    if (!reasonCode && !reason) {
+      return {
+        success: false,
+        message: "Select a reason for this failed attempt.",
+        requiresReason: true,
+      };
     }
+    if (reasonCode && FAILED_ATTEMPT_REASONS[reasonCode]) {
+      reason = FAILED_ATTEMPT_REASONS[reasonCode];
+    }
+    if (!reason) {
+      return { success: false, message: "Select a valid reason for this failed attempt." };
+    }
+
+    const timelineMsg =
+      `Delivery attempt was unsuccessful : Recipient Request Reschedule Delivery — Reason: ${reason}`;
 
     const lat = Number(args.lat);
     const lng = Number(args.lng);
@@ -593,16 +591,10 @@ export const reportFailedDeliveryAttempt = mutation({
       total: Number(order.finalTotal ?? order.total ?? 0),
       message:
         `⚠️ ${riderName} reported failed delivery (${attemptLabel}) for Order #${shortId} · ${customer}. ` +
-        `Rider GPS proof: ${coordsLabel}` +
-        (reason ? ` · Reason: ${reason}` : " · Customer may reschedule."),
+        `Rider GPS proof: ${coordsLabel} · ${timelineMsg}`,
       createdAt: at,
       read: false,
     });
-
-    const timelineMsg =
-      attempt >= FAILED_ATTEMPT_MAX && reason
-        ? `Delivery attempt ${attempt} unsuccessful. Reason: ${reason}`
-        : `Delivery attempt was unsuccessful : Recipient Request Reschedule Delivery`;
 
     if (order.email) {
       await notifyCustomerInApp(db, {

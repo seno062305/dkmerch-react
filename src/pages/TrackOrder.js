@@ -872,9 +872,9 @@ const TrackOrder = ({ onProductClick }) => {
     const fails = Array.isArray(order.deliveryFailedAttempts) ? order.deliveryFailedAttempts : [];
     fails.forEach((attempt) => {
       const n = Number(attempt?.attempt) || 0;
-      const isThird = n >= 3 && String(attempt?.reason || '').trim();
-      const desc = isThird
-        ? `Rider · Delivery attempt ${n} unsuccessful. Reason: ${String(attempt.reason).trim()}`
+      const reason = String(attempt?.reason || '').trim();
+      const desc = reason
+        ? `Delivery attempt was unsuccessful : Recipient Request Reschedule Delivery — Reason: ${reason}`
         : 'Delivery attempt was unsuccessful : Recipient Request Reschedule Delivery';
       steps.push({
         label: `Delivery Attempt ${n || ''} Unsuccessful`.replace(/\s+/g, ' ').trim(),
