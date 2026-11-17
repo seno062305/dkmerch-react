@@ -38,10 +38,45 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
     return () => window.removeEventListener('focus', sync);
   }, [isAuthenticated, user, getParkedRider]);
 
-  const riderBadge = useQuery(
-    api.riders.getRiderShopBadge,
-    parkedRider?.email ? { email: String(parkedRider.email) } : 'skip'
+  // Badge from existing order queries (avoids missing-function crash on stale Convex deploys)
+  const parkedOrders = useQuery(
+    api.orders.getAllOrders,
+    parkedRider?.email ? {} : 'skip'
   );
+  const parkedPickups = useQuery(
+    api.pickupRequests.getAllPickupRequests,
+    parkedRider?.email ? {} : 'skip'
+  );
+  const riderBadge = React.useMemo(() => {
+    if (!parkedRider?.email) return { lit: false, total: 0 };
+    const email = String(parkedRider.email).toLowerCase();
+    const pickups = Array.isArray(parkedPickups) ? parkedPickups : [];
+    const orders = Array.isArray(parkedOrders) ? parkedOrders : [];
+    const claimedIds = new Set(
+      pickups
+        .filter((p) => {
+          const st = String(p.status || '').toLowerCase();
+          return !['cancelled', 'canceled', 'completed', 'rejected'].includes(st);
+        })
+        .map((p) => String(p.orderId))
+    );
+    let available = 0;
+    for (const o of orders) {
+      const st = String(o.orderStatus || o.status || '').toLowerCase().replace(/\s+/g, '_');
+      if (!['confirmed', 'ready_for_pickup', 'paid'].includes(st)) continue;
+      if (claimedIds.has(String(o.orderId))) continue;
+      available += 1;
+    }
+    let active = 0;
+    for (const p of pickups) {
+      const riderEmail = String(p.riderEmail || p.email || '').toLowerCase();
+      if (riderEmail !== email) continue;
+      const st = String(p.status || '').toLowerCase();
+      if (['out_for_delivery', 'picked_up', 'accepted', 'claimed'].includes(st)) active += 1;
+    }
+    const total = available + active;
+    return { available, active, total, lit: total > 0 };
+  }, [parkedRider?.email, parkedOrders, parkedPickups]);
   const showRiderEntry = !isAuthenticated || !!parkedRider;
   const riderLit = !!parkedRider && !!riderBadge?.lit;
   const dropdownRef      = useRef(null);
