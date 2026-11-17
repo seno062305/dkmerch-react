@@ -3,6 +3,7 @@ import { query, mutation, internalQuery, internalMutation } from "./_generated/s
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { validatePersonName, validateAddress } from "./lib/personValidation";
+import { assertPasswordNotReused, nextPasswordHistory } from "./lib/passwordPolicy";
 
 const genSessionId = () =>
   `${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${Math.random().toString(36).slice(2, 10)}`;
@@ -1760,7 +1761,20 @@ export const resetRiderPasswordByEmail = mutation({
       return { success: false, message: "Password must be 7–10 characters." };
     }
 
-    await db.patch(rider._id, { password: newPassword });
+    const check = assertPasswordNotReused(
+      (rider as any).password,
+      (rider as any).passwordHistory,
+      newPassword
+    );
+    if (!check.ok) return { success: false, message: check.message };
+
+    await db.patch(rider._id, {
+      password: newPassword,
+      passwordHistory: nextPasswordHistory(
+        (rider as any).password,
+        (rider as any).passwordHistory
+      ),
+    });
     return { success: true };
   },
 });

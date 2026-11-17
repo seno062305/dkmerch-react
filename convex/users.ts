@@ -3,6 +3,7 @@ import { query, mutation, internalQuery, internalMutation } from "./_generated/s
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { insertCustomerNotification } from "./customerNotifications";
+import { assertPasswordNotReused, nextPasswordHistory } from "./lib/passwordPolicy";
 
 // ── RATE LIMIT CONFIG ─────────────────────────────
 const RATE_LIMIT_WINDOW_MS = 2 * 60 * 1000; // 2 minutes
@@ -1925,12 +1926,25 @@ export const updateUserProfile = mutation({
     status: v.optional(v.string()),
   },
   handler: async ({ db }, { id, ...updates }) => {
-    const existing = await db.get(id);
+    const existing = await db.get(id) as any;
     if (!existing) throw new Error("User not found.");
 
     const filtered: Record<string, unknown> = Object.fromEntries(
       Object.entries(updates).filter(([, val]) => val !== undefined)
     );
+
+    if (typeof filtered.password === "string") {
+      const check = assertPasswordNotReused(
+        existing.password,
+        existing.passwordHistory,
+        filtered.password
+      );
+      if (!check.ok) throw new Error(check.message);
+      filtered.passwordHistory = nextPasswordHistory(
+        existing.password,
+        existing.passwordHistory
+      );
+    }
 
     if (typeof filtered.username === "string") {
       const nextUsername = filtered.username.trim();
@@ -2158,15 +2172,24 @@ export const resetPasswordByEmail = mutation({
     let user = await db
       .query("users")
       .withIndex("by_email", (q) => q.eq("email", trimmed))
-      .first();
+      .first() as any;
     if (!user && trimmed !== normalized) {
       user = await db
         .query("users")
         .withIndex("by_email", (q) => q.eq("email", normalized))
-        .first();
+        .first() as any;
     }
     if (!user) return { success: false, message: "No account found with that email." };
-    await db.patch(user._id, { password: newPassword });
+    const check = assertPasswordNotReused(
+      user.password,
+      user.passwordHistory,
+      newPassword
+    );
+    if (!check.ok) return { success: false, message: check.message };
+    await db.patch(user._id, {
+      password: newPassword,
+      passwordHistory: nextPasswordHistory(user.password, user.passwordHistory),
+    });
     return { success: true, message: "Password reset successfully!" };
   },
 });

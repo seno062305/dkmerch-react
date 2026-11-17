@@ -66,6 +66,10 @@
   margin-bottom: 12px;
   overflow: hidden;
   flex-shrink: 0;
+  /* Always-visible ring + soft shadow so logos read against white */
+  box-shadow:
+    0 0 0 3px rgba(252, 18, 104, 0.14),
+    0 4px 12px rgba(15, 23, 42, 0.1);
   transition: border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
@@ -81,7 +85,9 @@
 
 .logo-item:hover .logo-circle {
   border-color: #e5e7eb;
-  box-shadow: 0 0 0 3px rgba(252, 18, 104, 0.12);
+  box-shadow:
+    0 0 0 4px rgba(252, 18, 104, 0.22),
+    0 8px 18px rgba(15, 23, 42, 0.14);
 }
 
 .logo-item:hover .logo-circle img {

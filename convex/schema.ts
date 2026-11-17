@@ -8,6 +8,8 @@ export default defineSchema({
     username: v.string(),
     email: v.string(),
     password: v.string(),
+    /** Previous passwords — cannot be reused on change/forgot reset */
+    passwordHistory: v.optional(v.array(v.string())),
     role: v.string(),
     status: v.optional(v.string()),
     suspendReason:  v.optional(v.string()),
@@ -336,6 +338,8 @@ export default defineSchema({
     plateNumber: v.optional(v.string()),
     licenseNumber: v.optional(v.string()),
     password: v.optional(v.string()),
+    /** Previous rider passwords — cannot be reused on reset */
+    passwordHistory: v.optional(v.array(v.string())),
     name: v.optional(v.string()),
     activeSessionId: v.optional(v.string()),
     activeSessionIds: v.optional(v.array(v.string())),

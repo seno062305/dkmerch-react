@@ -389,12 +389,15 @@ const Settings = () => {
   const [passwordFocused,     setPasswordFocused]     = useState(false);
   const [showNewPassword,     setShowNewPassword]     = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [passwordValidation,  setPasswordValidation]  = useState({ minLength: false, hasUppercase: false, hasLowercase: false, hasNumber: false, hasSymbol: false });
+  const [passwordValidation,  setPasswordValidation]  = useState({
+    minLength: false, hasUppercase: false, hasLowercase: false, hasNumber: false, hasSymbol: false, notReused: true,
+  });
   const [sentCode,         setSentCode]         = useState('');
   const [passwordCooldown, setPasswordCooldown] = useState(0);
   const [passwordAttempts, setPasswordAttempts] = useState(0);
 
   const updateUserProfile     = useMutation(api.users.updateUserProfile);
+  const resetPasswordByEmail  = useMutation(api.users.resetPasswordByEmail);
   const sendPasswordResetCode = useAction(api.sendEmail.sendPasswordResetCode);
   const deactivateOwnAccount  = useMutation(api.users.deactivateOwnAccount);
   const softDeleteUser        = useMutation(api.users.softDeleteUser);
@@ -410,19 +413,23 @@ const Settings = () => {
 
   useEffect(() => {
     const p = passwordForm.newPassword;
+    const currentPw = String(user?.password || '');
     setPasswordValidation({
       minLength:    p.length >= 8,
       hasUppercase: /[A-Z]/.test(p),
       hasLowercase: /[a-z]/.test(p),
       hasNumber:    /[0-9]/.test(p),
       hasSymbol:    /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(p),
+      // When current password is known locally, block reuse in the UI
+      notReused:    !p || !currentPw || p !== currentPw,
     });
-  }, [passwordForm.newPassword]);
+  }, [passwordForm.newPassword, user?.password]);
 
   const isPasswordValid = () => Object.values(passwordValidation).every(Boolean);
 
   const getPasswordStrength = () => {
-    const c = Object.values(passwordValidation).filter(Boolean).length;
+    const { notReused: _nr, ...rules } = passwordValidation;
+    const c = Object.values(rules).filter(Boolean).length;
     if (c === 0) return { text: '', percentage: 0,   color: '' };
     if (c <= 2)  return { text: 'Weak',   percentage: 20,  color: '#dc3545' };
     if (c === 3) return { text: 'Fair',   percentage: 40,  color: '#ffc107' };
@@ -554,15 +561,44 @@ const Settings = () => {
     if (passwordForm.verificationCode !== sentCode) { setSaveMsg('❌ Invalid verification code.'); return; }
     if (!isPasswordValid())                         { setSaveMsg('❌ Password does not meet requirements.'); return; }
     if (!passwordsMatch)                            { setSaveMsg('❌ Passwords do not match.'); return; }
+    // Local guard when current password is known (logged-in change password)
+    if (user?.password && passwordForm.newPassword === user.password) {
+      setSaveMsg("❌ You can't reuse your current password. Choose a different one.");
+      return;
+    }
     setSaving(true);
     try {
       const uid = user?._id || user?.id;
-      if (uid) { await updateUserProfile({ id: uid, password: passwordForm.newPassword }); if (updateUser) await updateUser({ password: passwordForm.newPassword }); }
+      if (isForgotPasswordFlow) {
+        const result = await resetPasswordByEmail({
+          email: String(passwordForm.email || user?.email || '').trim().toLowerCase(),
+          newPassword: passwordForm.newPassword,
+        });
+        if (!result?.success) {
+          setSaveMsg(`❌ ${result?.message || 'Failed to update password.'}`);
+          return;
+        }
+      } else if (uid) {
+        await updateUserProfile({ id: uid, password: passwordForm.newPassword });
+        if (updateUser) await updateUser({ password: passwordForm.newPassword });
+      }
       setSaveMsg('✅ Password updated successfully!');
       setPasswordForm({ email: '', verificationCode: '', newPassword: '', confirmPassword: '' }); setSentCode('');
       if (isForgotPasswordFlow) setTimeout(() => navigate('/'), 1500);
-    } catch { setSaveMsg('❌ Failed to update password.'); }
-    finally { setSaving(false); setTimeout(() => setSaveMsg(''), 4000); }
+    } catch (err) {
+      const raw = String(err?.data || err?.message || err || '');
+      const cleaned = raw
+        .replace(/^\[CONVEX[^\]]*\]\s*/i, '')
+        .replace(/^Uncaught Error:\s*/i, '')
+        .replace(/^Error:\s*/i, '')
+        .trim();
+      if (/reuse|previous password|current password/i.test(cleaned)) {
+        setSaveMsg(`❌ ${cleaned}`);
+      } else {
+        setSaveMsg('❌ Failed to update password.');
+      }
+    }
+    finally { setSaving(false); setTimeout(() => setSaveMsg(''), 5000); }
   };
 
   // ── Deactivate ────────────────────────────────────────────────────────────
@@ -787,6 +823,7 @@ const Settings = () => {
                         { key: 'hasLowercase', label: 'One lowercase letter' },
                         { key: 'hasNumber',    label: 'One number' },
                         { key: 'hasSymbol',    label: 'One special character' },
+                        { key: 'notReused',    label: 'Different from your current / previous password' },
                       ].map(({ key, label }) => (
                         <div key={key} className={`pw-req-item ${passwordValidation[key] ? 'pw-req-valid' : ''}`}>
                           <i className={`fas ${passwordValidation[key] ? 'fa-check-circle' : 'fa-times-circle'}`}></i>
