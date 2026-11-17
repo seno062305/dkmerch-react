@@ -232,12 +232,13 @@ const LiveBadge = ({ orderId }) => {
 // ─────────────────────────────────────────────────────────────
 // Notification Bell
 // ─────────────────────────────────────────────────────────────
-const NotificationBell = () => {
+const NotificationBell = ({ onOpenFailedAttempt }) => {
   const [open, setOpen]   = useState(false);
   const dropdownRef       = useRef(null);
   const notifications     = useQuery(api.riderNotifications.getRecent) ?? [];
   const unread            = useQuery(api.riderNotifications.getUnread)  ?? [];
   const markAllRead       = useMutation(api.riderNotifications.markAllRead);
+  const markOneRead       = useMutation(api.riderNotifications.markOneRead);
   const clearAll          = useMutation(api.riderNotifications.clearAll);
   const unreadCount       = unread.length;
   const handleOpen = async () => { setOpen(o => !o); if (!open && unreadCount > 0) await markAllRead().catch(() => {}); };
@@ -246,6 +247,13 @@ const NotificationBell = () => {
     const mins = Math.floor(diff / 60000);
     if (mins < 1) return 'just now'; if (mins < 60) return `${mins}m ago`;
     const hrs = Math.floor(mins / 60); if (hrs < 24) return `${hrs}h ago`; return `${Math.floor(hrs / 24)}d ago`;
+  };
+  const handleNotifClick = async (n) => {
+    if (n.type !== 'delivery_failed_attempt' && n.type !== 'rider_at_customer') return;
+    if (!onOpenFailedAttempt) return;
+    if (!n.read) await markOneRead({ id: n._id }).catch(() => {});
+    setOpen(false);
+    onOpenFailedAttempt(n);
   };
   return (
     <div className="ar-bell-wrap" ref={dropdownRef}>
@@ -269,18 +277,38 @@ const NotificationBell = () => {
           <div className="ar-bell-list">
             {notifications.length === 0
               ? <div className="ar-bell-empty"><span>🔕</span><span>No notifications yet</span></div>
-              : notifications.map(n => (
-                  <div key={n._id} className={`ar-bell-item ${!n.read ? 'ar-bell-item--unread' : ''}`}>
+              : notifications.map(n => {
+                  const clickable = (n.type === 'delivery_failed_attempt' || n.type === 'rider_at_customer') && !!onOpenFailedAttempt;
+                  return (
+                  <div
+                    key={n._id}
+                    className={`ar-bell-item ${!n.read ? 'ar-bell-item--unread' : ''} ${clickable ? 'ar-bell-item--clickable' : ''}`}
+                    role={clickable ? 'button' : undefined}
+                    tabIndex={clickable ? 0 : undefined}
+                    onClick={() => clickable && handleNotifClick(n)}
+                    onKeyDown={(e) => {
+                      if (!clickable) return;
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleNotifClick(n);
+                      }
+                    }}
+                    title={clickable ? 'Open map at rider last-seen location' : undefined}
+                  >
                     <div className="ar-bell-item-icon">
                       {n.type === 'delivery_failed_attempt' ? '⚠️' : n.type === 'rider_at_customer' ? '📍' : n.type === 'rider_link_reopened' ? '🔄' : '🛵'}
                     </div>
                     <div className="ar-bell-item-body">
                       <div className="ar-bell-item-msg">{n.message || `Rider opened link for Order #${n.orderId?.slice(-8).toUpperCase()}`}</div>
-                      <div className="ar-bell-item-time">{timeAgoStr(n.createdAt)}</div>
+                      <div className="ar-bell-item-time">
+                        {timeAgoStr(n.createdAt)}
+                        {clickable && <span className="ar-bell-item-hint"> · Tap to view map</span>}
+                      </div>
                     </div>
                     {!n.read && <span className="ar-bell-unread-dot" />}
                   </div>
-                ))
+                  );
+                })
             }
           </div>
         </div>
@@ -292,11 +320,12 @@ const NotificationBell = () => {
 // ─────────────────────────────────────────────────────────────
 // LiveMapModal — NCR-locked map
 // ─────────────────────────────────────────────────────────────
-const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
+const LiveMapModal = ({ orderId, order, onClose, fullscreen = false, focusLat = null, focusLng = null, focusLabel = '' }) => {
   const mapRef              = useRef(null);
   const mapObjRef           = useRef(null);
   const markerRef           = useRef(null);
   const lastKnownMarkerRef  = useRef(null);
+  const focusMarkerRef      = useRef(null);
   const circleRef           = useRef(null);
   const routeLineRef        = useRef(null);
   const destMarkerRef       = useRef(null);
@@ -373,25 +402,58 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
     };
   }, []);
 
-  // Load Leaflet
+  // Load Leaflet (once)
   useEffect(() => {
     if (window.L) { setLeafletReady(true); return; }
-    const link = document.createElement('link'); link.rel = 'stylesheet'; link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'; document.head.appendChild(link);
-    const script = document.createElement('script'); script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'; script.onload = () => setLeafletReady(true); document.head.appendChild(script);
+    if (!document.getElementById('leaflet-css')) {
+      const link = document.createElement('link');
+      link.id = 'leaflet-css';
+      link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(link);
+    }
+    const existing = document.getElementById('leaflet-js');
+    if (existing) {
+      if (window.L) setLeafletReady(true);
+      else existing.addEventListener('load', () => setLeafletReady(true));
+      return;
+    }
+    const script = document.createElement('script');
+    script.id = 'leaflet-js';
+    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.onload = () => setLeafletReady(true);
+    script.onerror = () => console.error('Leaflet failed to load');
+    document.head.appendChild(script);
   }, []);
 
-  // Init map — NCR-locked with minZoom + maxBounds + maxBoundsViscosity
+  // Init map — NCR-locked; cleanup handles React StrictMode remount
   useEffect(() => {
     if (!leafletReady || !mapRef.current || mapObjRef.current) return;
     const L = window.L;
+    if (!L) return;
 
-    const map = L.map(mapRef.current, {
-      zoomControl: true,
-      minZoom: NCR_MIN_ZOOM,
-      maxZoom: 19,
-      maxBounds: NCR_BOUNDS,
-      maxBoundsViscosity: 1.0,
-    });
+    // StrictMode remount can leave a stale Leaflet id on the same DOM node
+    if (mapRef.current._leaflet_id) {
+      try {
+        const stale = L.map(mapRef.current);
+        stale.remove();
+      } catch { /* ignore */ }
+      try { delete mapRef.current._leaflet_id; } catch { /* ignore */ }
+    }
+
+    let map;
+    try {
+      map = L.map(mapRef.current, {
+        zoomControl: true,
+        minZoom: NCR_MIN_ZOOM,
+        maxZoom: 19,
+        maxBounds: NCR_BOUNDS,
+        maxBoundsViscosity: 1.0,
+      });
+    } catch (err) {
+      console.error('Admin live map init failed:', err);
+      return;
+    }
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors',
@@ -402,27 +464,105 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
     // Also call setMaxBounds after init for extra enforcement
     map.setMaxBounds(NCR_BOUNDS);
 
-    const destLat = order?.addressLat;
-    const destLng = order?.addressLng;
+    const destLat = Number(order?.addressLat);
+    const destLng = Number(order?.addressLng);
 
-    const destInNCR = destLat && destLng &&
+    const destInNCR = Number.isFinite(destLat) && Number.isFinite(destLng) &&
       destLat >= 14.35 && destLat <= 14.80 &&
       destLng >= 120.86 && destLng <= 121.15;
+
+    const focusOk = Number.isFinite(Number(focusLat)) && Number.isFinite(Number(focusLng))
+      && Number(focusLat) !== 0 && Number(focusLng) !== 0;
 
     if (destInNCR) {
       map.setView([destLat, destLng], 15);
       const destIcon = L.divIcon({ html: `<div style="width:40px;height:40px;background:linear-gradient(135deg,#fc1268,#e0005a);border-radius:50%;border:3px solid white;box-shadow:0 3px 14px rgba(252,18,104,0.5);display:flex;align-items:center;justify-content:center;font-size:20px;">📍</div>`, className: '', iconSize: [40, 40], iconAnchor: [20, 40] });
+      const safeName = String(order?.customerName || 'Customer').replace(/[<>&]/g, '');
+      const safeAddr = String(order?.shippingAddress || '').replace(/[<>&]/g, '');
       const dm = L.marker([destLat, destLng], { icon: destIcon }).addTo(map);
-      dm.bindPopup(`<b>📍 Deliver to:</b><br>${order?.customerName || 'Customer'}<br><small>${order?.shippingAddress || ''}</small>`).openPopup();
+      dm.bindPopup(`<b>📍 Deliver to:</b><br>${safeName}<br><small>${safeAddr}</small>`).openPopup();
       destMarkerRef.current = dm;
-    } else {
+    } else if (!focusOk) {
       map.setView(NCR_CENTER, NCR_DEFAULT_ZOOM);
+    }
+
+    if (focusOk) {
+      const fLat = Number(focusLat);
+      const fLng = Number(focusLng);
+      const focusIcon = L.divIcon({
+        html: `<div style="width:40px;height:40px;background:linear-gradient(135deg,#f59e0b,#d97706);border-radius:50%;border:3px solid white;box-shadow:0 3px 14px rgba(245,158,11,0.5);display:flex;align-items:center;justify-content:center;font-size:18px;">⚠️</div>`,
+        className: '',
+        iconSize: [40, 40],
+        iconAnchor: [20, 20],
+      });
+      const safeFocus = String(focusLabel || 'Rider last seen').replace(/[<>&]/g, '');
+      const fm = L.marker([fLat, fLng], { icon: focusIcon }).addTo(map);
+      fm.bindPopup(`<b>⚠️ Failed attempt location</b><br><small>${safeFocus}</small><br><small>${fLat.toFixed(5)}, ${fLng.toFixed(5)}</small>`).openPopup();
+      focusMarkerRef.current = fm;
+      if (destInNCR) {
+        try {
+          map.fitBounds(L.latLngBounds([fLat, fLng], [destLat, destLng]), { padding: [48, 48], maxZoom: 16, animate: false });
+          hasFittedRef.current = true;
+        } catch {
+          map.setView([fLat, fLng], 16);
+        }
+      } else {
+        map.setView([fLat, fLng], 16);
+      }
     }
 
     mapObjRef.current = map;
     mapReadyRef.current = true;
     const refresh = () => { try { map.invalidateSize({ animate: false }); } catch {} };
-    [80, 250, 500].forEach((ms) => setTimeout(refresh, ms));
+    const timers = [80, 250, 500].map((ms) => setTimeout(refresh, ms));
+
+    return () => {
+      timers.forEach(clearTimeout);
+      if (routeAbortRef.current) {
+        try { routeAbortRef.current.abort(); } catch { /* ignore */ }
+        routeAbortRef.current = null;
+      }
+      if (routeTimerRef.current) {
+        clearTimeout(routeTimerRef.current);
+        routeTimerRef.current = null;
+      }
+      if (destMarkerRef.current) {
+        try { destMarkerRef.current.remove(); } catch { /* ignore */ }
+        destMarkerRef.current = null;
+      }
+      if (focusMarkerRef.current) {
+        try { focusMarkerRef.current.remove(); } catch { /* ignore */ }
+        focusMarkerRef.current = null;
+      }
+      if (markerRef.current) {
+        try { markerRef.current.remove(); } catch { /* ignore */ }
+        markerRef.current = null;
+      }
+      if (lastKnownMarkerRef.current) {
+        try { lastKnownMarkerRef.current.remove(); } catch { /* ignore */ }
+        lastKnownMarkerRef.current = null;
+      }
+      if (circleRef.current) {
+        try { circleRef.current.remove(); } catch { /* ignore */ }
+        circleRef.current = null;
+      }
+      if (routeLineRef.current) {
+        const lines = Array.isArray(routeLineRef.current) ? routeLineRef.current : [routeLineRef.current];
+        lines.forEach((l) => { try { l.remove(); } catch { /* ignore */ } });
+        routeLineRef.current = null;
+      }
+      if (mapObjRef.current) {
+        try { mapObjRef.current.remove(); } catch { /* ignore */ }
+        mapObjRef.current = null;
+      }
+      if (mapRef.current?._leaflet_id) {
+        try { delete mapRef.current._leaflet_id; } catch { /* ignore */ }
+      }
+      mapReadyRef.current = false;
+      hasFittedRef.current = false;
+      lastPlottedRef.current = { lat: null, lng: null };
+      lastRoutePlottedRef.current = { lat: null, lng: null };
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leafletReady]);
 
@@ -648,12 +788,7 @@ const LiveMapModal = ({ orderId, order, onClose, fullscreen = false }) => {
   }, [location, isLive, hasLoc, drawRoute]);
 
   useEffect(() => () => {
-    if (routeAbortRef.current) routeAbortRef.current.abort();
-    if (routeTimerRef.current) clearTimeout(routeTimerRef.current);
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-    if (lastKnownMarkerRef.current) { try { lastKnownMarkerRef.current.remove(); } catch {} }
-    if (mapObjRef.current) { try { mapObjRef.current.remove(); } catch {} mapObjRef.current = null; }
-    mapReadyRef.current = false;
   }, []);
 
   const lastKnownAt      = location?.lastKnownAt || location?.updatedAt;
@@ -942,6 +1077,7 @@ const CompletedOrderRow = ({ order, onViewDetails }) => {
 const AdminRiders = () => {
   const [removeTarget,    setRemoveTarget]    = useState(null);
   const [mapOrder,        setMapOrder]        = useState(null);
+  const [mapFocus,        setMapFocus]        = useState(null); // { lat, lng, label }
   const [mapFullscreen,   setMapFullscreen]   = useState(false);
   const [detailOrder,     setDetailOrder]     = useState(null);
   const [detailKind,      setDetailKind]      = useState(null); // 'active' | 'completed'
@@ -1013,11 +1149,44 @@ const AdminRiders = () => {
     setHiddenCompleted(p => [...p, removeTarget._id]);
     setRemoveTarget(null);
   };
-  const openMap = (order, full = false) => {
+  const openMap = (order, full = false, focus = null) => {
     setDetailOrder(null);
     setDetailKind(null);
+    setMapFocus(focus);
     setMapOrder(order);
     setMapFullscreen(full);
+  };
+  const openFailedAttemptFromNotif = (n) => {
+    const order =
+      allOrders.find((o) => o.orderId === n.orderId)
+      || activeDeliveryItems.find((o) => o.orderId === n.orderId)
+      || { orderId: n.orderId, customerName: n.customerName, riderInfo: { name: 'Rider' } };
+    const lat = Number(n.lat);
+    const lng = Number(n.lng);
+    const focus = Number.isFinite(lat) && Number.isFinite(lng) && lat !== 0 && lng !== 0
+      ? {
+          lat,
+          lng,
+          label: n.address
+            || `Attempt ${n.attempt || ''}`.trim()
+            || 'Rider last seen',
+        }
+      : null;
+    // Fallback: use latest failed attempt coords stored on the order
+    if (!focus && Array.isArray(order.deliveryFailedAttempts) && order.deliveryFailedAttempts.length) {
+      const last = order.deliveryFailedAttempts[order.deliveryFailedAttempts.length - 1];
+      const aLat = Number(last?.lat);
+      const aLng = Number(last?.lng);
+      if (Number.isFinite(aLat) && Number.isFinite(aLng)) {
+        openMap(order, true, {
+          lat: aLat,
+          lng: aLng,
+          label: last.address || `Attempt ${last.attempt || ''}`.trim() || 'Rider last seen',
+        });
+        return;
+      }
+    }
+    openMap(order, true, focus);
   };
   const openActiveDetails = (order) => { setDetailKind('active'); setDetailOrder(order); };
   const openCompletedDetails = (order) => { setDetailKind('completed'); setDetailOrder(order); };
@@ -1047,7 +1216,9 @@ const AdminRiders = () => {
           <h2 className="ar-delivery-title">Deliveries</h2>
           <DateFilter />
         </div>
-        <div className="ar-bell-tab-slot"><NotificationBell /></div>
+        <div className="ar-bell-tab-slot">
+          <NotificationBell onOpenFailedAttempt={openFailedAttemptFromNotif} />
+        </div>
       </div>
 
       <div className="ar-delivery-split">
@@ -1138,7 +1309,17 @@ const AdminRiders = () => {
         <CompletedDeliveryDetailModal order={detailOrder} onClose={closeDetails} onRemove={setRemoveTarget} />
       )}
       {removeTarget  && <RemoveConfirmModal order={removeTarget} onConfirm={confirmRemove} onClose={() => setRemoveTarget(null)} />}
-      {mapOrder      && <LiveMapModal orderId={mapOrder.orderId} order={mapOrder} onClose={() => { setMapOrder(null); setMapFullscreen(false); }} fullscreen={mapFullscreen} />}
+      {mapOrder && (
+        <LiveMapModal
+          orderId={mapOrder.orderId}
+          order={mapOrder}
+          onClose={() => { setMapOrder(null); setMapFocus(null); setMapFullscreen(false); }}
+          fullscreen={mapFullscreen}
+          focusLat={mapFocus?.lat}
+          focusLng={mapFocus?.lng}
+          focusLabel={mapFocus?.label || ''}
+        />
+      )}
     </div>
   );
 };

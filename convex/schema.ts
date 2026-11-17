@@ -243,6 +243,10 @@ export default defineSchema({
       lat: v.optional(v.number()),
       lng: v.optional(v.number()),
       accuracy: v.optional(v.number()),
+      /** City-level last-seen label (e.g. Caloocan City, Philippines) */
+      address: v.optional(v.string()),
+      /** Rider device brand/model (e.g. Chrome on Infinix Hot 40) */
+      deviceLabel: v.optional(v.string()),
       riderName: v.optional(v.string()),
       at: v.string(),
     }))),
@@ -441,6 +445,12 @@ export default defineSchema({
     message: v.optional(v.string()),
     createdAt: v.string(),
     read: v.boolean(),
+    /** Optional map focus for failed-attempt / arrival notices */
+    lat: v.optional(v.number()),
+    lng: v.optional(v.number()),
+    address: v.optional(v.string()),
+    deviceLabel: v.optional(v.string()),
+    attempt: v.optional(v.number()),
   }).index("by_read", ["read"]),
 
   /** In-app notification center for customers (bell next to profile). */

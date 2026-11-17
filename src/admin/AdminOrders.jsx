@@ -1559,10 +1559,13 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                       {a?.riderName && (
                         <div className="failed-attempt-admin-meta"><i className="fas fa-motorcycle"></i> {a.riderName}</div>
                       )}
-                      {hasCoords && (
+                      {a?.deviceLabel && (
+                        <div className="failed-attempt-admin-meta"><i className="fas fa-mobile-alt"></i> {a.deviceLabel}</div>
+                      )}
+                      {(a?.address || hasCoords) && (
                         <div className="failed-attempt-admin-gps">
                           <i className="fas fa-map-marker-alt"></i>
-                          <span>{lat.toFixed(6)}, {lng.toFixed(6)}</span>
+                          <span>{a?.address || `${lat.toFixed(6)}, ${lng.toFixed(6)}`}</span>
                           {a?.accuracy != null && <em>±{Math.round(a.accuracy)}m</em>}
                           {mapsUrl && (
                             <a href={mapsUrl} target="_blank" rel="noopener noreferrer">

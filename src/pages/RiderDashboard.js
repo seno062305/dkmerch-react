@@ -14,6 +14,7 @@ import InstallAppModal, {
   isInsecureInstallHost,
 } from '../components/InstallAppModal';
 import { isRiderAvailableOrder } from '../utils/deliveryUtils';
+import { getDeviceLabel, reverseGeocodePlace } from '../utils/deviceInfo';
 import DeliveryChatPanel from '../components/DeliveryChatPanel';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
 import { getOverlayRoot } from '../utils/scrollLock';
@@ -1473,6 +1474,14 @@ const RiderDashboard = () => {
     setFailingId(delivery._id);
     setOtpErrors((p) => ({ ...p, [delivery._id]: '' }));
     try {
+      const [deviceLabel, place] = await Promise.all([
+        getDeviceLabel().catch(() => ''),
+        reverseGeocodePlace(pos.lat, pos.lng).catch(() => null),
+      ]);
+      // Prefer city-level place; fall back to GPS reverse-geocode string if already present
+      const address = String(place || '').trim()
+        || (pos.address && !String(pos.address).startsWith('Approx.') ? String(pos.address).trim() : '');
+
       const result = await reportFailedAttempt({
         orderId: delivery.orderId,
         lat: pos.lat,
@@ -1481,6 +1490,8 @@ const RiderDashboard = () => {
         ...(reasonCode ? { reasonCode } : {}),
         ...(reason ? { reason } : {}),
         riderName: riderInfo.fullName || user?.name || 'Rider',
+        ...(address ? { address } : {}),
+        ...(deviceLabel ? { deviceLabel } : {}),
       });
       if (!result?.success) {
         if (result?.requiresReason) {

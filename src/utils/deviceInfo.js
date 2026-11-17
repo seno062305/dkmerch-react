@@ -256,6 +256,12 @@ async function reverseGeocode(lat, lon) {
   }
 }
 
+/** City-level place label for failed-attempt / last-seen notices (e.g. Caloocan City, Philippines). */
+export async function reverseGeocodePlace(lat, lon) {
+  if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lon))) return null;
+  return reverseGeocode(Number(lat), Number(lon));
+}
+
 async function lookupGpsLocation() {
   if (typeof navigator === "undefined" || !navigator.geolocation) return null;
   try {

@@ -509,6 +509,10 @@ export const reportFailedDeliveryAttempt = mutation({
     reasonCode: v.optional(v.string()),
     reason: v.optional(v.string()),
     riderName: v.optional(v.string()),
+    /** City-level last-seen place (preferred over raw coords in notices) */
+    address: v.optional(v.string()),
+    /** Rider phone/browser label (e.g. Chrome on Infinix) */
+    deviceLabel: v.optional(v.string()),
   },
   handler: async ({ db, scheduler }, args) => {
     const order = await db
@@ -562,6 +566,8 @@ export const reportFailedDeliveryAttempt = mutation({
 
     const at = new Date().toISOString();
     const riderName = String(args.riderName || order.riderInfo?.name || "Rider").trim() || "Rider";
+    const address = String(args.address || "").trim();
+    const deviceLabel = String(args.deviceLabel || "").trim();
     const entry = {
       attempt,
       ...(reason ? { reason } : {}),
@@ -571,6 +577,8 @@ export const reportFailedDeliveryAttempt = mutation({
       ...(args.accuracy != null && Number.isFinite(Number(args.accuracy))
         ? { accuracy: Number(args.accuracy) }
         : {}),
+      ...(address ? { address } : {}),
+      ...(deviceLabel ? { deviceLabel } : {}),
       riderName,
       at,
     };
@@ -583,8 +591,9 @@ export const reportFailedDeliveryAttempt = mutation({
 
     const shortId = shortOrderId(args.orderId);
     const customer = order.customerName || "Customer";
-    const coordsLabel = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    const placeLabel = address || `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
     const attemptLabel = `Attempt ${attempt}/${FAILED_ATTEMPT_MAX}`;
+    const devicePart = deviceLabel ? ` · Device: ${deviceLabel}` : "";
 
     await db.insert("riderNotifications", {
       type: "delivery_failed_attempt",
@@ -593,9 +602,14 @@ export const reportFailedDeliveryAttempt = mutation({
       total: Number(order.finalTotal ?? order.total ?? 0),
       message:
         `⚠️ ${riderName} reported failed delivery (${attemptLabel}) for Order #${shortId} · ${customer}. ` +
-        `Rider GPS proof: ${coordsLabel} · ${timelineMsg}`,
+        `Last seen: ${placeLabel}${devicePart} · ${timelineMsg}`,
       createdAt: at,
       read: false,
+      lat,
+      lng,
+      ...(address ? { address } : {}),
+      ...(deviceLabel ? { deviceLabel } : {}),
+      attempt,
     });
 
     if (order.email) {
