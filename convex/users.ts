@@ -972,6 +972,20 @@ export const checkUserSession = query({
     try {
       const user = await db.get(id as any) as any;
       if (!user) return { valid: false, reason: "not_found" };
+
+      const st = String(user.status || "active").toLowerCase();
+      // Suspended / deleted / deactivated cannot keep an open app session
+      // (temporary suspensions are restored on the next successful login)
+      if (st === "suspended" || st === "deleted" || st === "self_deactivated" || st === "deactivated") {
+        return {
+          valid: false,
+          reason: "account_suspended",
+          activeDeviceAt: null,
+          activeDeviceName: null,
+          activeDeviceLocation: null,
+        };
+      }
+
       const ids = getActiveSessionIds(user);
       if (ids.length === 0) return { valid: true, reason: "legacy" };
       if (ids.includes(sid)) {
@@ -1463,12 +1477,16 @@ async function scheduleWelcomePromoNotif(
   }
 }
 
+/**
+ * Step 2 — Verify registration OTP only.
+ * Does NOT insert into `users` yet. Account is created on completeRegistrationWithPin.
+ */
 export const verifyOtpAndCreateUser = mutation({
   args: {
     email: v.string(),
     otp: v.string(),
   },
-  handler: async ({ db, scheduler }, { email, otp }) => {
+  handler: async ({ db }, { email, otp }) => {
     const pending = await db
       .query("pendingUsers")
       .withIndex("by_email", q => q.eq("email", email))
@@ -1499,6 +1517,67 @@ export const verifyOtpAndCreateUser = mutation({
       return { success: false, message: "This email has already been registered." };
     }
 
+    const nowMs = Date.now();
+    await db.patch(pending._id, {
+      emailVerifiedAt: nowMs,
+      otp: undefined,
+      otpExpiresAt: undefined,
+    } as any);
+
+    return { success: true, emailVerified: true };
+  },
+});
+
+/**
+ * Step 3 — Final Create Account: insert live user + PIN only after email OTP verified.
+ */
+export const completeRegistrationWithPin = mutation({
+  args: {
+    email: v.string(),
+    pin: v.string(),
+  },
+  handler: async ({ db, scheduler }, { email, pin }) => {
+    if (!PIN_SET_RE.test(pin)) {
+      return { success: false, message: "PIN must be exactly 6 digits." };
+    }
+
+    const pending = await db
+      .query("pendingUsers")
+      .withIndex("by_email", q => q.eq("email", String(email || "").trim()))
+      .first();
+
+    if (!pending) {
+      return { success: false, message: "No pending registration found. Please register again." };
+    }
+
+    if (!pending.emailVerifiedAt) {
+      return { success: false, message: "Verify your email OTP first before creating your account." };
+    }
+
+    if (Date.now() > pending.expiresAt) {
+      await db.delete(pending._id);
+      return { success: false, message: "Registration expired. Please register again.", expired: true };
+    }
+
+    const alreadyExists = await db
+      .query("users")
+      .withIndex("by_email", q => q.eq("email", pending.email))
+      .first();
+    if (alreadyExists) {
+      await db.delete(pending._id);
+      return { success: false, message: "This email has already been registered." };
+    }
+
+    const usernameTaken = await db
+      .query("users")
+      .withIndex("by_username", q => q.eq("username", pending.username))
+      .first();
+    if (usernameTaken) {
+      await db.delete(pending._id);
+      return { success: false, message: "Username already taken. Please register again with a different username." };
+    }
+
+    const pinHash = await hashPin(pin);
     const userId = await db.insert("users", {
       name: pending.name,
       username: pending.username,
@@ -1507,12 +1586,15 @@ export const verifyOtpAndCreateUser = mutation({
       role: "user",
       status: "active",
       registeredAt: new Date().toISOString(),
-    });
+      pin: pinHash,
+      pinLength: 6,
+    } as any);
 
     await db.delete(pending._id);
     await scheduleWelcomePromoNotif(scheduler, pending.email, pending.name);
 
-    return { success: true, userId };
+    const user = await db.get(userId);
+    return { success: true, userId, user: user ? toSafeUser(user) : null };
   },
 });
 
@@ -1731,6 +1813,12 @@ export const suspendUser = mutation({
       suspendNote: note ?? undefined,
       suspendedAt: now,
       suspendedUntil: suspendedUntil ?? undefined,
+      // Kick every open session so the customer cannot keep using the app
+      activeSessionId: undefined,
+      activeSessionIds: [],
+      kickedAt: now,
+      loginAlert: undefined,
+      loginBroadcast: undefined,
     });
 
     const user = await ctx.db.get(id);

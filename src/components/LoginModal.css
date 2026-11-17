@@ -120,7 +120,7 @@ body.login-modal-open {
 }
 
 .rider-toggle-btn:hover {
-  border-color: #7c3aed;
+  border-color: #e5e7eb;
   color: #7c3aed;
   background: #f5f3ff;
 }
@@ -208,7 +208,7 @@ body.login-modal-open {
 /* Error Banner */
 .error-banner {
   background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
-  border: 1px solid #fca5a5;
+  border: 1px solid #e5e7eb;
   border-radius: 12px;
   padding: 14px 16px;
   margin-bottom: 24px;
@@ -284,7 +284,7 @@ body.login-modal-open {
 
 .form-input:focus {
   outline: none;
-  border-color: #ec4899;
+  border-color: #e5e7eb;
   box-shadow: 0 0 0 4px rgba(236, 72, 153, 0.1);
   background: #ffffff;
 }
@@ -371,7 +371,7 @@ body.login-modal-open {
   padding: 12px;
   background: #fff;
   border-radius: 16px;
-  border: 1px solid #fce7f3;
+  border: 1px solid #e5e7eb;
   box-shadow: 0 8px 24px rgba(236, 72, 153, 0.12);
 }
 
@@ -490,7 +490,7 @@ body.login-modal-open {
 
 .pin-hint-banner {
   background: #fff7ed !important;
-  border-color: #fed7aa !important;
+  border-color: #e5e7eb !important;
   color: #9a3412 !important;
 }
 
@@ -716,7 +716,7 @@ body.login-modal-open {
   animation: fadeIn 0.3s ease;
 }
 .forgot-msg.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-.forgot-msg.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+.forgot-msg.error { background: #f8d7da; color: #721c24; border: 1px solid #e5e7eb; }
 
 .password-strength-container { margin-top: 10px; }
 .password-strength-bar { width: 100%; height: 4px; background: #e5e7eb; border-radius: 2px; overflow: hidden; margin-bottom: 6px; }
@@ -731,7 +731,7 @@ body.login-modal-open {
 .requirement-item.valid { color: #10b981; font-weight: 500; }
 .requirement-item.valid svg { color: #10b981; }
 
-.password-success-message { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 12px 14px; background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%); border: 1px solid #6ee7b7; border-radius: 10px; color: #065f46; font-size: 13px; font-weight: 600; }
+.password-success-message { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 12px 14px; background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%); border: 1px solid #e5e7eb; border-radius: 10px; color: #065f46; font-size: 13px; font-weight: 600; }
 .password-success-message svg { width: 20px; height: 20px; color: #10b981; flex-shrink: 0; }
 
 .password-match-success { display: flex; align-items: center; gap: 8px; margin-top: 8px; color: #10b981; font-size: 13px; font-weight: 600; }
@@ -750,7 +750,7 @@ body.login-modal-open {
 /* Lockout banner — orange/amber tone to distinguish from regular error */
 .error-banner.lockout-banner {
   background: linear-gradient(135deg, #fff7ed, #fed7aa);
-  border-color: #fdba74;
+  border-color: #e5e7eb;
 }
 
 .error-banner.lockout-banner svg {
@@ -767,7 +767,7 @@ body.login-modal-open {
   align-items: center;
   gap: 10px;
   background: #fffbeb;
-  border: 1px solid #fde68a;
+  border: 1px solid #e5e7eb;
   border-radius: 10px;
   padding: 10px 14px;
   margin-bottom: 14px;
@@ -836,7 +836,7 @@ body.login-modal-open {
   align-items: center;
   gap: 14px;
   background: #f0fdf4;
-  border: 1.5px solid #86efac;
+  border: 1.5px solid #e5e7eb;
   border-radius: 12px;
   padding: 16px 20px;
   margin-bottom: 16px;
@@ -870,7 +870,7 @@ body.login-modal-open {
 /* Green success banner on login view (after reactivation) */
 .error-banner.success-banner {
   background: linear-gradient(135deg, #d1fae5, #a7f3d0);
-  border-color: #6ee7b7;
+  border-color: #e5e7eb;
 }
 .error-banner.success-banner svg { color: #059669; }
 .error-banner.success-banner span { color: #065f46; }

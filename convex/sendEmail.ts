@@ -1351,6 +1351,10 @@ export const sendSuspensionEmail = internalAction({
       payment_fraud:    "Payment Fraud",
       privacy_policy:   "Privacy Policy Violation",
       chargeback_abuse: "Chargeback Abuse",
+      delivery_misconduct: "Delivery Misconduct",
+      customer_complaints: "Customer Complaints",
+      identity_fraud: "Identity / Document Fraud",
+      vehicle_policy: "Vehicle / Safety Policy Violation",
       other:            "Policy Violation",
     };
 

@@ -1,11 +1,12 @@
 .dcp-panel {
   display: flex;
   flex-direction: column;
-  border: 1.5px solid #e9d5ff;
+  border: 1.5px solid #e5e7eb;
   border-radius: 14px;
   background: #faf5ff;
   overflow: hidden;
   margin-top: 14px;
+  min-height: 0;
 }
 
 .dcp-header {
@@ -116,7 +117,7 @@
 
 .dcp-input:focus {
   outline: none;
-  border-color: #ec4899;
+  border-color: #e5e7eb;
   box-shadow: 0 0 0 3px rgba(236, 72, 153, 0.12);
 }
 

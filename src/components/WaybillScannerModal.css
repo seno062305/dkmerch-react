@@ -110,7 +110,7 @@
   gap: 8px;
   align-items: flex-start;
   line-height: 1.4;
-  border: 1px solid #fecaca;
+  border: 1px solid #e5e7eb;
 }
 .wb-scan-error i {
   margin-top: 2px;
@@ -134,7 +134,7 @@
 .wb-scan-error--screen {
   background: #eff6ff;
   color: #1e3a8a;
-  border-color: #93c5fd;
+  border-color: #e5e7eb;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
 .wb-scan-error--screen .wb-scan-error-title {

@@ -21,8 +21,8 @@
   font-size: 13px;
 }
 
-.orders-filter .filter-btn:hover  { border-color: var(--primary-color); color: var(--primary-color); }
-.orders-filter .filter-btn.active { background: var(--primary-color); border-color: var(--primary-color); color: white; }
+.orders-filter .filter-btn:hover  { border-color: #e5e7eb; color: #e5e7eb; }
+.orders-filter .filter-btn.active { background: #e5e7eb; border-color: #e5e7eb; color: white; }
 
 /* GRID */
 .orders-grid {

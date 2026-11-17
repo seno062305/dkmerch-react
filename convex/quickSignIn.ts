@@ -98,7 +98,13 @@ export const approveSession = mutation({
     if (user.role !== "user") {
       return { success: false, error: "Only customer accounts can use Quick Sign In." };
     }
-    if (user.status === "suspended" || user.status === "deactivated" || user.deletedAt) {
+    if (
+      user.status === "suspended"
+      || user.status === "deactivated"
+      || user.status === "self_deactivated"
+      || user.status === "deleted"
+      || user.deletedAt
+    ) {
       return { success: false, error: "This account cannot sign in right now." };
     }
 

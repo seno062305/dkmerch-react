@@ -216,7 +216,7 @@
 
 .collection-card.highlighted {
   animation: highlightPulse 2s ease-in-out;
-  border: 2px solid var(--primary-color);
+  border: 2px solid #e5e7eb;
   box-shadow: 0 0 20px rgba(252, 18, 104, 0.3);
 }
 
@@ -474,7 +474,7 @@
   align-items: center;
   gap: 10px;
   background: linear-gradient(135deg, #fdf2f8, #fce7f3);
-  border: 1.5px solid #f9a8d4;
+  border: 1.5px solid #e5e7eb;
   border-radius: 10px;
   padding: 10px 18px;
   margin-top: 16px;
@@ -510,8 +510,8 @@
   50% { opacity: 0.3; }
 }
 
-.collection-card.collection-card-promo { box-shadow: 0 0 0 2px #f9a8d4 inset; }
-.collection-card.collection-card-promo:hover { box-shadow: 0 0 0 2px #ec4899 inset, 0 8px 24px rgba(236, 72, 153, 0.2); }
+.collection-card.collection-card-promo { box-shadow: none; }
+.collection-card.collection-card-promo:hover { box-shadow: 0 8px 24px rgba(26, 26, 46, 0.1); }
 
 .collection-promo-badge {
   position: absolute;
@@ -579,7 +579,7 @@
 }
 .shop-pager-nav:hover:not(:disabled),
 .shop-pager-num:hover {
-  border-color: #fc1268;
+  border-color: #e5e7eb;
   color: #fc1268;
   background: #fff5f8;
 }
@@ -588,7 +588,7 @@
   cursor: not-allowed;
 }
 .shop-pager-num.is-active {
-  border-color: #fc1268;
+  border-color: #e5e7eb;
   background: #fc1268;
   color: #fff;
 }
@@ -755,5 +755,5 @@
 
 /* Highlight border for released cards */
 .collection-card-released {
-  border: 2px solid var(--primary-color, #fc1268) !important;
+  border: 2px solid #e5e7eb !important;
 }

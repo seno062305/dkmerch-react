@@ -122,6 +122,7 @@ export const AuthProvider = ({ children }) => {
   const endRiderSession    = useMutation(api.riders.endRiderSession);
   const confirmRiderLoginAlert = useMutation(api.riders.confirmRiderLoginAlert);
   const denyRiderLoginAlert    = useMutation(api.riders.denyRiderLoginAlert);
+  const heartbeatChatPresence  = useMutation(api.supportChat.heartbeatPresence);
   const kickedRef = useRef(false);
   /** After Yes/No: keep confirmation UI open until OK */
   const holdLogoutConfirmRef = useRef(false);
@@ -198,6 +199,42 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     seedAdminMutation({}).catch(() => {});
   }, []);
+
+  // Chat Online/Offline — ping while customer/admin account is open anywhere in the app
+  useEffect(() => {
+    if (!isAuthenticated || !isReady || needsDeviceUnlock) return undefined;
+    if (role !== "user" && role !== "admin") return undefined;
+
+    const ping = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      if (role === "admin") {
+        heartbeatChatPresence({ role: "admin" }).catch(() => {});
+      } else if (user?.email) {
+        heartbeatChatPresence({
+          role: "customer",
+          customerEmail: String(user.email),
+        }).catch(() => {});
+      }
+    };
+
+    ping();
+    const id = setInterval(ping, 15000);
+    const onVis = () => {
+      if (document.visibilityState === "visible") ping();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [
+    isAuthenticated,
+    isReady,
+    needsDeviceUnlock,
+    role,
+    user?.email,
+    heartbeatChatPresence,
+  ]);
 
   useEffect(() => {
     const storedUser = readAuthUser();
@@ -579,31 +616,37 @@ export const AuthProvider = ({ children }) => {
     return () => window.removeEventListener("dkOpenLoginAlert", bump);
   }, [pendingLoginAlert, pendingRiderLoginAlert]);
 
-  // Sign out if THIS session was removed (takeover / logout-all)
+  // Sign out if THIS session was removed (takeover / logout-all / admin suspend)
   useEffect(() => {
     if (!sessionCheck || sessionCheck.valid !== false) return;
     if (
       sessionCheck.reason !== "new_device_logged_in"
       && sessionCheck.reason !== "session_revoked"
+      && sessionCheck.reason !== "account_suspended"
     ) return;
     if (holdLogoutConfirmRef.current) return;
     // Keep owner signed in while approving / blocking the other device
-    if (securityAlert?.mode === "pending" || securityAlert?.mode === "approved") return;
-    if (pendingLoginAlert || pendingRiderLoginAlert) return;
+    if (
+      sessionCheck.reason !== "account_suspended"
+      && (securityAlert?.mode === "pending" || securityAlert?.mode === "approved")
+    ) return;
+    if (
+      sessionCheck.reason !== "account_suspended"
+      && (pendingLoginAlert || pendingRiderLoginAlert)
+    ) return;
     if (kickedRef.current) return;
     kickedRef.current = true;
     const device = sessionCheck.activeDeviceName || "another device";
-    const where = sessionCheck.activeDeviceLocation
-      ? ` · ${sessionCheck.activeDeviceLocation}`
-      : "";
     const kickMsg =
-      sessionCheck.reason === "new_device_logged_in"
-        ? `Signed out · opened on ${device}`
-        : `Signed out · ${device}`;
-    voidMicrotask(() => {
+      sessionCheck.reason === "account_suspended"
+        ? "Your account has been suspended. Please contact support."
+        : sessionCheck.reason === "new_device_logged_in"
+          ? `Signed out · opened on ${device}`
+          : `Signed out · ${device}`;
+    queueMicrotask(() => {
       try {
         showNotification(kickMsg, "warning", {
-          duration: 3200,
+          duration: 4200,
           dedupeKey: `session-kick:${sessionCheck.reason}:${device}`,
         });
       } catch { /* ignore */ }

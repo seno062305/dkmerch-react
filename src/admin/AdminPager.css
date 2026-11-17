@@ -89,7 +89,7 @@
 }
 
 .dk-pager-size:focus {
-  border-color: #93c5fd;
+  border-color: #e5e7eb;
   box-shadow: 0 0 0 3px rgba(147, 197, 253, 0.25);
 }
 
@@ -120,7 +120,7 @@
 }
 
 .dk-pager-nav:hover:not(:disabled) {
-  border-color: #93c5fd;
+  border-color: #e5e7eb;
   color: #1d4ed8;
   background: #eff6ff;
 }
@@ -150,13 +150,13 @@
 }
 
 .dk-pager-num:hover {
-  border-color: #93c5fd;
+  border-color: #e5e7eb;
   background: #eff6ff;
   color: #1d4ed8;
 }
 
 .dk-pager-num--active {
-  border-color: #93c5fd;
+  border-color: #e5e7eb;
   background: #dbeafe;
   color: #1e3a8a;
   box-shadow: none;

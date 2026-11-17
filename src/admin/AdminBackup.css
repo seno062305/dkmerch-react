@@ -24,7 +24,7 @@
 
 .ab-settings-right {
   background: #fff;
-  border: 1px solid #ffd6e7;
+  border: 1px solid #e5e7eb;
   border-radius: 16px;
   padding: 16px 18px 18px;
   box-shadow: 0 2px 10px rgba(0,0,0,0.04);
@@ -159,7 +159,7 @@
 .ab-summary {
   background: white;
   border-radius: 14px;
-  border: 1px solid #ffd6e7;
+  border: 1px solid #e5e7eb;
   padding: 18px 24px;
   display: flex;
   align-items: center;
@@ -237,14 +237,14 @@
 .ab-card {
   background: white;
   border-radius: 14px;
-  border: 1px solid #ffd6e7;
+  border: 1px solid #e5e7eb;
   overflow: hidden;
   box-shadow: 0 2px 8px rgba(0,0,0,0.05);
   transition: box-shadow 0.2s;
 }
 
 .ab-card:hover { box-shadow: 0 4px 16px rgba(106,13,173,0.1); }
-.ab-card--expanded { border-color: #c4b5fd; }
+.ab-card--expanded { border-color: #e5e7eb; }
 
 .ab-card-header {
   display: flex;
@@ -304,7 +304,7 @@
   width: 34px;
   height: 34px;
   border-radius: 8px;
-  border: 1.5px solid #fecdd3;
+  border: 1.5px solid #e5e7eb;
   background: white;
   color: #fc1268;
   font-size: 13px;
@@ -318,7 +318,7 @@
 .ab-dl-btn:hover {
   background: #0f172a;
   color: white;
-  border-color: #fc1268;
+  border-color: #e5e7eb;
 }
 
 .ab-expand-arrow {
@@ -332,7 +332,7 @@
 .ab-spinner {
   width: 18px;
   height: 18px;
-  border: 2.5px solid #fecdd3;
+  border: 2.5px solid #e5e7eb;
   border-top-color: #fc1268;
   border-radius: 50%;
   animation: abSpin 0.7s linear infinite;
@@ -351,7 +351,7 @@
 
 /* ── Card Body (JSON preview) ── */
 .ab-card-body {
-  border-top: 1px solid #ffd6e7;
+  border-top: 1px solid #e5e7eb;
   background: #fafafa;
 }
 
@@ -360,7 +360,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 10px 16px;
-  border-bottom: 1px solid #ffd6e7;
+  border-bottom: 1px solid #e5e7eb;
   background: #ffe4ef;
 }
 
@@ -376,7 +376,7 @@
   gap: 5px;
   padding: 4px 12px;
   background: white;
-  border: 1.5px solid #fecdd3;
+  border: 1.5px solid #e5e7eb;
   border-radius: 6px;
   font-size: 11px;
   font-weight: 600;
@@ -388,7 +388,7 @@
 .ab-copy-btn:hover {
   background: #0f172a;
   color: white;
-  border-color: #fc1268;
+  border-color: #e5e7eb;
 }
 
 .ab-json-preview {
@@ -436,7 +436,7 @@
   width: 34px;
   height: 34px;
   border-radius: 8px;
-  border: 1.5px solid #fecdd3;
+  border: 1.5px solid #e5e7eb;
   background: #ffe4ef;
   color: #fc1268;
   font-size: 13px;
@@ -450,7 +450,7 @@
 .ab-view-btn:hover {
   background: #0f172a;
   color: white;
-  border-color: #fc1268;
+  border-color: #e5e7eb;
 }
 
 /* Overlay */
@@ -485,7 +485,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 18px 20px;
-  border-bottom: 1px solid #ffd6e7;
+  border-bottom: 1px solid #e5e7eb;
   background: linear-gradient(135deg, #fff1f5, #ffe4ef);
   flex-shrink: 0;
   gap: 12px;
@@ -538,7 +538,7 @@
   width: 34px;
   height: 34px;
   border-radius: 8px;
-  border: 1.5px solid #fecdd3;
+  border: 1.5px solid #e5e7eb;
   background: white;
   color: #6b7280;
   font-size: 14px;
@@ -560,7 +560,7 @@
   font-size: 12px;
   pointer-events: none;
 }
-.ab-modal-close:hover { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }
+.ab-modal-close:hover { background: #fee2e2; color: #e5e7eb; border-color: #e5e7eb; }
 
 /* Toolbar */
 .ab-modal-toolbar {
@@ -579,7 +579,7 @@
   align-items: center;
   gap: 8px;
   background: white;
-  border: 1.5px solid #fecdd3;
+  border: 1.5px solid #e5e7eb;
   border-radius: 8px;
   padding: 7px 12px;
   flex: 1;
@@ -639,7 +639,7 @@
   letter-spacing: 0.4px;
   padding: 10px 14px;
   text-align: left;
-  border-bottom: 2px solid #fecdd3;
+  border-bottom: 2px solid #e5e7eb;
   white-space: nowrap;
 }
 
@@ -659,8 +659,8 @@
 /* Cell types */
 .ab-cell-null { color: #d1d5db; font-style: italic; }
 .ab-cell-bool--true  { color: #059669; font-weight: 700; background: #d1fae5; padding: 2px 7px; border-radius: 4px; }
-.ab-cell-bool--false { color: #dc2626; font-weight: 700; background: #fee2e2; padding: 2px 7px; border-radius: 4px; }
-.ab-cell-obj { color: #fc1268; font-family: monospace; font-size: 11px; cursor: help; background: #ffe4ef; padding: 2px 6px; border-radius: 4px; }
+.ab-cell-bool--false { color: #e5e7eb; font-weight: 700; background: #fee2e2; padding: 2px 7px; border-radius: 4px; }
+.ab-cell-obj { color: #e5e7eb; font-family: monospace; font-size: 11px; cursor: help; background: #ffe4ef; padding: 2px 6px; border-radius: 4px; }
 
 /* Pagination */
 .ab-modal-pagination {
@@ -669,14 +669,14 @@
   justify-content: center;
   gap: 6px;
   padding: 12px 16px;
-  border-top: 1px solid #ffd6e7;
+  border-top: 1px solid #e5e7eb;
   background: #fafafa;
   flex-shrink: 0;
 }
 
 .ab-modal-pagination button {
   padding: 6px 12px;
-  border: 1.5px solid #fecdd3;
+  border: 1.5px solid #e5e7eb;
   background: white;
   color: #fc1268;
   border-radius: 7px;
@@ -685,7 +685,7 @@
   cursor: pointer;
   transition: all 0.2s;
 }
-.ab-modal-pagination button:hover:not(:disabled) { background: #0f172a; color: white; border-color: #fc1268; }
+.ab-modal-pagination button:hover:not(:disabled) { background: #0f172a; color: white; border-color: #e5e7eb; }
 .ab-modal-pagination button:disabled { opacity: 0.35; cursor: not-allowed; }
 .ab-modal-pagination span { font-size: 12px; color: #6b7280; padding: 0 6px; }
 
@@ -711,7 +711,7 @@
   display: flex;
   gap: 6px;
   margin-bottom: 20px;
-  border-bottom: 2px solid #ffd6e7;
+  border-bottom: 2px solid #e5e7eb;
   padding-bottom: 0;
 }
 
@@ -751,7 +751,7 @@
 }
 
 .ab-dropzone {
-  border: 2px dashed #c4b5fd;
+  border: 2px dashed #e5e7eb;
   border-radius: 16px;
   background: #fff1f5;
   padding: 36px 24px;
@@ -764,11 +764,11 @@
   text-align: center;
 }
 
-.ab-dropzone:hover { border-color: #fc1268; background: #ffe4ef; }
+.ab-dropzone:hover { border-color: #e5e7eb; background: #ffe4ef; }
 
 .ab-dropzone--loaded {
   border-style: solid;
-  border-color: #fc1268;
+  border-color: #e5e7eb;
   background: #ffe4ef;
   flex-direction: row;
   justify-content: center;
@@ -800,7 +800,7 @@
 
 .ab-import-error {
   background: #fee2e2;
-  border: 1px solid #fca5a5;
+  border: 1px solid #e5e7eb;
   border-radius: 10px;
   padding: 14px 16px;
   font-size: 13px;
@@ -814,7 +814,7 @@
 
 .ab-import-row {
   background: white;
-  border: 1.5px solid #ffd6e7;
+  border: 1.5px solid #e5e7eb;
   border-radius: 12px;
   padding: 14px 18px;
   display: flex;
@@ -824,10 +824,10 @@
   transition: border-color 0.2s;
 }
 
-.ab-import-row--done      { border-color: #6ee7b7; background: #f0fdf4; }
+.ab-import-row--done      { border-color: #e5e7eb; background: #f0fdf4; }
 .ab-import-row--duplicate { border-color: #fcd34d; background: #fffbeb; }
-.ab-import-row--error     { border-color: #fca5a5; background: #fff1f2; }
-.ab-import-row--importing { border-color: #a78bfa; }
+.ab-import-row--error     { border-color: #e5e7eb; background: #fff1f2; }
+.ab-import-row--importing { border-color: #e5e7eb; }
 
 .ab-import-row-left { display: flex; align-items: center; gap: 12px; }
 .ab-import-row-status { flex-shrink: 0; }
@@ -914,7 +914,7 @@
 
 .ab-import-summary {
   background: #d1fae5;
-  border: 1.5px solid #6ee7b7;
+  border: 1.5px solid #e5e7eb;
   border-radius: 12px;
   padding: 14px 18px;
   font-size: 14px;
@@ -935,7 +935,7 @@
 .ab-import-summary i { margin-top: 2px; flex-shrink: 0; }
 
 .ab-spinner--sm { width: 13px; height: 13px; border-width: 2px; }
-.ab-spinner--purple { border-color: #fecdd3; border-top-color: #fc1268; }
+.ab-spinner--purple { border-color: #e5e7eb; border-top-color: #e5e7eb; }
 
 /* ══════════════════════════════════════════
    MANUAL REFRESH CONTROLS
@@ -993,7 +993,7 @@
 /* ── Empty State ── */
 .ab-empty-state {
   background: #fff1f5;
-  border: 2px dashed #c4b5fd;
+  border: 2px dashed #e5e7eb;
   border-radius: 16px;
   padding: 48px 24px;
   text-align: center;
@@ -1117,7 +1117,7 @@
 /* -- Settings / status / password / type-confirm -- */
 .ab-status-panel {
   background: white;
-  border: 1px solid #ffd6e7;
+  border: 1px solid #e5e7eb;
   border-radius: 16px;
   padding: 18px 18px 16px;
   margin-bottom: 22px;
@@ -1165,7 +1165,7 @@
 }
 .ab-status-card {
   background: linear-gradient(180deg, #fff1f5 0%, #fff 100%);
-  border: 1px solid #ffd6e7;
+  border: 1px solid #e5e7eb;
   border-radius: 12px;
   padding: 14px;
 }
@@ -1201,7 +1201,7 @@
   align-items: center;
   gap: 6px;
   background: #fff1f5;
-  border: 1px solid #ffd6e7;
+  border: 1px solid #e5e7eb;
   border-radius: 999px;
   padding: 6px 10px;
   font-size: 11px;
@@ -1217,7 +1217,7 @@
   padding: 11px 16px;
   background: #fff;
   color: #fc1268;
-  border: 1.5px solid #fecdd3;
+  border: 1.5px solid #e5e7eb;
   border-radius: 10px;
   font-size: 13px;
   font-weight: 700;
@@ -1242,7 +1242,7 @@
 .ab-history {
   margin-top: 18px;
   background: #fff;
-  border: 1px solid #ffd6e7;
+  border: 1px solid #e5e7eb;
   border-radius: 14px;
   padding: 14px 16px;
 }
@@ -1315,7 +1315,7 @@
 .ab-password-field input {
   width: 100%;
   height: 44px;
-  border: 1.5px solid #fecdd3;
+  border: 1.5px solid #e5e7eb;
   border-radius: 10px;
   padding: 0 44px 0 14px;
   font-size: 14px;
@@ -1343,7 +1343,7 @@
 }
 .ab-type-banner {
   background: #fff1f2;
-  border: 1px solid #fecdd3;
+  border: 1px solid #e5e7eb;
   color: #9f1239;
   border-radius: 10px;
   padding: 10px 12px;
@@ -1354,7 +1354,7 @@
 .ab-type-input {
   width: 100%;
   height: 44px;
-  border: 1.5px solid #fecdd3;
+  border: 1.5px solid #e5e7eb;
   border-radius: 10px;
   padding: 0 14px;
   font-size: 14px;
@@ -1382,7 +1382,7 @@
   gap: 14px;
   align-items: start;
   background: linear-gradient(135deg, #fff1f5 0%, #fff 55%);
-  border: 1px solid #ffd6e7;
+  border: 1px solid #e5e7eb;
   border-radius: 14px;
   padding: 14px;
 }
@@ -1522,7 +1522,7 @@
 /* Auto backup */
 .ab-auto-panel {
   background: #fff;
-  border: 1px solid #ffd6e7;
+  border: 1px solid #e5e7eb;
   border-radius: 16px;
   padding: 16px 18px;
   margin-bottom: 22px;
@@ -1555,7 +1555,7 @@
 .ab-auto-meta strong { display: block; margin-top: 4px; font-size: 13px; color: #1f2937; }
 .ab-auto-row { display: flex; gap: 10px; align-items: center; }
 .ab-auto-row select {
-  flex: 1; height: 42px; border-radius: 10px; border: 1.5px solid #fecdd3;
+  flex: 1; height: 42px; border-radius: 10px; border: 1.5px solid #e5e7eb;
   padding: 0 12px; font-size: 14px; font-weight: 600; color: #1f2937; outline: none;
 }
 .ab-auto-note { margin: 10px 0 0; font-size: 11px; color: #6b7280; line-height: 1.45; }
@@ -1565,7 +1565,7 @@
   padding: 10px 12px;
   border-radius: 10px;
   background: #fff7ed;
-  border: 1px solid #fed7aa;
+  border: 1px solid #e5e7eb;
   color: #c2410c;
   font-size: 12px;
   font-weight: 700;
@@ -1575,7 +1575,7 @@
 /* Logs */
 .ab-logs-list { display: flex; flex-direction: column; gap: 10px; }
 .ab-log-row {
-  background: #fff; border: 1px solid #ffd6e7; border-radius: 12px; padding: 12px 14px;
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px 14px;
 }
 .ab-log-main { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; }
 .ab-log-main strong { color: #fc1268; text-transform: uppercase; font-size: 12px; }
@@ -1685,7 +1685,7 @@
   color: #fc1268;
 }
 .ab-logs-page-num--active {
-  border-color: #fecdd3;
+  border-color: #e5e7eb;
   background: #fff;
   color: #1f2937;
   box-shadow: 0 1px 2px rgba(0,0,0,0.04);

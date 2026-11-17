@@ -132,7 +132,7 @@
 .wv-released-badge i { font-size: 10px; }
 
 .wv-card-released {
-    border: 2px solid var(--primary-color, #fc1268) !important;
+    border: 2px solid #e5e7eb !important;
 }
 .wv-badge-stack {
     position: absolute;
@@ -335,7 +335,7 @@
     padding: 5px 7px;
     border-radius: 6px;
     background: #fef2f2;
-    border: 1px solid #fecaca;
+    border: 1px solid #e5e7eb;
 }
 .wv-sale-period i {
     margin-top: 1px;
@@ -425,7 +425,7 @@
   align-items: center;
   gap: 10px;
   background: linear-gradient(135deg, #fdf2f8, #fce7f3);
-  border: 1.5px solid #f9a8d4;
+  border: 1.5px solid #e5e7eb;
   border-radius: 10px;
   padding: 10px 16px;
   margin-top: 8px;
@@ -462,10 +462,10 @@
 }
 
 .wv-card.wv-card-promo {
-  box-shadow: 0 0 0 2px #f9a8d4, 0 2px 8px rgba(236, 72, 153, 0.15);
+  box-shadow: 0 0 0 1px #e5e7eb, 0 2px 8px rgba(26, 26, 46, 0.06);
 }
 .wv-card.wv-card-promo:hover {
-  box-shadow: 0 0 0 2px #ec4899, 0 6px 16px rgba(236, 72, 153, 0.25);
+  box-shadow: 0 0 0 1px #e5e7eb, 0 6px 16px rgba(26, 26, 46, 0.1);
 }
 
 .wv-promo-badge {
@@ -565,7 +565,7 @@
 /* ── Highlight promo banner (from email Shop Now link) ── */
 .wv-promo-banner-highlight {
   background: linear-gradient(135deg, #fce7f3, #ede9fe);
-  border-color: #ec4899;
+  border-color: #e5e7eb;
   animation: promo-banner-pulse 2s ease-in-out 3;
 }
 

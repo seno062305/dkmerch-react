@@ -196,7 +196,7 @@ body.product-modal-open .main-header {
   text-transform: uppercase;
 }
 
-.pre-order-badge { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
+.pre-order-badge { background: #eff6ff; color: #2563eb; border: 1px solid #e5e7eb; }
 .sale-badge {
   display: inline-flex;
   flex-direction: column;
@@ -204,7 +204,7 @@ body.product-modal-open .main-header {
   gap: 2px;
   background: #fef2f2;
   color: #dc2626;
-  border: 1px solid #fecaca;
+  border: 1px solid #e5e7eb;
   max-width: 160px;
   line-height: 1.2;
 }
@@ -321,7 +321,7 @@ body.product-modal-open .main-header {
   justify-content: center;
   gap: 8px;
   padding: 10px 14px;
-  border: 1.5px solid #fc1268;
+  border: 1.5px solid #e5e7eb;
   background: #fff;
   color: #fc1268;
   font-size: 13px;
@@ -443,7 +443,7 @@ body.product-modal-open .main-header {
   font-weight: 800;
 }
 .reviews-star-chip.is-active {
-  border-color: #fc1268;
+  border-color: #e5e7eb;
   background: #fff1f5;
   color: #fc1268;
 }
@@ -636,7 +636,7 @@ body.product-modal-open .main-header {
   padding: 8px 12px;
   border-radius: 8px;
   background: #fef2f2;
-  border: 1px solid #fecaca;
+  border: 1px solid #e5e7eb;
   color: #b91c1c;
   font-size: 12px;
   font-weight: 600;
@@ -649,7 +649,7 @@ body.product-modal-open .main-header {
 .current-price { font-size: 24px; font-weight: 800; color: var(--primary-color, #fc1268); }
 .promo-price { color: #16a34a; }
 .original-price { font-size: 14px; color: #999; text-decoration: line-through; }
-.discount-badge-inline { background: #dcfce7; color: #16a34a; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 4px; }
+.discount-badge-inline { background: #e5e7eb; color: #e5e7eb; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 4px; }
 
 .modal-product-info .stock-info,
 .product-modal .stock-info,

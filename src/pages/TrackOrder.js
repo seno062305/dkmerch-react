@@ -1009,6 +1009,13 @@ const TrackOrder = ({ onProductClick }) => {
     const [continuingPayment, setContinuingPayment] = useState(false);
     const createPaymentLink = useAction(api.payments.createPaymentLink);
     const assertOrderStock = useMutation(api.payments.assertOrderStock);
+    const deliveryChat = useQuery(
+      api.deliveryChat.getThreadByOrder,
+      !isGuest && order?.orderId && order?.riderInfo
+        ? { orderId: order.orderId }
+        : 'skip'
+    );
+    const riderChatUnread = !isGuest ? (deliveryChat?.unreadByCustomer || 0) : 0;
 
     const ordDate      = order._creationTime ? new Date(order._creationTime) : null;
     const orderStatus  = getDisplayStatus(order);
@@ -1093,7 +1100,15 @@ const TrackOrder = ({ onProductClick }) => {
         <div className="order-card-info">
           <div className="order-card-top">
             <p className="order-card-id">#{formatOrderShortId(order) || 'N/A'}</p>
-            <span className={`order-status-chip ${getStatusClass(statusKey)}`}>{orderStatus}</span>
+            <div className="order-card-top-right">
+              {riderChatUnread > 0 && (
+                <span className="order-card-msg-pill" title={`${riderChatUnread} new rider message${riderChatUnread > 1 ? 's' : ''}`}>
+                  <i className="fas fa-comment"></i>
+                  {riderChatUnread > 9 ? '9+' : riderChatUnread}
+                </span>
+              )}
+              <span className={`order-status-chip ${getStatusClass(statusKey)}`}>{orderStatus}</span>
+            </div>
           </div>
           <p className="order-card-name">
             {order.items?.[0]?.name || getProductById(order.items?.[0]?.id)?.name || 'Order'}
@@ -1133,6 +1148,11 @@ const TrackOrder = ({ onProductClick }) => {
             ) : (
               <button type="button" className="btn btn-primary btn-small order-view-btn" onClick={openCardDetails}>
                 <i className="fas fa-eye"></i> Details
+                {riderChatUnread > 0 && (
+                  <span className="order-chat-unread-badge" title={`${riderChatUnread} new rider message${riderChatUnread > 1 ? 's' : ''}`}>
+                    {riderChatUnread > 9 ? '9+' : riderChatUnread}
+                  </span>
+                )}
               </button>
             )}
             {isLbcOrder(order) && (
@@ -1449,6 +1469,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
   const delivered        = ['delivered','completed'].includes((order.orderStatus || order.status || '').toLowerCase());
   const canCancel        = !isGuest && canCustomerCancelOrder(order);
   const timelineSteps    = getTimelineSteps(order);
+  const showDeliverySplit = !!(order.riderInfo && !isCancelled && !isLbcOrder(order));
   const refundAmount     = (order.finalTotal ?? order.total ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2 });
   const { canRefund, hoursLeft, minsLeft, expired } = getRefundWindow(order);
 
@@ -1470,6 +1491,32 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
   }, [onClose, localProofOpen]);
 
   const getProductById = (id) => products.find(p => p._id === id || p.id === id);
+
+  const timelineBlock = (
+    <div className="tracking-timeline">
+      <h3>Order Timeline</h3>
+      <div className="timeline">
+        {timelineSteps.map((step, index) => (
+          <div key={index} className={`timeline-item ${step.completed ? 'completed' : ''} ${step.isCancelled ? 'cancelled-step' : ''} ${step.isFailedAttempt ? 'failed-attempt-step' : ''}${step.actor ? ` actor-${step.actor}` : ''}`}>
+            <div className="timeline-marker"><i className={`fas ${step.icon}`}></i></div>
+            <div className="timeline-content">
+              <div className="timeline-label-row">
+                <h4>{step.label}</h4>
+                {step.actor && (
+                  <span className={`timeline-actor-pill timeline-actor-${step.actor}`}>
+                    {step.actor === 'customer' ? 'Customer' : step.actor === 'admin' ? 'Admin' : 'Rider'}
+                  </span>
+                )}
+              </div>
+              {step.time && step.completed && <span className="timeline-timestamp"><i className="fas fa-clock"></i> {step.time}</span>}
+              <p className={step.completed ? 'timeline-desc-done' : 'timeline-desc-pending'}>{step.desc || (step.completed ? 'Completed' : 'Pending')}</p>
+              {step.isCancelled && step.cancelReason && <div className="timeline-cancel-reason"><div className="timeline-cancel-reason-label"><i className="fas fa-comment-alt"></i> Reason:</div><div className="timeline-cancel-reason-text">{step.cancelReason}</div></div>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
   const handleContinuePayment = async () => {
     setContinuingPayment(true);
@@ -1526,33 +1573,82 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
 
           {isLbcOrder(order) && !isCancelled && <LbcTrackPanel />}
 
-          {order.riderInfo && !isCancelled && !isLbcOrder(order) && (
-            <div className="rider-info-banner">
-              {riderPhoto ? (
-                <img src={riderPhoto} alt={order.riderInfo.name || 'Rider'} className="rider-info-photo" />
-              ) : (
-                <div className="rider-info-icon"><i className="fas fa-motorcycle"></i></div>
-              )}
-              <div className="rider-info-details">
-                <strong>Your Rider: {order.riderInfo.name || '—'}</strong>
-                <span>🏍️ Motorcycle{order.riderInfo.plate ? ` • Plate Number: ${order.riderInfo.plate}` : ''}</span>
-                {order.riderInfo.phone && <span><i className="fas fa-phone"></i> {order.riderInfo.phone}</span>}
-              </div>
-            </div>
-          )}
+          {showDeliverySplit && (
+            <div className={`track-delivery-split${!isGuest ? ' has-chat' : ''}`}>
+              <div className="track-delivery-left">
+                <div className="rider-info-banner">
+                  {riderPhoto ? (
+                    <img src={riderPhoto} alt={order.riderInfo.name || 'Rider'} className="rider-info-photo" />
+                  ) : (
+                    <div className="rider-info-icon"><i className="fas fa-motorcycle"></i></div>
+                  )}
+                  <div className="rider-info-details">
+                    <strong>Your Rider: {order.riderInfo.name || '—'}</strong>
+                    <span>🏍️ Motorcycle{order.riderInfo.plate ? ` • Plate Number: ${order.riderInfo.plate}` : ''}</span>
+                    {order.riderInfo.phone && <span><i className="fas fa-phone"></i> {order.riderInfo.phone}</span>}
+                  </div>
+                </div>
 
-          {!isGuest && !isCancelled && !isLbcOrder(order) && order.riderInfo && (
-            <DeliveryChatPanel
-              orderId={order.orderId}
-              role="customer"
-              userName={order.customerName || 'Customer'}
-              userEmail={order.email || ''}
-              peerName={order.riderInfo?.name}
-              riderName={order.riderInfo?.name}
-              riderEmail={order.riderInfo?.email}
-              customerName={order.customerName}
-              customerEmail={order.email}
-            />
+                {isOutForDelivery && (
+                  <div className="rider-map-section">
+                    <div className="rider-map-section-title">
+                      <i className="fas fa-map-marked-alt"></i>
+                      <span>Real-Time Rider Location</span>
+                      <span className="rider-map-live-pill">LIVE</span>
+                    </div>
+                    <RiderMap orderId={order.orderId} riderName={order.riderInfo?.name} orderData={order} />
+                  </div>
+                )}
+
+                {!isGuest && isOutForDelivery && (
+                  <div className="customer-otp-section">
+                    {localOtp ? (
+                      <div className="otp-display-card">
+                        <div className="otp-display-header">
+                          <div className="otp-display-icon"><i className="fas fa-shield-alt"></i></div>
+                          <div>
+                            <strong>Your Delivery OTP</strong>
+                            <p>Give this code to the rider only when you receive your package.</p>
+                          </div>
+                        </div>
+                        <div className="otp-code-display">{localOtp.split('').map((digit, i) => <span key={i} className="otp-digit">{digit}</span>)}</div>
+                        <div className="otp-display-note"><i className="fas fa-info-circle"></i><span>Do not share until the parcel is in your hands.</span></div>
+                      </div>
+                    ) : (
+                      <div className="otp-generate-card">
+                        <div className="otp-generate-header">
+                          <div className="otp-generate-icon"><i className="fas fa-hourglass-half"></i></div>
+                          <div>
+                            <strong>Waiting for delivery OTP</strong>
+                            <p>OTP appears here when your rider starts delivery.</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="track-delivery-center">
+                {timelineBlock}
+              </div>
+
+              {!isGuest && (
+                <div className="track-delivery-right">
+                  <DeliveryChatPanel
+                    orderId={order.orderId}
+                    role="customer"
+                    userName={order.customerName || 'Customer'}
+                    userEmail={order.email || ''}
+                    peerName={order.riderInfo?.name}
+                    riderName={order.riderInfo?.name}
+                    riderEmail={order.riderInfo?.email}
+                    customerName={order.customerName}
+                    customerEmail={order.email}
+                  />
+                </div>
+              )}
+            </div>
           )}
 
           {isCancelled && (
@@ -1682,68 +1778,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
             </div>
           )}
 
-          {isOutForDelivery && !isLbcOrder(order) && (
-            <div className="rider-map-section">
-              <div className="rider-map-section-title">
-                <i className="fas fa-map-marked-alt"></i>
-                <span>Real-Time Rider Location</span>
-                <span className="rider-map-live-pill">LIVE</span>
-              </div>
-              <RiderMap orderId={order.orderId} riderName={order.riderInfo?.name} orderData={order} />
-            </div>
-          )}
-
-          {!isGuest && isOutForDelivery && !isLbcOrder(order) && (
-            <div className="customer-otp-section">
-              {localOtp ? (
-                <div className="otp-display-card">
-                  <div className="otp-display-header">
-                    <div className="otp-display-icon"><i className="fas fa-shield-alt"></i></div>
-                    <div>
-                      <strong>Your Delivery OTP</strong>
-                      <p>Sent when your rider started delivery — also check your email. Give this code to the rider only when you receive your package.</p>
-                    </div>
-                  </div>
-                  <div className="otp-code-display">{localOtp.split('').map((digit, i) => <span key={i} className="otp-digit">{digit}</span>)}</div>
-                  <div className="otp-display-note"><i className="fas fa-info-circle"></i><span>Do not share this code until the parcel is in your hands.</span></div>
-                </div>
-              ) : (
-                <div className="otp-generate-card">
-                  <div className="otp-generate-header">
-                    <div className="otp-generate-icon"><i className="fas fa-hourglass-half"></i></div>
-                    <div>
-                      <strong>Waiting for delivery OTP</strong>
-                      <p>When your rider taps Notify / Out for Delivery, a 4-digit OTP is emailed to you and shown here automatically.</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="tracking-timeline">
-            <h3>Order Timeline</h3>
-            <div className="timeline">
-              {timelineSteps.map((step, index) => (
-                <div key={index} className={`timeline-item ${step.completed ? 'completed' : ''} ${step.isCancelled ? 'cancelled-step' : ''} ${step.isFailedAttempt ? 'failed-attempt-step' : ''}${step.actor ? ` actor-${step.actor}` : ''}`}>
-                  <div className="timeline-marker"><i className={`fas ${step.icon}`}></i></div>
-                  <div className="timeline-content">
-                    <div className="timeline-label-row">
-                      <h4>{step.label}</h4>
-                      {step.actor && (
-                        <span className={`timeline-actor-pill timeline-actor-${step.actor}`}>
-                          {step.actor === 'customer' ? 'Customer' : step.actor === 'admin' ? 'Admin' : 'Rider'}
-                        </span>
-                      )}
-                    </div>
-                    {step.time && step.completed && <span className="timeline-timestamp"><i className="fas fa-clock"></i> {step.time}</span>}
-                    <p className={step.completed ? 'timeline-desc-done' : 'timeline-desc-pending'}>{step.desc || (step.completed ? 'Completed' : 'Pending')}</p>
-                    {step.isCancelled && step.cancelReason && <div className="timeline-cancel-reason"><div className="timeline-cancel-reason-label"><i className="fas fa-comment-alt"></i> Reason:</div><div className="timeline-cancel-reason-text">{step.cancelReason}</div></div>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          {!showDeliverySplit && timelineBlock}
 
           <div className="order-items-timeline">
             <h3>Order Items</h3>

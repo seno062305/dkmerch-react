@@ -96,7 +96,7 @@
   gap: 6px;
   background: #fef2f2;
   color: #b91c1c;
-  border: 1px solid #fecaca;
+  border: 1px solid #e5e7eb;
   border-radius: 999px;
   padding: 5px 10px;
   font-size: 11px;
@@ -196,9 +196,9 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  border-bottom: 1px solid #fbcfe8;
+  border-bottom: 1px solid #e5e7eb;
 }
-.rider-card-scanned { border-color: #f9a8d4 !important; }
+.rider-card-scanned { border-color: #e5e7eb !important; }
 
 .rider-date-filter {
   display: flex;
@@ -268,7 +268,7 @@
   object-fit: cover;
   margin: 0 auto;
   display: block;
-  border: 3px solid #ffd6e7;
+  border: 3px solid #e5e7eb;
   box-shadow: 0 4px 14px rgba(252, 18, 104, 0.2);
 }
 .rider-plate-block {
@@ -316,7 +316,7 @@
 }
 .rider-profile-action.danger {
   background: #fef2f2;
-  border-color: #fecaca;
+  border-color: #e5e7eb;
   color: #b91c1c;
 }
 .rider-profile-back {
@@ -406,7 +406,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  border: 1px solid #ffd6e7;
+  border: 1px solid #e5e7eb;
   flex-shrink: 0;
 }
 
@@ -525,7 +525,7 @@
 }
 
 .rider-logout-btn i { font-size: 14px; width: 18px; text-align: center; color: #dc2626; flex-shrink: 0; }
-.rider-logout-btn:hover { background: #fee2e2; border-color: #dc2626; }
+.rider-logout-btn:hover { background: #fee2e2; border-color: #e5e7eb; }
 
 /* ------ MAIN ------ */
 .rider-main { margin-left: 260px; flex: 1; padding: 20px 32px 32px; min-height: 100vh; box-sizing: border-box; }
@@ -626,7 +626,7 @@
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-.rider-compact-card:hover { border-color: #ffd6e7; box-shadow: 0 4px 16px rgba(252,18,104,0.1); }
+.rider-compact-card:hover { border-color: #e5e7eb; box-shadow: 0 4px 16px rgba(252,18,104,0.1); }
 
 .rider-compact-row {
   display: flex;
@@ -723,7 +723,7 @@
   margin-bottom: 4px;
 }
 
-.rider-expanded-section.rider-info-preview { background: #fff0f5; border-color: #ffd6e7; }
+.rider-expanded-section.rider-info-preview { background: #fff0f5; border-color: #e5e7eb; }
 
 .rider-expanded-section-title {
   font-size: 11px;
@@ -761,7 +761,7 @@
 
 /* ------ NOTICE BOXES ------ */
 .rider-approved-notice  { margin-top: 4px; padding: 10px 14px; background: #d1fae5; color: #065f46; border-radius: 10px; font-size: 13px; font-weight: 600; }
-.rider-rejected-notice  { margin-top: 4px; padding: 10px 14px; background: #fee2e2; color: #991b1b; border-radius: 10px; font-size: 13px; }
+.rider-rejected-notice  { margin-top: 4px; padding: 10px 14px; background: #fee2e2; color: #e5e7eb; border-radius: 10px; font-size: 13px; }
 .rider-ofd-notice       { margin-top: 4px; padding: 10px 14px; background: #dbeafe; color: #1e40af; border-radius: 10px; font-size: 13px; font-weight: 600; }
 .rider-completed-notice { margin-top: 4px; padding: 10px 14px; background: #d1fae5; color: #065f46; border-radius: 10px; font-size: 13px; font-weight: 700; }
 
@@ -797,7 +797,7 @@
 .rider-confirm-delivery-section {
   margin-top: 12px;
   background: linear-gradient(135deg, #f0fdf4, #e8f5e9);
-  border: 2px solid #86efac;
+  border: 2px solid #e5e7eb;
   border-radius: 14px;
   padding: 20px;
 }
@@ -811,8 +811,8 @@
   align-items: flex-start;
   gap: 10px;
   background: #fffbeb;
-  border: 1.5px solid #fde68a;
-  border-left: 4px solid #f59e0b;
+  border: 1.5px solid #e5e7eb;
+  border-left: 4px solid #e5e7eb;
   border-radius: 10px;
   padding: 10px 14px;
   font-size: 13px;
@@ -840,7 +840,7 @@
 
 .otp-required-tag {
   font-size: 10px; font-weight: 700; color: #dc3545;
-  background: #fff5f5; border: 1px solid #fca5a5;
+  background: #fff5f5; border: 1px solid #e5e7eb;
   border-radius: 10px; padding: 2px 8px;
   text-transform: uppercase; letter-spacing: 0.3px; margin-left: 4px;
 }
@@ -855,7 +855,7 @@
 .rider-otp-input {
   width: 100%;
   padding: 14px 18px;
-  border: 2px solid #86efac;
+  border: 2px solid #e5e7eb;
   border-radius: 12px;
   font-size: clamp(18px, 5vw, 26px);
   font-weight: 800;
@@ -873,7 +873,7 @@
 .rider-photo-group { margin-bottom: 16px; }
 
 .rider-photo-dropzone {
-  border: 2px dashed #86efac;
+  border: 2px dashed #e5e7eb;
   border-radius: 12px;
   background: white;
   cursor: pointer;
@@ -886,8 +886,8 @@
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
-.rider-photo-dropzone:hover { border-color: #16a34a; background: #f0fdf4; }
-.rider-photo-dropzone.has-photo { border-style: solid; border-color: #16a34a; }
+.rider-photo-dropzone:hover { border-color: #e5e7eb; background: #f0fdf4; }
+.rider-photo-dropzone.has-photo { border-style: solid; border-color: #e5e7eb; }
 
 .rider-photo-placeholder { display: flex; flex-direction: column; align-items: center; gap: 6px; color: #4ade80; padding: 24px; text-align: center; }
 .rider-photo-placeholder i { font-size: 34px; color: #86efac; }
@@ -911,7 +911,7 @@
 
 .rider-confirm-error {
   display: flex; align-items: flex-start; gap: 8px;
-  background: #fef2f2; border: 1.5px solid #fca5a5;
+  background: #fef2f2; border: 1.5px solid #e5e7eb;
   border-radius: 10px; padding: 10px 14px;
   font-size: 13px; font-weight: 600; color: #991b1b;
   margin-bottom: 14px; line-height: 1.5;
@@ -1140,13 +1140,13 @@
 .rider-delete-btn {
   display: flex; align-items: center; justify-content: center; gap: 8px;
   width: 100%; margin-top: 8px; padding: 10px 14px;
-  background: transparent; border: 1.5px solid #fca5a5;
-  border-radius: 10px; color: #dc2626;
+  background: transparent; border: 1.5px solid #e5e7eb;
+  border-radius: 10px; color: #e5e7eb;
   font-size: 13px; font-weight: 600; cursor: pointer;
   transition: all 0.2s; min-height: 40px;
   -webkit-tap-highlight-color: transparent; touch-action: manipulation;
 }
-.rider-delete-btn:hover { background: #fee2e2; border-color: #dc2626; }
+.rider-delete-btn:hover { background: #fee2e2; border-color: #e5e7eb; }
 
 /* ------ NOT APPROVED ------ */
 .rider-not-approved {
@@ -1187,7 +1187,7 @@
 
 .rider-live-badge {
   display: flex; align-items: center; gap: 7px;
-  background: #f0fdf4; border: 1.5px solid #86efac;
+  background: #f0fdf4; border: 1.5px solid #e5e7eb;
   color: #166534; border-radius: 20px;
   padding: 6px 14px; font-size: 12px; font-weight: 700;
   white-space: nowrap; flex-shrink: 0;
@@ -1254,7 +1254,7 @@
   display: flex; align-items: center; gap: 6px;
   margin: 0 8px 6px; padding: 6px 10px;
   background: linear-gradient(135deg, #f0fdf4, #dcfce7);
-  border: 1.5px solid #86efac; border-radius: 8px;
+  border: 1.5px solid #e5e7eb; border-radius: 8px;
   font-size: 11px; font-weight: 700; color: #14532d;
 }
 .rider-gps-sidebar-status small { font-weight: 400; color: #166534; margin-left: 2px; }
@@ -1262,7 +1262,7 @@
 .rider-gps-active-badge {
   display: inline-flex; align-items: center; gap: 5px;
   background: #d1fae5; color: #065f46;
-  border: 1px solid #6ee7b7; border-radius: 20px;
+  border: 1px solid #e5e7eb; border-radius: 20px;
   padding: 3px 10px; font-size: 11px; font-weight: 700; white-space: nowrap;
 }
 
@@ -1284,7 +1284,7 @@
   border: 2px solid #e2e8f0; border-radius: 12px;
   padding: 16px; transition: all 0.25s;
 }
-.rider-gps-panel.gps-panel-active { background: linear-gradient(135deg, #f0fdf4, #e8f5e9); border-color: #86efac; }
+.rider-gps-panel.gps-panel-active { background: linear-gradient(135deg, #f0fdf4, #e8f5e9); border-color: #e5e7eb; }
 
 .rider-gps-panel-title { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 800; color: #1a1f36; margin-bottom: 10px; }
 .rider-gps-panel-title i { color: #fc1268; font-size: 14px; }
@@ -1322,21 +1322,21 @@
 .rider-gps-stop-btn {
   width: 100%; padding: 10px 14px;
   background: transparent; color: #dc2626;
-  border: 1.5px solid #fca5a5; border-radius: 10px;
+  border: 1.5px solid #e5e7eb; border-radius: 10px;
   font-size: 12px; font-weight: 600; cursor: pointer;
   display: flex; align-items: center; justify-content: center; gap: 6px;
   transition: all 0.2s; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
 }
-.rider-gps-stop-btn:hover { background: #fee2e2; border-color: #dc2626; }
+.rider-gps-stop-btn:hover { background: #fee2e2; border-color: #e5e7eb; }
 
 .rider-gps-error-banner {
   display: flex; align-items: flex-start; gap: 10px;
-  background: #fef2f2; border: 1.5px solid #fca5a5;
+  background: #fef2f2; border: 1.5px solid #e5e7eb;
   border-radius: 10px; padding: 12px 16px;
   font-size: 13px; color: #991b1b; margin-bottom: 16px; line-height: 1.5;
 }
 .rider-gps-error-banner i { color: #dc2626; flex-shrink: 0; margin-top: 2px; }
-.rider-gps-error-banner button { margin-left: auto; background: none; border: none; color: #991b1b; cursor: pointer; font-size: 14px; padding: 0 4px; flex-shrink: 0; }
+.rider-gps-error-banner button { margin-left: auto; background: none; border: none; color: #e5e7eb; cursor: pointer; font-size: 14px; padding: 0 4px; flex-shrink: 0; }
 
 /* ====== CUSTOMER MAP ====== */
 .customer-map-section-title {
@@ -1347,24 +1347,24 @@
   border-top: 1px solid #e2e8f0;
 }
 
-.customer-map-wrapper { border-radius: 10px; overflow: hidden; border: 1.5px solid #bfdbfe; background: #eff6ff; position: relative; }
+.customer-map-wrapper { border-radius: 10px; overflow: hidden; border: 1.5px solid #e5e7eb; background: #eff6ff; position: relative; }
 
 .customer-map-address-bar {
   display: flex; align-items: center; gap: 8px;
   padding: 10px 12px; background: #dbeafe;
   font-size: 13px; color: #1e40af; font-weight: 500;
-  border-bottom: 1px solid #bfdbfe; flex-wrap: wrap;
+  border-bottom: 1px solid #e5e7eb; flex-wrap: wrap;
 }
 .customer-map-address-bar i { color: #3b82f6; flex-shrink: 0; }
 .customer-map-geocoding { margin-left: auto; font-size: 11px; color: #6b7280; font-style: italic; }
 .customer-map-container { height: 220px; width: 100%; }
-.customer-map-error { padding: 8px 12px; font-size: 12px; color: #92400e; background: #fef3c7; border-bottom: 1px solid #fde68a; display: flex; align-items: center; gap: 6px; }
+.customer-map-error { padding: 8px 12px; font-size: 12px; color: #92400e; background: #fef3c7; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; gap: 6px; }
 .customer-map-no-address { display: flex; align-items: center; gap: 8px; padding: 12px; font-size: 13px; color: #6b7280; background: #f8fafc; border-radius: 8px; border: 1.5px dashed #e2e8f0; }
 .customer-map-inner-wrapper { position: relative; width: 100%; }
 
 .customer-map-fullscreen-btn {
   position: absolute; bottom: 10px; left: 10px; z-index: 500;
-  background: white; border: 1.5px solid #3b82f6; border-radius: 8px;
+  background: white; border: 1.5px solid #e5e7eb; border-radius: 8px;
   padding: 7px 13px; font-size: 12px; font-weight: 700; color: #1e40af;
   cursor: pointer; display: flex; align-items: center; gap: 6px;
   box-shadow: 0 2px 10px rgba(0,0,0,0.18); transition: all 0.2s;
@@ -1376,7 +1376,7 @@
 .customer-map-zoom-hint {
   display: flex; align-items: center; gap: 6px;
   padding: 7px 12px; background: #f0f9ff;
-  border-top: 1px solid #bfdbfe; font-size: 11px; color: #64748b; flex-wrap: wrap;
+  border-top: 1px solid #e5e7eb; font-size: 11px; color: #64748b; flex-wrap: wrap;
 }
 .customer-map-zoom-hint i { color: #3b82f6; font-size: 11px; flex-shrink: 0; }
 
@@ -1432,7 +1432,7 @@ body.rider-fullscreen-map-open {
 .fullscreen-map-close:hover { background: rgba(255,255,255,0.28); }
 
 .fullscreen-map-loading { display: flex; flex-direction: column; gap: 4px; padding: 6px 16px 0; background: #dbeafe; flex-shrink: 0; }
-.fullscreen-map-loading-bar { height: 3px; background: linear-gradient(90deg, #3b82f6, #93c5fd, #3b82f6); background-size: 200% 100%; animation: fsmLoadingSlide 1.4s ease-in-out infinite; border-radius: 2px; }
+.fullscreen-map-loading-bar { height: 3px; background: linear-gradient(90deg, #e5e7eb, #e5e7eb, #e5e7eb); background-size: 200% 100%; animation: fsmLoadingSlide 1.4s ease-in-out infinite; border-radius: 2px; }
 @keyframes fsmLoadingSlide { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 .fullscreen-map-loading span { font-size: 11px; color: #1e40af; padding-bottom: 5px; font-weight: 600; }
 
@@ -1445,7 +1445,7 @@ body.rider-fullscreen-map-open {
 
 .fullscreen-map-footer {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  padding: 8px 16px; background: #f0f9ff; border-top: 1px solid #bfdbfe;
+  padding: 8px 16px; background: #f0f9ff; border-top: 1px solid #e5e7eb;
   font-size: 11px; color: #64748b; flex-shrink: 0; flex-wrap: wrap;
 }
 .fullscreen-map-footer i { color: #3b82f6; font-size: 11px; }
@@ -1459,7 +1459,7 @@ body.rider-fullscreen-map-open {
   letter-spacing: 0.2px;
   color: #9d174d;
   background: #fce7f3;
-  border: 1px solid #f9a8d4;
+  border: 1px solid #e5e7eb;
   border-radius: 999px;
   padding: 2px 8px;
   white-space: nowrap;
@@ -1472,20 +1472,20 @@ body.rider-fullscreen-map-open {
 .rider-sidebar-close:hover { background: #f1f5f9; color: #1a1f36; }
 
 /* ------ NEWEST CARD ------ */
-.rider-card-newest { border-color: #fc1268 !important; box-shadow: 0 4px 16px rgba(252,18,104,0.15) !important; position: relative; }
+.rider-card-newest { border-color: #e5e7eb !important; box-shadow: 0 4px 16px rgba(252,18,104,0.15) !important; position: relative; }
 .rider-newest-tag { background: linear-gradient(135deg, #fc1268, #ff4d94); color: white; font-size: 11px; font-weight: 700; padding: 4px 12px; display: flex; align-items: center; gap: 5px; letter-spacing: 0.3px; }
 .rider-newest-tag i { font-size: 10px; }
 
 /* ====== NOTIF BELL ====== */
 .rider-notif-wrapper { position: relative; }
-.rider-notif-bell-btn { position: relative; width: 36px; height: 36px; background: #fff0f5; border: 1.5px solid #ffd6e7; border-radius: 10px; color: #fc1268; font-size: 15px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; -webkit-tap-highlight-color: transparent; }
+.rider-notif-bell-btn { position: relative; width: 36px; height: 36px; background: #fff0f5; border: 1.5px solid #e5e7eb; border-radius: 10px; color: #e5e7eb; font-size: 15px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; -webkit-tap-highlight-color: transparent; }
 .rider-notif-bell-btn:hover { background: #ffd6e7; }
-.rider-notif-count { position: absolute; top: -4px; right: -4px; background: #fc1268; color: white; font-size: 10px; font-weight: 800; border-radius: 50%; width: 17px; height: 17px; display: flex; align-items: center; justify-content: center; border: 2px solid white; animation: badgePop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.rider-notif-count { position: absolute; top: -4px; right: -4px; background: #e5e7eb; color: white; font-size: 10px; font-weight: 800; border-radius: 50%; width: 17px; height: 17px; display: flex; align-items: center; justify-content: center; border: 2px solid white; animation: badgePop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
 
-.rider-notif-dropdown { position: absolute; top: 44px; right: 0; width: 290px; background: white; border-radius: 14px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); border: 1.5px solid #ffd6e7; z-index: 99999; overflow: hidden; animation: notifDropIn 0.2s cubic-bezier(0.34, 1.4, 0.64, 1); }
+.rider-notif-dropdown { position: absolute; top: 44px; right: 0; width: 290px; background: white; border-radius: 14px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); border: 1.5px solid #e5e7eb; z-index: 99999; overflow: hidden; animation: notifDropIn 0.2s cubic-bezier(0.34, 1.4, 0.64, 1); }
 @keyframes notifDropIn { from { opacity: 0; transform: translateY(-8px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
 
-.rider-notif-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: linear-gradient(135deg, #fff0f5, #ffd6e7); border-bottom: 1px solid #ffd6e7; }
+.rider-notif-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: linear-gradient(135deg, #fff0f5, #e5e7eb); border-bottom: 1px solid #e5e7eb; }
 .rider-notif-header strong { font-size: 13px; color: #1a1f36; font-weight: 700; }
 .rider-notif-close { background: none; border: none; color: #94a3b8; font-size: 14px; cursor: pointer; padding: 0 4px; line-height: 1; }
 .rider-notif-empty { padding: 18px; text-align: center; font-size: 13px; color: #94a3b8; }
@@ -1496,7 +1496,7 @@ body.rider-fullscreen-map-open {
 .rider-notif-text strong { font-size: 13px; color: #1a1f36; font-weight: 700; }
 .rider-notif-text span { font-size: 12px; color: #64748b; }
 .rider-notif-text small { font-size: 11px; color: #fc1268; font-weight: 600; }
-.rider-notif-view-btn { width: 100%; padding: 11px 14px; background: linear-gradient(135deg, #fc1268, #ff4d94); color: white; border: none; font-size: 13px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: opacity 0.2s; -webkit-tap-highlight-color: transparent; }
+.rider-notif-view-btn { width: 100%; padding: 11px 14px; background: linear-gradient(135deg, #e5e7eb, #ff4d94); color: white; border: none; font-size: 13px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: opacity 0.2s; -webkit-tap-highlight-color: transparent; }
 .rider-notif-view-btn:hover { opacity: 0.9; }
 
 /* ====== BADGE ANIMATIONS ====== */
@@ -1505,7 +1505,7 @@ body.rider-fullscreen-map-open {
 @keyframes badgePulseRing { 0% { box-shadow: 0 0 0 0 rgba(252,18,104,0.6); } 70% { box-shadow: 0 0 0 6px rgba(252,18,104,0); } 100% { box-shadow: 0 0 0 0 rgba(252,18,104,0); } }
 
 /* ====== PWA INSTALL BUTTON ====== */
-.rider-install-btn { display: flex; align-items: center; gap: 10px; width: calc(100% - 32px); margin: 8px 16px; padding: 11px 16px; background: linear-gradient(135deg, #fc1268, #ff5a9d); color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity 0.2s, transform 0.2s; box-shadow: 0 3px 12px rgba(252, 18, 104, 0.35); }
+.rider-install-btn { display: flex; align-items: center; gap: 10px; width: calc(100% - 32px); margin: 8px 16px; padding: 11px 16px; background: linear-gradient(135deg, #e5e7eb, #ff5a9d); color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity 0.2s, transform 0.2s; box-shadow: 0 3px 12px rgba(252, 18, 104, 0.35); }
 .rider-install-btn:hover { opacity: 0.92; transform: translateY(-1px); }
 .rider-install-btn i { font-size: 15px; }
 
@@ -1520,12 +1520,12 @@ body.rider-fullscreen-map-open {
 .rider-ios-install-modal p { text-align: center; font-size: 14px; color: #666; margin: 0 0 20px; line-height: 1.5; }
 .rider-ios-steps { display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px; }
 .rider-ios-step { display: flex; align-items: center; gap: 12px; background: #f8f8f8; border-radius: 12px; padding: 12px 14px; font-size: 14px; color: #333; line-height: 1.4; }
-.rider-ios-step-num { min-width: 28px; height: 28px; background: linear-gradient(135deg, #fc1268, #ff5a9d); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0; }
-.rider-ios-install-done { width: 100%; padding: 14px; background: linear-gradient(135deg, #fc1268, #ff5a9d); color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; transition: opacity 0.2s; }
+.rider-ios-step-num { min-width: 28px; height: 28px; background: linear-gradient(135deg, #e5e7eb, #ff5a9d); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0; }
+.rider-ios-install-done { width: 100%; padding: 14px; background: linear-gradient(135deg, #e5e7eb, #ff5a9d); color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; transition: opacity 0.2s; }
 .rider-ios-install-done:hover { opacity: 0.9; }
 
 /* ====== CALL BUTTON ====== */
-.rider-call-btn { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; padding: 6px 14px; background: linear-gradient(135deg, #22c55e, #16a34a); color: white; border-radius: 20px; font-size: 13px; font-weight: 600; text-decoration: none; box-shadow: 0 2px 8px rgba(34,197,94,0.35); transition: all 0.2s ease; flex-shrink: 0; }
+.rider-call-btn { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; padding: 6px 14px; background: linear-gradient(135deg, #e5e7eb, #e5e7eb); color: white; border-radius: 20px; font-size: 13px; font-weight: 600; text-decoration: none; box-shadow: 0 2px 8px rgba(34,197,94,0.35); transition: all 0.2s ease; flex-shrink: 0; }
 .rider-call-btn:hover { background: linear-gradient(135deg, #16a34a, #15803d); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(34,197,94,0.45); }
 .rider-call-btn i { font-size: 12px; }
 
@@ -1533,12 +1533,12 @@ body.rider-fullscreen-map-open {
 @media (max-width: 768px) {
   .rider-mobile-header { display: flex; align-items: center; justify-content: space-between; padding: 0 14px; height: 52px; background: white; border-bottom: 1px solid #f0f0f0; box-shadow: 0 2px 8px rgba(0,0,0,0.06); position: sticky; top: 0; z-index: 200; flex-shrink: 0; }
   .rider-burger-btn { display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 10px; color: #1a1f36; font-size: 15px; cursor: pointer; transition: all 0.2s; -webkit-tap-highlight-color: transparent; touch-action: manipulation; flex-shrink: 0; }
-  .rider-burger-btn:hover { background: #fff0f5; border-color: #fc1268; color: #fc1268; }
+  .rider-burger-btn:hover { background: #fff0f5; border-color: #e5e7eb; color: #e5e7eb; }
   .rider-mobile-logo { display: flex; align-items: center; gap: 7px; font-size: 17px; font-weight: 800; color: #1a1f36; }
   .rider-mobile-logo i { color: #fc1268; font-size: 17px; }
   .rider-mobile-header-right { display: flex; align-items: center; gap: 7px; }
-  .rider-mobile-gps-pill { display: flex; align-items: center; gap: 5px; background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; border-radius: 20px; padding: 3px 9px; font-size: 11px; font-weight: 700; }
-  .rider-mobile-avatar { width: 34px; height: 34px; background: #fff0f5; border: 1.5px solid #ffd6e7; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fc1268; font-size: 17px; }
+  .rider-mobile-gps-pill { display: flex; align-items: center; gap: 5px; background: #d1fae5; color: #065f46; border: 1px solid #e5e7eb; border-radius: 20px; padding: 3px 9px; font-size: 11px; font-weight: 700; }
+  .rider-mobile-avatar { width: 34px; height: 34px; background: #fff0f5; border: 1.5px solid #e5e7eb; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #e5e7eb; font-size: 17px; }
 
   .rider-sidebar { position: fixed !important; left: -280px; top: 0; bottom: 0; width: 260px !important; z-index: 9999 !important; transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 4px 0 24px rgba(0,0,0,0.15); min-height: 100vh !important; height: 100vh !important; overflow-y: auto; }
   .rider-sidebar.open { left: 0; }

@@ -1578,6 +1578,23 @@ const RiderDashboard = () => {
   };
 
   if (riderInfo === undefined) return <div className="rider-dashboard"><div className="rider-not-approved"><div className="rider-na-icon">🛵</div><h2>Loading...</h2></div></div>;
+  if (riderInfo?.status === 'suspended') {
+    const until = riderInfo.suspendedUntil
+      ? new Date(riderInfo.suspendedUntil).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })
+      : null;
+    return (
+      <div className="rider-dashboard"><div className="rider-not-approved">
+        <div className="rider-na-icon">🚫</div>
+        <h2>Account Suspended</h2>
+        <p>
+          {until
+            ? `Your rider account is suspended until ${until}. You cannot take deliveries until it is restored.`
+            : 'Your rider account has been suspended. Please contact admin for help.'}
+        </p>
+        <button className="rider-logout-btn" onClick={handleLogout}>Logout</button>
+      </div></div>
+    );
+  }
   if (!riderInfo || riderInfo.status !== 'approved') return (
     <div className="rider-dashboard"><div className="rider-not-approved">
       <div className="rider-na-icon">🛵</div>

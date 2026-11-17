@@ -709,7 +709,7 @@ header {
   width: 100%;
   background: linear-gradient(135deg, #f5f0ff, #faf5ff);
   border: none;
-  border-left: 3px solid #7c3aed;
+  border-left: 3px solid #e5e7eb;
   color: #7c3aed;
   font-size: 1rem;
   font-weight: 600;
@@ -753,7 +753,7 @@ header {
   width: 100%;
   text-align: left;
   font-size: 0.95rem;
-  border-left: 3px solid #fc1268;
+  border-left: 3px solid #e5e7eb;
   box-sizing: border-box;
 }
 

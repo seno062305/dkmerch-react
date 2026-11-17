@@ -4,10 +4,10 @@ import './NotificationToast.css'; // toast styles
 const NotificationContext = createContext(null);
 
 const ICONS = {
-  success: 'fa-check-circle',
-  error: 'fa-exclamation-circle',
-  warning: 'fa-exclamation-triangle',
-  info: 'fa-info-circle',
+  success: 'fa-check',
+  error: 'fa-times',
+  warning: 'fa-exclamation',
+  info: 'fa-info',
 };
 
 const DEFAULT_MS = {
@@ -17,8 +17,8 @@ const DEFAULT_MS = {
   error: 3500,
 };
 
-/** Keep toast text short so it stays pill-sized on mobile/desktop. */
-const shortenToast = (text, max = 72) => {
+/** Keep toast text readable in the top-center card without wrapping too tall. */
+const shortenToast = (text, max = 96) => {
   const t = String(text || '').replace(/\s+/g, ' ').trim();
   if (t.length <= max) return t;
   return `${t.slice(0, max - 1).trim()}…`;
@@ -70,8 +70,8 @@ export const NotificationProvider = ({ children }) => {
         return prev;
       }
       createdId = ++idRef.current;
-      // Keep stack tiny so toasts don't cover the screen
-      return [...prev.slice(-1), { id: createdId, message: text, type: safeType, dedupeKey }];
+      // Keep a short stack for the layered top-center toast look
+      return [...prev.slice(-2), { id: createdId, message: text, type: safeType, dedupeKey }];
     });
 
     if (createdId != null && duration > 0) {
@@ -108,7 +108,9 @@ export const NotificationProvider = ({ children }) => {
       <div className="dk-toast-stack" aria-live="polite" aria-relevant="additions">
         {toasts.map((t) => (
           <div key={t.id} className={`dk-toast dk-toast--${t.type}`} role="status">
-            <i className={`fas ${ICONS[t.type]}`} aria-hidden="true" />
+            <span className="dk-toast-icon" aria-hidden="true">
+              <i className={`fas ${ICONS[t.type]}`} />
+            </span>
             <span className="dk-toast-msg">{t.message}</span>
             <button
               type="button"

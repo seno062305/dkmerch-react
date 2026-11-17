@@ -38,6 +38,18 @@ crons.daily(
   internal.users.purgeExpiredDeletedAccounts
 );
 
+// Restore temporary user/rider suspensions after suspendedUntil.
+crons.interval(
+  "dkmerch-auto-unsuspend-expired",
+  { hours: 1 },
+  internal.users.autoUnsuspendExpired
+);
+crons.interval(
+  "dkmerch-auto-unsuspend-expired-riders",
+  { hours: 1 },
+  internal.riders.autoUnsuspendExpiredRiders
+);
+
 // Release due pre-order products into Home/Collections, mark reservations
 // available, and email customers (every minute).
 crons.interval(

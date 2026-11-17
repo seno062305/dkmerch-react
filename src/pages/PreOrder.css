@@ -281,7 +281,7 @@
   gap: 6px;
   background: #eff6ff;
   color: #2563eb;
-  border: 1px solid #bfdbfe;
+  border: 1px solid #e5e7eb;
   border-radius: 6px;
   padding: 5px 10px;
   font-size: 11px;
@@ -335,7 +335,7 @@
   font-size: 13px;
   background: #f0fdf4;
   color: #15803d;
-  border: 1.5px solid #bbf7d0;
+  border: 1.5px solid #e5e7eb;
   border-radius: var(--border-radius);
   font-weight: 700;
   cursor: default;
@@ -429,7 +429,7 @@
   font-size: 13px;
   color: #2563eb;
   background: #eff6ff;
-  border: 1px solid #bfdbfe;
+  border: 1px solid #e5e7eb;
   padding: 8px 12px;
   border-radius: 8px;
   font-weight: 600;
@@ -469,7 +469,7 @@
   font-size: 12px;
   color: #7c3aed;
   background: #f5f3ff;
-  border: 1px solid #ddd6fe;
+  border: 1px solid #e5e7eb;
   border-radius: 8px;
   padding: 10px 12px;
   line-height: 1.6;

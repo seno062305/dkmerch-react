@@ -105,41 +105,95 @@ const REJECT_REASONS = [
 // ─────────────────────────────────────────────────────────────
 const RiderIdCardModal = ({ rider, onClose }) => {
   const cardRef = useRef();
+  const issued = new Date(rider.dkRiderIdGeneratedAt || Date.now()).toLocaleDateString('en-PH', {
+    year: 'numeric', month: 'short', day: 'numeric',
+  });
   const handlePrint = () => {
-    const win = window.open('', '_blank', 'width=500,height=320');
-    win.document.write(`<html><head><title>DKMerch Rider ID</title><style>body{margin:0;padding:20px;font-family:'Segoe UI',sans-serif;background:#f0f0f0;}.dk-id-card{width:380px;min-height:220px;background:linear-gradient(135deg,#fc1268,#e0005a);border-radius:16px;padding:20px;color:white;box-shadow:0 8px 32px rgba(252,18,104,0.4);position:relative;overflow:hidden;}</style></head><body>${cardRef.current.innerHTML}</body></html>`);
-    win.document.close(); win.focus(); win.print(); win.close();
+    if (!cardRef.current) return;
+    const win = window.open('', '_blank', 'width=520,height=360');
+    if (!win) return;
+    const printCss = `
+      @page { size: auto; margin: 10mm; }
+      * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      html, body { margin: 0; padding: 0; background: #fff; font-family: 'Segoe UI', system-ui, sans-serif; }
+      body { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+      .au-dk-id-card {
+        width: 85.6mm; height: 53.98mm;
+        background: linear-gradient(145deg, #1e1b4b 0%, #4c1d95 55%, #7c3aed 100%) !important;
+        border-radius: 3.2mm; color: #fff !important; overflow: hidden;
+        display: flex; flex-direction: column; box-shadow: none;
+      }
+      .au-dk-id-header { display: flex; align-items: center; gap: 2.2mm; padding: 2.4mm 3.2mm 1.6mm; border-bottom: 0.3mm solid rgba(255,255,255,0.18); }
+      .au-dk-id-logo { font-size: 4.2mm; } .au-dk-id-brand { font-size: 3.4mm; font-weight: 800; }
+      .au-dk-id-brand-sub { font-size: 2.1mm; opacity: 0.85; }
+      .au-dk-id-body { display: flex; gap: 2.8mm; padding: 2.6mm 3.2mm; flex: 1; min-height: 0; }
+      .au-dk-id-photo, .au-dk-id-photo-placeholder {
+        width: 14mm; height: 14mm; border-radius: 1.6mm; object-fit: cover;
+        border: 0.35mm solid rgba(255,255,255,0.4); flex-shrink: 0; background: rgba(255,255,255,0.12);
+        display: flex; align-items: center; justify-content: center; font-size: 6mm;
+      }
+      .au-dk-id-info { min-width: 0; flex: 1; }
+      .au-dk-id-name { font-size: 3.3mm; font-weight: 800; margin: 0 0 0.4mm; word-break: break-word; }
+      .au-dk-id-role { font-size: 1.9mm; opacity: 0.88; margin: 0 0 1.2mm; text-transform: uppercase; letter-spacing: 0.06em; }
+      .au-dk-id-details { font-size: 2.15mm; line-height: 1.45; opacity: 0.95; }
+      .au-dk-id-details > div { display: flex; gap: 1.2mm; margin-bottom: 0.35mm; }
+      .au-dk-id-footer {
+        display: flex; justify-content: space-between; align-items: flex-end;
+        padding: 1.8mm 3.2mm 2.2mm; background: rgba(0,0,0,0.22) !important;
+      }
+      .au-dk-id-number { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 2.6mm; font-weight: 800; }
+      .au-dk-id-number-label { font-size: 1.7mm; opacity: 0.75; text-transform: uppercase; }
+      .au-dk-id-valid { font-size: 2mm; opacity: 0.9; }
+    `;
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>DKMerch Rider ID — ${rider.dkRiderId || ''}</title>
+      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
+      <style>${printCss}</style></head><body>${cardRef.current.innerHTML}</body></html>`);
+    win.document.close();
+    const go = () => { try { win.focus(); win.print(); } finally { setTimeout(() => { try { win.close(); } catch {} }, 400); } };
+    setTimeout(go, 280);
   };
   return (
     <div className="id-card-overlay" onClick={onClose}>
       <div className="id-card-modal" onClick={e => e.stopPropagation()}>
         <button className="id-card-close" onClick={onClose}>✕</button>
-        <h3 className="id-card-modal-title">🎉 Rider Approved!</h3>
-        <p className="id-card-modal-sub">DKMerch Rider ID has been generated.</p>
+        <h3 className="id-card-modal-title">Rider Approved!</h3>
+        <p className="id-card-modal-sub">DKMerch Rider ID has been generated. Print and laminate this card.</p>
         <div ref={cardRef}>
-          <div className="dk-id-card">
-            <div className="dk-id-bg-circle1" /><div className="dk-id-bg-circle2" />
-            <div className="dk-id-header"><span className="dk-id-logo">🛵</span><div><div className="dk-id-brand">DKMerch</div><div className="dk-id-brand-sub">Official Delivery Rider</div></div></div>
-            <div className="dk-id-body">
-              {rider.riderPhoto ? <img src={rider.riderPhoto} alt="Rider" className="dk-id-photo" /> : <div className="dk-id-photo-placeholder">👤</div>}
-              <div className="dk-id-info">
-                <div className="dk-id-name">{rider.fullName}</div>
-                <div className="dk-id-role">Delivery Rider</div>
-                <div className="dk-id-details">
-                  <div className="dk-id-detail">📞 {rider.phone}</div>
-                  <div className="dk-id-detail">✉️ {rider.email}</div>
-                  <div className="dk-id-detail" style={{ textTransform: 'capitalize' }}>🛵 {rider.vehicleType || '—'} {rider.plateNumber ? `• ${rider.plateNumber}` : ''}</div>
+          <div className="au-dk-id-card">
+            <div className="au-dk-id-header">
+              <span className="au-dk-id-logo"><i className="fas fa-motorcycle"></i></span>
+              <div>
+                <div className="au-dk-id-brand">DKMerch</div>
+                <div className="au-dk-id-brand-sub">Official Delivery Rider</div>
+              </div>
+            </div>
+            <div className="au-dk-id-body">
+              {rider.riderPhoto
+                ? <img src={rider.riderPhoto} alt="Rider" className="au-dk-id-photo" />
+                : <div className="au-dk-id-photo-placeholder"><i className="fas fa-user"></i></div>}
+              <div className="au-dk-id-info">
+                <div className="au-dk-id-name">{rider.fullName}</div>
+                <div className="au-dk-id-role">Delivery Rider · Motorcycle</div>
+                <div className="au-dk-id-details">
+                  <div><i className="fas fa-phone"></i><span>{rider.phone || '—'}</span></div>
+                  <div><i className="fas fa-envelope"></i><span>{rider.email || '—'}</span></div>
+                  {rider.plateNumber && <div><i className="fas fa-car"></i><span>Plate: {rider.plateNumber}</span></div>}
+                  {rider.licenseNumber && <div><i className="fas fa-id-card"></i><span>License: {rider.licenseNumber}</span></div>}
+                  {rider.address && <div><i className="fas fa-map-marker-alt"></i><span>{rider.address}</span></div>}
                 </div>
               </div>
             </div>
-            <div className="dk-id-footer">
-              <div><div className="dk-id-number">{rider.dkRiderId}</div><div className="dk-id-number-label">Rider ID</div></div>
-              <div className="dk-id-valid">Issued: {new Date(rider.dkRiderIdGeneratedAt || Date.now()).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })}</div>
+            <div className="au-dk-id-footer">
+              <div>
+                <div className="au-dk-id-number">{rider.dkRiderId}</div>
+                <div className="au-dk-id-number-label">Rider ID</div>
+              </div>
+              <div className="au-dk-id-valid">{issued}</div>
             </div>
           </div>
         </div>
         <div className="id-card-actions">
-          <button className="id-card-print-btn" onClick={handlePrint}>🖨️ Print ID Card</button>
+          <button className="id-card-print-btn" onClick={handlePrint}><i className="fas fa-print"></i> Print ID Card</button>
           <button className="id-card-done-btn" onClick={onClose}>Done</button>
         </div>
       </div>
@@ -218,7 +272,29 @@ const RejectApplicationModal = ({ app, onConfirm, onClose }) => {
           </div>
         </div>
         <div style={{ marginBottom: 20 }}>
-          <textarea style={{ width: '100%', padding: '10px 12px', border: '2px solid #e2e8f0', borderRadius: 10, fontSize: 13, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box', outline: 'none' }} placeholder="Additional note (optional)..." value={note} onChange={e => setNote(e.target.value)} rows={2} />
+          <textarea
+            style={{
+              width: '100%',
+              maxWidth: '100%',
+              padding: '10px 12px',
+              border: '2px solid #e2e8f0',
+              borderRadius: 10,
+              fontSize: 13,
+              fontFamily: 'inherit',
+              resize: 'none',
+              boxSizing: 'border-box',
+              outline: 'none',
+              minHeight: 64,
+              maxHeight: 64,
+              height: 64,
+              overflowX: 'hidden',
+              overflowY: 'auto',
+            }}
+            placeholder="Additional note (optional)..."
+            value={note}
+            onChange={e => setNote(e.target.value)}
+            rows={2}
+          />
         </div>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', borderTop: '1px solid #e2e8f0', paddingTop: 16 }}>
           <button onClick={onClose} style={{ padding: '10px 20px', background: '#e2e8f0', color: '#4a5568', border: 'none', borderRadius: 10, fontWeight: 600, cursor: 'pointer', fontSize: 14 }}>Cancel</button>

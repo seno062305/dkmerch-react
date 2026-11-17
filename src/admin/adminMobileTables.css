@@ -60,7 +60,7 @@
     border-radius: 10px !important;
     background: #fff !important;
     color: #fc1268 !important;
-    border: 1.5px solid #fc1268 !important;
+    border: 1.5px solid #e5e7eb !important;
     box-shadow: 0 2px 8px rgba(252, 18, 104, 0.12) !important;
   }
 
@@ -248,7 +248,7 @@
   .mobile-card-toggle:hover,
   .mobile-card-toggle:active {
     background: #fff0f5;
-    border-color: #fc1268;
+    border-color: #e5e7eb;
     color: #fc1268;
   }
 

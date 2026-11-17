@@ -36,7 +36,7 @@
   padding: 4px 10px;
   border-radius: 999px;
   background: #fff0f6;
-  border: 1px solid #ffd6e7;
+  border: 1px solid #e5e7eb;
   color: #fc1268;
   font-size: 12px;
   font-weight: 700;
@@ -71,14 +71,14 @@
 .create-btn--ghost {
   background: #fff0f6;
   color: #fc1268;
-  border: 1.5px solid #ffd6e7;
+  border: 1.5px solid #e5e7eb;
   box-shadow: none;
 }
 
 .create-btn--ghost:hover {
   background: #fc1268;
   color: #fff;
-  border-color: #fc1268;
+  border-color: #e5e7eb;
 }
 
 /* Mobile create row */
@@ -137,7 +137,7 @@
   display: inline-block;
   background: linear-gradient(135deg, #fdf2f8, #fce7f3);
   color: #be185d;
-  border: 1px solid #f9a8d4;
+  border: 1px solid #e5e7eb;
   border-radius: 20px;
   padding: 3px 12px;
   font-size: 12px;
@@ -168,7 +168,7 @@
 
 .group-select:focus {
   outline: none;
-  border-color: #ec4899;
+  border-color: #e5e7eb;
   box-shadow: 0 0 0 3px rgba(236, 72, 153, 0.1);
 }
 
@@ -253,7 +253,7 @@
   white-space: nowrap;
 }
 
-.group-select.input-error { border-color: #ef4444; }
+.group-select.input-error { border-color: #e5e7eb; }
 
 /* Empty cards msg */
 .empty-cards-msg {
@@ -436,7 +436,7 @@
   gap: 10px;
   margin: 4px 0 10px;
   padding: 10px 12px;
-  border: 1.5px dashed #ffd6e7;
+  border: 1.5px dashed #e5e7eb;
   border-radius: 10px;
   background: #fff7fb;
   color: #be185d;
@@ -502,10 +502,10 @@
 }
 
 .form-group input:focus, .group-select:focus {
-  outline: none; border-color: #ec4899; box-shadow: 0 0 0 2px rgba(236, 72, 153, 0.1);
+  outline: none; border-color: #e5e7eb; box-shadow: 0 0 0 2px rgba(236, 72, 153, 0.1);
 }
 
-.input-error { border-color: #ef4444 !important; box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.1) !important; }
+.input-error { border-color: #e5e7eb !important; box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.1) !important; }
 .field-hint { font-size: 10px; color: #9ca3af; margin-top: 3px; }
 .field-error { font-size: 10px; color: #ef4444; margin-top: 3px; font-weight: 500; }
 
@@ -567,7 +567,7 @@
 }
 .time-input:focus {
   outline: none;
-  border-color: #fc1268;
+  border-color: #e5e7eb;
   box-shadow: 0 0 0 2px rgba(252, 18, 104, 0.1);
 }
 
@@ -576,7 +576,7 @@
   color: #fc1268;
   font-weight: 600;
   background: #fff0f6;
-  border: 1px solid #ffd6e7;
+  border: 1px solid #e5e7eb;
   border-radius: 6px;
   padding: 6px 8px;
   white-space: nowrap;
@@ -586,7 +586,7 @@
 
 .schedule-summary {
   background: #fff0f6;
-  border: 1px solid #ffd6e7;
+  border: 1px solid #e5e7eb;
   border-radius: 8px;
   padding: 10px 12px;
   font-size: 12px;
@@ -599,7 +599,7 @@
   font-size: 12px;
   color: #166534;
   background: #f0fdf4;
-  border: 1px solid #bbf7d0;
+  border: 1px solid #e5e7eb;
   border-radius: 8px;
   padding: 10px 12px;
   margin-top: 8px;

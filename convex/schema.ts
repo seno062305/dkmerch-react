@@ -109,6 +109,8 @@ export default defineSchema({
     createdAt: v.number(),
     otp: v.optional(v.string()),
     otpExpiresAt: v.optional(v.number()),
+    /** Set after OTP success — live `users` row is created only on final Create Account + PIN. */
+    emailVerifiedAt: v.optional(v.number()),
   })
     .index("by_token", ["token"])
     .index("by_email", ["email"]),
@@ -373,6 +375,10 @@ export default defineSchema({
     validId2: v.optional(v.union(v.string(), v.null())),
     dkRiderId: v.optional(v.string()),
     dkRiderIdGeneratedAt: v.optional(v.string()),
+    suspendReason: v.optional(v.string()),
+    suspendNote: v.optional(v.string()),
+    suspendedAt: v.optional(v.number()),
+    suspendedUntil: v.optional(v.number()),
   })
     .index("by_email", ["email"])
     .index("by_status", ["status"]),

@@ -363,7 +363,7 @@
 
 .btn-outline-danger {
   background: white;
-  border: 1.5px solid #e57373;
+  border: 1.5px solid #e5e7eb;
   color: #e53935;
   border-radius: var(--border-radius, 8px);
   padding: 10px 20px;
@@ -377,7 +377,7 @@
 
 .btn-outline-danger:hover {
   background: #ffebee;
-  border-color: #c62828;
+  border-color: #e5e7eb;
   color: #c62828;
 }
 

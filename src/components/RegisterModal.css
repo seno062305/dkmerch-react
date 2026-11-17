@@ -140,7 +140,7 @@
   margin-bottom: 12px;
   padding: 10px 12px;
   background: #fef2f2;
-  border: 1px solid #fecaca;
+  border: 1px solid #e5e7eb;
   border-radius: 10px;
   color: #dc2626;
   font-size: 12px;
@@ -155,7 +155,7 @@
 }
 
 .form-input.valid { border-color: #10b981 !important; }
-.form-input.error { border-color: #dc2626 !important; }
+.form-input.error { border-color: #e5e7eb !important; }
 
 .password-strength-container { margin-top: 6px; }
 
@@ -230,7 +230,7 @@
   margin-top: 8px;
   padding: 8px 10px;
   background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
-  border: 1px solid #6ee7b7;
+  border: 1px solid #e5e7eb;
   border-radius: 8px;
   color: #065f46;
   font-size: 12px;
@@ -306,7 +306,7 @@
 .forgot-msg.error {
   background: #f8d7da;
   color: #721c24;
-  border: 1px solid #f5c6cb;
+  border: 1px solid #e5e7eb;
 }
 
 .register-submit-btn {
@@ -400,7 +400,7 @@
 .reg-consent-notice {
   display: block;
   background: #eff6ff;
-  border: 1px solid #bfdbfe;
+  border: 1px solid #e5e7eb;
   border-radius: 8px;
   padding: 8px 10px;
   margin-bottom: 8px;
@@ -462,7 +462,7 @@
   margin-top: 8px;
   padding: 6px 10px;
   background: #fef2f2;
-  border: 1px solid #fecaca;
+  border: 1px solid #e5e7eb;
   border-radius: 8px;
   color: #dc2626;
   font-size: 11px;

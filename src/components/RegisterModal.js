@@ -6,7 +6,6 @@ import { useAuth } from "../context/AuthContext";
 import { useMutation, useAction, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { appendActivityLog } from "../admin/lib/localActivityLog";
-import { savePinWithFallback } from "../lib/localPin";
 import { runWithFailover } from "../lib/failoverWrite";
 import { useNotification } from "../context/NotificationContext";
 import useBodyScrollLock from "../hooks/useBodyScrollLock";
@@ -42,7 +41,7 @@ const RegisterModal = ({ onClose }) => {
   const [resendLoading, setResendLoading] = useState(false);
   const [pendingEmail, setPendingEmail] = useState("");
   const [pendingName, setPendingName] = useState("");
-  const [pendingUserId, setPendingUserId] = useState(null);
+  const [emailVerified, setEmailVerified] = useState(false);
   const [pinDigits, setPinDigits] = useState(["", "", "", "", "", ""]);
   const [pinConfirmDigits, setPinConfirmDigits] = useState(["", "", "", "", "", ""]);
   const [pinStep, setPinStep] = useState(0); // 0 = enter, 1 = confirm
@@ -75,8 +74,8 @@ const RegisterModal = ({ onClose }) => {
   // ── Convex mutations / actions ────────────────────
   const registerPendingUserMut = useMutation(api.users.registerPendingUser);
   const verifyOtpAndCreateUserMut = useMutation(api.users.verifyOtpAndCreateUser);
+  const completeRegistrationWithPinMut = useMutation(api.users.completeRegistrationWithPin);
   const resendOtpMutation = useMutation(api.users.resendOtp);
-  const setUserPin = useMutation(api.users.setUserPin);
   const resetPasswordByEmail = useMutation(api.users.resetPasswordByEmail);
 
   const registerPendingUser = (args) =>
@@ -89,9 +88,17 @@ const RegisterModal = ({ onClose }) => {
     });
   const verifyOtpAndCreateUser = (args) =>
     runWithFailover(verifyOtpAndCreateUserMut, args, {
-      table: "users",
-      mutation: "users:createUser",
+      table: "pendingUsers",
+      mutation: "users:verifyOtpAndCreateUser",
       docKey: args?.email || args?.token,
+      payload: args,
+      needsEmail: true,
+    });
+  const completeRegistrationWithPin = (args) =>
+    runWithFailover(completeRegistrationWithPinMut, args, {
+      table: "users",
+      mutation: "users:completeRegistrationWithPin",
+      docKey: args?.email,
       payload: args,
       needsEmail: true,
     });
@@ -291,23 +298,15 @@ const RegisterModal = ({ onClose }) => {
       if (result.success) {
         try {
           appendActivityLog({
-            action: "register",
+            action: "register_email_verified",
             actorEmail: pendingEmail,
             actorName: pendingName,
             actorRole: "user",
-            details: "Account created after OTP verification",
+            details: "Email OTP verified — account not created yet (awaiting PIN)",
           });
         } catch {}
-        setPendingUserId(result.userId);
-        setOtpSuccess("✅ Email verified! Create your login PIN next.");
-        if (activePromos.length > 0) {
-          const top = activePromos[0];
-          const more = activePromos.length > 1 ? ` (+${activePromos.length - 1} more)` : "";
-          showNotification(
-            `Promo available: use ${top.code} for ${top.discount}% off${more}. Check your email too!`,
-            "success"
-          );
-        }
+        setEmailVerified(true);
+        setOtpSuccess("✅ Email verified! Create your login PIN to finish Create Account.");
         setPinDigits(["", "", "", "", "", ""]);
         setPinConfirmDigits(["", "", "", "", "", ""]);
         setPinStep(0);
@@ -400,36 +399,50 @@ const RegisterModal = ({ onClose }) => {
       setTimeout(() => pinRefs.current[0]?.focus(), 80);
       return;
     }
-    if (!pendingUserId) {
-      setPinError("Account session lost. Please register again.");
+    if (!pendingEmail || !emailVerified) {
+      setPinError("Verify your email first, then create your account.");
       return;
     }
     setPinLoading(true);
     setPinError("");
     try {
-      const saved = await savePinWithFallback(setUserPin, pendingUserId, pin);
-      if (!saved.success) {
-        setPinError(saved.message || "Failed to save PIN.");
+      const created = await completeRegistrationWithPin({
+        email: pendingEmail,
+        pin,
+      });
+      if (!created?.success) {
+        setPinError(created?.message || "Failed to create account.");
         return;
       }
-      setPinSuccess(
-        saved.source === "local"
-          ? "✅ PIN saved on this device! Signing you in…"
-          : "✅ PIN saved! Signing you in…"
-      );
-      await completeLogin(
-        {
-          _id: pendingUserId,
-          name: pendingName,
-          username: formData.username,
-          email: pendingEmail,
-          role: "user",
-        },
-        "Registered + PIN created"
-      );
+      try {
+        appendActivityLog({
+          action: "register",
+          actorEmail: pendingEmail,
+          actorName: pendingName,
+          actorRole: "user",
+          details: "Account created after OTP + PIN (Create Account)",
+        });
+      } catch {}
+      if (activePromos.length > 0) {
+        const top = activePromos[0];
+        const more = activePromos.length > 1 ? ` (+${activePromos.length - 1} more)` : "";
+        showNotification(
+          `Promo available: use ${top.code} for ${top.discount}% off${more}. Check your email too!`,
+          "success"
+        );
+      }
+      setPinSuccess("✅ Account created! Signing you in…");
+      const userDoc = created.user || {
+        _id: created.userId,
+        name: pendingName,
+        username: formData.username,
+        email: pendingEmail,
+        role: "user",
+      };
+      await completeLogin(userDoc, "Registered + PIN created");
       setTimeout(() => onClose(), 900);
     } catch (err) {
-      setPinError(String(err?.message || "Failed to save PIN. Please try again.").slice(0, 140));
+      setPinError(String(err?.message || "Failed to create account. Please try again.").slice(0, 140));
     } finally {
       setPinLoading(false);
     }
@@ -658,7 +671,7 @@ const RegisterModal = ({ onClose }) => {
                   cursor: "pointer", marginBottom: "12px",
                 }}
               >
-                {pinLoading ? "Saving…" : pinStep === 0 ? "Continue" : "Save PIN & Continue"}
+                {pinLoading ? "Creating…" : pinStep === 0 ? "Continue" : "Create Account"}
               </button>
 
               {pinStep === 1 && (
@@ -1062,7 +1075,7 @@ const RegisterModal = ({ onClose }) => {
                 {isLoading ? (
                   <><svg className="spinner" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" style={{ opacity: 0.25 }} /><path fill="currentColor" style={{ opacity: 0.75 }} d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Sending Code...</>
                 ) : (
-                  <>Create Account</>
+                  <>Continue</>
                 )}
               </button>
 

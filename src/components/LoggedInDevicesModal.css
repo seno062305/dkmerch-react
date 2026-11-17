@@ -64,7 +64,7 @@
 .lid-error {
   background: #fef2f2;
   color: #b91c1c;
-  border: 1px solid #fecaca;
+  border: 1px solid #e5e7eb;
   border-radius: 10px;
   padding: 10px 12px;
   font-size: 0.8rem;
@@ -104,7 +104,7 @@
 }
 
 .lid-item.is-current {
-  border-color: #bfdbfe;
+  border-color: #e5e7eb;
   background: #f8fbff;
 }
 
@@ -237,7 +237,7 @@
 }
 
 .lid-footer-btn.danger {
-  border-color: #fecaca;
+  border-color: #e5e7eb;
   background: #fef2f2;
   color: #b91c1c;
 }

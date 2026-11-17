@@ -8,6 +8,7 @@ import { appendActivityLog } from '../admin/lib/localActivityLog';
 import { runWithFailover } from '../lib/failoverWrite';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
 import { getOverlayRoot } from '../utils/scrollLock';
+import { validatePersonName, validateAddress } from '../utils/personFieldValidation';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
@@ -329,7 +330,8 @@ const RiderRegistrationModal = ({ onClose }) => {
   const handleChange = (e) => {
     const { name, value } = e.target;
     const next = { ...form };
-    if (name === 'phone')              { next.phone         = value.replace(/\D/g, '').slice(0, 11); }
+    if (name === 'fullName')           { next.fullName      = value.replace(/[0-9]/g, '').replace(/\s+/g, ' ').slice(0, 60); }
+    else if (name === 'phone')         { next.phone         = value.replace(/\D/g, '').slice(0, 11); }
     else if (name === 'plateNumber')   { next.plateNumber   = formatPlateNumber(value); }
     else if (name === 'licenseNumber') { next.licenseNumber = formatLicenseNumber(value); }
     else if (name === 'password')      { next.password      = value.slice(0, 10); }
@@ -482,8 +484,8 @@ const RiderRegistrationModal = ({ onClose }) => {
 
   const validate = () => {
     const e = {};
-    if (!form.fullName.trim()) e.fullName = 'Full name is required.';
-    else if (form.fullName.trim().length < 3) e.fullName = 'At least 3 characters.';
+    const nameErr = validatePersonName(form.fullName);
+    if (nameErr) e.fullName = nameErr;
 
     if (!form.email.trim()) e.email = 'Email is required.';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Enter a valid email.';
@@ -492,8 +494,8 @@ const RiderRegistrationModal = ({ onClose }) => {
     else if (form.phone.length !== 11) e.phone = 'Must be exactly 11 digits.';
     else if (!form.phone.startsWith('09')) e.phone = 'Must start with 09.';
 
-    if (!form.address.trim()) e.address = 'Address is required.';
-    else if (form.address.trim().length < 10) e.address = 'Please enter a complete address.';
+    const addressErr = validateAddress(form.address, true);
+    if (addressErr) e.address = addressErr;
 
     if (!form.plateNumber.trim()) {
       e.plateNumber = 'Plate number is required.';
@@ -512,6 +514,10 @@ const RiderRegistrationModal = ({ onClose }) => {
 
     if (!form.confirmPassword) e.confirmPassword = 'Please confirm your password.';
     else if (form.password !== form.confirmPassword) e.confirmPassword = 'Passwords do not match.';
+
+    if (!photos.riderPhoto) {
+      e.riderPhoto = 'Rider face photo is required.';
+    }
 
     if (!consentChecked) e.consent = 'You must agree to the Privacy Policy and Terms to continue.';
     if (!otpVerified) e.otp = 'Verify your email with the OTP code first.';
@@ -545,7 +551,7 @@ const RiderRegistrationModal = ({ onClose }) => {
           actorEmail: form.email,
           actorName: form.fullName,
           actorRole: 'rider',
-          details: 'Rider application submitted',
+          details: 'Rider account created (auto-approved)',
         });
       } catch {}
       setSubmitted(true);
@@ -580,8 +586,8 @@ const RiderRegistrationModal = ({ onClose }) => {
           {submitted ? (
             <div className="rider-modal-success">
               <div className="success-icon">✅</div>
-              <h3>Application Submitted!</h3>
-              <p>We'll review your application and get back to you via email or phone.</p>
+              <h3>You're approved!</h3>
+              <p>Your rider account is ready. You can log in now at /rider with your email and password.</p>
               <button className="rider-btn-close" onClick={onClose}>Close</button>
             </div>
           ) : (
@@ -740,11 +746,11 @@ const RiderRegistrationModal = ({ onClose }) => {
                 {/* ══ RIGHT: Photos & IDs ══ */}
                 <div className="rider-col-right">
                   <div className="col-section-label">Identity Verification</div>
-                  <p className="col-section-hint">All photos are optional for now.</p>
+                  <p className="col-section-hint">Rider face photo is required. Valid IDs are optional.</p>
 
                   {/* SELFIE */}
                   <div className="rider-form-group">
-                    <label>🤳 Selfie <span className="optional-tag">Optional</span></label>
+                    <label>🤳 Rider Face Photo <span className="required-tag">Required</span></label>
                     <div className="selfie-guidelines">
                       <div className="selfie-guidelines-title">📋 Photo Requirements</div>
                       <div className="selfie-guideline-item guideline-required">

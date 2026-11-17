@@ -130,7 +130,7 @@
 
 .search-box input:focus {
   outline: none;
-  border-color: #ee4d2d;
+  border-color: #e5e7eb;
   box-shadow: 0 0 0 3px rgba(238, 77, 45, 0.1);
 }
 
@@ -241,7 +241,7 @@
 
 .stock-edit .save-btn   { padding: 6px 10px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer; }
 .stock-edit .save-btn:hover { background: #059669; }
-.stock-edit .cancel-btn { padding: 6px 10px; background: #ef4444; color: white; border: none; border-radius: 6px; cursor: pointer; }
+.stock-edit .cancel-btn { padding: 6px 10px; background: #e5e7eb; color: white; border: none; border-radius: 6px; cursor: pointer; }
 .stock-edit .cancel-btn:hover { background: #dc2626; }
 
 /* STATUS BADGES */

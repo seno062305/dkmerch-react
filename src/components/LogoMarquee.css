@@ -59,7 +59,7 @@
   height: 112px;
   border-radius: 50%;
   background: #fff1f5;
-  border: 2.5px solid #fecdd3;
+  border: 2.5px solid #e5e7eb;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -80,7 +80,7 @@
 }
 
 .logo-item:hover .logo-circle {
-  border-color: #fc1268;
+  border-color: #e5e7eb;
   box-shadow: 0 0 0 3px rgba(252, 18, 104, 0.12);
 }
 

@@ -1,14 +1,16 @@
 .dk-toast-stack {
   position: fixed;
-  top: 12px;
-  right: 12px;
+  top: max(12px, env(safe-area-inset-top, 0px));
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
   z-index: 40000;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-  width: min(280px, calc(100vw - 24px));
-  max-width: 280px;
+  align-items: center;
+  gap: 8px;
+  width: min(380px, calc(100vw - 28px));
+  max-width: min(380px, calc(100vw - 28px));
   pointer-events: none;
 }
 
@@ -16,80 +18,98 @@
   pointer-events: auto;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: 999px;
-  color: #fff;
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.18);
-  animation: dkToastIn 0.22s ease-out;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  max-width: 100%;
-  min-height: 36px;
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: #fff;
+  color: #1a1f36;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.14), 0 2px 8px rgba(15, 23, 42, 0.06);
+  border: 1px solid #f1f5f9;
+  animation: dkToastIn 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+  min-height: 48px;
+  transition: transform 0.25s ease, opacity 0.25s ease, box-shadow 0.25s ease;
 }
 
-.dk-toast > i:first-child {
-  font-size: 13px;
-  line-height: 1;
-  flex-shrink: 0;
-  margin-top: 0;
-  opacity: 0.95;
+/* Soft stack depth when multiple toasts show */
+.dk-toast-stack .dk-toast:nth-child(n + 2) {
+  opacity: 0.92;
+  transform: scale(0.985);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.1);
 }
+
+.dk-toast-stack .dk-toast:nth-child(n + 3) {
+  opacity: 0.84;
+  transform: scale(0.97);
+}
+
+.dk-toast-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #fff;
+  font-size: 12px;
+}
+
+.dk-toast--success .dk-toast-icon { background: #16a34a; }
+.dk-toast--error .dk-toast-icon { background: #dc2626; }
+.dk-toast--warning .dk-toast-icon { background: #d97706; }
+.dk-toast--info .dk-toast-icon { background: #fc1268; }
 
 .dk-toast-msg {
   flex: 1;
   min-width: 0;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
-  line-height: 1.25;
-  white-space: nowrap;
+  line-height: 1.35;
+  color: #1a1f36;
+  white-space: normal;
   overflow: hidden;
-  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 .dk-toast-close {
   flex-shrink: 0;
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   border: none;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.18);
-  color: #fff;
+  background: #f8fafc;
+  color: #94a3b8;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0;
   line-height: 0;
+  transition: background 0.15s, color 0.15s;
 }
 
 .dk-toast-close i {
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .dk-toast-close:hover {
-  background: rgba(255, 255, 255, 0.28);
+  background: #fce7f3;
+  color: #fc1268;
 }
 
-.dk-toast--success {
-  background: linear-gradient(135deg, #16a34a, #22c55e);
-}
-
-.dk-toast--error {
-  background: linear-gradient(135deg, #dc2626, #f97316);
-}
-
-.dk-toast--warning {
-  background: linear-gradient(135deg, #d97706, #f59e0b);
-}
-
-.dk-toast--info {
-  background: linear-gradient(135deg, #fc1268, #a855f7);
-}
+.dk-toast--success { border-color: #e5e7eb; }
+.dk-toast--error { border-color: #e5e7eb; }
+.dk-toast--warning { border-color: #e5e7eb; }
+.dk-toast--info { border-color: #e5e7eb; }
 
 @keyframes dkToastIn {
   from {
     opacity: 0;
-    transform: translateY(-6px) scale(0.96);
+    transform: translateY(-14px) scale(0.96);
   }
   to {
     opacity: 1;
@@ -99,18 +119,17 @@
 
 @media (max-width: 768px) {
   .dk-toast-stack {
-    top: auto;
-    bottom: calc(78px + env(safe-area-inset-bottom, 0px));
-    left: 50%;
-    right: auto;
-    transform: translateX(-50%);
-    width: min(300px, calc(100vw - 28px));
-    max-width: min(300px, calc(100vw - 28px));
-    align-items: center;
+    top: max(10px, env(safe-area-inset-top, 0px));
+    width: min(360px, calc(100vw - 24px));
+    max-width: min(360px, calc(100vw - 24px));
   }
 
   .dk-toast {
-    width: auto;
-    max-width: 100%;
+    padding: 11px 12px;
+    border-radius: 14px;
+  }
+
+  .dk-toast-msg {
+    font-size: 12.5px;
   }
 }

@@ -14,7 +14,7 @@
   right: 24px;
   z-index: 9999;
   background: #f0fdf4;
-  border: 1.5px solid #86efac;
+  border: 1.5px solid #e5e7eb;
   color: #15803d;
   font-size: 14px;
   font-weight: 600;
@@ -108,7 +108,7 @@
 .view-toggle .view-btn.active {
   background: #fff !important;
   color: #fc1268 !important;
-  border: 1.5px solid #fc1268 !important;
+  border: 1.5px solid #e5e7eb !important;
   box-shadow: 0 2px 8px rgba(252, 18, 104, 0.12) !important;
 }
 
@@ -208,7 +208,7 @@
   height: 100%;
   min-width: 0;
 }
-.product-card:hover { transform: translateY(-4px); box-shadow: 0 8px 20px rgba(0,0,0,0.12); border-color: #ee4d2d; }
+.product-card:hover { transform: translateY(-4px); box-shadow: 0 8px 20px rgba(0,0,0,0.12); border-color: #e5e7eb; }
 
 .product-image {
   position: relative;
@@ -285,12 +285,12 @@
   display: flex; align-items: flex-start; gap: 6px;
   font-size: 11px; color: #2563eb; font-weight: 600;
   margin-bottom: 10px; background: #eff6ff;
-  padding: 5px 10px; border-radius: 6px; border: 1px solid #bfdbfe;
+  padding: 5px 10px; border-radius: 6px; border: 1px solid #e5e7eb;
   line-height: 1.35;
   word-break: break-word;
 }
-.release-date-info.released { background: #f0fdf4; color: #15803d; border-color: #86efac; }
-.release-date-info.sale-date-info { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+.release-date-info.released { background: #f0fdf4; color: #15803d; border-color: #e5e7eb; }
+.release-date-info.sale-date-info { background: #fef2f2; color: #e5e7eb; border-color: #e5e7eb; }
 
 .product-pricing { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
 .price { font-size: 18px; font-weight: 700; color: #ee4d2d; }
@@ -467,7 +467,7 @@
 }
 .stock-filters .search-box input:focus,
 .stock-filters .filter-select:focus {
-  border-color: #fc1268;
+  border-color: #e5e7eb;
   box-shadow: 0 0 0 3px rgba(252, 18, 104, 0.12);
 }
 
@@ -573,7 +573,7 @@
 }
 .stock-list-row.low-stock-row {
   background: #fff7ed;
-  border-color: #fed7aa;
+  border-color: #e5e7eb;
 }
 .stock-list-thumb {
   width: 48px;
@@ -660,7 +660,7 @@
   display: none;
 }
 .stock-edit input[aria-invalid="true"] {
-  border-color: #ef4444;
+  border-color: #e5e7eb;
   box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
 }
 .stock-panel--low .stock-list-row {
@@ -743,7 +743,7 @@
 }
 .stock-edit input:focus {
   outline: none;
-  border-color: #fc1268;
+  border-color: #e5e7eb;
   box-shadow: 0 0 0 3px rgba(252, 18, 104, 0.12);
 }
 .stock-edit .save-btn,
@@ -937,11 +937,21 @@
   background: white;
   color: #111827;
 }
+.form-group textarea {
+  resize: none !important;
+  min-height: 88px;
+  max-height: 88px;
+  height: 88px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  field-sizing: fixed;
+  max-width: 100%;
+}
 .form-group input:focus,
 .form-group select:focus,
 .form-group textarea:focus {
   outline: none;
-  border-color: #ee4d2d;
+  border-color: #e5e7eb;
   box-shadow: 0 0 0 3px rgba(238,77,45,0.1);
 }
 
@@ -961,7 +971,7 @@
 .form-group.has-error input,
 .form-group.has-error select,
 .form-group.has-error textarea {
-  border-color: #ef4444;
+  border-color: #e5e7eb;
   box-shadow: 0 0 0 3px rgba(239,68,68,0.1);
 }
 
@@ -996,7 +1006,7 @@
   transition: border-color 0.15s, background 0.15s;
 }
 .catalog-add-btn:hover {
-  border-color: #ee4d2d;
+  border-color: #e5e7eb;
   background: #fff5f2;
 }
 .catalog-del-btn {
@@ -1014,7 +1024,7 @@
   transition: border-color 0.15s, background 0.15s;
 }
 .catalog-del-btn:hover:not(:disabled) {
-  border-color: #dc2626;
+  border-color: #e5e7eb;
   background: #fef2f2;
 }
 .catalog-del-btn:disabled {
@@ -1087,7 +1097,7 @@
 .catalog-logo-btn {
   background: #fff;
   color: #fc1268;
-  border: 1.5px solid #fc1268;
+  border: 1.5px solid #e5e7eb;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1106,7 +1116,7 @@
   border-radius: 50%;
   overflow: hidden;
   background: #fff1f5;
-  border: 2px solid #fecdd3;
+  border: 2px solid #e5e7eb;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -1163,7 +1173,7 @@
   margin: 16px 0 0;
   padding: 11px 14px;
   background: #fff1f5;
-  border: 1px solid #fecdd3;
+  border: 1px solid #e5e7eb;
   border-radius: 10px;
   color: #9f1239;
   font-size: 13px;
@@ -1219,7 +1229,7 @@
 .catalog-count {
   background: #fff1f5;
   color: #fc1268;
-  border: 1px solid #fecdd3;
+  border: 1px solid #e5e7eb;
   font-size: 12px;
   font-weight: 800;
   padding: 4px 10px;
@@ -1238,7 +1248,7 @@
 }
 .catalog-panel .catalog-add-row input:focus {
   outline: none;
-  border-color: #fc1268;
+  border-color: #e5e7eb;
   box-shadow: 0 0 0 3px rgba(252, 18, 104, 0.12);
 }
 .catalog-panel .helper-text {
@@ -1326,7 +1336,7 @@
   justify-content: center;
 }
 .catalog-manager .catalog-del-btn {
-  border-color: #fecdd3;
+  border-color: #e5e7eb;
   color: #fc1268;
   background: #fff;
   border-radius: 10px;
@@ -1334,14 +1344,14 @@
   height: 36px;
 }
 .catalog-manager .catalog-del-btn:hover:not(:disabled) {
-  border-color: #fc1268;
+  border-color: #e5e7eb;
   background: #fff1f5;
   color: #e0105a;
 }
 .catalog-manager .catalog-del-btn.is-locked,
 .catalog-manager .catalog-del-btn:disabled {
   color: #fda4af;
-  border-color: #fce7f3;
+  border-color: #e5e7eb;
   background: #fffafc;
   opacity: 0.7;
 }
@@ -1368,7 +1378,7 @@
 .checkbox-label { display: flex; align-items: center; gap: 10px; cursor: pointer; position: relative; }
 .checkbox-label input[type="checkbox"] { position: absolute; opacity: 0; cursor: pointer; }
 .checkbox-custom { width: 20px; height: 20px; border: 2px solid #cbd5e1; border-radius: 4px; transition: all 0.2s; flex-shrink: 0; }
-.checkbox-label input[type="checkbox"]:checked + .checkbox-custom { background: #ee4d2d; border-color: #ee4d2d; }
+.checkbox-label input[type="checkbox"]:checked + .checkbox-custom { background: #e5e7eb; border-color: #e5e7eb; }
 .checkbox-label input[type="checkbox"]:checked + .checkbox-custom::after {
   content: '✓'; position: absolute; color: white;
   font-size: 13px; font-weight: 700; left: 4px; top: 1px;
@@ -1380,7 +1390,7 @@
 .release-preview {
   display: flex; align-items: center; gap: 10px;
   background: linear-gradient(135deg, #eff6ff, #f0fdf4);
-  border: 1.5px solid #bfdbfe; border-radius: 10px;
+  border: 1.5px solid #e5e7eb; border-radius: 10px;
   padding: 12px 16px; font-size: 14px; color: #1e40af; font-weight: 500;
 }
 .release-preview i { color: #2563eb; font-size: 15px; flex-shrink: 0; }
@@ -1388,7 +1398,7 @@
 
 .email-notice {
   display: flex; align-items: flex-start; gap: 10px;
-  background: #eff6ff; border: 1.5px solid #bfdbfe;
+  background: #eff6ff; border: 1.5px solid #e5e7eb;
   border-radius: 10px; padding: 12px 16px;
   font-size: 13px; color: #1e40af;
 }
@@ -1467,7 +1477,7 @@
     border-radius: 10px !important;
     background: #fff !important;
     color: #fc1268 !important;
-    border: 1.5px solid #fc1268 !important;
+    border: 1.5px solid #e5e7eb !important;
     box-shadow: 0 2px 8px rgba(252, 18, 104, 0.12) !important;
   }
   .stock-tabs .tab-btn.active i { color: #fc1268 !important; }

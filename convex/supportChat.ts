@@ -62,12 +62,34 @@ export const getOrCreateMyThread = mutation({
   },
 });
 
-async function getAdminPresenceOnlineAt(db: any) {
+const ONLINE_WINDOW_MS = 60_000;
+
+async function getPresenceOnlineAt(db: any, key: string) {
   const row = await db
     .query("supportPresence")
-    .withIndex("by_key", (q: any) => q.eq("key", "admin"))
+    .withIndex("by_key", (q: any) => q.eq("key", key))
     .first();
   return row?.onlineAt || 0;
+}
+
+async function getAdminPresenceOnlineAt(db: any) {
+  return getPresenceOnlineAt(db, "admin");
+}
+
+async function upsertPresence(db: any, key: string, now: number) {
+  const existing = await db
+    .query("supportPresence")
+    .withIndex("by_key", (q: any) => q.eq("key", key))
+    .first();
+  if (existing) {
+    await db.patch(existing._id, { onlineAt: now });
+  } else {
+    await db.insert("supportPresence", { key, onlineAt: now });
+  }
+}
+
+function customerPresenceKey(email: string) {
+  return `customer:${normalizeEmail(email)}`;
 }
 
 export const getMyThread = query({
@@ -88,7 +110,7 @@ export const getAdminOnline = query({
   args: {},
   handler: async ({ db }) => {
     const onlineAt = await getAdminPresenceOnlineAt(db);
-    return { onlineAt, isOnline: onlineAt > 0 && Date.now() - onlineAt < 45000 };
+    return { onlineAt, isOnline: onlineAt > 0 && Date.now() - onlineAt < ONLINE_WINDOW_MS };
   },
 });
 
@@ -138,6 +160,7 @@ export const sendCustomerMessage = mutation({
         unreadByAdmin: 1,
         unreadByCustomer: 0,
         status: "open",
+        customerOnlineAt: now,
         updatedAt: now,
         createdAt: now,
       });
@@ -150,6 +173,7 @@ export const sendCustomerMessage = mutation({
         imageStorageId: args.imageStorageId,
         createdAt: now,
       });
+      await upsertPresence(db, customerPresenceKey(email), now);
       return { success: true, threadId };
     }
 
@@ -169,8 +193,10 @@ export const sendCustomerMessage = mutation({
       unreadByAdmin: (thread.unreadByAdmin || 0) + 1,
       status: "open",
       archivedAt: 0, // new customer message restores from archive
+      customerOnlineAt: now,
       updatedAt: now,
     });
+    await upsertPresence(db, customerPresenceKey(email), now);
     return { success: true, threadId: thread._id };
   },
 });
@@ -203,8 +229,10 @@ export const sendAdminMessage = mutation({
       lastMessagePreview: body || "📷 Image",
       unreadByCustomer: (thread.unreadByCustomer || 0) + 1,
       status: "open",
+      adminOnlineAt: now,
       updatedAt: now,
     });
+    await upsertPresence(db, "admin", now);
     return { success: true };
   },
 });
@@ -215,7 +243,16 @@ export const listThreadsForAdmin = query({
     const threads = await db.query("supportThreads").collect();
     const active = threads.filter((t: any) => !(t.archivedAt > 0));
     active.sort((a: any, b: any) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0));
-    return active;
+    const enriched = [];
+    for (const t of active) {
+      const email = normalizeEmail(t.customerEmail || "");
+      const globalCustomerOnlineAt = email
+        ? await getPresenceOnlineAt(db, customerPresenceKey(email))
+        : 0;
+      const customerOnlineAt = Math.max(t.customerOnlineAt || 0, globalCustomerOnlineAt || 0);
+      enriched.push({ ...t, customerOnlineAt });
+    }
+    return enriched;
   },
 });
 
@@ -310,7 +347,7 @@ export const markThreadReadByCustomer = mutation({
   },
 });
 
-/** Keep presence fresh while chat page is open (call every ~20s). */
+/** Keep presence fresh while the account is open (call every ~15s). */
 export const heartbeatPresence = mutation({
   args: {
     role: v.union(v.literal("customer"), v.literal("admin")),
@@ -322,22 +359,17 @@ export const heartbeatPresence = mutation({
     if (args.role === "customer") {
       const email = normalizeEmail(args.customerEmail || "");
       if (!email) return { success: false };
+      // Global customer presence — admin chat shows Online while account is open
+      await upsertPresence(db, customerPresenceKey(email), now);
       const thread = await findThreadByEmail(db, email);
-      if (!thread) return { success: false };
-      await db.patch(thread._id, { customerOnlineAt: now, updatedAt: now });
+      if (thread) {
+        await db.patch(thread._id, { customerOnlineAt: now, updatedAt: now });
+      }
       return { success: true };
     }
 
-    // Global admin presence — any customer can see admin online while Admin Chat is open
-    const existing = await db
-      .query("supportPresence")
-      .withIndex("by_key", (q: any) => q.eq("key", "admin"))
-      .first();
-    if (existing) {
-      await db.patch(existing._id, { onlineAt: now });
-    } else {
-      await db.insert("supportPresence", { key: "admin", onlineAt: now });
-    }
+    // Global admin presence — customers see Online while admin account is open
+    await upsertPresence(db, "admin", now);
 
     if (args.threadId) {
       const thread = await db.get(args.threadId);

@@ -2,6 +2,7 @@
 import { query, mutation, internalQuery, internalMutation } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
+import { validatePersonName, validateAddress } from "./lib/personValidation";
 
 const genSessionId = () =>
   `${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${Math.random().toString(36).slice(2, 10)}`;
@@ -164,6 +165,22 @@ export const createRiderApplication = mutation({
   },
   handler: async ({ db }, args) => {
     const email = String(args.email || "").trim().toLowerCase();
+    const fullName = String(args.fullName || "").replace(/\s+/g, " ").trim();
+    const address = args.address != null ? String(args.address).replace(/\s+/g, " ").trim() : "";
+
+    const nameErr = validatePersonName(fullName, true);
+    if (nameErr) return { success: false, message: nameErr };
+    const addressErr = validateAddress(address, true);
+    if (addressErr) return { success: false, message: addressErr };
+
+    const riderPhoto = args.riderPhoto ? String(args.riderPhoto) : "";
+    if (!riderPhoto) {
+      return { success: false, message: "Rider face photo is required." };
+    }
+    if (riderPhoto.length > 900_000) {
+      return { success: false, message: "Rider face photo is too large. Use a smaller JPG/PNG." };
+    }
+
     const verified = await assertRiderEmailVerified(db, email);
     if (!verified.ok) return { success: false, message: verified.message };
 
@@ -172,27 +189,33 @@ export const createRiderApplication = mutation({
       .withIndex("by_email", q => q.eq("email", email))
       .first();
     if (existing) {
-      return { success: false, message: "This email is already registered as a rider applicant." };
+      return { success: false, message: "This email is already registered as a rider." };
     }
+
+    // Auto-approve on create — no pending review queue
+    const dkRiderId = await allocateNextDkRiderId(db);
     const id = await db.insert("riderApplications", {
-      fullName: args.fullName,
+      fullName,
       email,
       phone: args.phone,
-      vehicleType: args.vehicleType,
-      status: "pending",
+      vehicleType: args.vehicleType || "motorcycle",
+      status: "approved",
       appliedAt: new Date().toISOString(),
-      address: args.address,
+      address,
       plateNumber: args.plateNumber,
       licenseNumber: args.licenseNumber,
       password: args.password,
-      riderPhoto: args.riderPhoto,
+      riderPhoto,
       validId1: args.validId1,
       validId2: args.validId2,
+      dkRiderId,
+      dkRiderIdGeneratedAt: new Date().toISOString(),
+      activeSessionIds: [] as string[],
     });
     if (verified.row?._id) {
       try { await db.delete(verified.row._id); } catch { /* optional */ }
     }
-    return { success: true, id };
+    return { success: true, id, dkRiderId, email, fullName };
   },
 });
 
@@ -231,6 +254,14 @@ export const adminCreateRider = mutation({
   },
   handler: async ({ db }, args) => {
     const email = args.email.trim().toLowerCase();
+    const fullName = String(args.fullName || "").replace(/\s+/g, " ").trim();
+    const address = args.address?.trim() ? String(args.address).replace(/\s+/g, " ").trim() : "";
+
+    const nameErr = validatePersonName(fullName, true);
+    if (nameErr) return { success: false, message: nameErr };
+    const addressErr = validateAddress(address, true);
+    if (addressErr) return { success: false, message: addressErr };
+
     const verified = await assertRiderEmailVerified(db, email);
     if (!verified.ok) return { success: false, message: verified.message };
 
@@ -246,7 +277,7 @@ export const adminCreateRider = mutation({
 
     // Never pass explicit `undefined` — Convex rejects those on insert.
     const doc: Record<string, unknown> = {
-      fullName: args.fullName.trim(),
+      fullName,
       email,
       phone: args.phone.trim(),
       vehicleType: args.vehicleType || "motorcycle",
@@ -257,11 +288,10 @@ export const adminCreateRider = mutation({
       dkRiderIdGeneratedAt: new Date().toISOString(),
       activeSessionIds: [] as string[],
     };
-    const address = args.address?.trim();
     const plateNumber = args.plateNumber?.trim();
     const licenseNumber = args.licenseNumber?.trim();
     const riderPhoto = args.riderPhoto || null;
-    if (address) doc.address = address;
+    doc.address = address;
     if (plateNumber) doc.plateNumber = plateNumber;
     if (licenseNumber) doc.licenseNumber = licenseNumber;
     if (riderPhoto) {
@@ -357,8 +387,118 @@ export const updateRiderPhoto = mutation({
 export const updateRiderStatus = mutation({
   args: { id: v.id("riderApplications"), status: v.string() },
   handler: async ({ db }, { id, status }) => {
-    await db.patch(id, { status });
+    const rider = await db.get(id);
+    if (!rider) return { success: false, message: "Rider not found." };
+
+    const next = String(status || "").toLowerCase().trim();
+    if (!["approved", "suspended", "pending"].includes(next)) {
+      return { success: false, message: "Invalid rider status." };
+    }
+
+    const patch: Record<string, unknown> = { status: next };
+    // Kick active sessions when suspending so they cannot keep delivering
+    if (next === "suspended") {
+      patch.activeSessionId = undefined;
+      patch.activeSessionIds = [];
+      patch.kickedAt = Date.now();
+      patch.loginAlert = undefined;
+      patch.loginBroadcast = undefined;
+    }
+    await db.patch(id, patch);
+    return { success: true, status: next };
+  },
+});
+
+export const suspendRider = mutation({
+  args: {
+    id: v.id("riderApplications"),
+    reason: v.string(),
+    note: v.optional(v.string()),
+    durationDays: v.optional(v.number()), // undefined = permanent
+  },
+  handler: async (ctx, { id, reason, note, durationDays }) => {
+    const rider = await ctx.db.get(id);
+    if (!rider) return { success: false, message: "Rider not found." };
+    if (rider.status !== "approved" && rider.status !== "suspended") {
+      return { success: false, message: "Only approved riders can be suspended." };
+    }
+
+    const now = Date.now();
+    const suspendedUntil = durationDays
+      ? now + durationDays * 24 * 60 * 60 * 1000
+      : undefined;
+
+    await ctx.db.patch(id, {
+      status: "suspended",
+      suspendReason: reason,
+      suspendNote: note ?? undefined,
+      suspendedAt: now,
+      suspendedUntil: suspendedUntil ?? undefined,
+      activeSessionId: undefined,
+      activeSessionIds: [],
+      kickedAt: now,
+      loginAlert: undefined,
+      loginBroadcast: undefined,
+    });
+
+    if (rider.email) {
+      await ctx.scheduler.runAfter(0, internal.sendEmail.sendSuspensionEmail, {
+        to: rider.email,
+        name: rider.fullName ?? "Rider",
+        reason,
+        note: note ?? undefined,
+        suspendedUntil: suspendedUntil ?? undefined,
+      });
+    }
+
+    return {
+      success: true,
+      riderEmail: rider.email,
+      riderName: rider.fullName,
+      suspendedUntil: suspendedUntil ?? null,
+    };
+  },
+});
+
+export const unsuspendRider = mutation({
+  args: { id: v.id("riderApplications") },
+  handler: async ({ db }, { id }) => {
+    const rider = await db.get(id);
+    if (!rider) return { success: false, message: "Rider not found." };
+
+    await db.patch(id, {
+      status: "approved",
+      suspendReason: undefined,
+      suspendNote: undefined,
+      suspendedAt: undefined,
+      suspendedUntil: undefined,
+    });
     return { success: true };
+  },
+});
+
+/** Clear temporary rider suspensions that have expired (cron / login safety). */
+export const autoUnsuspendExpiredRiders = internalMutation({
+  args: {},
+  handler: async ({ db }) => {
+    const now = Date.now();
+    const riders = await db
+      .query("riderApplications")
+      .withIndex("by_status", (q) => q.eq("status", "suspended"))
+      .collect();
+    const toUnsuspend = riders.filter(
+      (r) => r.suspendedUntil && r.suspendedUntil <= now
+    );
+    for (const rider of toUnsuspend) {
+      await db.patch(rider._id, {
+        status: "approved",
+        suspendedUntil: undefined,
+        suspendedAt: undefined,
+        suspendReason: undefined,
+        suspendNote: undefined,
+      });
+    }
+    return { unsuspended: toUnsuspend.length };
   },
 });
 
@@ -530,11 +670,27 @@ export const loginRider = mutation({
         message: "❌ Your rider application was not approved. Please contact support.",
       };
     }
+    let liveStatus = status;
     if (status === "suspended") {
-      return {
-        success: false, riderExists: true,
-        message: "🚫 Your rider account has been suspended. Please contact admin.",
-      };
+      // Auto-restore temporary suspensions that already expired
+      if (rider.suspendedUntil && rider.suspendedUntil <= Date.now()) {
+        await db.patch(rider._id, {
+          status: "approved",
+          suspendedUntil: undefined,
+          suspendedAt: undefined,
+          suspendReason: undefined,
+          suspendNote: undefined,
+        });
+        liveStatus = "approved";
+      } else {
+        const until = rider.suspendedUntil
+          ? ` until ${new Date(rider.suspendedUntil).toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "numeric" })}`
+          : "";
+        return {
+          success: false, riderExists: true,
+          message: `🚫 Your rider account has been suspended${until}. Please contact admin.`,
+        };
+      }
     }
     if (rider.password && rider.password !== password) {
       return {
@@ -556,7 +712,7 @@ export const loginRider = mutation({
       name: rider.fullName,
       email: rider.email,
       role: "rider" as const,
-      status: rider.status,
+      status: liveStatus || rider.status,
       dkRiderId: rider.dkRiderId,
     };
 
@@ -740,6 +896,20 @@ export const checkRiderSession = query({
       .first();
 
     if (!rider) return { valid: false, reason: "rider_not_found" };
+
+    const st = String(rider.status || "").toLowerCase();
+    // Suspended / pending / rejected cannot keep an open app session
+    if (st === "suspended" || (st && st !== "approved" && st !== "active")) {
+      return {
+        valid: false,
+        reason: "account_suspended",
+        activeDeviceAt: null,
+        activeDeviceName: null,
+        activeDeviceLocation: null,
+        kickedAt: rider.kickedAt ?? null,
+      };
+    }
+
     const ids = getRiderSessionIds(rider);
     if (ids.length === 0) return { valid: true, reason: "legacy" };
 

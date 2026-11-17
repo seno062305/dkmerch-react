@@ -232,11 +232,11 @@
   transition: all 0.3s ease;
 }
 
-.chart-controls button:hover { border-color: #fc1268; color: #fc1268; }
+.chart-controls button:hover { border-color: #e5e7eb; color: #e5e7eb; }
 
 .chart-controls button.active {
   background: #fc1268;
-  border-color: #fc1268;
+  border-color: #e5e7eb;
   color: white;
 }
 
@@ -680,7 +680,7 @@
   font-size: 12px;
   color: #7c3aed;
   background: #f5f3ff;
-  border: 1px solid #c4b5fd;
+  border: 1px solid #e5e7eb;
   border-radius: 8px;
   padding: 8px 12px;
   margin-top: 12px;

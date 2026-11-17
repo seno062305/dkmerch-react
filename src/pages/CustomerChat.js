@@ -29,7 +29,7 @@ const CustomerChat = () => {
   const heartbeatPresence = useMutation(api.supportChat.heartbeatPresence);
 
   const adminPresence = useQuery(api.supportChat.getAdminOnline, {});
-  const ONLINE_MS = 45000;
+  const ONLINE_MS = 60000;
   const adminOnline = !!(
     (adminPresence?.isOnline) ||
     (thread?.adminOnlineAt && Date.now() - thread.adminOnlineAt < ONLINE_MS)
@@ -124,7 +124,7 @@ const CustomerChat = () => {
       heartbeatPresence({ role: 'customer', customerEmail: email }).catch(() => {});
     };
     ping();
-    const id = setInterval(ping, 20000);
+    const id = setInterval(ping, 15000);
     const onVis = () => {
       if (document.visibilityState === 'visible') ping();
     };
@@ -223,8 +223,8 @@ const CustomerChat = () => {
             <div className="customer-chat-brand-text">
               <strong>Chat with Admin</strong>
               <span className={`customer-chat-presence ${adminOnline ? 'is-online' : 'is-offline'}`}>
-                <i className="fas fa-circle" aria-hidden="true"></i>
-                {adminOnline ? 'Online' : 'Offline'}
+                <span className="chat-presence-dot" aria-hidden="true" />
+                <span className="chat-presence-label">{adminOnline ? 'Online' : 'Offline'}</span>
               </span>
             </div>
           </div>

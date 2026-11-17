@@ -71,7 +71,7 @@ const AdminChat = () => {
   const archiveThread = useMutation(api.supportChat.archiveThread);
   const unarchiveThread = useMutation(api.supportChat.unarchiveThread);
 
-  const ONLINE_MS = 45000;
+  const ONLINE_MS = 60000;
   const customerOnline = !!(activeThread?.customerOnlineAt && Date.now() - activeThread.customerOnlineAt < ONLINE_MS);
   const customerLastReadAt = activeThread?.customerLastReadAt || 0;
   void presenceTick;
@@ -121,7 +121,7 @@ const AdminChat = () => {
       }).catch(() => {});
     };
     ping();
-    const id = setInterval(ping, 20000);
+    const id = setInterval(ping, 15000);
     const onVis = () => {
       if (document.visibilityState === 'visible') ping();
     };
@@ -489,8 +489,11 @@ const AdminChat = () => {
                 <div className="admin-chat-convo-head-text">
                   <strong>{activeThread.customerName || 'Customer'}</strong>
                   <span className={`admin-chat-presence ${customerOnline ? 'is-online' : 'is-offline'}`}>
-                    <i className="fas fa-circle"></i>
-                    {customerOnline ? 'Online' : 'Offline'} · {activeThread.customerEmail}
+                    <span className="chat-presence-dot" aria-hidden="true" />
+                    <span className="chat-presence-label">
+                      {customerOnline ? 'Online' : 'Offline'}
+                    </span>
+                    <span className="admin-chat-presence-email">· {activeThread.customerEmail}</span>
                   </span>
                 </div>
                 <button

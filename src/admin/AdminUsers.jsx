@@ -8,6 +8,7 @@ import AdminPager, { fixedPageStyle } from './AdminPager';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
 import { formatPlateNumber, formatLicenseNumber, PLATE_REGEX, LICENSE_REGEX } from '../utils/riderIdFormat';
 import { IMAGE_ACCEPT_NO_GIF, validateImageFile } from '../utils/imageUpload';
+import { validatePersonName, validateAddress } from '../utils/personFieldValidation';
 
 const fileToDataUrl = (file) =>
   new Promise((resolve, reject) => {
@@ -45,7 +46,7 @@ const compressImageDataUrl = (dataUrl, { maxEdge = 720, quality = 0.8 } = {}) =>
     img.src = dataUrl;
   });
 
-const RiderViewModal = ({ rider, onClose, onPhotoUpdated }) => {
+const RiderViewModal = ({ rider, onClose, onPhotoUpdated, onToggleSuspend }) => {
   useBodyScrollLock(true);
   const cardRef = useRef();
   const photoInputRef = useRef();
@@ -62,13 +63,156 @@ const RiderViewModal = ({ rider, onClose, onPhotoUpdated }) => {
 
   const handlePrint = () => {
     if (!cardRef.current) return;
-    const win = window.open('', '_blank', 'width=500,height=320');
+    const win = window.open('', '_blank', 'width=520,height=360');
     if (!win) return;
-    win.document.write(`<html><head><title>DKMerch Rider ID</title><style>body{margin:0;padding:20px;font-family:'Segoe UI',sans-serif;background:#f0f0f0;}</style></head><body>${cardRef.current.innerHTML}</body></html>`);
+    // CR80 credit-card size (85.6 × 53.98 mm) — same look as on-screen purple ID for lamination
+    const printCss = `
+      @page { size: auto; margin: 10mm; }
+      * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      html, body {
+        margin: 0; padding: 0;
+        background: #fff;
+        font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      }
+      body {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .au-dk-id-card {
+        width: 85.6mm;
+        height: 53.98mm;
+        background: linear-gradient(145deg, #1e1b4b 0%, #4c1d95 55%, #7c3aed 100%) !important;
+        border-radius: 3.2mm;
+        color: #fff !important;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        box-shadow: none;
+      }
+      .au-dk-id-header {
+        display: flex;
+        align-items: center;
+        gap: 2.2mm;
+        padding: 2.4mm 3.2mm 1.6mm;
+        border-bottom: 0.3mm solid rgba(255,255,255,0.18);
+        flex-shrink: 0;
+      }
+      .au-dk-id-logo { font-size: 4.2mm; line-height: 1; }
+      .au-dk-id-brand { font-size: 3.4mm; font-weight: 800; letter-spacing: 0.04em; line-height: 1.15; }
+      .au-dk-id-brand-sub { font-size: 2.1mm; opacity: 0.85; line-height: 1.2; }
+      .au-dk-id-body {
+        display: flex;
+        gap: 2.8mm;
+        padding: 2.6mm 3.2mm;
+        align-items: flex-start;
+        flex: 1;
+        min-height: 0;
+      }
+      .au-dk-id-photo,
+      .au-dk-id-photo-placeholder {
+        width: 14mm;
+        height: 14mm;
+        border-radius: 1.6mm;
+        object-fit: cover;
+        border: 0.35mm solid rgba(255,255,255,0.4);
+        flex-shrink: 0;
+        background: rgba(255,255,255,0.12);
+      }
+      .au-dk-id-photo-placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 6mm;
+      }
+      .au-dk-id-info { min-width: 0; flex: 1; }
+      .au-dk-id-name {
+        font-size: 3.3mm;
+        font-weight: 800;
+        margin: 0 0 0.4mm;
+        line-height: 1.15;
+        word-break: break-word;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .au-dk-id-role {
+        font-size: 1.9mm;
+        opacity: 0.88;
+        margin: 0 0 1.2mm;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      .au-dk-id-details {
+        font-size: 2.15mm;
+        line-height: 1.45;
+        opacity: 0.95;
+      }
+      .au-dk-id-details > div {
+        display: flex;
+        align-items: flex-start;
+        gap: 1.2mm;
+        margin-bottom: 0.35mm;
+      }
+      .au-dk-id-details i {
+        width: 2.4mm;
+        flex-shrink: 0;
+        margin-top: 0.15mm;
+        text-align: center;
+        opacity: 0.95;
+      }
+      .au-dk-id-details span,
+      .au-dk-id-details {
+        overflow: hidden;
+      }
+      .au-dk-id-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        padding: 1.8mm 3.2mm 2.2mm;
+        background: rgba(0,0,0,0.22) !important;
+        flex-shrink: 0;
+      }
+      .au-dk-id-number {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 2.6mm;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+      }
+      .au-dk-id-number-label {
+        font-size: 1.7mm;
+        opacity: 0.75;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .au-dk-id-valid { font-size: 2mm; opacity: 0.9; }
+      @media print {
+        body { background: #fff !important; }
+        .au-dk-id-card { box-shadow: none !important; }
+      }
+    `;
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>DKMerch Rider ID — ${rider.dkRiderId || ''}</title>
+      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
+      <style>${printCss}</style>
+    </head><body>${cardRef.current.innerHTML}</body></html>`);
     win.document.close();
-    win.focus();
-    win.print();
-    win.close();
+    const triggerPrint = () => {
+      try {
+        win.focus();
+        win.print();
+      } finally {
+        // Keep window open briefly so print dialog can capture colors/images
+        setTimeout(() => { try { win.close(); } catch { /* ignore */ } }, 400);
+      }
+    };
+    // Wait for FA + photo to load before printing
+    if (win.document.readyState === 'complete') {
+      setTimeout(triggerPrint, 280);
+    } else {
+      win.onload = () => setTimeout(triggerPrint, 280);
+    }
   };
 
   const handlePhotoPick = async (e) => {
@@ -123,11 +267,17 @@ const RiderViewModal = ({ rider, onClose, onPhotoUpdated }) => {
                 <div className="au-dk-id-name">{rider.fullName}</div>
                 <div className="au-dk-id-role">Delivery Rider · Motorcycle</div>
                 <div className="au-dk-id-details">
-                  <div><i className="fas fa-phone"></i> {rider.phone || '—'}</div>
-                  <div><i className="fas fa-envelope"></i> {rider.email || '—'}</div>
-                  {rider.plateNumber && <div><i className="fas fa-car"></i> Plate: {rider.plateNumber}</div>}
-                  {rider.licenseNumber && <div><i className="fas fa-id-card"></i> License: {rider.licenseNumber}</div>}
-                  {rider.address && <div><i className="fas fa-map-marker-alt"></i> {rider.address}</div>}
+                  <div><i className="fas fa-phone" aria-hidden="true"></i><span className="au-dk-id-details-text">{rider.phone || '—'}</span></div>
+                  <div><i className="fas fa-envelope" aria-hidden="true"></i><span className="au-dk-id-details-text">{rider.email || '—'}</span></div>
+                  {rider.plateNumber && (
+                    <div><i className="fas fa-car" aria-hidden="true"></i><span className="au-dk-id-details-text">Plate: {rider.plateNumber}</span></div>
+                  )}
+                  {rider.licenseNumber && (
+                    <div><i className="fas fa-id-card" aria-hidden="true"></i><span className="au-dk-id-details-text">License: {rider.licenseNumber}</span></div>
+                  )}
+                  {rider.address && (
+                    <div><i className="fas fa-map-marker-alt" aria-hidden="true"></i><span className="au-dk-id-details-text">{rider.address}</span></div>
+                  )}
                 </div>
               </div>
             </div>
@@ -206,6 +356,16 @@ const RiderViewModal = ({ rider, onClose, onPhotoUpdated }) => {
               <i className="fas fa-print"></i> Print ID Card
             </button>
           )}
+          {onToggleSuspend && (rider.status === 'approved' || rider.status === 'suspended') && (
+            <button
+              type="button"
+              className="au-btn-secondary"
+              onClick={() => onToggleSuspend(rider)}
+            >
+              <i className={`fas ${rider.status === 'suspended' ? 'fa-user-check' : 'fa-user-slash'}`}></i>
+              {rider.status === 'suspended' ? 'Unsuspend' : 'Suspend'}
+            </button>
+          )}
           <button type="button" className="au-btn-primary" onClick={onClose}>Done</button>
         </div>
       </div>
@@ -273,6 +433,15 @@ const SUSPEND_REASONS = [
   { value: 'other',            label: 'Other',                        defaultDays: 1 },
 ];
 
+const RIDER_SUSPEND_REASONS = [
+  { value: 'delivery_misconduct',  label: 'Delivery Misconduct',              defaultDays: 3 },
+  { value: 'customer_complaints',  label: 'Customer Complaints',              defaultDays: 3 },
+  { value: 'identity_fraud',       label: 'Identity / Document Fraud',        defaultDays: 7 },
+  { value: 'vehicle_policy',       label: 'Vehicle / Safety Policy Violation', defaultDays: 3 },
+  { value: 'abusive_behavior',     label: 'Abusive / Harassing Behavior',     defaultDays: 3 },
+  { value: 'other',                label: 'Other',                            defaultDays: 1 },
+];
+
 const DURATION_OPTIONS = [
   { label: '3 Days',    days: 3    },
   { label: '7 Days',    days: 7    },
@@ -323,6 +492,8 @@ const AdminUsers = () => {
   const suspendUserMutation   = useMutation(api.users.suspendUser);
   const unsuspendUserMutation = useMutation(api.users.unsuspendUser);
   const deleteRiderMutation   = useMutation(api.riders.deleteRider);
+  const suspendRiderMutation  = useMutation(api.riders.suspendRider);
+  const unsuspendRiderMutation = useMutation(api.riders.unsuspendRider);
   const adminCreateRider      = useMutation(api.riders.adminCreateRider);
   const approveRiderMutation  = useMutation(api.riders.approveRider);
   const rejectRiderMutation   = useMutation(api.riders.rejectRiderApplication);
@@ -337,7 +508,9 @@ const AdminUsers = () => {
 
   const [showSuspendModal, setShowSuspendModal] = useState(false);
   const [suspendStep, setSuspendStep]           = useState(STEP_CONFIGURE);
+  const [suspendKind, setSuspendKind]           = useState('user'); // 'user' | 'rider'
   const [userToSuspend, setUserToSuspend]       = useState(null);
+  const [riderToSuspend, setRiderToSuspend]     = useState(null);
   const [suspendReason, setSuspendReason]       = useState('');
   const [suspendDays, setSuspendDays]           = useState(null);
   const [suspendNote, setSuspendNote]           = useState('');
@@ -345,9 +518,10 @@ const AdminUsers = () => {
 
   const [showUnsuspendConfirm, setShowUnsuspendConfirm] = useState(false);
   const [userToUnsuspend, setUserToUnsuspend]           = useState(null);
+  const [riderToUnsuspend, setRiderToUnsuspend]         = useState(null);
 
   const [riderSearch, setRiderSearch]             = useState('');
-  const [riderFilterStatus, setRiderFilterStatus] = useState('all'); // all | rejected | suspended
+  const [riderFilterStatus, setRiderFilterStatus] = useState('all'); // all | approved | suspended
 
   const [showRiderDeleteModal, setShowRiderDeleteModal] = useState(false);
   const [riderDeleteStep, setRiderDeleteStep]           = useState(STEP_CONFIGURE);
@@ -359,6 +533,7 @@ const AdminUsers = () => {
   const [riderForm, setRiderForm]         = useState(EMPTY_RIDER_FORM);
   const [riderFormError, setRiderFormError] = useState('');
   const [riderFormLoading, setRiderFormLoading] = useState(false);
+  const [showAddRider, setShowAddRider] = useState(false);
   const [pendingAppDetail, setPendingAppDetail] = useState(null);
   const [showRiderPw, setShowRiderPw]     = useState(false);
   const [viewingRider, setViewingRider]   = useState(null);
@@ -373,7 +548,7 @@ const AdminUsers = () => {
   const sendRegistrationOTP  = useAction(api.sendEmail.sendRegistrationOTP);
 
   useEffect(() => {
-    if (activeTab !== 'riders' && activeTab !== 'applications') return;
+    if (activeTab !== 'riders') return;
     if (riderIdsRepairedRef.current) return;
     riderIdsRepairedRef.current = true;
     repairDuplicateRiderIds({}).catch(() => {
@@ -398,18 +573,28 @@ const AdminUsers = () => {
     setTimeout(() => setNotification({ show: false, message: '', type: '' }), 6000);
   };
 
+  // Normalize legacy "deactivated" → self_deactivated so Deactivated filter catches everyone
+  const normalizeUserStatus = (status) => {
+    const s = status || 'active';
+    if (s === 'deactivated') return 'self_deactivated';
+    return s;
+  };
+
   // Live statuses only: active, suspended, deactivated
   const ALLOWED_USER_STATUSES = new Set(['active', 'suspended', 'self_deactivated']);
   const regularUsers = users.filter((u) =>
-    ALLOWED_USER_STATUSES.has(u.status || 'active')
+    ALLOWED_USER_STATUSES.has(normalizeUserStatus(u.status))
   );
 
   const byNewest = (a, b) =>
     (b._creationTime || new Date(b.appliedAt || b.registeredAt || 0).getTime() || 0) -
     (a._creationTime || new Date(a.appliedAt || a.registeredAt || 0).getTime() || 0);
 
+  const showUserStatusCol = filterStatus === 'all';
+
   const filteredUsers = regularUsers.filter(u => {
-    if (filterStatus !== 'all' && (u.status || 'active') !== filterStatus) return false;
+    const status = normalizeUserStatus(u.status);
+    if (filterStatus !== 'all' && status !== filterStatus) return false;
     if (!searchTerm.trim()) return true;
     const q = searchTerm.toLowerCase();
     return (
@@ -427,7 +612,12 @@ const AdminUsers = () => {
     return filteredUsers.slice(start, start + pageSize);
   }, [filteredUsers, page, pageSize]);
 
-  const filteredRiders = riders.filter(r => {
+  // Riders tab: approved + suspended only (pending lives under Applications)
+  const rosterRiders = riders.filter((r) =>
+    r.status === 'approved' || r.status === 'suspended'
+  );
+
+  const filteredRiders = rosterRiders.filter(r => {
     if (riderFilterStatus !== 'all' && r.status !== riderFilterStatus) return false;
     if (!riderSearch.trim()) return true;
     const q = riderSearch.toLowerCase();
@@ -435,15 +625,16 @@ const AdminUsers = () => {
       r.fullName?.toLowerCase().includes(q) ||
       r.email?.toLowerCase().includes(q) ||
       r.phone?.includes(riderSearch) ||
-      r.vehicleType?.toLowerCase().includes(q)
+      r.vehicleType?.toLowerCase().includes(q) ||
+      r.dkRiderId?.toLowerCase().includes(q)
     );
   }).sort(byNewest);
 
-  const pendingApplications = riders.filter(r => r.status === 'pending').sort(byNewest);
 
   const handleRiderFormChange = (e) => {
     const { name, value } = e.target;
     let next = value;
+    if (name === 'fullName') next = value.replace(/[0-9]/g, '').replace(/\s+/g, ' ').slice(0, 60);
     if (name === 'phone') next = value.replace(/\D/g, '').slice(0, 11);
     if (name === 'plateNumber') next = formatPlateNumber(value);
     if (name === 'licenseNumber') next = formatLicenseNumber(value);
@@ -544,6 +735,16 @@ const AdminUsers = () => {
       setRiderFormError('Full name, email, phone, and password are required.');
       return;
     }
+    const nameErr = validatePersonName(fullName);
+    if (nameErr) {
+      setRiderFormError(nameErr);
+      return;
+    }
+    const addressErr = validateAddress(address, true);
+    if (addressErr) {
+      setRiderFormError(addressErr);
+      return;
+    }
     if (!riderOtpVerified) {
       setRiderFormError('Send and verify the email OTP first so we know the inbox works.');
       return;
@@ -554,6 +755,10 @@ const AdminUsers = () => {
     }
     if (!/\S+@\S+\.\S+/.test(email.trim())) {
       setRiderFormError('Please enter a valid email address.');
+      return;
+    }
+    if (!/^09\d{9}$/.test(phone.trim())) {
+      setRiderFormError('Phone must be 11 digits and start with 09.');
       return;
     }
     if (!password.startsWith('@rider') || password.length < 7 || password.length > 10) {
@@ -585,11 +790,11 @@ const AdminUsers = () => {
         fullName: fullName.trim(),
         email: email.trim().toLowerCase(),
         phone: phone.trim(),
+        address: address.trim(),
         vehicleType: 'motorcycle',
         password,
         riderPhoto: photo || null,
       };
-      if (address.trim()) payload.address = address.trim();
       if (plateNumber.trim()) payload.plateNumber = plateNumber.trim();
       if (licenseNumber.trim()) payload.licenseNumber = licenseNumber.trim();
 
@@ -618,6 +823,7 @@ const AdminUsers = () => {
       showNotification(`Rider created: ${result.dkRiderId}`, 'success');
       setActiveTab('riders');
       setRiderFilterStatus('all');
+      setShowAddRider(false);
     } catch (err) {
       console.error(err);
       const raw = String(err?.data || err?.message || '');
@@ -681,7 +887,9 @@ const AdminUsers = () => {
   };
 
   const openSuspendModal = (user) => {
+    setSuspendKind('user');
     setUserToSuspend(user);
+    setRiderToSuspend(null);
     setSuspendReason('');
     setSuspendDays(null);
     setSuspendNote('');
@@ -689,19 +897,36 @@ const AdminUsers = () => {
     setShowSuspendModal(true);
   };
 
+  const openRiderSuspendModal = (rider) => {
+    if (!rider || rider.status === 'suspended') return;
+    setSuspendKind('rider');
+    setRiderToSuspend(rider);
+    setUserToSuspend(null);
+    setSuspendReason('');
+    setSuspendDays(null);
+    setSuspendNote('');
+    setSuspendStep(STEP_CONFIGURE);
+    setShowSuspendModal(true);
+    if (viewingRider?._id === rider._id) setViewingRider(null);
+  };
+
   const closeSuspendModal = () => {
     if (suspendLoading) return;
     setShowSuspendModal(false);
     setSuspendStep(STEP_CONFIGURE);
+    setSuspendKind('user');
     setUserToSuspend(null);
+    setRiderToSuspend(null);
     setSuspendReason('');
     setSuspendNote('');
     setSuspendDays(null);
   };
 
+  const activeSuspendReasons = suspendKind === 'rider' ? RIDER_SUSPEND_REASONS : SUSPEND_REASONS;
+
   const handleReasonChange = (value) => {
     setSuspendReason(value);
-    const cfg = SUSPEND_REASONS.find(r => r.value === value);
+    const cfg = activeSuspendReasons.find(r => r.value === value);
     if (cfg) setSuspendDays(cfg.defaultDays);
   };
 
@@ -714,9 +939,34 @@ const AdminUsers = () => {
   };
 
   const handleConfirmSuspend = async () => {
-    if (!userToSuspend || !suspendReason) return;
+    if (!suspendReason) return;
     setSuspendLoading(true);
     try {
+      if (suspendKind === 'rider') {
+        if (!riderToSuspend) return;
+        const result = await suspendRiderMutation({
+          id: riderToSuspend._id,
+          reason: suspendReason,
+          note: suspendNote || undefined,
+          durationDays: suspendDays ?? undefined,
+        });
+        if (!result?.success) {
+          showNotification(result?.message || 'Failed to suspend rider.', 'error');
+          return;
+        }
+        const durationLabel = suspendDays
+          ? `for ${suspendDays} day${suspendDays !== 1 ? 's' : ''}`
+          : 'permanently';
+        showNotification(
+          `${riderToSuspend.fullName} has been suspended ${durationLabel}. An email notification has been sent.`,
+          'success'
+        );
+        setRiderFilterStatus('suspended');
+        closeSuspendModal();
+        return;
+      }
+
+      if (!userToSuspend) return;
       await suspendUserMutation({
         id: userToSuspend._id,
         reason: suspendReason,
@@ -740,12 +990,38 @@ const AdminUsers = () => {
       closeSuspendModal();
     } catch (err) {
       console.error('Suspend error:', err);
-      showNotification('Failed to suspend user. Please try again.', 'error');
+      showNotification(
+        suspendKind === 'rider'
+          ? 'Failed to suspend rider. Please try again.'
+          : 'Failed to suspend user. Please try again.',
+        'error'
+      );
+    } finally {
+      setSuspendLoading(false);
     }
-    setSuspendLoading(false);
   };
 
   const confirmUnsuspend = async () => {
+    if (riderToUnsuspend) {
+      try {
+        await unsuspendRiderMutation({ id: riderToUnsuspend._id });
+        showNotification(`${riderToUnsuspend.fullName} has been unsuspended successfully.`, 'success');
+        if (viewingRider?._id === riderToUnsuspend._id) {
+          setViewingRider({
+            ...viewingRider,
+            status: 'approved',
+            suspendReason: undefined,
+            suspendNote: undefined,
+            suspendedUntil: undefined,
+          });
+        }
+      } catch {
+        showNotification('Failed to unsuspend rider.', 'error');
+      }
+      setShowUnsuspendConfirm(false);
+      setRiderToUnsuspend(null);
+      return;
+    }
     if (!userToUnsuspend) return;
     try {
       await unsuspendUserMutation({ id: userToUnsuspend._id });
@@ -799,7 +1075,6 @@ const AdminUsers = () => {
   const getSelectedDeleteReasonLabel = () =>
     RIDER_DELETE_REASONS.find(r => r.value === riderDeleteReason)?.label || riderDeleteReason || '—';
 
-  const getRoleBadgeClass        = (role)   => role === 'admin' ? 'role-badge admin' : 'role-badge user';
   const getRiderStatusBadgeClass = (status) => {
     const map = {
       pending:   'rider-status-badge pending',
@@ -812,19 +1087,18 @@ const AdminUsers = () => {
 
   // ── Status badge class — active / suspended / deactivated only ────────────
   const getStatusBadgeClass = (status) => {
-    const s = status || 'active';
+    const s = normalizeUserStatus(status);
     if (s === 'self_deactivated') return 'status-badge self-deactivated';
     return `status-badge ${s}`;
   };
 
   // ── Status display label + icon ───────────────────────────────────────────
   const getStatusDisplay = (status) => {
-    const s = status || 'active';
-    switch (s) {
+    switch (normalizeUserStatus(status)) {
       case 'active':           return { label: 'Active',      faIcon: 'fa-check-circle' };
       case 'suspended':        return { label: 'Suspended',   faIcon: 'fa-user-slash' };
       case 'self_deactivated': return { label: 'Deactivated', faIcon: 'fa-user-clock' };
-      default:                 return { label: s,             faIcon: 'fa-circle' };
+      default:                 return { label: 'Active',      faIcon: 'fa-circle' };
     }
   };
 
@@ -840,7 +1114,18 @@ const AdminUsers = () => {
     return `${diffDays}d left`;
   };
 
-  const getReasonLabel   = (val) => SUSPEND_REASONS.find(r => r.value === val)?.label || val || '—';
+  const getReasonLabel = (val) =>
+    RIDER_SUSPEND_REASONS.find(r => r.value === val)?.label
+    || SUSPEND_REASONS.find(r => r.value === val)?.label
+    || val
+    || '—';
+
+  const getRiderSuspendUntilLabel = (rider) => {
+    if (!rider?.suspendedUntil) return 'Permanent';
+    const diffDays = Math.ceil((rider.suspendedUntil - Date.now()) / (1000 * 60 * 60 * 24));
+    if (diffDays <= 0) return 'Expires soon';
+    return `${diffDays}d left`;
+  };
   const getDurationLabel = () => {
     if (suspendDays === null) return 'Permanent';
     if (suspendDays === 1) return '1 Day';
@@ -849,12 +1134,23 @@ const AdminUsers = () => {
 
   // ── Stats ─────────────────────────────────────────────────────────────────
   const totalUsers        = regularUsers.length;
-  const activeUsers       = regularUsers.filter(u => (u.status || 'active') === 'active').length;
-  const suspendedUsers    = regularUsers.filter(u => u.status === 'suspended').length;
-  const deactivatedUsers  = regularUsers.filter(u => u.status === 'self_deactivated').length;
-  const totalRiders       = riders.length;
+  const activeUsers       = regularUsers.filter(u => normalizeUserStatus(u.status) === 'active').length;
+  const suspendedUsers    = regularUsers.filter(u => normalizeUserStatus(u.status) === 'suspended').length;
+  const deactivatedUsers  = regularUsers.filter(u => normalizeUserStatus(u.status) === 'self_deactivated').length;
+  const totalRiders       = rosterRiders.length;
   const approvedRiders    = riders.filter(r => r.status === 'approved').length;
-  const pendingRiders     = riders.filter(r => r.status === 'pending').length;
+  const suspendedRiders   = riders.filter(r => r.status === 'suspended').length;
+
+  const handleRiderSuspendAction = (rider) => {
+    if (!rider?._id) return;
+    if (rider.status === 'suspended') {
+      setRiderToUnsuspend(rider);
+      setUserToUnsuspend(null);
+      setShowUnsuspendConfirm(true);
+      return;
+    }
+    openRiderSuspendModal(rider);
+  };
 
   return (
     <div className="admin-users">
@@ -871,7 +1167,7 @@ const AdminUsers = () => {
 
       {/* ── STATS CARDS ── */}
       <div className="users-stats-row">
-        {activeTab === 'riders' || activeTab === 'applications' ? (
+        {activeTab === 'riders' ? (
           <>
             <div className="au-stat-card">
               <div className="au-stat-icon au-stat-icon--purple"><i className="fas fa-motorcycle"></i></div>
@@ -890,11 +1186,11 @@ const AdminUsers = () => {
               </div>
             </div>
             <div className="au-stat-card">
-              <div className="au-stat-icon au-stat-icon--yellow"><i className="fas fa-clock"></i></div>
+              <div className="au-stat-icon au-stat-icon--red"><i className="fas fa-user-slash"></i></div>
               <div className="au-stat-info">
-                <div className="au-stat-label">PENDING</div>
-                <div className="au-stat-number">{pendingRiders}</div>
-                <div className="au-stat-sub">{pendingRiders === 0 ? 'no pending' : 'awaiting review'}</div>
+                <div className="au-stat-label">SUSPENDED</div>
+                <div className="au-stat-number">{suspendedRiders}</div>
+                <div className="au-stat-sub">{suspendedRiders === 0 ? 'none' : 'suspended riders'}</div>
               </div>
             </div>
           </>
@@ -942,12 +1238,6 @@ const AdminUsers = () => {
           <span className="tab-label">Riders</span>
           <span className="au-tab-badge">{totalRiders}</span>
         </button>
-        <button className={`tab-btn ${activeTab === 'applications' ? 'active' : ''}`} onClick={() => setActiveTab('applications')}>
-          <i className="fas fa-id-card"></i>
-          <span className="tab-label tab-label--long">Rider Applications</span>
-          <span className="tab-label tab-label--short">Applications</span>
-          <span className="au-tab-badge">{pendingRiders}</span>
-        </button>
       </div>
 
       {/* ══ USERS TAB ══════════════════════════════════════════════════════════ */}
@@ -976,14 +1266,21 @@ const AdminUsers = () => {
               <div className="dk-fixed-page dk-fixed-page--table" style={fixedPageStyle(pageSize, { '--dk-row-h': '64px' })}>
               <table className="users-table">
                 <thead>
-                  <tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr>
+                  <tr>
+                    <th>Name</th>
+                    <th>Username</th>
+                    <th>Email</th>
+                    {showUserStatusCol && <th>Status</th>}
+                    <th>Actions</th>
+                  </tr>
                 </thead>
                 <tbody>
                   {pagedUsers.map(user => {
-                    const { label: statusLabel, faIcon: statusFaIcon } = getStatusDisplay(user.status);
-                    const isActive      = (user.status || 'active') === 'active';
-                    const isSuspended   = user.status === 'suspended';
-                    const isDeactivated = user.status === 'self_deactivated';
+                    const status = normalizeUserStatus(user.status);
+                    const { label: statusLabel, faIcon: statusFaIcon } = getStatusDisplay(status);
+                    const isActive      = status === 'active';
+                    const isSuspended   = status === 'suspended';
+                    const isDeactivated = status === 'self_deactivated';
                     const isAdmin       = user.email === 'admin' || user.role === 'admin';
 
                     return (
@@ -991,37 +1288,33 @@ const AdminUsers = () => {
                         <td className="user-name" data-label="Name"><i className="fas fa-user-circle"></i>{user.name}</td>
                         <td data-label="Username">@{user.username}</td>
                         <td data-label="Email">{user.email}</td>
-                        <td data-label="Role">
-                          <span className={getRoleBadgeClass(user.role)}>
-                            <i className={`fas ${user.role === 'admin' ? 'fa-shield-alt' : 'fa-user'}`}></i>
-                            {user.role}
-                          </span>
-                        </td>
-                        <td data-label="Status">
-                          <div className="status-cell">
-                            <span className={getStatusBadgeClass(user.status)}>
-                              <i className={`fas ${statusFaIcon || 'fa-circle'}`}></i>
-                              {statusLabel}
-                            </span>
+                        {showUserStatusCol && (
+                          <td data-label="Status">
+                            <div className="status-cell">
+                              <span className={getStatusBadgeClass(status)}>
+                                <i className={`fas ${statusFaIcon || 'fa-circle'}`}></i>
+                                {statusLabel}
+                              </span>
 
-                            {isSuspended && (
-                              <span className="suspend-meta">
-                                <span className="suspend-duration-chip">
-                                  <i className="fas fa-clock"></i>{getSuspendUntilLabel(user)}
+                              {isSuspended && (
+                                <span className="suspend-meta">
+                                  <span className="suspend-duration-chip">
+                                    <i className="fas fa-clock"></i>{getSuspendUntilLabel(user)}
+                                  </span>
+                                  {user.suspendReason && (
+                                    <span className="suspend-reason-chip">{getReasonLabel(user.suspendReason)}</span>
+                                  )}
                                 </span>
-                                {user.suspendReason && (
-                                  <span className="suspend-reason-chip">{getReasonLabel(user.suspendReason)}</span>
-                                )}
-                              </span>
-                            )}
+                              )}
 
-                            {isDeactivated && (
-                              <span className="deactivated-chip">
-                                <i className="fas fa-info-circle"></i>Self-deactivated · Can reactivate via login
-                              </span>
-                            )}
-                          </div>
-                        </td>
+                              {isDeactivated && (
+                                <span className="deactivated-chip">
+                                  <i className="fas fa-info-circle"></i>Self-deactivated · Can reactivate via login
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                        )}
                         <td className="actions-cell" data-label="Actions">
                           {!isAdmin && (
                             <>
@@ -1076,13 +1369,210 @@ const AdminUsers = () => {
               {riderSearch && <button className="clear-search" onClick={() => setRiderSearch('')}><i className="fas fa-times"></i></button>}
             </div>
             <div className="status-filter">
-              {['all', 'rejected', 'suspended'].map(s => (
-                <button key={s} className={`filter-btn ${riderFilterStatus === s ? 'active' : ''}`} onClick={() => setRiderFilterStatus(s)}>
-                  {s.charAt(0).toUpperCase() + s.slice(1)}
+              {[
+                { key: 'all', label: 'All' },
+                { key: 'approved', label: 'Approved' },
+                { key: 'suspended', label: 'Suspended' },
+              ].map(({ key, label }) => (
+                <button
+                  key={key}
+                  className={`filter-btn ${riderFilterStatus === key ? 'active' : ''}`}
+                  onClick={() => setRiderFilterStatus(key)}
+                >
+                  {label}
+                  {key === 'suspended' && suspendedRiders > 0 ? ` (${suspendedRiders})` : ''}
                 </button>
               ))}
+              <button
+                type="button"
+                className={`filter-btn ${showAddRider ? 'active' : ''}`}
+                onClick={() => setShowAddRider((v) => !v)}
+              >
+                <i className="fas fa-user-plus"></i> {showAddRider ? 'Close' : 'Add Rider'}
+              </button>
             </div>
           </div>
+
+          {showAddRider && (
+          <div className="au-rider-app-card">
+            <div className="au-rider-app-header">
+              <div>
+                <h3><i className="fas fa-user-plus"></i> Add Rider</h3>
+                <p>Account is created as approved and can log in at /rider right away.</p>
+              </div>
+            </div>
+            <form className="au-rider-app-form" onSubmit={handleAdminCreateRider}>
+              <div className="au-rider-form-grid">
+                <div className="form-group">
+                  <label>Full Name *</label>
+                  <input name="fullName" value={riderForm.fullName} onChange={handleRiderFormChange} placeholder="Juan Dela Cruz" required maxLength={60} autoComplete="name" />
+                </div>
+                <div className="form-group">
+                  <label>Email (login) *</label>
+                  <input name="email" type="email" value={riderForm.email} onChange={handleRiderFormChange} placeholder="rider@email.com" required />
+                  <div className="au-rider-otp-row">
+                    <button
+                      type="button"
+                      className="au-btn-secondary au-otp-send-btn"
+                      disabled={riderOtpBusy || riderOtpCooldown > 0}
+                      onClick={handleSendRiderOtp}
+                    >
+                      {riderOtpBusy ? <><i className="fas fa-spinner fa-spin"></i> Sending…</>
+                        : riderOtpCooldown > 0 ? `Resend in ${riderOtpData}s` : <><i className="fas fa-paper-plane"></i> Send OTP</>}
+                    </button>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="6-digit OTP"
+                      value={riderOtp}
+                      onChange={(e) => setRiderOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      disabled={!riderOtpSent || riderOtpVerified}
+                    />
+                    <button
+                      type="button"
+                      className="au-btn-secondary"
+                      disabled={riderOtpBusy || !riderOtpSent || riderOtpVerified}
+                      onClick={handleVerifyRiderOtp}
+                    >
+                      {riderOtpVerified ? <><i className="fas fa-check"></i> Verified</> : 'Verify'}
+                    </button>
+                  </div>
+                  {riderOtpMsg && (
+                    <small className={`au-field-hint ${riderOtpVerified ? 'au-otp-ok' : ''}`}>{riderOtpMsg}</small>
+                  )}
+                </div>
+                <div className="form-group">
+                  <label>Phone *</label>
+                  <input name="phone" value={riderForm.phone} onChange={handleRiderFormChange} placeholder="09XXXXXXXXX" required />
+                </div>
+                <div className="form-group">
+                  <label>Vehicle Type</label>
+                  <input value="Motorcycle" disabled readOnly className="au-vehicle-fixed" />
+                  <input type="hidden" name="vehicleType" value="motorcycle" />
+                </div>
+                <div className="form-group">
+                  <label>Plate Number</label>
+                  <input
+                    name="plateNumber"
+                    value={riderForm.plateNumber}
+                    onChange={handleRiderFormChange}
+                    placeholder="ABC 1234"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>License Number</label>
+                  <input
+                    name="licenseNumber"
+                    value={riderForm.licenseNumber}
+                    onChange={handleRiderFormChange}
+                    placeholder="N01-23-456789"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Address *</label>
+                  <input name="address" value={riderForm.address} onChange={handleRiderFormChange} placeholder="Street, Barangay, City" required />
+                </div>
+                <div className="form-group">
+                  <label>Rider Face Photo *</label>
+                  <input
+                    type="file"
+                    accept={IMAGE_ACCEPT_NO_GIF}
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = '';
+                      if (!file) return;
+                      const err = validateImageFile(file);
+                      if (err) { setRiderFormError(err); return; }
+                      try {
+                        let dataUrl = await fileToDataUrl(file);
+                        if (String(dataUrl).length > 400_000) {
+                          dataUrl = await compressImageDataUrl(dataUrl, { maxEdge: 640, quality: 0.72 });
+                        }
+                        setRiderForm((prev) => ({ ...prev, riderPhoto: dataUrl }));
+                        setRiderFormError('');
+                      } catch {
+                        setRiderFormError('Failed to read photo.');
+                      }
+                    }}
+                  />
+                  {riderForm.riderPhoto && (
+                    <img src={riderForm.riderPhoto} alt="Rider preview" className="au-rider-form-photo-preview" />
+                  )}
+                </div>
+                <div className="form-group">
+                  <label>Password * <span className="au-field-hint">must start with @rider</span></label>
+                  <div className="au-pw-row">
+                    <input
+                      name="password"
+                      type={showRiderPw ? 'text' : 'password'}
+                      value={riderForm.password}
+                      onChange={handleRiderFormChange}
+                      placeholder="@rider1"
+                      autoComplete="new-password"
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="au-pw-toggle"
+                      onClick={() => setShowRiderPw((p) => !p)}
+                      aria-label={showRiderPw ? 'Hide password' : 'Show password'}
+                      title={showRiderPw ? 'Hide password' : 'Show password'}
+                    >
+                      <i className={`fas ${showRiderPw ? 'fa-eye-slash' : 'fa-eye'}`}></i>
+                    </button>
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label>Confirm Password *</label>
+                  <div className="au-pw-row">
+                    <input
+                      name="confirmPassword"
+                      type={showRiderPw ? 'text' : 'password'}
+                      value={riderForm.confirmPassword}
+                      onChange={handleRiderFormChange}
+                      placeholder="Repeat password"
+                      autoComplete="new-password"
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="au-pw-toggle"
+                      onClick={() => setShowRiderPw((p) => !p)}
+                      aria-label={showRiderPw ? 'Hide password' : 'Show password'}
+                      title={showRiderPw ? 'Hide password' : 'Show password'}
+                    >
+                      <i className={`fas ${showRiderPw ? 'fa-eye-slash' : 'fa-eye'}`}></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              {riderFormError && (
+                <div className="au-rider-form-error"><i className="fas fa-exclamation-circle"></i> {riderFormError}</div>
+              )}
+              <div className="au-rider-form-actions">
+                <button
+                  type="button"
+                  className="au-btn-secondary"
+                  onClick={() => {
+                    setRiderForm(EMPTY_RIDER_FORM);
+                    setRiderFormError('');
+                    setRiderOtp('');
+                    setRiderOtpSent(false);
+                    setRiderOtpVerified(false);
+                    setRiderOtpMsg('');
+                  }}
+                  disabled={riderFormLoading}
+                >
+                  Clear
+                </button>
+                <button type="submit" className="au-btn-primary" disabled={riderFormLoading}>
+                  {riderFormLoading ? <><i className="fas fa-spinner fa-spin"></i> Creating...</> : <><i className="fas fa-user-check"></i> Create Rider</>}
+                </button>
+              </div>
+            </form>
+          </div>
+          )}
+
           <div className="users-table-container">
             {filteredRiders.length === 0 ? (
               <div className="no-users"><i className="fas fa-motorcycle"></i><p>No riders found</p></div>
@@ -1120,13 +1610,25 @@ const AdminUsers = () => {
                           : <span style={{ color: '#9ca3af', fontSize: 12 }}>—</span>}
                       </td>
                       <td data-label="Status">
-                        <span className={getRiderStatusBadgeClass(rider.status)}>
-                          {rider.status === 'approved'  && <i className="fas fa-check-circle"></i>}
-                          {rider.status === 'pending'   && <i className="fas fa-clock"></i>}
-                          {rider.status === 'rejected'  && <i className="fas fa-times-circle"></i>}
-                          {rider.status === 'suspended' && <i className="fas fa-ban"></i>}
-                          {rider.status}
-                        </span>
+                        <div className="status-cell">
+                          <span className={getRiderStatusBadgeClass(rider.status)}>
+                            {rider.status === 'approved'  && <i className="fas fa-check-circle"></i>}
+                            {rider.status === 'pending'   && <i className="fas fa-clock"></i>}
+                            {rider.status === 'rejected'  && <i className="fas fa-times-circle"></i>}
+                            {rider.status === 'suspended' && <i className="fas fa-ban"></i>}
+                            {rider.status}
+                          </span>
+                          {rider.status === 'suspended' && (
+                            <span className="suspend-meta">
+                              <span className="suspend-duration-chip">
+                                <i className="fas fa-clock"></i>{getRiderSuspendUntilLabel(rider)}
+                              </span>
+                              {rider.suspendReason && (
+                                <span className="suspend-reason-chip">{getReasonLabel(rider.suspendReason)}</span>
+                              )}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="date-cell" data-label="Applied">{formatDate(rider.appliedAt)}</td>
                       <td className="actions-cell" data-label="Actions">
@@ -1137,6 +1639,23 @@ const AdminUsers = () => {
                         >
                           <i className="fas fa-eye"></i>
                         </button>
+                        {rider.status === 'suspended' ? (
+                          <button
+                            className="btn-suspend btn-activate"
+                            onClick={() => handleRiderSuspendAction(rider)}
+                            title="Unsuspend rider"
+                          >
+                            <i className="fas fa-user-check"></i>
+                          </button>
+                        ) : (
+                          <button
+                            className="btn-suspend"
+                            onClick={() => handleRiderSuspendAction(rider)}
+                            title="Suspend rider"
+                          >
+                            <i className="fas fa-user-slash"></i>
+                          </button>
+                        )}
                         <button className="btn-delete" onClick={() => openRiderDeleteModal(rider)} title="Delete">
                           <i className="fas fa-trash"></i>
                         </button>
@@ -1164,7 +1683,7 @@ const AdminUsers = () => {
               <div className="au-rider-form-grid">
                 <div className="form-group">
                   <label>Full Name *</label>
-                  <input name="fullName" value={riderForm.fullName} onChange={handleRiderFormChange} placeholder="Juan Dela Cruz" required />
+                  <input name="fullName" value={riderForm.fullName} onChange={handleRiderFormChange} placeholder="Juan Dela Cruz" required maxLength={60} autoComplete="name" />
                 </div>
                 <div className="form-group">
                   <label>Email (login) *</label>
@@ -1236,8 +1755,8 @@ const AdminUsers = () => {
                   <small className="au-field-hint">Auto: N01-23-456789 · caps + dashes</small>
                 </div>
                 <div className="form-group au-rider-form-span2">
-                  <label>Address</label>
-                  <input name="address" value={riderForm.address} onChange={handleRiderFormChange} placeholder="Delivery area / home address" />
+                  <label>Address *</label>
+                  <input name="address" value={riderForm.address} onChange={handleRiderFormChange} placeholder="Street, Barangay, City" required />
                 </div>
                 <div className="form-group au-rider-form-span2">
                   <label>Rider Face Photo * <span className="au-field-hint">shown to customers on Track Order</span></label>
@@ -1415,21 +1934,28 @@ const AdminUsers = () => {
             {suspendStep === STEP_CONFIGURE && (
               <>
                 <div className="modal-header suspend-modal-header">
-                  <h2><i className="fas fa-user-slash"></i> Suspend Account</h2>
+                  <h2>
+                    <i className={`fas ${suspendKind === 'rider' ? 'fa-motorcycle' : 'fa-user-slash'}`}></i>
+                    {suspendKind === 'rider' ? ' Suspend Rider' : ' Suspend Account'}
+                  </h2>
                   <button className="close-btn" onClick={closeSuspendModal}><i className="fas fa-times"></i></button>
                 </div>
                 <div className="suspend-modal-body">
                   <div className="suspend-user-pill">
-                    <i className="fas fa-user-circle"></i>
+                    <i className={`fas ${suspendKind === 'rider' ? 'fa-motorcycle' : 'fa-user-circle'}`}></i>
                     <div>
-                      <div className="suspend-user-name">{userToSuspend?.name}</div>
-                      <div className="suspend-user-email">{userToSuspend?.email}</div>
+                      <div className="suspend-user-name">
+                        {suspendKind === 'rider' ? riderToSuspend?.fullName : userToSuspend?.name}
+                      </div>
+                      <div className="suspend-user-email">
+                        {suspendKind === 'rider' ? riderToSuspend?.email : userToSuspend?.email}
+                      </div>
                     </div>
                   </div>
                   <div className="form-group">
                     <label><i className="fas fa-exclamation-triangle"></i> Reason <span className="required-star">*</span></label>
                     <div className="reason-grid">
-                      {SUSPEND_REASONS.map(r => (
+                      {activeSuspendReasons.map(r => (
                         <button key={r.value} type="button"
                           className={`reason-chip ${suspendReason === r.value ? 'active' : ''}`}
                           onClick={() => handleReasonChange(r.value)}>
@@ -1465,7 +1991,7 @@ const AdminUsers = () => {
                       <i className={`fas ${suspendDays === null ? 'fa-exclamation-circle' : 'fa-info-circle'}`}></i>
                       <div>
                         {suspendDays === null
-                          ? <><strong>Permanent suspension</strong> — the user will lose access indefinitely and receive an email notification.</>
+                          ? <><strong>Permanent suspension</strong> — the {suspendKind === 'rider' ? 'rider' : 'user'} will lose access indefinitely and receive an email notification.</>
                           : <><strong>{suspendDays}-day suspension</strong> — auto-restores after {suspendDays} day{suspendDays !== 1 ? 's' : ''}. Email notification will be sent.</>
                         }
                       </div>
@@ -1489,8 +2015,13 @@ const AdminUsers = () => {
                 <div className="suspend-modal-body">
                   <div className="suspend-confirm-summary">
                     <div className="suspend-confirm-icon"><i className="fas fa-user-slash"></i></div>
-                    <p className="suspend-confirm-headline">You are about to suspend <strong>{userToSuspend?.name}</strong></p>
-                    <p className="suspend-confirm-sub">{userToSuspend?.email}</p>
+                    <p className="suspend-confirm-headline">
+                      You are about to suspend{' '}
+                      <strong>{suspendKind === 'rider' ? riderToSuspend?.fullName : userToSuspend?.name}</strong>
+                    </p>
+                    <p className="suspend-confirm-sub">
+                      {suspendKind === 'rider' ? riderToSuspend?.email : userToSuspend?.email}
+                    </p>
                     <div className="suspend-confirm-details">
                       <div className="suspend-confirm-row">
                         <span className="suspend-confirm-label"><i className="fas fa-exclamation-triangle"></i> Reason</span>
@@ -1538,14 +2069,37 @@ const AdminUsers = () => {
 
       {/* ══ UNSUSPEND / REACTIVATE CONFIRM ════════════════════════════════════ */}
       {showUnsuspendConfirm && (
-        <div className="modal-overlay" onClick={() => setShowUnsuspendConfirm(false)}>
+        <div
+          className="modal-overlay"
+          onClick={() => {
+            setShowUnsuspendConfirm(false);
+            setRiderToUnsuspend(null);
+            setUserToUnsuspend(null);
+          }}
+        >
           <div className="modal-content confirm-modal" onClick={e => e.stopPropagation()}>
             <div className="confirm-icon activate"><i className="fas fa-check-circle"></i></div>
-            <h2>Unsuspend Account?</h2>
-            <p>Restore access for <strong>{userToUnsuspend?.name}</strong>?</p>
-            <p className="success-text">They will be able to log in immediately.</p>
+            <h2>{riderToUnsuspend ? 'Unsuspend Rider?' : 'Unsuspend Account?'}</h2>
+            <p>
+              Restore access for{' '}
+              <strong>{riderToUnsuspend?.fullName || userToUnsuspend?.name}</strong>?
+            </p>
+            <p className="success-text">
+              {riderToUnsuspend
+                ? 'They will be able to log in and take deliveries again.'
+                : 'They will be able to log in immediately.'}
+            </p>
             <div className="modal-actions">
-              <button className="btn-cancel" onClick={() => setShowUnsuspendConfirm(false)}>Cancel</button>
+              <button
+                className="btn-cancel"
+                onClick={() => {
+                  setShowUnsuspendConfirm(false);
+                  setRiderToUnsuspend(null);
+                  setUserToUnsuspend(null);
+                }}
+              >
+                Cancel
+              </button>
               <button className="btn-activate-confirm" onClick={confirmUnsuspend}>
                 <i className="fas fa-check-circle"></i> Unsuspend
               </button>
@@ -1559,6 +2113,7 @@ const AdminUsers = () => {
           rider={viewingRider}
           onClose={() => setViewingRider(null)}
           onPhotoUpdated={(updated) => setViewingRider(updated)}
+          onToggleSuspend={handleRiderSuspendAction}
         />
       )}
       {pendingAppDetail && (
