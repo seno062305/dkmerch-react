@@ -605,6 +605,40 @@ const AdminOrders = () => {
     cancelled:  validOrders.filter((o) => isCancelledStatus(o) || hasAnyCancelRequest(o)).length,
   };
 
+  /** Newest order overall — highlight in list + keep Pending badge lit for new ones. */
+  const latestOrderId = useMemo(() => {
+    let bestId = null;
+    let bestTs = -1;
+    for (const o of validOrders) {
+      const ts = Number(o._creationTime) || Number(o.orderSeq) || 0;
+      if (ts >= bestTs) {
+        bestTs = ts;
+        bestId = o.orderId;
+      }
+    }
+    return bestId;
+  }, [validOrders]);
+
+  const SEEN_ORDERS_KEY = 'dk_admin_orders_seen_at';
+  const [seenOrdersAt, setSeenOrdersAt] = useState(() => {
+    try { return Number(localStorage.getItem(SEEN_ORDERS_KEY) || 0); } catch { return 0; }
+  });
+
+  const hasUnseenPending = useMemo(() => {
+    return validOrders.some((o) => {
+      if (!isPendingStatus(o) || hasCancelRequest(o)) return false;
+      const ts = Number(o._creationTime) || 0;
+      return ts > seenOrdersAt;
+    });
+  }, [validOrders, seenOrdersAt]);
+
+  useEffect(() => {
+    if (activeTab !== 'pending') return;
+    const now = Date.now();
+    setSeenOrdersAt(now);
+    try { localStorage.setItem(SEEN_ORDERS_KEY, String(now)); } catch { /* ignore */ }
+  }, [activeTab]);
+
   const showStatusFilter = ['all', 'pending', 'confirmed', 'shipped'].includes(activeTab);
 
   const statusFilterOptions = useMemo(() => {
@@ -967,16 +1001,28 @@ const AdminOrders = () => {
                 const refundRequested = order.refundStatus === 'requested';
                 const cancelRequested = order.cancelRequestStatus === 'requested';
                 const pendingRow = refundRequested || cancelRequested;
+                const isLatest = order.orderId === latestOrderId;
                 const canConfirm =
                   activeTab === 'pending'
                   && order.paymentStatus === 'paid'
                   && isPendingStatus(order)
                   && order.cancelRequestStatus !== 'requested';
                 return (
-                  <tr key={order.orderId} className={pendingRow ? 'row-refund-pending' : ''}>
+                  <tr
+                    key={order.orderId}
+                    className={[
+                      pendingRow ? 'row-refund-pending' : '',
+                      isLatest ? 'row-latest-order' : '',
+                    ].filter(Boolean).join(' ')}
+                  >
                     <td data-label="Order ID">
                       <div className="order-id-cell">
                         <strong>#{formatOrderShortId(order)}</strong>
+                        {isLatest && (
+                          <span className="orders-latest-flag" title="Latest order">
+                            <i className="fas fa-bolt"></i> Latest
+                          </span>
+                        )}
                         {refundRequested && (
                           <span className="orders-refund-flag" title="Refund requested">
                             <i className="fas fa-undo-alt"></i> Refund
@@ -1059,10 +1105,13 @@ const AdminOrders = () => {
         {tabs.map((t) => {
           const count = tabCounts[t.key] ?? 0;
           const isAlert = t.key === 'refunds' || t.key === 'cancelled';
+          // Keep Pending badge lit even when another tab is selected
+          const pendingLit = t.key === 'pending' && count > 0;
+          const pendingNew = pendingLit && hasUnseenPending && activeTab !== 'pending';
           return (
             <button
               key={t.key}
-              className={`tab-btn ${activeTab === t.key ? 'active' : ''} ${isAlert ? 'tab-btn-refund' : ''}`}
+              className={`tab-btn ${activeTab === t.key ? 'active' : ''} ${isAlert ? 'tab-btn-refund' : ''} ${pendingNew ? 'tab-btn-pending-alert' : ''}`}
               onClick={() => setActiveTab(t.key)}
             >
               {t.dkIcon
@@ -1070,7 +1119,16 @@ const AdminOrders = () => {
                 : <i className={`fas ${t.icon}`}></i>}
               {t.label}
               {count > 0 && (
-                <span className={`tab-count-badge ${isAlert ? 'tab-count-badge--refund' : ''}`}>{count}</span>
+                <span
+                  className={[
+                    'tab-count-badge',
+                    isAlert ? 'tab-count-badge--refund' : '',
+                    pendingLit ? 'tab-count-badge--lit' : '',
+                    pendingNew ? 'tab-count-badge--pulse' : '',
+                  ].filter(Boolean).join(' ')}
+                >
+                  {count}
+                </span>
               )}
             </button>
           );
@@ -1443,6 +1501,12 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
               <div className="info-item"><label>Payment Method</label><span className="method-display" style={{ color: pm.color, display: 'inline-flex', alignItems: 'center', gap: 6 }}><PaymentMethodMark pm={pm} /> {pm.label}</span></div>
               <div className="info-item"><label>Payment Status</label><span className={`payment-badge ${isPaid ? 'paid' : 'pending'}`}>{isPaid ? 'Paid' : 'Pending'}</span></div>
             </div>
+            {String(order.notes || '').trim() && (
+              <div className="customer-note-box">
+                <label><i className="fas fa-sticky-note"></i> Customer Note</label>
+                <p>{String(order.notes).trim()}</p>
+              </div>
+            )}
           </div>
 
           {hasPromo && (
@@ -1466,6 +1530,50 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                 <div className="info-item"><label>Name</label><strong>{order.riderInfo.name || 'N/A'}</strong></div>
                 <div className="info-item"><label>Phone</label><span>{order.riderInfo.phone || 'N/A'}</span></div>
                 <div className="info-item"><label>Plate</label><span>{order.riderInfo.plate || 'N/A'}</span></div>
+              </div>
+            </div>
+          )}
+
+          {Array.isArray(order.deliveryFailedAttempts) && order.deliveryFailedAttempts.length > 0 && (
+            <div className="modal-section">
+              <h3><i className="fas fa-exclamation-triangle"></i> Failed Delivery Attempts</h3>
+              <div className="failed-attempts-admin-list">
+                {order.deliveryFailedAttempts.map((a, idx) => {
+                  const lat = Number(a?.lat);
+                  const lng = Number(a?.lng);
+                  const hasCoords = Number.isFinite(lat) && Number.isFinite(lng);
+                  const mapsUrl = hasCoords
+                    ? `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=17/${lat}/${lng}`
+                    : null;
+                  return (
+                    <div key={idx} className="failed-attempt-admin-card">
+                      <div className="failed-attempt-admin-top">
+                        <strong>Attempt {a?.attempt || idx + 1}/3</strong>
+                        <span>{a?.at ? new Date(a.at).toLocaleString('en-PH') : '—'}</span>
+                      </div>
+                      <p className="failed-attempt-admin-msg">
+                        {a?.reason
+                          ? a.reason
+                          : 'Delivery attempt was unsuccessful : Recipient Request Reschedule Delivery'}
+                      </p>
+                      {a?.riderName && (
+                        <div className="failed-attempt-admin-meta"><i className="fas fa-motorcycle"></i> {a.riderName}</div>
+                      )}
+                      {hasCoords && (
+                        <div className="failed-attempt-admin-gps">
+                          <i className="fas fa-map-marker-alt"></i>
+                          <span>{lat.toFixed(6)}, {lng.toFixed(6)}</span>
+                          {a?.accuracy != null && <em>±{Math.round(a.accuracy)}m</em>}
+                          {mapsUrl && (
+                            <a href={mapsUrl} target="_blank" rel="noopener noreferrer">
+                              View on map
+                            </a>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

@@ -861,14 +861,45 @@ const TrackOrder = ({ onProductClick }) => {
         { label: 'Delivered',         icon: 'fa-check-double',  completed: ['delivered','completed'].includes(status), time: fmt(order.deliveryConfirmedAt), desc: ['delivered','completed'].includes(status) ? 'Admin · Delivered successfully!' : 'Waiting for LBC delivery.', actor: 'admin' },
       ];
     }
-    return [
+    const steps = [
       { label: 'Order Placed',      icon: 'fa-shopping-cart', completed: true, time: fmt(order._creationTime), desc: 'Customer · Your order has been placed.', actor: 'customer' },
       { label: 'Payment Confirmed', icon: 'fa-credit-card',   completed: order.paymentStatus === 'paid', time: fmt(order.paidAt), desc: order.paymentStatus === 'paid' ? 'Customer · Payment received.' : 'Customer · Waiting for payment.', actor: 'customer' },
       { label: 'Order Confirmed',   icon: 'fa-check-circle',  completed: ['confirmed','shipped','out_for_delivery','delivered','completed'].includes(status), time: fmt(order.confirmedAt), desc: ['confirmed','shipped','out_for_delivery','delivered','completed'].includes(status) ? 'Admin · Order confirmed.' : 'Admin · Waiting for confirmation.', actor: 'admin' },
       { label: 'Rider Assigned',    icon: 'fa-motorcycle',    completed: !!order.riderInfo || ['shipped','out_for_delivery','delivered','completed'].includes(status), time: fmt(order.shippedAt), desc: order.riderInfo ? `Rider · ${order.riderInfo.name} accepted your order.` : 'Rider · Waiting for rider.', actor: 'rider' },
       { label: 'Out for Delivery',  icon: 'fa-shipping-fast', completed: ['out_for_delivery','delivered','completed'].includes(status), time: fmt(order.outForDeliveryAt), desc: ['out_for_delivery','delivered','completed'].includes(status) ? 'Rider · On the way to you.' : 'Rider · Waiting for pickup.', actor: 'rider' },
-      { label: 'Delivered',         icon: 'fa-check-double',  completed: ['delivered','completed'].includes(status), time: fmt(order.deliveryConfirmedAt), desc: ['delivered','completed'].includes(status) ? 'Rider · Delivered successfully!' : 'Rider · Waiting for delivery.', actor: 'rider' },
     ];
+
+    const fails = Array.isArray(order.deliveryFailedAttempts) ? order.deliveryFailedAttempts : [];
+    fails.forEach((attempt) => {
+      const n = Number(attempt?.attempt) || 0;
+      const isThird = n >= 3 && String(attempt?.reason || '').trim();
+      const desc = isThird
+        ? `Rider · Delivery attempt ${n} unsuccessful. Reason: ${String(attempt.reason).trim()}`
+        : 'Delivery attempt was unsuccessful : Recipient Request Reschedule Delivery';
+      steps.push({
+        label: `Delivery Attempt ${n || ''} Unsuccessful`.replace(/\s+/g, ' ').trim(),
+        icon: 'fa-exclamation-circle',
+        completed: true,
+        isFailedAttempt: true,
+        time: fmt(attempt?.at),
+        desc,
+        actor: 'rider',
+      });
+    });
+
+    steps.push({
+      label: 'Delivered',
+      icon: 'fa-check-double',
+      completed: ['delivered', 'completed'].includes(status),
+      time: fmt(order.deliveryConfirmedAt),
+      desc: ['delivered', 'completed'].includes(status)
+        ? 'Rider · Delivered successfully!'
+        : fails.length
+          ? 'Rider · Waiting for next delivery attempt / reschedule.'
+          : 'Rider · Waiting for delivery.',
+      actor: 'rider',
+    });
+    return steps;
   };
 
   const openLightbox  = (images, startIndex = 0) => setLightboxData({ images, index: startIndex });
@@ -1675,7 +1706,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
             <h3>Order Timeline</h3>
             <div className="timeline">
               {timelineSteps.map((step, index) => (
-                <div key={index} className={`timeline-item ${step.completed ? 'completed' : ''} ${step.isCancelled ? 'cancelled-step' : ''}${step.actor ? ` actor-${step.actor}` : ''}`}>
+                <div key={index} className={`timeline-item ${step.completed ? 'completed' : ''} ${step.isCancelled ? 'cancelled-step' : ''} ${step.isFailedAttempt ? 'failed-attempt-step' : ''}${step.actor ? ` actor-${step.actor}` : ''}`}>
                   <div className="timeline-marker"><i className={`fas ${step.icon}`}></i></div>
                   <div className="timeline-content">
                     <div className="timeline-label-row">

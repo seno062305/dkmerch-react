@@ -918,6 +918,59 @@
 }
 .rider-confirm-error i { font-size: 14px; flex-shrink: 0; margin-top: 2px; }
 
+.rider-confirm-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.rider-confirm-title-row .rider-confirm-title { margin-bottom: 0; }
+
+.rider-attempt-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.rider-attempt-indicator.has-fails {
+  background: #fff7ed;
+  color: #c2410c;
+}
+.rider-attempt-indicator.maxed {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+.rider-attempt-indicator i { font-size: 10px; }
+.rider-attempt-dots { display: inline-flex; gap: 3px; margin-left: 2px; }
+.rider-attempt-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #cbd5e1;
+}
+.rider-attempt-dot.used { background: #f97316; }
+.rider-attempt-indicator.maxed .rider-attempt-dot.used { background: #dc2626; }
+
+.rider-confirm-actions {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.rider-confirm-actions .rider-confirm-btn,
+.rider-confirm-actions .rider-failed-attempt-btn {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+}
+
 .rider-confirm-btn {
   width: 100%;
   padding: 14px 20px;
@@ -931,6 +984,157 @@
 }
 .rider-confirm-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(22,163,74,0.5); }
 .rider-confirm-btn:disabled, .rider-confirm-btn.confirming { background: #94a3b8; box-shadow: none; cursor: not-allowed; transform: none; }
+
+.rider-failed-attempt-btn {
+  padding: 14px 12px;
+  background: #fff;
+  color: #c2410c;
+  border: 2px solid #fdba74;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.25s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.rider-failed-attempt-btn:hover:not(:disabled) {
+  background: #fff7ed;
+  border-color: #f97316;
+  transform: translateY(-1px);
+}
+.rider-failed-attempt-btn:disabled,
+.rider-failed-attempt-btn.reporting {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none;
+}
+.rider-fail-max-note {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: #b91c1c;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  line-height: 1.4;
+}
+
+.rider-fail-reason-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 16px;
+}
+.rider-fail-reason-modal {
+  width: 100%;
+  max-width: 420px;
+  background: #fff;
+  border-radius: 18px 18px 14px 14px;
+  padding: 18px 16px 16px;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+}
+.rider-fail-reason-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.rider-fail-reason-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: #9a3412;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rider-fail-reason-close {
+  border: none;
+  background: #f1f5f9;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: #64748b;
+  cursor: pointer;
+}
+.rider-fail-reason-desc {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.45;
+}
+.rider-fail-reason-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.rider-fail-reason-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1.5px solid #e2e8f0;
+  background: #f8fafc;
+  color: #1e293b;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.rider-fail-reason-option > span { flex: 1; }
+.rider-fail-reason-option.selected {
+  border-color: #f97316;
+  background: #fff7ed;
+  color: #9a3412;
+}
+.rider-fail-reason-actions {
+  display: flex;
+  gap: 8px;
+}
+.rider-fail-reason-cancel,
+.rider-fail-reason-submit {
+  flex: 1;
+  padding: 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  border: none;
+}
+.rider-fail-reason-cancel {
+  background: #f1f5f9;
+  color: #475569;
+}
+.rider-fail-reason-submit {
+  background: linear-gradient(135deg, #ea580c, #c2410c);
+  color: #fff;
+}
+.rider-fail-reason-submit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+@media (max-width: 480px) {
+  .rider-confirm-actions {
+    flex-direction: column;
+  }
+  .rider-confirm-title-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
 
 /* ------ DELETE BUTTONS ------ */
 .rider-delete-btn {

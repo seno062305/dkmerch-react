@@ -926,6 +926,9 @@ const RiderDashboard = () => {
   const [photoData, setPhotoData]                   = useState({});
   const [otpErrors, setOtpErrors]                   = useState({});
   const [confirmingId, setConfirmingId]             = useState(null);
+  const [failingId, setFailingId]                   = useState(null);
+  const [failReasonOpen, setFailReasonOpen]         = useState(null);
+  const [failReasonCode, setFailReasonCode]         = useState('');
   const [notifyingId, setNotifyingId]               = useState(null);
   const [acceptingId, setAcceptingId]               = useState(null);
   const [pickupDateFrom, setPickupDateFrom]         = useState('');
@@ -994,6 +997,7 @@ const RiderDashboard = () => {
   const acceptOrderMutation = useMutation(api.pickupRequests.acceptOrder);
   const updateOrderFields   = useMutation(api.orders.updateOrderFields);
   const notifyCustomerOfd   = useMutation(api.orders.notifyCustomerOutForDelivery);
+  const reportFailedAttempt = useMutation(api.orders.reportFailedDeliveryAttempt);
   const updatePickupStatus  = useMutation(api.pickupRequests.updatePickupStatus);
   const deletePickupRequest = useMutation(api.pickupRequests.deletePickupRequest);
   const updateRiderLocation = useMutation(api.riders.updateRiderLocation);
@@ -1434,6 +1438,133 @@ const RiderDashboard = () => {
     finally { setConfirmingId(null); }
   };
 
+  const FAILED_ATTEMPT_MAX = 3;
+  const FAILED_REASON_OPTIONS = [
+    { code: 'customer_no_show', label: 'Customer did not show up / not at the address' },
+    { code: 'no_answer', label: 'Customer did not answer the call' },
+  ];
+
+  const getFailedAttemptCount = (order) => {
+    if (!order) return 0;
+    if (typeof order.deliveryFailedAttemptCount === 'number') return order.deliveryFailedAttemptCount;
+    return Array.isArray(order.deliveryFailedAttempts) ? order.deliveryFailedAttempts.length : 0;
+  };
+
+  const submitFailedAttempt = async (delivery, { reasonCode = '', reason = '' } = {}) => {
+    const order = findOrderLoose(allOrders, delivery.orderId);
+    if (!order) {
+      setOtpErrors((p) => ({ ...p, [delivery._id]: '⏳ Order data is still loading. Please wait a moment and try again.' }));
+      return;
+    }
+    const pos = currentPosition || GPS.lastPosition();
+    if (!pos?.lat || !pos?.lng) {
+      setOtpErrors((p) => ({
+        ...p,
+        [delivery._id]: 'Turn on GPS / wait for location before reporting a failed attempt. Admin needs your pin as proof.',
+      }));
+      return;
+    }
+    const used = getFailedAttemptCount(order);
+    if (used >= FAILED_ATTEMPT_MAX) {
+      setOtpErrors((p) => ({ ...p, [delivery._id]: 'Maximum of 3 failed attempts already reached.' }));
+      return;
+    }
+    const nextAttempt = used + 1;
+    setFailingId(delivery._id);
+    setOtpErrors((p) => ({ ...p, [delivery._id]: '' }));
+    try {
+      const result = await reportFailedAttempt({
+        orderId: delivery.orderId,
+        lat: pos.lat,
+        lng: pos.lng,
+        accuracy: pos.accuracy != null ? Number(pos.accuracy) : undefined,
+        ...(reasonCode ? { reasonCode } : {}),
+        ...(reason ? { reason } : {}),
+        riderName: riderInfo.fullName || user?.name || 'Rider',
+      });
+      if (!result?.success) {
+        if (result?.requiresReason) {
+          setFailReasonOpen(delivery);
+          setFailReasonCode('');
+          showNotification('Select a reason for the 3rd failed attempt.', 'warning');
+        } else {
+          showNotification(result?.message || 'Could not report failed attempt.', 'error');
+        }
+        return;
+      }
+      setFailReasonOpen(null);
+      setFailReasonCode('');
+      showNotification(
+        nextAttempt >= FAILED_ATTEMPT_MAX
+          ? `Failed attempt ${nextAttempt}/${FAILED_ATTEMPT_MAX} reported with reason. Admin & customer notified.`
+          : `Failed attempt ${nextAttempt}/${FAILED_ATTEMPT_MAX} reported. Customer timeline updated — admin has your GPS proof.`,
+        'success'
+      );
+    } catch (err) {
+      console.error(err);
+      showNotification('Failed to report attempt. Please try again.', 'error');
+    } finally {
+      setFailingId(null);
+    }
+  };
+
+  const handleFailedAttemptClick = async (delivery) => {
+    const order = findOrderLoose(allOrders, delivery.orderId);
+    const used = getFailedAttemptCount(order);
+    if (used >= FAILED_ATTEMPT_MAX) {
+      showNotification('Maximum of 3 failed attempts already reached for this order.', 'warning');
+      return;
+    }
+    const nextAttempt = used + 1;
+    const shortId = String(delivery.orderId || '').slice(-8).toUpperCase();
+
+    if (nextAttempt >= FAILED_ATTEMPT_MAX) {
+      setFailReasonOpen(delivery);
+      setFailReasonCode('');
+      return;
+    }
+
+    const ok = await confirm({
+      title: `Report failed attempt ${nextAttempt}/${FAILED_ATTEMPT_MAX}?`,
+      message:
+        `Order #${shortId}\n\n` +
+        `This records that you went to the customer location but delivery was unsuccessful.\n` +
+        `Your current GPS pin will be sent to admin as proof.\n` +
+        `Customer timeline: "Delivery attempt was unsuccessful : Recipient Request Reschedule Delivery"`,
+      confirmLabel: 'Report Failed Attempt',
+      cancelLabel: 'Cancel',
+      variant: 'danger',
+      icon: 'fa-exclamation-triangle',
+    });
+    if (!ok) return;
+    await submitFailedAttempt(delivery);
+  };
+
+  const confirmThirdFailedAttempt = async () => {
+    if (!failReasonOpen) return;
+    if (!failReasonCode) {
+      showNotification('Select a reason for the 3rd failed attempt.', 'warning');
+      return;
+    }
+    const opt = FAILED_REASON_OPTIONS.find((o) => o.code === failReasonCode);
+    const shortId = String(failReasonOpen.orderId || '').slice(-8).toUpperCase();
+    const ok = await confirm({
+      title: `3rd failed attempt — confirm?`,
+      message:
+        `Order #${shortId}\n\nReason: ${opt?.label || failReasonCode}\n\n` +
+        `This reason will show on the customer timeline. Your GPS pin goes to admin.`,
+      confirmLabel: 'Submit 3rd Attempt',
+      cancelLabel: 'Back',
+      variant: 'danger',
+      icon: 'fa-exclamation-triangle',
+    });
+    if (!ok) return;
+    await submitFailedAttempt(failReasonOpen, {
+      reasonCode: failReasonCode,
+      reason: opt?.label || '',
+    });
+  };
+
   const handleDeletePickup = async (pickupId, status, orderId) => {
     if (status !== 'completed') {
       showNotification('You can only remove completed deliveries from My Orders.', 'warning');
@@ -1784,9 +1915,23 @@ const RiderDashboard = () => {
                               {notifyingId === delivery._id ? <><i className="fas fa-spinner fa-spin"></i> Notifying...</> : <><DkIcon name={DK_ICONS.notification} size={14} /> Notify Customer — I'm On My Way!</>}
                             </button>
                           )}
-                          {isOutForDelivery && (
+                          {isOutForDelivery && (() => {
+                            const failCount = getFailedAttemptCount(ord);
+                            const failMaxed = failCount >= FAILED_ATTEMPT_MAX;
+                            return (
                             <div className="rider-confirm-delivery-section">
-                              <div className="rider-confirm-title"><i className="fas fa-shield-alt"></i> Confirm Delivery</div>
+                              <div className="rider-confirm-title-row">
+                                <div className="rider-confirm-title"><i className="fas fa-shield-alt"></i> Confirm Delivery</div>
+                                <div className={`rider-attempt-indicator ${failCount > 0 ? 'has-fails' : ''} ${failMaxed ? 'maxed' : ''}`} title="Failed delivery attempts">
+                                  <i className="fas fa-redo-alt"></i>
+                                  <span>{failCount}/{FAILED_ATTEMPT_MAX} attempts</span>
+                                  <div className="rider-attempt-dots" aria-hidden="true">
+                                    {[1, 2, 3].map((n) => (
+                                      <span key={n} className={`rider-attempt-dot ${failCount >= n ? 'used' : ''}`} />
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
                               <p className="rider-confirm-desc">Enter the <strong>OTP</strong> emailed to the customer (also on their Track Order page). They should give it only when the parcel is handed over.</p>
                               <div className="rider-otp-group">
                                 <label className="rider-otp-label"><i className="fas fa-key"></i> Customer OTP Code<span className="otp-required-tag">*Required</span></label>
@@ -1820,11 +1965,37 @@ const RiderDashboard = () => {
                                 />
                               </div>
                               {errMsg && <div className="rider-confirm-error"><i className="fas fa-exclamation-circle"></i> {errMsg}</div>}
-                              <button className={`rider-confirm-btn ${confirmingId === delivery._id ? 'confirming' : ''}`} onClick={() => confirmDelivery(delivery)} disabled={confirmingId === delivery._id}>
-                                {confirmingId === delivery._id ? <><i className="fas fa-spinner fa-spin"></i> Confirming...</> : <><DkIcon name={DK_ICONS.completed} size={14} /> Confirm Delivery</>}
-                              </button>
+                              <div className="rider-confirm-actions">
+                                <button
+                                  type="button"
+                                  className={`rider-confirm-btn ${confirmingId === delivery._id ? 'confirming' : ''}`}
+                                  onClick={() => confirmDelivery(delivery)}
+                                  disabled={confirmingId === delivery._id || failingId === delivery._id}
+                                >
+                                  {confirmingId === delivery._id
+                                    ? <><i className="fas fa-spinner fa-spin"></i> Confirming...</>
+                                    : <><DkIcon name={DK_ICONS.completed} size={14} /> Confirm Delivery</>}
+                                </button>
+                                <button
+                                  type="button"
+                                  className={`rider-failed-attempt-btn ${failingId === delivery._id ? 'reporting' : ''}`}
+                                  onClick={() => handleFailedAttemptClick(delivery)}
+                                  disabled={failMaxed || failingId === delivery._id || confirmingId === delivery._id}
+                                  title={failMaxed ? 'Maximum 3 failed attempts reached' : 'Report unsuccessful delivery — sends GPS proof to admin'}
+                                >
+                                  {failingId === delivery._id
+                                    ? <><i className="fas fa-spinner fa-spin"></i> Reporting...</>
+                                    : <><i className="fas fa-exclamation-triangle"></i> Failed Attempt</>}
+                                </button>
+                              </div>
+                              {failMaxed && (
+                                <p className="rider-fail-max-note">
+                                  <i className="fas fa-info-circle"></i> 3 failed attempts recorded. Contact admin if you still need help.
+                                </p>
+                              )}
                             </div>
-                          )}
+                            );
+                          })()}
                           <DeliveryChatPanel
                             orderId={delivery.orderId}
                             role="rider"
@@ -1966,6 +2137,53 @@ const RiderDashboard = () => {
             ? `Scan the waybill QR for #${scanTargetOrderId.slice(-8).toUpperCase()} (printed or on screen). Wrong QR = mismatch, not accepted.`
             : 'Scan the waybill QR for this order (printed or on screen).'}
         />
+      )}
+
+      {failReasonOpen && createPortal(
+        <div className="rider-fail-reason-overlay" onClick={() => !failingId && setFailReasonOpen(null)}>
+          <div className="rider-fail-reason-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="fail-reason-title">
+            <div className="rider-fail-reason-header">
+              <h3 id="fail-reason-title"><i className="fas fa-exclamation-triangle"></i> 3rd Failed Attempt</h3>
+              <button type="button" className="rider-fail-reason-close" onClick={() => !failingId && setFailReasonOpen(null)} aria-label="Close">
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+            <p className="rider-fail-reason-desc">
+              Order #{String(failReasonOpen.orderId || '').slice(-8).toUpperCase()} — select why delivery failed. This reason will appear on the customer timeline. Your GPS pin is sent to admin as proof.
+            </p>
+            <div className="rider-fail-reason-options">
+              {FAILED_REASON_OPTIONS.map((opt) => (
+                <button
+                  key={opt.code}
+                  type="button"
+                  className={`rider-fail-reason-option ${failReasonCode === opt.code ? 'selected' : ''}`}
+                  onClick={() => setFailReasonCode(opt.code)}
+                  disabled={!!failingId}
+                >
+                  <i className={`fas ${opt.code === 'no_answer' ? 'fa-phone-slash' : 'fa-user-slash'}`}></i>
+                  <span>{opt.label}</span>
+                  {failReasonCode === opt.code && <i className="fas fa-check-circle"></i>}
+                </button>
+              ))}
+            </div>
+            <div className="rider-fail-reason-actions">
+              <button type="button" className="rider-fail-reason-cancel" onClick={() => setFailReasonOpen(null)} disabled={!!failingId}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rider-fail-reason-submit"
+                onClick={confirmThirdFailedAttempt}
+                disabled={!failReasonCode || !!failingId}
+              >
+                {failingId
+                  ? <><i className="fas fa-spinner fa-spin"></i> Submitting...</>
+                  : <><i className="fas fa-paper-plane"></i> Submit Attempt</>}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

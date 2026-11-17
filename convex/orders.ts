@@ -491,6 +491,145 @@ export const updateOrderOtp = mutation({
   },
 });
 
+const FAILED_ATTEMPT_MAX = 3;
+const FAILED_ATTEMPT_REASONS: Record<string, string> = {
+  customer_no_show: "Customer did not show up / was not at the address",
+  no_answer: "Customer did not answer the call",
+};
+
+/** Rider reports unsuccessful delivery handoff (max 3). Keeps order out_for_delivery. */
+export const reportFailedDeliveryAttempt = mutation({
+  args: {
+    orderId: v.string(),
+    lat: v.number(),
+    lng: v.number(),
+    accuracy: v.optional(v.number()),
+    reasonCode: v.optional(v.string()),
+    reason: v.optional(v.string()),
+    riderName: v.optional(v.string()),
+  },
+  handler: async ({ db, scheduler }, args) => {
+    const order = await db
+      .query("orders")
+      .withIndex("by_orderId", (q) => q.eq("orderId", args.orderId))
+      .first();
+    if (!order) return { success: false, message: "Order not found." };
+
+    const status = String(order.orderStatus || "").toLowerCase();
+    if (status !== "out_for_delivery") {
+      return { success: false, message: "Order must be out for delivery." };
+    }
+    if (order.deliveryOtpVerified || status === "completed") {
+      return { success: false, message: "Order already delivered." };
+    }
+
+    const existing: any[] = Array.isArray(order.deliveryFailedAttempts)
+      ? [...order.deliveryFailedAttempts]
+      : [];
+    if (existing.length >= FAILED_ATTEMPT_MAX) {
+      return { success: false, message: "Maximum of 3 failed attempts reached." };
+    }
+
+    const attempt = existing.length + 1;
+    let reasonCode = args.reasonCode ? String(args.reasonCode).trim() : "";
+    let reason = args.reason ? String(args.reason).trim() : "";
+
+    if (attempt >= FAILED_ATTEMPT_MAX) {
+      if (!reasonCode && !reason) {
+        return {
+          success: false,
+          message: "Select a reason for the 3rd failed attempt.",
+          requiresReason: true,
+        };
+      }
+      if (reasonCode && FAILED_ATTEMPT_REASONS[reasonCode]) {
+        reason = FAILED_ATTEMPT_REASONS[reasonCode];
+      }
+      if (!reason) {
+        return { success: false, message: "Select a valid reason for the 3rd attempt." };
+      }
+    } else {
+      // Attempts 1–2 use the standard recipient-request reschedule message (no rider reason)
+      reasonCode = "";
+      reason = "";
+    }
+
+    const lat = Number(args.lat);
+    const lng = Number(args.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return { success: false, message: "GPS location is required as proof." };
+    }
+
+    const at = new Date().toISOString();
+    const riderName = String(args.riderName || order.riderInfo?.name || "Rider").trim() || "Rider";
+    const entry = {
+      attempt,
+      ...(reason ? { reason } : {}),
+      ...(reasonCode ? { reasonCode } : {}),
+      lat,
+      lng,
+      ...(args.accuracy != null && Number.isFinite(Number(args.accuracy))
+        ? { accuracy: Number(args.accuracy) }
+        : {}),
+      riderName,
+      at,
+    };
+    existing.push(entry);
+
+    await db.patch(order._id, {
+      deliveryFailedAttempts: existing,
+      deliveryFailedAttemptCount: existing.length,
+    });
+
+    const shortId = shortOrderId(args.orderId);
+    const customer = order.customerName || "Customer";
+    const coordsLabel = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    const attemptLabel = `Attempt ${attempt}/${FAILED_ATTEMPT_MAX}`;
+
+    await db.insert("riderNotifications", {
+      type: "delivery_failed_attempt",
+      orderId: String(args.orderId),
+      customerName: String(customer),
+      total: Number(order.finalTotal ?? order.total ?? 0),
+      message:
+        `⚠️ ${riderName} reported failed delivery (${attemptLabel}) for Order #${shortId} · ${customer}. ` +
+        `Rider GPS proof: ${coordsLabel}` +
+        (reason ? ` · Reason: ${reason}` : " · Customer may reschedule."),
+      createdAt: at,
+      read: false,
+    });
+
+    const timelineMsg =
+      attempt >= FAILED_ATTEMPT_MAX && reason
+        ? `Delivery attempt ${attempt} unsuccessful. Reason: ${reason}`
+        : `Delivery attempt was unsuccessful : Recipient Request Reschedule Delivery`;
+
+    if (order.email) {
+      await notifyCustomerInApp(db, {
+        email: order.email,
+        type: "delivery_failed_attempt",
+        title: `Delivery attempt unsuccessful · #${shortId}`,
+        body: timelineMsg,
+        url: `/track-order?order=${encodeURIComponent(args.orderId)}`,
+        orderId: args.orderId,
+      });
+      await scheduler.runAfter(0, internal.webPush.sendToEmail, {
+        email: order.email,
+        title: `Delivery attempt unsuccessful · #${shortId}`,
+        body: timelineMsg,
+        url: `/track-order?order=${encodeURIComponent(args.orderId)}`,
+      });
+    }
+
+    return {
+      success: true,
+      attempt,
+      maxAttempts: FAILED_ATTEMPT_MAX,
+      reason: reason || null,
+    };
+  },
+});
+
 export const deleteOrder = mutation({
   args: {
     orderId: v.string(),

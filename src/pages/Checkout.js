@@ -107,15 +107,38 @@ function calcLalamoveShipping(storeLat, storeLng, lat, lng, cartItems = [], prod
 }
 
 // ─── ADDRESS MAP PICKER (manual fields + optional pin w/ search) ─────────────
-const buildFullAddress = ({ address, barangay, city, zipCode }) =>
-  [address, barangay && `Brgy. ${barangay}`, city, zipCode, 'Philippines']
+const buildFullAddress = ({ address, barangay, city, province, zipCode }) =>
+  [address, barangay && `Brgy. ${barangay}`, city, province, zipCode, 'Philippines']
     .filter(Boolean)
     .join(', ');
+
+/** Parse Nominatim reverse/search addressdetails into checkout fields (PH). */
+const parseNominatimAddress = (data) => {
+  const a = data?.address || {};
+  const road = a.road || a.pedestrian || a.path || a.residential || a.street || a.cycleway || '';
+  const street = [a.house_number, road].filter(Boolean).join(' ').trim()
+    || a.building
+    || a.amenity
+    || '';
+  const barangay = a.suburb || a.neighbourhood || a.quarter || a.village
+    || a.hamlet || a.barangay || a.city_district || '';
+  const city = a.city || a.municipality || a.town || a.county || '';
+  const province = a.state || a.province || a.region || '';
+  const zipCode = String(a.postcode || '').replace(/[^\d]/g, '').slice(0, 4);
+  return {
+    address: street,
+    barangay: String(barangay || '').trim(),
+    city: String(city || '').trim(),
+    province: String(province || '').trim(),
+    zipCode,
+  };
+};
 
 const AddressMapPicker = ({
   address,
   barangay,
   city,
+  province,
   zipCode,
   onFieldsChange,
   onSelectSuggestion,
@@ -129,7 +152,9 @@ const AddressMapPicker = ({
   const markerRef      = useRef(null);
   const pendingFly     = useRef(null);
   const suggestRef     = useRef(null);
-  const fieldsRef      = useRef({ address, barangay, city, zipCode });
+  const fieldsRef      = useRef({ address, barangay, city, province, zipCode });
+  const suppressForwardGeocodeRef = useRef(false);
+  const reverseAbortRef = useRef(null);
 
   const [leafletReady,    setLeafletReady]    = useState(!!window.L);
   // Never auto-open on load/refresh — only when user taps Add/Edit pin
@@ -142,8 +167,8 @@ const AddressMapPicker = ({
   const [showSuggestions, setShowSuggestions] = useState(false);
 
   useEffect(() => {
-    fieldsRef.current = { address, barangay, city, zipCode };
-  }, [address, barangay, city, zipCode]);
+    fieldsRef.current = { address, barangay, city, province, zipCode };
+  }, [address, barangay, city, province, zipCode]);
 
   useEffect(() => {
     if (window.L) { setLeafletReady(true); return; }
@@ -184,9 +209,8 @@ const AddressMapPicker = ({
     });
   }, []);
 
-  const commitPin = useCallback((lat, lng, { fly = true } = {}) => {
+  const applyPinOnMap = useCallback((lat, lng, fields, { fly = true } = {}) => {
     const withinNCR = checkAndNotifyNCR(lat, lng);
-    const fields = fieldsRef.current;
     const label = buildFullAddress(fields);
     if (markerRef.current && mapInstanceRef.current && window.L) {
       markerRef.current.setIcon(makeIcon(withinNCR));
@@ -202,14 +226,81 @@ const AddressMapPicker = ({
       pendingFly.current = { lat, lng, withinNCR };
     }
     setPinSet(true);
+    return withinNCR;
+  }, [checkAndNotifyNCR, makeIcon]);
+
+  const commitPin = useCallback((lat, lng, { fly = true } = {}) => {
+    const fields = fieldsRef.current;
+    const withinNCR = applyPinOnMap(lat, lng, fields, { fly });
     onSelectSuggestion({ ...fields, lat, lng });
     setStatusText(withinNCR
       ? 'Pin set — drag to fine-tune'
       : '⚠️ Outside rider area — LBC Express shipping'
     );
-  }, [checkAndNotifyNCR, makeIcon, onSelectSuggestion]);
+  }, [applyPinOnMap, onSelectSuggestion]);
+
+  /** Drag / tap / search pin → reverse-geocode and autofill address fields. */
+  const placePinAndAutofill = useCallback(async (lat, lng, { fly = false } = {}) => {
+    if (reverseAbortRef.current) {
+      try { reverseAbortRef.current.abort(); } catch { /* ignore */ }
+    }
+    const controller = new AbortController();
+    reverseAbortRef.current = controller;
+
+    applyPinOnMap(lat, lng, fieldsRef.current, { fly });
+    onSelectSuggestion({ ...fieldsRef.current, lat, lng });
+    setGeocoding(true);
+    setStatusText('Looking up address for this pin…');
+
+    try {
+      const params = new URLSearchParams({
+        format: 'json',
+        lat: String(lat),
+        lon: String(lng),
+        zoom: '18',
+        addressdetails: '1',
+      });
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?${params}`, {
+        headers: { 'Accept-Language': 'en', 'User-Agent': 'DKMerchCheckout/1.0' },
+        signal: controller.signal,
+      });
+      const data = await res.json();
+      if (controller.signal.aborted) return;
+
+      const parsed = parseNominatimAddress(data);
+      // Keep previous street if Nominatim only returned area-level names
+      const merged = {
+        address: parsed.address || fieldsRef.current.address || '',
+        barangay: parsed.barangay || fieldsRef.current.barangay || '',
+        city: parsed.city || fieldsRef.current.city || '',
+        province: parsed.province || fieldsRef.current.province || '',
+        zipCode: parsed.zipCode || fieldsRef.current.zipCode || '',
+      };
+      fieldsRef.current = merged;
+      suppressForwardGeocodeRef.current = true;
+      onFieldsChange(merged);
+      onSelectSuggestion({ ...merged, lat, lng });
+      applyPinOnMap(lat, lng, merged, { fly: false });
+
+      const withinNCR = isWithinRiderRange(lat, lng, storeLat, storeLng);
+      setStatusText(withinNCR
+        ? 'Address filled from pin — edit fields if needed'
+        : '⚠️ Outside rider area — address filled · LBC Express'
+      );
+    } catch (err) {
+      if (err?.name === 'AbortError') return;
+      setStatusText('Pin set — could not look up address. Fill fields manually.');
+    } finally {
+      if (reverseAbortRef.current === controller) {
+        setGeocoding(false);
+        reverseAbortRef.current = null;
+      }
+      setTimeout(() => { suppressForwardGeocodeRef.current = false; }, 1200);
+    }
+  }, [applyPinOnMap, onFieldsChange, onSelectSuggestion, storeLat, storeLng]);
 
   const geocodeFilledAddress = useCallback(async () => {
+    if (suppressForwardGeocodeRef.current) return false;
     const fields = fieldsRef.current;
     const street = (fields.address || '').trim();
     const cty = (fields.city || '').trim();
@@ -297,11 +388,11 @@ const AddressMapPicker = ({
 
       marker.on('dragend', () => {
         const { lat, lng } = marker.getLatLng();
-        commitPin(lat, lng, { fly: false });
+        placePinAndAutofill(lat, lng, { fly: false });
       });
 
       map.on('click', (e) => {
-        commitPin(e.latlng.lat, e.latlng.lng, { fly: false });
+        placePinAndAutofill(e.latlng.lat, e.latlng.lng, { fly: false });
       });
 
       mapInstanceRef.current = map;
@@ -312,7 +403,7 @@ const AddressMapPicker = ({
         if (pendingFly.current) {
           const p = pendingFly.current;
           pendingFly.current = null;
-          commitPin(p.lat, p.lng);
+          placePinAndAutofill(p.lat, p.lng, { fly: true });
           return;
         }
         // Prefer plotting the address the user typed
@@ -332,6 +423,9 @@ const AddressMapPicker = ({
 
   useEffect(() => () => {
     clearTimeout(suggestRef.current);
+    if (reverseAbortRef.current) {
+      try { reverseAbortRef.current.abort(); } catch { /* ignore */ }
+    }
     if (mapInstanceRef.current) {
       try { mapInstanceRef.current.remove(); } catch { /* ignore */ }
       mapInstanceRef.current = null;
@@ -342,10 +436,11 @@ const AddressMapPicker = ({
   // While map is open, keep pin aligned with filled address fields
   useEffect(() => {
     if (!mapVisible || !mapInstanceRef.current) return;
+    if (suppressForwardGeocodeRef.current) return;
     if (!(address || '').trim() && !(city || '').trim()) return;
     const t = setTimeout(() => { geocodeFilledAddress(); }, 800);
     return () => clearTimeout(t);
-  }, [address, barangay, city, zipCode, mapVisible, geocodeFilledAddress]);
+  }, [address, barangay, city, province, zipCode, mapVisible, geocodeFilledAddress]);
 
   const fetchPinSuggestions = useCallback(async (query) => {
     if (!query || query.trim().length < 2) {
@@ -385,11 +480,11 @@ const AddressMapPicker = ({
     setPinQuery(s.label);
     setSuggestions([]);
     setShowSuggestions(false);
-    commitPin(s.lat, s.lng);
+    placePinAndAutofill(s.lat, s.lng, { fly: true });
   };
 
   const handleField = (field, val) => {
-    onFieldsChange({ address, barangay, city, zipCode, [field]: val });
+    onFieldsChange({ address, barangay, city, province, zipCode, [field]: val });
   };
 
   const handleOpenPin = () => {
@@ -439,7 +534,18 @@ const AddressMapPicker = ({
           />
         </div>
 
-        <div className="address-field address-field-full">
+        <div className="address-field">
+          <label>Province <span className="req">*</span></label>
+          <input
+            type="text"
+            value={province || ''}
+            onChange={(e) => handleField('province', e.target.value)}
+            placeholder="e.g. Metro Manila, Cavite"
+            autoComplete="address-level1"
+          />
+        </div>
+
+        <div className="address-field">
           <label>ZIP Code <span className="req">*</span></label>
           <input
             type="text"
@@ -507,7 +613,7 @@ const AddressMapPicker = ({
 
           <div ref={mapRef} className="address-map-preview-container" />
           <div className="address-map-preview-hint">
-            <i className="fas fa-hand-pointer"></i> Tap map or drag 📍 pin
+            <i className="fas fa-hand-pointer"></i> Tap map or drag 📍 pin — address fields auto-fill
             <span style={{ marginLeft: 'auto', fontSize: 10, color: '#64748b', fontWeight: 600 }}>Optional</span>
           </div>
         </div>
@@ -721,9 +827,9 @@ const Checkout = () => {
   const [errors,            setErrors]            = useState({ phone: '' });
   const cartPromo = location.state?.appliedPromo || null;
 
-  const [formData,      setFormData]      = useState({ fullName: '', email: '', phone: '', address: '', barangay: '', city: '', zipCode: '', notes: '' });
+  const [formData,      setFormData]      = useState({ fullName: '', email: '', phone: '', address: '', barangay: '', city: '', province: '', zipCode: '', notes: '' });
   const [savedContact,  setSavedContact]  = useState({ fullName: '', email: '', phone: '' });
-  const [savedAddress,  setSavedAddress]  = useState({ address: '', barangay: '', city: '', zipCode: '' });
+  const [savedAddress,  setSavedAddress]  = useState({ address: '', barangay: '', city: '', province: '', zipCode: '' });
   const [addressCoords, setAddressCoords] = useState(null);
   const [savedCoords,   setSavedCoords]   = useState(null);
   const [isOutsideNCR,  setIsOutsideNCR]  = useState(false);
@@ -763,14 +869,15 @@ const Checkout = () => {
       address:  profile?.address  || '',
       barangay: profile?.barangay || '',
       city:     profile?.city     || '',
+      province: profile?.province || '',
       zipCode:  profile?.zipCode  || '',
       notes:    '',
     };
     setFormData(init);
     setSavedContact({ fullName: init.fullName, email: init.email, phone: init.phone });
-    setSavedAddress({ address: init.address, barangay: init.barangay, city: init.city, zipCode: init.zipCode });
+    setSavedAddress({ address: init.address, barangay: init.barangay, city: init.city, province: init.province, zipCode: init.zipCode });
     setIsEditingContact(!init.fullName || !init.email || !init.phone);
-    setIsEditingAddress(!init.address || !init.barangay || !init.city || !init.zipCode);
+    setIsEditingAddress(!init.address || !init.barangay || !init.city || !init.province || !init.zipCode);
     if (profile?.addressLat && profile?.addressLng) {
       const coords = { lat: profile.addressLat, lng: profile.addressLng };
       setSavedCoords(coords);
@@ -857,16 +964,18 @@ const Checkout = () => {
       address: fields.address ?? prev.address,
       barangay: fields.barangay ?? prev.barangay,
       city: fields.city ?? prev.city,
+      province: fields.province ?? prev.province,
       zipCode: fields.zipCode ?? prev.zipCode,
     }));
   };
 
-  const handleAddressSelect = ({ address, barangay, city, zipCode, lat, lng }) => {
+  const handleAddressSelect = ({ address, barangay, city, province, zipCode, lat, lng }) => {
     setFormData((prev) => ({
       ...prev,
       address: address ?? prev.address,
       barangay: barangay ?? prev.barangay,
       city: city ?? prev.city,
+      province: province ?? prev.province,
       zipCode: zipCode ?? prev.zipCode,
     }));
     if (lat != null && lng != null) setAddressCoords({ lat, lng });
@@ -880,6 +989,7 @@ const Checkout = () => {
     savedAddress.address.trim() &&
     savedAddress.barangay.trim() &&
     savedAddress.city.trim() &&
+    savedAddress.province.trim() &&
     savedAddress.zipCode.trim();
 
   const isFormReady = () =>
@@ -899,6 +1009,7 @@ const Checkout = () => {
         address: savedAddress.address,
         barangay: savedAddress.barangay,
         city: savedAddress.city,
+        province: savedAddress.province,
         zipCode: savedAddress.zipCode,
       });
       showNotification('Contact information saved!', 'success');
@@ -909,11 +1020,13 @@ const Checkout = () => {
     if (!formData.address.trim()) { showNotification('Please enter your street address', 'error'); return; }
     if (!formData.barangay.trim()) { showNotification('Please enter your barangay', 'error'); return; }
     if (!formData.city.trim()) { showNotification('Please enter your city', 'error'); return; }
+    if (!formData.province.trim()) { showNotification('Please enter your province', 'error'); return; }
     if (!formData.zipCode.trim()) { showNotification('Please enter your ZIP code', 'error'); return; }
     setSavedAddress({
       address: formData.address,
       barangay: formData.barangay,
       city: formData.city,
+      province: formData.province,
       zipCode: formData.zipCode,
     });
     setIsEditingAddress(false);
@@ -924,6 +1037,7 @@ const Checkout = () => {
         address: formData.address,
         barangay: formData.barangay,
         city: formData.city,
+        province: formData.province,
         zipCode: formData.zipCode,
         ...(addressCoords ? { addressLat: addressCoords.lat, addressLng: addressCoords.lng } : {}),
       });
@@ -1030,8 +1144,9 @@ const Checkout = () => {
 
       const addressParts = [savedAddress.address];
       if (savedAddress.barangay) addressParts.push(`Brgy. ${savedAddress.barangay}`);
-      if (savedAddress.city)    addressParts.push(savedAddress.city);
-      if (savedAddress.zipCode) addressParts.push(savedAddress.zipCode);
+      if (savedAddress.city)     addressParts.push(savedAddress.city);
+      if (savedAddress.province) addressParts.push(savedAddress.province);
+      if (savedAddress.zipCode)  addressParts.push(savedAddress.zipCode);
       const shippingAddressStr = addressParts.join(', ');
 
       const createResult = await createOrder({
@@ -1186,6 +1301,7 @@ const Checkout = () => {
             address:  savedAddress.address,
             barangay: savedAddress.barangay,
             city:     savedAddress.city,
+            province: savedAddress.province,
             zipCode:  savedAddress.zipCode,
             addressLat: addressCoords.lat,
             addressLng: addressCoords.lng,
@@ -1379,6 +1495,10 @@ const Checkout = () => {
                       <span className="info-value">{savedAddress.city || <span className="info-missing">—</span>}</span>
                     </div>
                     <div className="info-display-item">
+                      <span className="info-label">Province</span>
+                      <span className="info-value">{savedAddress.province || <span className="info-missing">—</span>}</span>
+                    </div>
+                    <div className="info-display-item">
                       <span className="info-label">ZIP Code</span>
                       <span className="info-value">{savedAddress.zipCode || <span className="info-missing">—</span>}</span>
                     </div>
@@ -1417,6 +1537,7 @@ const Checkout = () => {
                         address={formData.address}
                         barangay={formData.barangay}
                         city={formData.city}
+                        province={formData.province}
                         zipCode={formData.zipCode}
                         onFieldsChange={handleAddressFieldsChange}
                         onSelectSuggestion={handleAddressSelect}
