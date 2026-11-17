@@ -1647,9 +1647,23 @@
 .order-cancel-btn:disabled { opacity: 0.65; cursor: not-allowed; }
 .modal-cancel-order-btn {
   margin: 0 0 14px;
+  width: 100%;
   padding: 12px 16px;
-  font-size: 13px;
-  background: linear-gradient(135deg, #fef2f2, #fee2e2);
+  font-size: 14px;
+  font-weight: 700;
+  background: #dc2626 !important;
+  border: none !important;
+  color: #fff !important;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(220, 38, 38, 0.28);
+}
+.modal-cancel-order-btn:hover:not(:disabled) {
+  background: #b91c1c !important;
+  border-color: transparent !important;
+  color: #fff !important;
+}
+.modal-cancel-order-btn i {
+  color: #fff !important;
 }
 
 .cancel-order-note {
@@ -1687,14 +1701,14 @@
 
 .cancel-reason-option:hover {
   background: linear-gradient(135deg, #fdf2f8, #f5f3ff);
-  border-color: #e5e7eb;
+  border-color: #fc1268;
   color: #fc1268;
   transform: translateX(3px);
 }
 
 .cancel-reason-option.selected {
   background: linear-gradient(135deg, #fdf2f8, #fce7f3);
-  border-color: #e5e7eb;
+  border-color: #fc1268;
   color: #be185d;
   box-shadow: 0 0 0 3px rgba(252, 18, 104, 0.12);
 }
@@ -1724,7 +1738,16 @@
 
 .cancel-order-submit {
   background: linear-gradient(135deg, #ef4444, #dc2626) !important;
-  border-color: #e5e7eb !important;
+  border: none !important;
+  color: #fff !important;
+  box-shadow: 0 2px 10px rgba(220, 38, 38, 0.28);
+}
+.cancel-order-submit:hover:not(:disabled) {
+  filter: brightness(1.05);
+  color: #fff !important;
+}
+.cancel-order-submit i {
+  color: #fff !important;
 }
 
 .refund-error {
