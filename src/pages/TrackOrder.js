@@ -467,6 +467,14 @@ const RiderMap = ({ orderId, riderName, orderData }) => {
     if (!leafletLoaded || mapInstanceRef.current || !mapRef.current) return;
     try {
       const L = window.L;
+      // StrictMode remount can leave a stale Leaflet id on the container
+      if (mapRef.current._leaflet_id) {
+        try {
+          const stale = L.map(mapRef.current);
+          stale.remove();
+        } catch { /* ignore */ }
+        try { delete mapRef.current._leaflet_id; } catch { /* ignore */ }
+      }
       // ✅ NCR-restricted map init
       const map = L.map(mapRef.current, {
         zoomControl: true,
@@ -491,7 +499,18 @@ const RiderMap = ({ orderId, riderName, orderData }) => {
       mapInstanceRef.current = map; markerRef.current = marker;
       setMapReady(true);
       const refresh = () => { try { map.invalidateSize({ animate: false }); } catch {} };
-      [80, 250, 500].forEach((ms) => setTimeout(refresh, ms));
+      const timers = [80, 250, 500].map((ms) => setTimeout(refresh, ms));
+      return () => {
+        timers.forEach(clearTimeout);
+        try { marker.remove(); } catch { /* ignore */ }
+        try { map.remove(); } catch { /* ignore */ }
+        mapInstanceRef.current = null;
+        markerRef.current = null;
+        if (mapRef.current?._leaflet_id) {
+          try { delete mapRef.current._leaflet_id; } catch { /* ignore */ }
+        }
+        setMapReady(false);
+      };
     } catch { setMapError('Failed to initialize map.'); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leafletLoaded]);
