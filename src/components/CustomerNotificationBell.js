@@ -36,6 +36,10 @@ function typeBadge(type) {
     case 'order_cancelled':
     case 'cancel_approved': return { icon: 'fa-times', tone: 'warn' };
     case 'cancel_rejected': return { icon: 'fa-exclamation', tone: 'warn' };
+    case 'login_alert':
+    case 'login_opened':
+    case 'login_blocked':
+      return { icon: 'fa-shield-alt', tone: 'warn' };
     default: return { icon: 'fa-bell', tone: 'default' };
   }
 }
@@ -44,6 +48,16 @@ export function resolveNotificationTarget(n) {
   const type = String(n?.type || '');
   const url = String(n?.url || '');
   const orderId = String(n?.orderId || '').trim();
+
+  // Sign-in / security notices → Where you're logged in
+  if (
+    type === 'login_alert'
+    || type === 'login_opened'
+    || type === 'login_blocked'
+    || /open=loginAlert/i.test(url)
+  ) {
+    return '/settings?tab=manage&open=devices';
+  }
 
   if (type === 'app_update') {
     let version = '';

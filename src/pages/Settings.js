@@ -447,6 +447,24 @@ const Settings = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
 
+  // Sign-in notifications deep-link → Account Management + Where you're logged in
+  useEffect(() => {
+    if (isForgotPasswordFlow || !isAuthenticated) return;
+    let params;
+    try {
+      params = new URLSearchParams(location.search || '');
+    } catch {
+      return;
+    }
+    const tab = String(params.get('tab') || '').toLowerCase();
+    const open = String(params.get('open') || '').toLowerCase();
+    if (tab !== 'manage' && open !== 'devices') return;
+    if (tab === 'manage' || open === 'devices') setActiveTab('manage');
+    if (open === 'devices') setShowDevicesModal(true);
+    // Clear query so Back doesn't re-open the modal
+    navigate('/settings', { replace: true });
+  }, [location.search, isAuthenticated, isForgotPasswordFlow, navigate]);
+
   useEffect(() => {
     if (isForgotPasswordFlow) return;
     if (!isAuthenticated) { navigate('/'); return; }

@@ -591,7 +591,8 @@ export const reportFailedDeliveryAttempt = mutation({
 
     const shortId = shortOrderId(args.orderId);
     const customer = order.customerName || "Customer";
-    const placeLabel = address || `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    // Prefer city last-seen — never bake raw GPS coords into the notice text
+    const placeLabel = address || "map pin (tap to view)";
     const attemptLabel = `Attempt ${attempt}/${FAILED_ATTEMPT_MAX}`;
     const devicePart = deviceLabel ? ` · Device: ${deviceLabel}` : "";
 

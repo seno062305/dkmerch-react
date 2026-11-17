@@ -225,14 +225,14 @@ function formatPlace(parts) {
 async function reverseGeocode(lat, lon) {
   try {
     const ctrl = typeof AbortSignal !== "undefined" && AbortSignal.timeout
-      ? AbortSignal.timeout(3000)
+      ? AbortSignal.timeout(6000)
       : undefined;
     const url =
       `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}`
-      + `&lon=${encodeURIComponent(lon)}&zoom=12&addressdetails=1`;
+      + `&lon=${encodeURIComponent(lon)}&zoom=14&addressdetails=1`;
     const res = await fetch(url, {
       signal: ctrl,
-      headers: { Accept: "application/json" },
+      headers: { Accept: "application/json", "Accept-Language": "en" },
     });
     if (!res.ok) return null;
     const data = await res.json();
@@ -244,16 +244,40 @@ async function reverseGeocode(lat, lon) {
       || a.village
       || a.suburb
       || a.city_district
+      || a.neighbourhood
       || a.county
       || "";
     const region = a.state || a.region || "";
     const country = a.country || "";
     // Require a city/municipality — not country alone
-    if (!city) return null;
+    if (!city) {
+      // Fallback: pull a city-ish token from display_name
+      const fromDisplay = cityFromDisplayName(data?.display_name);
+      if (fromDisplay) return fromDisplay;
+      return null;
+    }
     return formatPlace([city, country || region]);
   } catch {
     return null;
   }
+}
+
+/** Extract "City, Country" from a long Nominatim display_name when possible. */
+export function cityFromDisplayName(displayName) {
+  const parts = String(displayName || "")
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (parts.length < 2) return null;
+  const country = parts[parts.length - 1];
+  // Prefer a token that looks like a city / municipality
+  const cityish = parts.find((p) =>
+    /\b(city|municipality|town)\b/i.test(p)
+    || /caloocan|quezon|makati|manila|pasig|taguig|valenzuela|marikina|mandaluyong|pasay|paranaque|parañaque|las piñas|las pinas|muntinlupa|navotas|malabon|san juan|pateros/i.test(p)
+  );
+  const pick = cityish || parts[Math.max(0, parts.length - 3)] || parts[0];
+  if (!pick || /^philippines$/i.test(pick)) return null;
+  return formatPlace([pick, /philippines/i.test(country) ? "Philippines" : country]);
 }
 
 /** City-level place label for failed-attempt / last-seen notices (e.g. Caloocan City, Philippines). */

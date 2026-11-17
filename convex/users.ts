@@ -608,7 +608,7 @@ export const startUserSession = mutation({
           type: "login_alert",
           title: "New sign-in request",
           body: `${deviceName} · ${location}. Confirm on any logged-in device if this was you.`,
-          url: "/?open=loginAlert",
+          url: "/settings?tab=manage&open=devices",
         });
       } catch { /* optional */ }
       try {
@@ -617,7 +617,7 @@ export const startUserSession = mutation({
           title: "New login to your DKMerch account",
           body: `${deviceName} · ${location}. Confirm if this was you.`,
           // Path-only so the installed PWA opens (not a fresh browser tab)
-          url: "/?open=loginAlert",
+          url: "/settings?tab=manage&open=devices",
           role: "user",
         });
       } catch { /* push optional */ }
@@ -1168,7 +1168,7 @@ export const confirmLoginAlert = mutation({
           type: "login_opened",
           title: "Account opened on another device",
           body: `Your DKMerch account was opened on ${alert.deviceName || "another device"}${alert.location ? ` · ${alert.location}` : ""}.`,
-          url: "/",
+          url: "/settings?tab=manage&open=devices",
         });
       } catch { /* optional */ }
       try {
@@ -1176,7 +1176,7 @@ export const confirmLoginAlert = mutation({
           email: String(user.email).toLowerCase(),
           title: "Account opened on another device",
           body: `${alert.deviceName || "Another device"}${alert.location ? ` · ${alert.location}` : ""}.`,
-          url: "/",
+          url: "/settings?tab=manage&open=devices",
           role: "user",
         });
       } catch { /* optional */ }
@@ -1220,7 +1220,7 @@ export const denyLoginAlert = mutation({
           type: "login_blocked",
           title: "Login blocked",
           body: "A sign-in attempt was denied on your account. If this wasn't you, change your password.",
-          url: "/",
+          url: "/settings?tab=manage&open=devices",
         });
       } catch { /* optional */ }
       try {
@@ -1228,7 +1228,7 @@ export const denyLoginAlert = mutation({
           email: String(user.email).toLowerCase(),
           title: "Login blocked",
           body: "A login attempt was denied. If this wasn't you, change your password.",
-          url: "/",
+          url: "/settings?tab=manage&open=devices",
           role: "user",
         });
       } catch { /* optional */ }

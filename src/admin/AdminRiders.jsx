@@ -6,7 +6,40 @@ import { api } from '../../convex/_generated/api';
 import DkIcon, { DK_ICONS } from '../components/DkIcon';
 import AdminPager, { fixedPageStyle } from './AdminPager';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
+import { reverseGeocodePlace } from '../utils/deviceInfo';
 const SITE_URL = process.env.REACT_APP_SITE_URL || 'https://dkmerchwebsite.vercel.app';
+
+const COORDS_IN_MSG_RE = /(?:Rider GPS proof|Last seen):\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/i;
+
+/** Build admin-facing failed-attempt text with city last-seen (never raw coords). */
+function formatFailedAttemptNotice(n, resolvedPlace) {
+  const raw = String(n?.message || '');
+  const place = String(
+    resolvedPlace
+    || n?.address
+    || ''
+  ).trim();
+  const device = String(n?.deviceLabel || '').trim();
+  const devicePart = device ? ` · Device: ${device}` : '';
+
+  if (place && COORDS_IN_MSG_RE.test(raw)) {
+    return raw.replace(COORDS_IN_MSG_RE, `Last seen: ${place}${devicePart}`);
+  }
+  if (place && /Last seen:\s*map pin/i.test(raw)) {
+    return raw.replace(/Last seen:\s*map pin[^·]*/i, `Last seen: ${place}${devicePart} `);
+  }
+  // Older rows with only coords — rebuild a readable line when we have place
+  if (place && /-?\d+\.\d+\s*,\s*-?\d+\.\d+/.test(raw) && !/Last seen:/i.test(raw)) {
+    const cleaned = raw.replace(/Rider GPS proof:\s*-?\d+\.\d+\s*,\s*-?\d+\.\d+\s*·?\s*/i, '');
+    const head = cleaned.split('·')[0]?.trim() || cleaned;
+    const rest = cleaned.includes('·') ? cleaned.slice(cleaned.indexOf('·') + 1).trim() : '';
+    return `${head} Last seen: ${place}${devicePart}${rest ? ` · ${rest}` : ''}`.trim();
+  }
+  if (!place && COORDS_IN_MSG_RE.test(raw)) {
+    return raw.replace(COORDS_IN_MSG_RE, `Last seen: map pin (tap to view)${devicePart}`);
+  }
+  return raw || `Rider opened link for Order #${String(n?.orderId || '').slice(-8).toUpperCase()}`;
+}
 
 const toDateStr = (ms) => new Date(ms).toISOString().split('T')[0];
 const todayStr  = toDateStr(Date.now());
@@ -240,7 +273,37 @@ const NotificationBell = ({ onOpenFailedAttempt }) => {
   const markAllRead       = useMutation(api.riderNotifications.markAllRead);
   const markOneRead       = useMutation(api.riderNotifications.markOneRead);
   const clearAll          = useMutation(api.riderNotifications.clearAll);
+  const [placeById, setPlaceById] = useState({});
   const unreadCount       = unread.length;
+
+  // Resolve city last-seen for failed attempts that only have lat/lng (incl. old notices)
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      const targets = (notifications || []).filter((n) => {
+        if (n.type !== 'delivery_failed_attempt') return false;
+        if (n.address || placeById[n._id]) return false;
+        const lat = Number(n.lat);
+        const lng = Number(n.lng);
+        return Number.isFinite(lat) && Number.isFinite(lng);
+      });
+      if (!targets.length) return;
+      for (const n of targets.slice(0, 8)) {
+        const lat = Number(n.lat);
+        const lng = Number(n.lng);
+        try {
+          const place = await reverseGeocodePlace(lat, lng);
+          if (cancelled || !place) continue;
+          setPlaceById((prev) => (prev[n._id] ? prev : { ...prev, [n._id]: place }));
+        } catch { /* ignore */ }
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+  // placeById intentionally omitted — we only fill missing ids
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notifications]);
+
   const handleOpen = async () => { setOpen(o => !o); if (!open && unreadCount > 0) await markAllRead().catch(() => {}); };
   const timeAgoStr = (isoStr) => {
     const diff = Date.now() - new Date(isoStr).getTime();
@@ -253,7 +316,10 @@ const NotificationBell = ({ onOpenFailedAttempt }) => {
     if (!onOpenFailedAttempt) return;
     if (!n.read) await markOneRead({ id: n._id }).catch(() => {});
     setOpen(false);
-    onOpenFailedAttempt(n);
+    const enriched = placeById[n._id] && !n.address
+      ? { ...n, address: placeById[n._id] }
+      : n;
+    onOpenFailedAttempt(enriched);
   };
   return (
     <div className="ar-bell-wrap" ref={dropdownRef}>
@@ -279,6 +345,9 @@ const NotificationBell = ({ onOpenFailedAttempt }) => {
               ? <div className="ar-bell-empty"><span>🔕</span><span>No notifications yet</span></div>
               : notifications.map(n => {
                   const clickable = (n.type === 'delivery_failed_attempt' || n.type === 'rider_at_customer') && !!onOpenFailedAttempt;
+                  const msg = n.type === 'delivery_failed_attempt'
+                    ? formatFailedAttemptNotice(n, placeById[n._id])
+                    : (n.message || `Rider opened link for Order #${n.orderId?.slice(-8).toUpperCase()}`);
                   return (
                   <div
                     key={n._id}
@@ -299,7 +368,7 @@ const NotificationBell = ({ onOpenFailedAttempt }) => {
                       {n.type === 'delivery_failed_attempt' ? '⚠️' : n.type === 'rider_at_customer' ? '📍' : n.type === 'rider_link_reopened' ? '🔄' : '🛵'}
                     </div>
                     <div className="ar-bell-item-body">
-                      <div className="ar-bell-item-msg">{n.message || `Rider opened link for Order #${n.orderId?.slice(-8).toUpperCase()}`}</div>
+                      <div className="ar-bell-item-msg">{msg}</div>
                       <div className="ar-bell-item-time">
                         {timeAgoStr(n.createdAt)}
                         {clickable && <span className="ar-bell-item-hint"> · Tap to view map</span>}

@@ -26,12 +26,15 @@ function deviceIcon(platform, deviceName) {
 /**
  * Facebook-style "Where you're logged in" modal.
  */
+const PREVIEW_COUNT = 2;
+
 const LoggedInDevicesModal = ({ userId, currentSessionId, onClose, onLogoutCurrent }) => {
   useCloseOnHistoryBack(true, onClose, 'loggedInDevices');
   const { confirm } = useConfirm();
   const [menuFor, setMenuFor] = useState(null);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
+  const [showAll, setShowAll] = useState(false);
   const menuRef = useRef(null);
 
   const sessions = useQuery(
@@ -170,52 +173,65 @@ const LoggedInDevicesModal = ({ userId, currentSessionId, onClose, onLogoutCurre
               <span>No active sessions found.</span>
             </div>
           ) : (
-            <ul className="lid-list">
-              {sessions.map((s) => (
-                <li key={s.sessionId} className={`lid-item ${s.isCurrent ? 'is-current' : ''}`}>
-                  <div className="lid-item-icon">
-                    <i className={`fas ${deviceIcon(s.platform, s.deviceName)}`} />
-                  </div>
-                  <div className="lid-item-body">
-                    <div className="lid-item-title">
-                      {s.deviceName}
-                      {s.location ? ` · ${s.location}` : ''}
+            <>
+              <ul className="lid-list">
+                {(showAll ? sessions : sessions.slice(0, PREVIEW_COUNT)).map((s) => (
+                  <li key={s.sessionId} className={`lid-item ${s.isCurrent ? 'is-current' : ''}`}>
+                    <div className="lid-item-icon">
+                      <i className={`fas ${deviceIcon(s.platform, s.deviceName)}`} />
                     </div>
-                    <div className="lid-item-meta">
-                      {s.platform ? `${s.platform} · ` : ''}
-                      {s.isCurrent ? (
-                        <span className="lid-active-now">Active now</span>
-                      ) : (
-                        timeAgo(s.lastActiveAt)
+                    <div className="lid-item-body">
+                      <div className="lid-item-title">
+                        {s.deviceName}
+                        {s.location ? ` · ${s.location}` : ''}
+                      </div>
+                      <div className="lid-item-meta">
+                        {s.platform ? `${s.platform} · ` : ''}
+                        {s.isCurrent ? (
+                          <span className="lid-active-now">Active now</span>
+                        ) : (
+                          timeAgo(s.lastActiveAt)
+                        )}
+                      </div>
+                    </div>
+                    <div className="lid-item-menu-wrap" ref={menuFor === s.sessionId ? menuRef : null}>
+                      <button
+                        type="button"
+                        className="lid-dots"
+                        aria-label="Device options"
+                        disabled={!!busy}
+                        onClick={() => setMenuFor((cur) => (cur === s.sessionId ? null : s.sessionId))}
+                      >
+                        <i className="fas fa-ellipsis-v" />
+                      </button>
+                      {menuFor === s.sessionId && (
+                        <div className="lid-menu">
+                          <button
+                            type="button"
+                            className="lid-menu-btn danger"
+                            disabled={busy === s.sessionId}
+                            onClick={() => handleLogoutOne(s)}
+                          >
+                            {busy === s.sessionId ? 'Logging out…' : 'Log out'}
+                          </button>
+                        </div>
                       )}
                     </div>
-                  </div>
-                  <div className="lid-item-menu-wrap" ref={menuFor === s.sessionId ? menuRef : null}>
-                    <button
-                      type="button"
-                      className="lid-dots"
-                      aria-label="Device options"
-                      disabled={!!busy}
-                      onClick={() => setMenuFor((cur) => (cur === s.sessionId ? null : s.sessionId))}
-                    >
-                      <i className="fas fa-ellipsis-v" />
-                    </button>
-                    {menuFor === s.sessionId && (
-                      <div className="lid-menu">
-                        <button
-                          type="button"
-                          className="lid-menu-btn danger"
-                          disabled={busy === s.sessionId}
-                          onClick={() => handleLogoutOne(s)}
-                        >
-                          {busy === s.sessionId ? 'Logging out…' : 'Log out'}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
+                  </li>
+                ))}
+              </ul>
+              {sessions.length > PREVIEW_COUNT && (
+                <button
+                  type="button"
+                  className="lid-show-all"
+                  onClick={() => setShowAll((v) => !v)}
+                >
+                  {showAll
+                    ? 'Show less'
+                    : `Show all (${sessions.length} devices)`}
+                </button>
+              )}
+            </>
           )}
         </div>
 
