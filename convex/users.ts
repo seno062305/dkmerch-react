@@ -11,6 +11,34 @@ const RATE_LIMIT_MAX        = 5;             // max 5 attempts per fingerprint p
 /** 30-day grace window after customer self-delete (recoverable via OTP). */
 const ACCOUNT_DELETE_GRACE_MS = 30 * 24 * 60 * 60 * 1000;
 
+/** Unfinished customer orders block self-deactivate / self-delete. */
+function isBlockingCustomerOrder(order: any): boolean {
+  const st = String(order?.orderStatus || "")
+    .toLowerCase()
+    .replace(/\s+/g, "_");
+  const legacy = String(order?.status || "")
+    .toLowerCase()
+    .replace(/\s+/g, "_");
+  const done = new Set([
+    "completed",
+    "delivered",
+    "cancelled",
+    "canceled",
+  ]);
+  if (done.has(st) || done.has(legacy)) return false;
+  return true;
+}
+
+async function countBlockingOrdersForUser(db: any, user: any): Promise<number> {
+  const email = String(user?.email || "").trim();
+  if (!email) return 0;
+  const orders = await db
+    .query("orders")
+    .withIndex("by_email", (q: any) => q.eq("email", email))
+    .collect();
+  return orders.filter(isBlockingCustomerOrder).length;
+}
+
 function genSessionId() {
   const a = Math.random().toString(36).slice(2, 10);
   const b = Math.random().toString(36).slice(2, 10);
@@ -1858,6 +1886,15 @@ export const softDeleteUser = mutation({
     if (user.role === "admin" || user.email === "admin") {
       return { success: false, message: "Admin accounts cannot be deleted." };
     }
+    const activeOrderCount = await countBlockingOrdersForUser(db, user);
+    if (activeOrderCount > 0) {
+      return {
+        success: false,
+        blocked: true,
+        activeOrderCount,
+        message: `You have ${activeOrderCount} active/pending order${activeOrderCount === 1 ? "" : "s"}. Finish or cancel them before deleting your account.`,
+      };
+    }
     const now = Date.now();
     await db.patch(id, {
       status: "deleted",
@@ -2039,6 +2076,28 @@ export const resetPasswordByEmail = mutation({
 //  ACCOUNT MANAGEMENT — Self-service deactivation & reactivation
 // ════════════════════════════════════════════════════════════════════
 
+/** Settings UI: whether deactivate/delete should be blocked. */
+export const getAccountClosureBlock = query({
+  args: { userId: v.string() },
+  handler: async ({ db }, { userId }) => {
+    try {
+      const user = await db.get(userId as any);
+      if (!user) return { blocked: false, activeOrderCount: 0 };
+      const activeOrderCount = await countBlockingOrdersForUser(db, user);
+      return {
+        blocked: activeOrderCount > 0,
+        activeOrderCount,
+        message:
+          activeOrderCount > 0
+            ? `You have ${activeOrderCount} active/pending order${activeOrderCount === 1 ? "" : "s"}. Finish or cancel them before deactivating or deleting your account.`
+            : "",
+      };
+    } catch {
+      return { blocked: false, activeOrderCount: 0 };
+    }
+  },
+});
+
 // ── Deactivate own account (temporary — reactivatable via OTP) ───────────────
 export const deactivateOwnAccount = mutation({
   args: {
@@ -2047,6 +2106,17 @@ export const deactivateOwnAccount = mutation({
     note: v.optional(v.string()),
   },
   handler: async ({ db }, { id, reason, note }) => {
+    const user = await db.get(id) as any;
+    if (!user) return { success: false, message: "Account not found." };
+    const activeOrderCount = await countBlockingOrdersForUser(db, user);
+    if (activeOrderCount > 0) {
+      return {
+        success: false,
+        blocked: true,
+        activeOrderCount,
+        message: `You have ${activeOrderCount} active/pending order${activeOrderCount === 1 ? "" : "s"}. Finish or cancel them before deactivating your account.`,
+      };
+    }
     await db.patch(id, {
       status: "self_deactivated",
       suspendReason: reason,

@@ -1441,7 +1441,7 @@ const RiderDashboard = () => {
   const FAILED_ATTEMPT_MAX = 3;
   const FAILED_REASON_OPTIONS = [
     { code: 'customer_no_show', label: 'Customer did not show up / not at the address' },
-    { code: 'no_answer', label: 'Customer did not answer the call' },
+    { code: 'cannot_be_reached', label: 'Cannot be reached' },
   ];
 
   const getFailedAttemptCount = (order) => {
@@ -2144,7 +2144,7 @@ const RiderDashboard = () => {
                   onClick={() => setFailReasonCode(opt.code)}
                   disabled={!!failingId}
                 >
-                  <i className={`fas ${opt.code === 'no_answer' ? 'fa-phone-slash' : 'fa-user-slash'}`}></i>
+                  <i className={`fas ${opt.code === 'cannot_be_reached' ? 'fa-phone-slash' : 'fa-user-slash'}`}></i>
                   <span>{opt.label}</span>
                   {failReasonCode === opt.code && <i className="fas fa-check-circle"></i>}
                 </button>

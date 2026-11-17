@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useMutation, useAction } from 'convex/react';
+import { useMutation, useAction, useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useNotification } from '../context/NotificationContext';
 import QuickSignInScannerModal from '../components/QuickSignInScannerModal';
@@ -400,6 +400,13 @@ const Settings = () => {
   const softDeleteUser        = useMutation(api.users.softDeleteUser);
   const verifyUserPassword    = useMutation(api.users.verifyUserPassword);
   const approveQuickSignIn    = useMutation(api.quickSignIn.approveSession);
+  const accountClosureBlock   = useQuery(
+    api.users.getAccountClosureBlock,
+    user?._id || user?.id ? { userId: String(user._id || user.id) } : 'skip'
+  );
+  const closureBlocked = !!accountClosureBlock?.blocked;
+  const closureMsg = accountClosureBlock?.message
+    || 'You have an active/pending order. Finish or cancel it before deactivating or deleting your account.';
 
   useEffect(() => {
     const p = passwordForm.newPassword;
@@ -542,6 +549,10 @@ const Settings = () => {
 
   // ── Deactivate ────────────────────────────────────────────────────────────
   const openDeact = () => {
+    if (closureBlocked) {
+      showNotification(closureMsg, 'warning');
+      return;
+    }
     setDeactStep(1); setDeactPassword(''); setDeactError(''); setDeactShowPw(false);
     setShowDeactModal(true);
   };
@@ -566,7 +577,11 @@ const Settings = () => {
     setDeactLoading(true); setDeactError('');
     try {
       const uid = user._id || user.id;
-      await deactivateOwnAccount({ id: uid, reason: 'self_deactivated', note: undefined });
+      const result = await deactivateOwnAccount({ id: uid, reason: 'self_deactivated', note: undefined });
+      if (!result?.success) {
+        setDeactError(result?.message || 'Failed to deactivate. Please try again.');
+        return;
+      }
       logout();
       navigate('/', { replace: true });
     } catch { setDeactError('Failed to deactivate. Please try again.'); }
@@ -575,6 +590,10 @@ const Settings = () => {
 
   // ── Delete ────────────────────────────────────────────────────────────────
   const openDelete = () => {
+    if (closureBlocked) {
+      showNotification(closureMsg, 'warning');
+      return;
+    }
     setDeleteReason('');
     setDeleteNote('');
     setDeletePassword('');
@@ -606,11 +625,15 @@ const Settings = () => {
         setDeleteError('Incorrect password. Please try again.');
         return;
       }
-      await softDeleteUser({
+      const result = await softDeleteUser({
         id: uid,
         reason: deleteReason || 'self_deleted',
         note: deleteNote || undefined,
       });
+      if (!result?.success) {
+        setDeleteError(result?.message || 'Failed to delete account. Please try again.');
+        return;
+      }
       logout();
       navigate('/', { replace: true });
     } catch {
@@ -823,22 +846,56 @@ const Settings = () => {
                 </button>
               </div>
 
-              <div className="settings-acct-card settings-acct-card--warn">
+              {closureBlocked && (
+                <div className="settings-closure-block-banner" role="status">
+                  <i className="fas fa-ban" aria-hidden="true"></i>
+                  <div>
+                    <strong>Deactivate / Delete unavailable</strong>
+                    <p>{closureMsg}</p>
+                  </div>
+                </div>
+              )}
+
+              <div className={`settings-acct-card settings-acct-card--warn${closureBlocked ? ' is-blocked' : ''}`}>
                 <div className="settings-acct-card-icon"><i className="fas fa-pause-circle"></i></div>
                 <div className="settings-acct-card-info">
                   <h4>Deactivate Account</h4>
                   <p>Temporarily suspend your account. You can reactivate anytime by logging in again — we'll verify your identity via email OTP.</p>
+                  {closureBlocked && (
+                    <span className="settings-closure-lock-chip">
+                      <i className="fas fa-lock"></i> Not allowed while you have pending orders
+                    </span>
+                  )}
                 </div>
-                <button className="settings-acct-btn settings-acct-btn--warn" onClick={openDeact}>Deactivate</button>
+                <button
+                  className="settings-acct-btn settings-acct-btn--warn"
+                  onClick={openDeact}
+                  disabled={closureBlocked}
+                  title={closureBlocked ? closureMsg : 'Deactivate account'}
+                >
+                  {closureBlocked ? 'Unavailable' : 'Deactivate'}
+                </button>
               </div>
 
-              <div className="settings-acct-card settings-acct-card--danger">
+              <div className={`settings-acct-card settings-acct-card--danger${closureBlocked ? ' is-blocked' : ''}`}>
                 <div className="settings-acct-card-icon"><i className="fas fa-trash-alt"></i></div>
                 <div className="settings-acct-card-info">
                   <h4>Delete Account</h4>
                   <p>Schedule account deletion. You can recover it within 30 days by logging in again; after that it’s permanently removed.</p>
+                  {closureBlocked && (
+                    <span className="settings-closure-lock-chip">
+                      <i className="fas fa-lock"></i> Not allowed while you have pending orders
+                    </span>
+                  )}
                 </div>
-                <button className="settings-acct-btn settings-acct-btn--danger" onClick={openDelete}>Delete</button>
+                <button
+                  className="settings-acct-btn settings-acct-btn--danger"
+                  onClick={openDelete}
+                  disabled={closureBlocked}
+                  title={closureBlocked ? closureMsg : 'Delete account'}
+                >
+                  {closureBlocked ? 'Unavailable' : 'Delete'}
+                </button>
               </div>
             </div>
           )}

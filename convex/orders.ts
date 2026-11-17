@@ -494,7 +494,9 @@ export const updateOrderOtp = mutation({
 const FAILED_ATTEMPT_MAX = 3;
 const FAILED_ATTEMPT_REASONS: Record<string, string> = {
   customer_no_show: "Customer did not show up / was not at the address",
-  no_answer: "Customer did not answer the call",
+  cannot_be_reached: "Cannot be reached",
+  /** legacy code from earlier builds */
+  no_answer: "Cannot be reached",
 };
 
 /** Rider reports unsuccessful delivery handoff (max 3). Keeps order out_for_delivery. */

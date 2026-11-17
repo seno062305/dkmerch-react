@@ -490,6 +490,62 @@
 }
 .settings-acct-btn--danger:hover { background: #fca5a5; }
 
+.settings-acct-btn:disabled,
+.settings-acct-btn:disabled:hover {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.settings-closure-block-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  border-radius: 12px;
+  border: 1.5px solid #fdba74;
+  background: #fff7ed;
+  color: #9a3412;
+}
+.settings-closure-block-banner > i {
+  margin-top: 2px;
+  font-size: 16px;
+  color: #ea580c;
+  flex-shrink: 0;
+}
+.settings-closure-block-banner strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+.settings-closure-block-banner p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #c2410c;
+}
+
+.settings-acct-card.is-blocked {
+  opacity: 0.92;
+  border-color: #fdba74;
+  background: #fffaf5;
+}
+.settings-closure-lock-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #ffedd5;
+  color: #9a3412;
+  font-size: 11px;
+  font-weight: 800;
+}
+.settings-closure-lock-chip i { font-size: 10px; }
+
 /* ══════════════════════════════════════════
    ACCOUNT ACTION MODAL
 ══════════════════════════════════════════ */
