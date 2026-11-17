@@ -329,6 +329,10 @@
   padding: 6px 10px;
   margin: 0;
   position: relative;
+  background: linear-gradient(135deg, #fc1268, #9c27b0) !important;
+  color: #fff !important;
+  border: none !important;
+  box-shadow: 0 2px 8px rgba(252, 18, 104, 0.28);
 }
 
 .order-chat-unread-badge {
@@ -1526,13 +1530,24 @@
 
 .btn-continue-payment {
   width: 100%; padding: 10px 16px;
-  background: linear-gradient(135deg, #e5e7eb, #e5e7eb); color: #fff; border: none;
+  background: linear-gradient(135deg, #fc1268, #9c27b0); color: #fff; border: none;
   border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer;
   display: flex; align-items: center; justify-content: center; gap: 8px;
   margin-top: 8px; transition: opacity 0.2s;
+  box-shadow: 0 2px 8px rgba(252, 18, 104, 0.28);
 }
-.btn-continue-payment:hover { opacity: 0.88; }
-.btn-continue-payment:disabled { opacity: 0.6; cursor: not-allowed; }
+.btn-continue-payment:hover { opacity: 0.9; filter: brightness(1.03); }
+.btn-continue-payment:disabled { opacity: 0.6; cursor: not-allowed; filter: none; box-shadow: none; }
+
+/* Order cards: Pay matches Details size */
+.order-card-actions .btn-continue-payment {
+  width: auto;
+  margin-top: 0;
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 8px;
+  gap: 5px;
+}
 
 .pending-payment-banner {
   display: flex; align-items: center; gap: 14px; background: #fff8e1;
@@ -1613,22 +1628,22 @@
 /* Review button on delivered order card */
 .order-review-btn {
   width: auto; justify-content: center; font-size: 11px; padding: 6px 10px;
-  background: #fff0f6; border: 1px solid #e5e7eb; color: #e5e7eb;
+  background: #fff0f6; border: 1px solid #fc1268; color: #fc1268;
   border-radius: 8px; cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center; gap: 5px; transition: all 0.2s;
   font-weight: 700; margin: 0; box-sizing: border-box; line-height: 1.2;
 }
-.order-review-btn:hover { background: #e5e7eb; border-color: #e5e7eb; color: #9d174d; }
+.order-review-btn:hover { background: #ffe0ef; border-color: #e0105a; color: #9d174d; }
 
 /* Cancel order (active tab) */
 .order-cancel-btn {
   width: auto; justify-content: center; font-size: 11px; padding: 6px 10px;
-  background: #fff; border: 1px solid #e5e7eb; color: #e5e7eb;
+  background: #fff; border: 1.5px solid #dc2626; color: #dc2626;
   border-radius: 8px; cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center; gap: 5px; transition: all 0.2s;
   font-weight: 700; margin: 0; box-sizing: border-box; line-height: 1.2;
 }
-.order-cancel-btn:hover:not(:disabled) { background: #fef2f2; border-color: #e5e7eb; color: #e5e7eb; }
+.order-cancel-btn:hover:not(:disabled) { background: #fef2f2; border-color: #b91c1c; color: #b91c1c; }
 .order-cancel-btn:disabled { opacity: 0.65; cursor: not-allowed; }
 .modal-cancel-order-btn {
   margin: 0 0 14px;
@@ -1728,10 +1743,10 @@
 /* Refund button on order card */
 .order-refund-btn {
   width: auto; justify-content: center; font-size: 11px; padding: 6px 10px;
-  background: white; border: 1px solid #e5e7eb; color: #b45309;
+  background: #fffbeb; border: 1.5px solid #f59e0b; color: #b45309;
   border-radius: 8px; cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center; gap: 5px; transition: all 0.2s;
-  font-weight: 600; margin: 0; box-sizing: border-box; line-height: 1.2;
+  font-weight: 700; margin: 0; box-sizing: border-box; line-height: 1.2;
 }
 .order-refund-btn:hover { background: #fffbeb; border-color: #d97706; color: #92400e; }
 .order-refund-retry-btn { border-color: #6366f1; color: #4338ca; }
@@ -1744,7 +1759,7 @@
 }
 .refund-badge-pending  { background: #fef3c7; color: #92400e; border: 1px solid #e5e7eb; }
 .refund-badge-approved { background: #d1fae5; color: #065f46; border: 1px solid #e5e7eb; }
-.refund-badge-rejected { background: #fee2e2; color: #e5e7eb; border: 1px solid #e5e7eb; }
+.refund-badge-rejected { background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; }
 
 /* Refund button inside modal */
 .modal-refund-btn {
@@ -1949,7 +1964,7 @@
 
 .refund-error-msg {
   display: flex; align-items: center; gap: 8px; background: #fef2f2;
-  border: 1px solid #e5e7eb; color: #e5e7eb; font-size: 13px; font-weight: 600;
+  border: 1px solid #fecaca; color: #dc2626; font-size: 13px; font-weight: 600;
   padding: 10px 12px; border-radius: 8px;
 }
 
