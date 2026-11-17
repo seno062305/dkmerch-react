@@ -536,7 +536,7 @@
 .proof-badge { display: inline-flex; align-items: center; gap: 5px; background: #d1fae5; color: #065f46; border-radius: 12px; padding: 4px 10px; font-size: 12px; font-weight: 700; }
 .proof-badge i { font-size: 11px; }
 
-.accept-btn { background: #e5e7eb; color: white; border: none; padding: 10px 16px; border-radius: 8px; cursor: pointer; transition: all 0.3s ease; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+.accept-btn { background: #28a745; color: white; border: none; padding: 10px 16px; border-radius: 8px; cursor: pointer; transition: all 0.3s ease; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
 .accept-btn:hover { background: #218838; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(40,167,69,0.3); }
 
 .view-btn {
@@ -1139,12 +1139,12 @@
 .status-btn span { font-size: 13px; font-weight: 700; }
 .current-indicator { font-size: 10px !important; font-weight: 700 !important; background: rgba(255,255,255,0.3); border-radius: 20px; padding: 2px 8px; letter-spacing: 0; text-transform: none !important; margin-left: 4px; }
 
-.status-btn.confirmed    { background: #e5e7eb; border-color: #e5e7eb; color: white; }
-.status-btn.cancelled    { background: #e5e7eb; border-color: #e5e7eb; color: white; }
-.status-btn.pending      { background: #e5e7eb; border-color: #e5e7eb; color: white; }
+.status-btn.confirmed    { background: #fc1268; border-color: #fc1268; color: white; }
+.status-btn.cancelled    { background: #dc3545; border-color: #dc3545; color: white; }
+.status-btn.pending      { background: #f59e0b; border-color: #f59e0b; color: white; }
 .status-btn.shipped      { background: #6366f1; border-color: #6366f1; color: white; }
 .status-btn.out-delivery { background: #f97316; border-color: #f97316; color: white; }
-.status-btn.completed    { background: #e5e7eb; border-color: #e5e7eb; color: white; }
+.status-btn.completed    { background: #16a34a; border-color: #16a34a; color: white; }
 
 .status-btn:not(.is-blocked):not(.is-current):hover { transform: translateY(-2px); box-shadow: 0 4px 14px rgba(0,0,0,0.18); filter: brightness(1.06); }
 .status-btn.is-current { box-shadow: 0 0 0 3px rgba(0,0,0,0.1); cursor: default; opacity: 1; transform: none; filter: none; }
@@ -1153,7 +1153,7 @@
 
 /* Modal Actions */
 .modal-actions { display: flex; justify-content: flex-end; padding-top: 20px; border-top: 2px solid #e2e8f0; gap: 12px; }
-.delete-order-btn { padding: 12px 24px; background: #e5e7eb; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.3s ease; display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.delete-order-btn { padding: 12px 24px; background: #dc3545; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.3s ease; display: flex; align-items: center; gap: 8px; font-size: 14px; }
 .delete-order-btn:hover { background: #c82333; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(220,53,69,0.3); }
 
 /* Cancel reason display */
@@ -1176,7 +1176,7 @@
 .cancel-presets { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
 .cancel-preset-chip { background: #f8f9fa; border: 2px solid #e2e8f0; border-radius: 20px; padding: 8px 16px; font-size: 13px; font-weight: 600; color: #1a1f36; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 6px; }
 .cancel-preset-chip:hover { border-color: #e5e7eb; background: #fff5f5; color: #e5e7eb; }
-.cancel-preset-chip.active { background: #e5e7eb; border-color: #e5e7eb; color: white; }
+.cancel-preset-chip.active { background: #dc3545; border-color: #dc3545; color: white; }
 .cancel-preset-chip i { font-size: 11px; }
 .cancel-custom-wrap { margin-top: 4px; }
 .cancel-custom-wrap label { display: block; font-size: 13px; font-weight: 700; color: #1a1f36; margin-bottom: 8px; }
@@ -1206,7 +1206,7 @@
 .cancel-reason-footer { display: flex; justify-content: flex-end; align-items: center; gap: 12px; padding: 16px 24px; border-top: 2px solid #f0f0f0; background: #fafafa; }
 .cancel-go-back-btn { padding: 11px 20px; background: white; color: #64748b; border: 2px solid #e2e8f0; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 8px; }
 .cancel-go-back-btn:hover { background: #f8f9fa; border-color: #94a3b8; color: #1a1f36; }
-.cancel-confirm-btn { padding: 11px 22px; background: #e5e7eb; color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 14px; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 8px; }
+.cancel-confirm-btn { padding: 11px 22px; background: #dc3545; color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 14px; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 8px; }
 .cancel-confirm-btn:hover:not(:disabled) { background: #b02333; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(220,53,69,0.35); }
 .cancel-confirm-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 
@@ -1231,7 +1231,7 @@
 .promo-admin-pill i { font-size: 11px; }
 .promo-admin-card { background: linear-gradient(135deg, #fdf2f8, #e5e7eb); border: 1.5px solid #e5e7eb; border-radius: 12px; overflow: hidden; }
 .promo-admin-top { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid #e5e7eb; background: rgba(255,255,255,0.5); }
-.promo-admin-badge { display: inline-flex; align-items: center; gap: 7px; background: linear-gradient(135deg, #e5e7eb, #f472b6); color: white; font-size: 14px; font-weight: 800; padding: 6px 14px; border-radius: 20px; font-family: 'Courier New', monospace; letter-spacing: 1.5px; }
+.promo-admin-badge { display: inline-flex; align-items: center; gap: 7px; background: linear-gradient(135deg, #fc1268, #f472b6); color: white; font-size: 14px; font-weight: 800; padding: 6px 14px; border-radius: 20px; font-family: 'Courier New', monospace; letter-spacing: 1.5px; }
 .promo-admin-badge i { font-size: 12px; }
 .promo-admin-details { padding: 14px 18px; display: flex; flex-direction: column; gap: 8px; }
 .promo-admin-row { display: flex; justify-content: space-between; align-items: center; font-size: 14px; padding: 6px 0; border-bottom: 1px dashed #e5e7eb; }
@@ -1295,7 +1295,7 @@
 }
 
 /* Print Waybill button */
-.print-waybill-btn-bottom { display: flex; align-items: center; gap: 7px; padding: 12px 24px; background: #e5e7eb; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.2s; margin-right: auto; }
+.print-waybill-btn-bottom { display: flex; align-items: center; gap: 7px; padding: 12px 24px; background: #fc1268; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.2s; margin-right: auto; }
 .print-waybill-btn-bottom:hover { opacity: 0.9; transform: translateY(-1px); box-shadow: 0 4px 14px rgba(252,18,104,0.35); }
 
 /* ══════════════════════════════════
@@ -1593,14 +1593,14 @@
 .admin-refund-note-input { width: 100%; padding: 10px 12px; border: 1.5px solid #e5e7eb; border-radius: 8px; font-size: 13px; font-family: inherit; resize: none !important; min-height: 64px; max-height: 160px; height: 64px; overflow-y: auto; transition: border-color 0.2s; box-sizing: border-box; color: #1a1f36; field-sizing: fixed; }
 .admin-refund-note-input:focus { outline: none; border-color: #f59e0b; box-shadow: 0 0 0 3px rgba(245,158,11,0.12); }
 .admin-refund-action-btns { display: flex; gap: 10px; }
-.admin-refund-reject-btn { flex: 1; padding: 11px 14px; background: white; border: 1.5px solid #e5e7eb; color: #e5e7eb; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; transition: all 0.2s; }
-.admin-refund-reject-btn:hover:not(:disabled) { background: #fef2f2; border-color: #e5e7eb; }
-.admin-refund-approve-btn { flex: 1; padding: 11px 14px; background: #e5e7eb; border: none; color: white; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; transition: all 0.2s; box-shadow: 0 3px 10px rgba(22,163,74,0.25); }
+.admin-refund-reject-btn { flex: 1; padding: 11px 14px; background: white; border: 1.5px solid #fecaca; color: #dc2626; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; transition: all 0.2s; }
+.admin-refund-reject-btn:hover:not(:disabled) { background: #fef2f2; border-color: #f87171; }
+.admin-refund-approve-btn { flex: 1; padding: 11px 14px; background: #16a34a; border: none; color: white; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; transition: all 0.2s; box-shadow: 0 3px 10px rgba(22,163,74,0.25); }
 .admin-refund-approve-btn:hover:not(:disabled) { background: #15803d; transform: translateY(-1px); }
 .admin-refund-reject-btn:disabled, .admin-refund-approve-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 .admin-refund-resolved { display: flex; align-items: center; gap: 10px; padding: 13px 16px; font-size: 13px; font-weight: 600; border-top: 1.5px solid; }
 .admin-refund-resolved.approved { background: #f0fdf4; border-color: #e5e7eb; color: #15803d; }
-.admin-refund-resolved.rejected { background: #fef2f2; border-color: #e5e7eb; color: #e5e7eb; }
+.admin-refund-resolved.rejected { background: #fef2f2; border-color: #fecaca; color: #dc2626; }
 .admin-refund-resolved i { font-size: 16px; }
 .admin-refund-amount-row { background: #f0fdf4; border-radius: 6px; padding: 10px 16px !important; }
 .admin-refund-amount-value { font-size: 18px !important; color: #059669 !important; font-weight: 800 !important; }
@@ -1644,7 +1644,7 @@
 .reject-confirm-actions { display: flex; gap: 10px; }
 .reject-confirm-cancel-btn { flex: 1; padding: 11px; background: white; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 14px; font-weight: 600; color: #64748b; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; transition: all 0.2s; }
 .reject-confirm-cancel-btn:hover { background: #f8f9fa; border-color: #94a3b8; }
-.reject-confirm-proceed-btn { flex: 1; padding: 11px; background: #e5e7eb; border: none; color: white; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; transition: all 0.2s; }
+.reject-confirm-proceed-btn { flex: 1; padding: 11px; background: #dc2626; border: none; color: white; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; transition: all 0.2s; }
 .reject-confirm-proceed-btn:hover { background: #b91c1c; }
 
 /* ══════════════════════════
