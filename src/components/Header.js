@@ -228,7 +228,7 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
     if (parkedRider?.email) {
       const ok = await confirm({
         title: 'Switch to Rider app?',
-        message: 'Return to your rider dashboard? Your shop/customer account stays signed in on this device (parked) — no logout.',
+        message: 'Return to your rider dashboard? Your customer/shop login on this device stays signed in (parked) — no logout.',
         confirmLabel: 'Go to Rider',
         cancelLabel: 'Stay on Shop',
         variant: 'warning',

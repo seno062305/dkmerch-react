@@ -2140,7 +2140,7 @@ const RiderDashboard = () => {
           onClick={async () => {
             const ok = await confirm({
               title: 'Switch to Shop?',
-              message: 'Open the DKMerch homepage? Your rider account stays signed in (parked). If you’re already logged in as a customer on this device, you’ll stay logged in there too — no logout.',
+              message: 'Open the DKMerch homepage? Your rider session stays parked. If a customer account is already logged in on this device, you’ll stay signed in as that customer — no logout.',
               confirmLabel: 'Go to Shop',
               cancelLabel: 'Stay on Rider',
               variant: 'warning',

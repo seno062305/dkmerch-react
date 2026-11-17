@@ -1237,29 +1237,19 @@ export const AuthProvider = ({ children }) => {
   };
 
   /**
-   * Rider → Shop: park rider (keep server session). Restore parked/same customer
-   * if available so the shop account stays logged in — never force a logout.
+   * Rider → Shop: park rider (keep server session).
+   * Same device: always restore the parked/last customer login on this phone —
+   * never log the customer out just because we switched roles.
    */
   const switchRiderToShop = () => {
     const prev = userRef.current;
     if (!prev || prev.role !== "rider") return { success: false, message: "Not a rider session." };
     parkRiderSession(prev);
 
-    const riderEmail = String(prev.email || "").toLowerCase();
+    // Same device = keep whatever customer account was already used here
     const parkedCust = getParkedCustomer();
     const unlockCust = getDeviceUnlock();
-    let customerProfile = null;
-    if (parkedCust?._id) customerProfile = parkedCust;
-    else if (
-      unlockCust?._id
-      && (
-        !riderEmail
-        || !unlockCust.email
-        || String(unlockCust.email).toLowerCase() === riderEmail
-      )
-    ) {
-      customerProfile = unlockCust;
-    }
+    const customerProfile = parkedCust?._id ? parkedCust : (unlockCust?._id ? unlockCust : null);
 
     const customerSession = toCustomerSessionUser(customerProfile);
     if (customerSession) {
@@ -1289,9 +1279,9 @@ export const AuthProvider = ({ children }) => {
       };
     }
 
-    // No customer session on this device — guest shop browse (rider still parked)
+    // No customer login ever saved on this device — guest shop (still no rider logout)
     clearAuthUser();
-    clearSessionAlive();
+    // Keep sessionAlive so we don't wipe device unlock profiles on next boot
     userRef.current = null;
     setUser(null);
     setRole(null);
