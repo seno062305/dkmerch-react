@@ -666,8 +666,12 @@ export const touchUserSession = mutation({
   args: {
     userId: v.string(),
     sessionId: v.optional(v.string()),
+    /** Optional refresh of device brand/model shown in Where you're logged in */
+    deviceName: v.optional(v.string()),
+    location: v.optional(v.string()),
+    platform: v.optional(v.string()),
   },
-  handler: async ({ db }, { userId, sessionId }) => {
+  handler: async ({ db }, { userId, sessionId, deviceName, location, platform }) => {
     const id = String(userId || "").trim();
     const sid = String(sessionId || "").trim();
     if (!id) return { success: false };
@@ -676,15 +680,22 @@ export const touchUserSession = mutation({
       if (!user) return { success: false };
       const ids = getActiveSessionIds(user);
       const now = Date.now();
+      const nextName = String(deviceName || "").trim().slice(0, 120);
+      const nextLoc = String(location || "").trim().slice(0, 160);
+      const nextPlat = String(platform || "").trim().slice(0, 80);
 
       if (sid && ids.includes(sid)) {
-        await db.patch(user._id, { activeDeviceAt: now } as any);
+        const userPatch: any = { activeDeviceAt: now };
+        if (nextName) userPatch.activeDeviceName = nextName;
+        if (nextLoc) userPatch.activeDeviceLocation = nextLoc;
+        if (nextPlat) userPatch.activeDevicePlatform = nextPlat;
+        await db.patch(user._id, userPatch);
         await upsertUserSession(db, {
           userId: id,
           sessionId: sid,
-          deviceName: user.activeDeviceName,
-          location: user.activeDeviceLocation,
-          platform: user.activeDevicePlatform,
+          deviceName: nextName || user.activeDeviceName,
+          location: nextLoc || user.activeDeviceLocation,
+          platform: nextPlat || user.activeDevicePlatform,
           now,
         });
         return { success: true, sessionId: sid };

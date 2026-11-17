@@ -94,7 +94,7 @@ async function getClientHintModel() {
     if (!uaData?.getHighEntropyValues) return "";
     const hints = await Promise.race([
       uaData.getHighEntropyValues(["model", "platform", "platformVersion", "fullVersionList"]),
-      new Promise((r) => setTimeout(() => r(null), 800)),
+      new Promise((r) => setTimeout(() => r(null), 1500)),
     ]);
     return sanitizePhoneModel(hints?.model);
   } catch {
@@ -102,9 +102,39 @@ async function getClientHintModel() {
   }
 }
 
+/** Prefer a branded phone name over generic "Android phone". */
+function preferPhoneBrand(model) {
+  const m = sanitizePhoneModel(model);
+  if (!m) return "";
+  // Already branded
+  if (/infinix|tecno|itel|redmi|poco|xiaomi|oppo|vivo|realme|samsung|pixel|nokia|huawei|honor|iphone|ipad/i.test(m)) {
+    return m;
+  }
+  // Common Infinix / TECNO model prefixes when brand omitted from hints
+  if (/^X[0-9]{3,}/i.test(m) || /^Hot\b/i.test(m) || /^Note\b/i.test(m) || /^Smart\b/i.test(m)) {
+    return `Infinix ${m}`;
+  }
+  if (/^LG[A-Z0-9]+/i.test(m) || /^KE[0-9]+/i.test(m)) return `TECNO ${m}`;
+  if (/^RMX/i.test(m)) return `realme ${m}`;
+  if (/^CPH|^P[A-Z]{2}M/i.test(m)) return `OPPO ${m}`;
+  if (/^V[0-9]{4}/i.test(m)) return `vivo ${m}`;
+  if (/^SM-/i.test(m)) return `Samsung ${m}`;
+  if (/^M[0-9]{4}|^22[0-9]{2}|^23[0-9]{2}/i.test(m)) return `Xiaomi ${m}`;
+  return m;
+}
+
+/** True when label has no useful brand (needs refresh). */
+export function isGenericDeviceLabel(label = "") {
+  const s = String(label || "").toLowerCase();
+  if (!s) return true;
+  if (/android phone|unknown device|this device|another device/.test(s)) return true;
+  if (/dkmerch app · android phone|chrome on android phone|browser on android phone/.test(s)) return true;
+  return false;
+}
+
 /**
- * Human-readable device label for login alerts.
- * Prefers phone brand/model (e.g. Infinix X6812) when detectable.
+ * Human-readable device label for login alerts / Where you're logged in.
+ * Prefers phone brand/model (e.g. Infinix Hot 40, POCO X5) when detectable.
  */
 export async function getDeviceLabel() {
   if (typeof navigator === "undefined") return "Unknown device";
@@ -113,7 +143,7 @@ export async function getDeviceLabel() {
   const standalone = isStandalonePwa();
   const hintModel = await getClientHintModel();
   const uaPhone = sanitizePhoneModel(parsePhoneFromUa(ua));
-  const phoneModel = sanitizePhoneModel(hintModel || uaPhone);
+  const phoneModel = preferPhoneBrand(hintModel || uaPhone);
 
   if (/iPhone/i.test(ua)) {
     return standalone ? "DKMerch App · iPhone" : "Safari on iPhone";
@@ -145,7 +175,7 @@ export function getDeviceLabelSync() {
   const ua = navigator.userAgent || "";
   const browser = getBrowserLabel(ua);
   const standalone = isStandalonePwa();
-  const phoneModel = sanitizePhoneModel(parsePhoneFromUa(ua));
+  const phoneModel = preferPhoneBrand(parsePhoneFromUa(ua));
   if (/iPhone/i.test(ua)) return standalone ? "DKMerch App · iPhone" : "Safari on iPhone";
   if (/iPad/i.test(ua)) return standalone ? "DKMerch App · iPad" : `${browser} on iPad`;
   if (/Android/i.test(ua)) {
@@ -396,9 +426,9 @@ export async function guessLocation() {
  */
 export async function collectLoginDeviceInfo({ fast = true } = {}) {
   const platform = getPlatformLabel();
-  // Prefer detailed model (Infinix, etc.); fall back sync if hints are slow
+  // Give Client Hints time for brand/model (Infinix, POCO, etc.)
   const deviceName =
-    (await withTimeout(getDeviceLabel(), 500)) || getDeviceLabelSync();
+    (await withTimeout(getDeviceLabel(), fast ? 1600 : 2500)) || getDeviceLabelSync();
 
   const cached = readLocCache();
   if (cached?.place && isSpecificPlace(cached.place)) {

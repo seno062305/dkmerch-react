@@ -3,6 +3,10 @@ import { useMutation, useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useCloseOnHistoryBack } from '../hooks/useCloseOnHistoryBack';
 import { useConfirm } from '../context/ConfirmContext';
+import {
+  collectLoginDeviceInfo,
+  isGenericDeviceLabel,
+} from '../utils/deviceInfo';
 import './LoggedInDevicesModal.css';
 
 function timeAgo(ts) {
@@ -44,6 +48,37 @@ const LoggedInDevicesModal = ({ userId, currentSessionId, onClose, onLogoutCurre
 
   const logoutSession = useMutation(api.users.logoutSession);
   const logoutAllSessions = useMutation(api.users.logoutAllSessions);
+  const touchUserSession = useMutation(api.users.touchUserSession);
+
+  // Refresh this device's brand/model when opening the modal (fixes "Android phone")
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      if (!userId || !currentSessionId) return;
+      const current = (sessions || []).find((s) => s.isCurrent || s.sessionId === currentSessionId);
+      const storedName = current?.deviceName || '';
+      try {
+        const device = await collectLoginDeviceInfo({ fast: true });
+        if (cancelled || !device?.deviceName) return;
+        // Always upgrade generic labels; also refresh if we got a clearer brand
+        const shouldUpdate =
+          isGenericDeviceLabel(storedName)
+          || (device.deviceName !== storedName && !isGenericDeviceLabel(device.deviceName));
+        if (!shouldUpdate) return;
+        await touchUserSession({
+          userId: String(userId),
+          sessionId: String(currentSessionId),
+          deviceName: device.deviceName,
+          location: device.location || undefined,
+          platform: device.platform || undefined,
+        });
+      } catch { /* optional */ }
+    };
+    run();
+    return () => { cancelled = true; };
+  // Only on open / identity change — not on every sessions poll
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, currentSessionId]);
 
   useEffect(() => {
     const onDoc = (e) => {
