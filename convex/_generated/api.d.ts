@@ -22,6 +22,7 @@ import type * as failoverSync from "../failoverSync.js";
 import type * as firebaseSync from "../firebaseSync.js";
 import type * as init from "../init.js";
 import type * as lib_orderSeq from "../lib/orderSeq.js";
+import type * as lib_personValidation from "../lib/personValidation.js";
 import type * as orders from "../orders.js";
 import type * as otpCooldown from "../otpCooldown.js";
 import type * as payments from "../payments.js";
@@ -65,6 +66,7 @@ declare const fullApi: ApiFromModules<{
   firebaseSync: typeof firebaseSync;
   init: typeof init;
   "lib/orderSeq": typeof lib_orderSeq;
+  "lib/personValidation": typeof lib_personValidation;
   orders: typeof orders;
   otpCooldown: typeof otpCooldown;
   payments: typeof payments;
