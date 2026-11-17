@@ -1295,16 +1295,34 @@ export const AuthProvider = ({ children }) => {
     };
   };
 
+  /**
+   * Free Rider↔Shop switch only when BOTH are present on this device:
+   * parked rider + active customer login. Guest shop → must log in as rider.
+   */
+  const canFreeSwitchToRider = () => {
+    const parked = getParkedRider();
+    if (!parked?.email) return false;
+    const cur = userRef.current;
+    return !!(cur && (cur.role === "user" || cur.role === "admin") && cur._id);
+  };
+
   /** Restore parked rider; park active customer so shop login is kept. */
   const restoreParkedRider = () => {
     const parked = getParkedRider();
     if (!parked?.email) return { success: false, message: "No parked rider session." };
 
     const prev = userRef.current;
-    if (prev && (prev.role === "user" || prev.role === "admin")) {
-      parkCustomerSession(prev);
-      // Soft-clear customer active slot only — do NOT endUserSession
+    // Require customer login on this device — no direct switch while guest
+    if (!prev || (prev.role !== "user" && prev.role !== "admin") || !prev._id) {
+      return {
+        success: false,
+        needsRiderLogin: true,
+        message: "Log in to open the Rider app.",
+      };
     }
+
+    parkCustomerSession(prev);
+    // Soft-clear customer active slot only — do NOT endUserSession
 
     const sessionUser = {
       _id: parked._id || parked.id,
@@ -1315,7 +1333,6 @@ export const AuthProvider = ({ children }) => {
       ...(parked.sessionId ? { sessionId: String(parked.sessionId) } : {}),
     };
     clearRiderBrowsingFlag();
-    // Keep parked rider key until applySession (role=rider) clears it after restore
     clearParkedRider();
     applySession(sessionUser);
     return { success: true, user: sessionUser };
@@ -1371,6 +1388,7 @@ export const AuthProvider = ({ children }) => {
         updateUser,
         switchRiderToShop,
         restoreParkedRider,
+        canFreeSwitchToRider,
         getParkedRider,
         isRiderBrowsingShop,
         completeRiderPinUnlock,
@@ -1409,6 +1427,7 @@ export const useAuth = () => {
     updateUser: () => {},
     switchRiderToShop: () => ({ success: false }),
     restoreParkedRider: () => ({ success: false }),
+    canFreeSwitchToRider: () => false,
     getParkedRider: () => null,
     isRiderBrowsingShop: () => false,
     completeRiderPinUnlock: async () => ({ success: false }),

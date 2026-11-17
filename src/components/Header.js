@@ -15,8 +15,10 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
   const {
     user,
     isAuthenticated,
+    role,
     logout,
     restoreParkedRider,
+    canFreeSwitchToRider,
     getParkedRider,
     beginRoleSwitch,
     endRoleSwitch,
@@ -225,7 +227,10 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
 
   const handleRiderIconClick = async () => {
     closeMobileMenu();
-    if (parkedRider?.email) {
+    // Free switch only when customer is logged in AND rider session is parked
+    const allowSwitch = !!parkedRider?.email && !!canFreeSwitchToRider?.()
+      && isAuthenticated && (role === 'user' || role === 'admin');
+    if (allowSwitch) {
       const ok = await confirm({
         title: 'Switch to Rider app?',
         message: 'Return to your rider dashboard? Your customer/shop login on this device stays signed in (parked) — no logout.',
@@ -249,6 +254,7 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
         endRoleSwitch?.();
       }
     }
+    // Guest / no customer login → must sign in as rider
     setShowRiderModal(true);
   };
 
@@ -351,7 +357,11 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
                           </em>
                         )}
                       </span>
-                      <span>{parkedRider ? 'Back to Rider' : 'Rider'}</span>
+                      <span>
+                        {parkedRider && isAuthenticated && (role === 'user' || role === 'admin')
+                          ? 'Back to Rider'
+                          : 'Rider'}
+                      </span>
                     </button>
                   </li>
                 )}
