@@ -1,9 +1,17 @@
 import React, { useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { goToCustomerTab } from '../utils/navScroll';
 import './Help.css';
+
+const SERVICE_LINKS = [
+  { label: 'Track Order', path: '/track-order', icon: 'fa-map-marker-alt' },
+  { label: 'Terms and Conditions', path: '/terms-and-conditions', icon: 'fa-file-contract' },
+  { label: 'Privacy Policy', path: '/privacy-policy', icon: 'fa-user-shield' },
+];
 
 const Help = () => {
   const location = useLocation();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (location.hash) {
@@ -18,6 +26,11 @@ const Help = () => {
   // FIXED: use primitives, not the whole location object
   }, [location.hash, location.pathname]);
 
+  const handleServiceNav = (e, path) => {
+    e.preventDefault();
+    goToCustomerTab(navigate, location.pathname, path);
+  };
+
   return (
     <main className="help-main">
       {/* Same page-header structure as PreOrder */}
@@ -30,6 +43,37 @@ const Help = () => {
 
       <div className="container">
         <div className="help-page">
+
+          {/* Customer Service — moved from footer (esp. mobile) */}
+          <section id="customer-service" className="help-section help-customer-service">
+            <h2><i className="fas fa-headset"></i> Customer Service</h2>
+            <p className="help-cs-intro">Quick links and support — same tools that used to live in the site footer.</p>
+            <div className="help-cs-grid">
+              {SERVICE_LINKS.map((link) => (
+                <Link
+                  key={link.path}
+                  to={link.path}
+                  className="help-cs-card"
+                  onClick={(e) => handleServiceNav(e, link.path)}
+                >
+                  <i className={`fas ${link.icon}`}></i>
+                  <span>{link.label}</span>
+                </Link>
+              ))}
+              <a href="#contact" className="help-cs-card" onClick={(e) => {
+                e.preventDefault();
+                document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}>
+                <i className="fas fa-envelope"></i>
+                <span>Contact Us</span>
+              </a>
+            </div>
+            <div className="help-cs-contact">
+              <p><i className="fas fa-phone"></i> +63 912 345 6789</p>
+              <p><i className="fas fa-envelope"></i> dkmerchtest@gmail.com</p>
+              <p><i className="fas fa-clock"></i> Mon-Sat: 9AM-6PM PHT</p>
+            </div>
+          </section>
 
           {/* FAQ */}
           <section id="faq" className="help-section">

@@ -664,10 +664,12 @@ const Settings = () => {
   return (
     <div className="settings-page">
       <div className="settings-container">
-        <div className="settings-header">
-          <h1>{isForgotPasswordFlow ? 'Reset Password' : 'Edit Profile'}</h1>
-          <p>{isForgotPasswordFlow ? 'Enter your email and verification code to reset your password' : 'Update your personal information and account security'}</p>
-        </div>
+        {isForgotPasswordFlow && (
+          <div className="settings-header">
+            <h1>Reset Password</h1>
+            <p>Enter your email and verification code to reset your password</p>
+          </div>
+        )}
 
         {!isForgotPasswordFlow && (
           <div className="settings-tabs">

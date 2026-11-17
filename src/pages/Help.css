@@ -182,11 +182,76 @@
   opacity: 0.8;
 }
 
+/* Customer Service (from footer) */
+.help-cs-intro {
+  margin: -8px 0 18px;
+  color: var(--gray-color);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.help-cs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.help-cs-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: var(--dark-color);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 650;
+  border: 1px solid #eef2f7;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.help-cs-card:hover {
+  background: #fff;
+  border-color: #e2e8f0;
+}
+
+.help-cs-card i {
+  color: var(--primary-color);
+  font-size: 16px;
+  width: 18px;
+  text-align: center;
+}
+
+.help-cs-contact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid #eef2f7;
+}
+
+.help-cs-contact p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--gray-color);
+  font-weight: 600;
+}
+
+.help-cs-contact i {
+  color: var(--primary-color);
+  margin-right: 6px;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .help-section { padding: 35px 0; }
   .help-section h2 { font-size: 17px; }
   .faq-grid, .info-content, .contact-options { grid-template-columns: 1fr; }
+  .help-cs-grid { grid-template-columns: 1fr 1fr; }
 }
 
 @media (max-width: 576px) {

@@ -28,13 +28,6 @@ const Footer = () => {
     { label: 'Pre-Order', path: '/preorder' }
   ];
 
-  const serviceLinks = [
-    { label: 'Help Center', path: '/help' },
-    { label: 'Track Order', path: '/track-order' },
-    { label: 'Terms and Conditions', path: '/terms-and-conditions' },
-    { label: 'Privacy Policy', path: '/privacy-policy' },
-  ];
-
   return (
     <footer>
       <div className="container">
@@ -67,22 +60,18 @@ const Footer = () => {
                   </a>
                 </li>
               ))}
-            </ul>
-          </div>
-
-          <div className="footer-section">
-            <h4>Customer Service</h4>
-            <ul className="footer-links">
-              {serviceLinks.map((link) => (
-                <li key={link.path}>
-                  <a
-                    href={link.path}
-                    onClick={(e) => handleNavClick(e, link.path)}
-                  >
-                    {link.label}
-                  </a>
-                </li>
-              ))}
+              <li>
+                <a
+                  href="/help#customer-service"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    navigate('/help#customer-service');
+                  }}
+                >
+                  Customer Service
+                </a>
+              </li>
             </ul>
           </div>
 

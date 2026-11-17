@@ -150,8 +150,9 @@ footer {
 }
 
 @media (max-width: 768px) {
+  /* Hide site footer on mobile — Customer Service lives in Help tab */
   footer {
-    padding: 20px 0 12px;
+    display: none !important;
   }
 
   .footer-content {
@@ -239,12 +240,11 @@ footer {
 
 @media (max-width: 576px) {
   footer {
-    padding: 16px 0 10px;
+    display: none !important;
   }
 
-  /* With bottom nav — keep footer short so page doesn’t feel endless */
   body.has-customer-bottom-nav footer {
-    padding-bottom: 8px;
+    display: none !important;
   }
 
   .footer-content {

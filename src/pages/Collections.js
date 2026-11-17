@@ -249,11 +249,8 @@ const Collections = () => {
 
   return (
     <div className="collections-page">
-      <div className="collections-header">
-        <h1>All Collections</h1>
-        <p>Explore our complete K-Pop merchandise collection</p>
-
-        {activePromo && activePromo.isActive && (
+      {activePromo && activePromo.isActive && (
+        <div className="collections-header collections-header--promo-only">
           <div className="collections-promo-banner">
             <i className="fas fa-tag"></i>
             <span>
@@ -262,8 +259,8 @@ const Collections = () => {
               {activePromo.discount}% off
             </span>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="collections-filters">
         <div className="filters-single-line">
