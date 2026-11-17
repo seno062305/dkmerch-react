@@ -173,6 +173,19 @@ const AppUpdateModal = ({ force = false }) => {
                 Please update the app before continuing to payment.
               </p>
             )}
+            {(() => {
+              try {
+                const u = JSON.parse(localStorage.getItem('authUser') || 'null');
+                if (u?.role === 'rider') {
+                  return (
+                    <p className="aum-force-note">
+                      After updating, set or enter your rider PIN so the app stays locked when closed.
+                    </p>
+                  );
+                }
+              } catch { /* ignore */ }
+              return null;
+            })()}
             <button type="button" className="aum-btn" onClick={runUpdate}>
               Update now
             </button>

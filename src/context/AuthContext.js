@@ -309,10 +309,16 @@ export const AuthProvider = ({ children }) => {
       return;
     }
 
-    // Just finished "Update now" → stay on account for every role
+    // Just finished "Update now":
+    // customers/admin stay signed in; riders must set/unlock PIN so close→reopen works
     if (keepAfterUpdate && !loggedOut) {
       try { clearAuthGate(); } catch { /* ignore */ }
-      restoreSession(false);
+      if (storedUser.role === "rider") {
+        try { saveDeviceUnlock(storedUser); } catch { /* ignore */ }
+        restoreSession(true);
+      } else {
+        restoreSession(false);
+      }
       setIsReady(true);
       return;
     }
@@ -771,10 +777,22 @@ export const AuthProvider = ({ children }) => {
       if (mode === "rider") {
         const device = await collectLoginDeviceInfo({ fast: true });
         const storedAuth = readAuthUser();
-        const reuseSessionId = String(
-          (storedAuth?.role === "rider" && storedAuth?.email === identifier && storedAuth?.sessionId)
-          || ""
-        ).trim();
+        const parked = getParkedRider();
+        const idLower = String(identifier || "").trim().toLowerCase();
+        const reuseFromStored =
+          storedAuth?.role === "rider"
+          && String(storedAuth?.email || "").toLowerCase() === idLower
+          && storedAuth?.sessionId
+            ? String(storedAuth.sessionId).trim()
+            : "";
+        // Same-device park heartbeat must not look like "another device"
+        const reuseFromParked =
+          parked?.email
+          && String(parked.email).toLowerCase() === idLower
+          && parked?.sessionId
+            ? String(parked.sessionId).trim()
+            : "";
+        const reuseSessionId = reuseFromStored || reuseFromParked;
         const riderResult = await loginRiderMutation({
           email: identifier,
           password,
@@ -833,6 +851,7 @@ export const AuthProvider = ({ children }) => {
           };
         }
 
+        try { clearParkedRider(); } catch { /* ignore */ }
         applySession(sessionRider);
         safeLog({
           action: "login",

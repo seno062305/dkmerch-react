@@ -252,6 +252,7 @@ const RiderRegistrationModal = ({ onClose }) => {
     vehicleType: 'motorcycle',
     plateNumber: '', licenseNumber: '',
     password: '', confirmPassword: '',
+    pin: '', confirmPin: '',
   });
 
   const [photos, setPhotos]               = useState({ riderPhoto: null, validId1: null, validId2: null });
@@ -335,6 +336,9 @@ const RiderRegistrationModal = ({ onClose }) => {
     else if (name === 'plateNumber')   { next.plateNumber   = formatPlateNumber(value); }
     else if (name === 'licenseNumber') { next.licenseNumber = formatLicenseNumber(value); }
     else if (name === 'password')      { next.password      = value.slice(0, 10); }
+    else if (name === 'pin' || name === 'confirmPin') {
+      next[name] = value.replace(/\D/g, '').slice(0, 6);
+    }
     else if (name === 'vehicleType')   { return; }
     else                               { next[name] = value; }
     setForm(next);
@@ -515,6 +519,11 @@ const RiderRegistrationModal = ({ onClose }) => {
     if (!form.confirmPassword) e.confirmPassword = 'Please confirm your password.';
     else if (form.password !== form.confirmPassword) e.confirmPassword = 'Passwords do not match.';
 
+    if (!form.pin || form.pin.length !== 6) e.pin = 'Set a 6-digit PIN to unlock the rider app.';
+    else if (!/^\d{6}$/.test(form.pin)) e.pin = 'PIN must be exactly 6 digits.';
+    if (!form.confirmPin) e.confirmPin = 'Please confirm your PIN.';
+    else if (form.pin !== form.confirmPin) e.confirmPin = 'PINs do not match.';
+
     if (!photos.riderPhoto) {
       e.riderPhoto = 'Rider face photo is required.';
     }
@@ -540,6 +549,7 @@ const RiderRegistrationModal = ({ onClose }) => {
         plateNumber:   form.plateNumber,
         licenseNumber: form.licenseNumber,
         password:      form.password,
+        pin:           form.pin,
         riderPhoto:    photos.riderPhoto ?? undefined,
         validId1:      photos.validId1   ?? undefined,
         validId2:      photos.validId2   ?? undefined,
@@ -587,7 +597,7 @@ const RiderRegistrationModal = ({ onClose }) => {
             <div className="rider-modal-success">
               <div className="success-icon">✅</div>
               <h3>You're approved!</h3>
-              <p>Your rider account is ready. You can log in now at /rider with your email and password.</p>
+              <p>Your rider account is ready. Log in at /rider with your email and password — use your PIN when you reopen the app after closing it.</p>
               <button className="rider-btn-close" onClick={onClose}>Close</button>
             </div>
           ) : (
@@ -739,6 +749,45 @@ const RiderRegistrationModal = ({ onClose }) => {
                       ? <span className="error-msg">⚠ {errors.confirmPassword}</span>
                       : form.confirmPassword && form.password === form.confirmPassword
                         ? <span className="match-ok">✅ Passwords match</span>
+                        : null}
+                  </div>
+
+                  <div className="col-section-label" style={{ marginTop: 8 }}>App unlock PIN</div>
+                  <p className="col-section-hint">
+                    Used when you close and reopen the rider app (6 digits).
+                  </p>
+                  <div className="rider-form-group">
+                    <label>Set PIN <span className="required-tag">Required</span></label>
+                    <input
+                      name="pin"
+                      type="password"
+                      inputMode="numeric"
+                      autoComplete="new-password"
+                      placeholder="6-digit PIN"
+                      value={form.pin}
+                      onChange={handleChange}
+                      maxLength={6}
+                      className={errors.pin ? 'input-error' : ''}
+                    />
+                    {errors.pin && <span className="error-msg">⚠ {errors.pin}</span>}
+                  </div>
+                  <div className="rider-form-group">
+                    <label>Confirm PIN</label>
+                    <input
+                      name="confirmPin"
+                      type="password"
+                      inputMode="numeric"
+                      autoComplete="new-password"
+                      placeholder="Re-enter PIN"
+                      value={form.confirmPin}
+                      onChange={handleChange}
+                      maxLength={6}
+                      className={errors.confirmPin ? 'input-error' : ''}
+                    />
+                    {errors.confirmPin
+                      ? <span className="error-msg">⚠ {errors.confirmPin}</span>
+                      : form.confirmPin && form.pin === form.confirmPin && form.pin.length === 6
+                        ? <span className="match-ok">✅ PINs match</span>
                         : null}
                   </div>
                 </div>

@@ -2051,7 +2051,7 @@ const AdminBackup = () => {
                   return;
                 }
                 const ok = window.confirm(
-                  `Publish app update v${version}?\n\nCustomers will get email, push, and in-app bell notifications, plus the update popup.\n\nContinue?`
+                  `Publish app update v${version}?\n\nCustomers will get email, push, and in-app bell notifications, plus the update popup.\n\nRiders who update will be asked to set/unlock their own PIN (for reopen after closing the rider app).\n\nContinue?`
                 );
                 if (!ok) return;
                 setUpdateMsg('');
@@ -2066,7 +2066,7 @@ const AdminBackup = () => {
                   if (!res?.success) {
                     setUpdateMsg(res?.message || 'Failed to publish update.');
                   } else {
-                    setUpdateMsg('Update published. Customers were notified (email + bell + push).');
+                    setUpdateMsg('Update published. Customers notified; riders will set/unlock PIN after updating.');
                     setUpdateForm((p) => ({ ...p, version: '' }));
                     showNotification('App update published successfully.', 'success');
                   }

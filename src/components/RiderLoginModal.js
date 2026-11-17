@@ -70,7 +70,10 @@ const RiderLoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) =
   const rememberedRider = (() => {
     try { return getRiderDeviceUnlock(); } catch { return null; }
   })();
-  const startPin = !!(preferPinUnlock && rememberedRider?.email);
+  const unlockEmail = String(
+    rememberedRider?.email || (user?.role === "rider" ? user?.email : "") || ""
+  ).toLowerCase();
+  const startPin = !!(preferPinUnlock && unlockEmail);
 
   // view: "login" | "forgot" | "pin" | "createPin" | "forgotPin"
   const [view, setView] = useState(startPin ? "pin" : "login");
@@ -82,9 +85,7 @@ const RiderLoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) =
   const [pinBusy, setPinBusy] = useState(false);
   const [forgotPinOtp, setForgotPinOtp] = useState("");
   const [forgotPinSent, setForgotPinSent] = useState("");
-  const [createPinEmail, setCreatePinEmail] = useState(
-    () => String(rememberedRider?.email || user?.email || "")
-  );
+  const [createPinEmail, setCreatePinEmail] = useState(() => unlockEmail);
   const pinLen = 6;
 
   const verifyRiderPin = useMutation(api.riders.verifyRiderLoginPin);
@@ -93,7 +94,9 @@ const RiderLoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) =
   const verifyRiderPinOtp = useMutation(api.riders.verifyRiderLoginOtp);
   const riderPinStatus = useQuery(
     api.riders.hasRiderLoginPin,
-    createPinEmail ? { email: String(createPinEmail).toLowerCase() } : "skip"
+    createPinEmail || unlockEmail
+      ? { email: String(createPinEmail || unlockEmail).toLowerCase() }
+      : "skip"
   );
 
   useEffect(() => {
@@ -101,6 +104,22 @@ const RiderLoginModal = ({ onClose, onLoginSuccess, preferPinUnlock = false }) =
       try { writeAuthGate("pin"); } catch { /* ignore */ }
     }
   }, [startPin]);
+
+  // After app update / cold start: no PIN yet → Set PIN; otherwise unlock
+  useEffect(() => {
+    if (!preferPinUnlock || !unlockEmail) return;
+    if (riderPinStatus === undefined) return;
+    setCreatePinEmail(unlockEmail);
+    setDeviceUnlockMode(true);
+    if (!riderPinStatus.hasPin) {
+      setView("createPin");
+      setPinValue("");
+      setPinConfirm("");
+    } else if (view !== "forgotPin" && view !== "forgot") {
+      setView("pin");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preferPinUnlock, unlockEmail, riderPinStatus?.hasPin]);
 
   const finishRiderUnlock = async (profile) => {
     try { clearAuthGate(); } catch { /* ignore */ }

@@ -87,10 +87,13 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
     const total = available + active;
     return { available, active, total, lit: total > 0 };
   }, [parkedRider?.email, parkedOrders, parkedPickups]);
-  // Rider icon only after switching from Rider → Shop (parked session).
-  // Shop-only customer login / guest browse → no rider icon.
-  const showRiderEntry = !!parkedRider?.email;
-  const riderLit = !!parkedRider && !!riderBadge?.lit;
+  // Guest → show Login icon. Shop-only customer login → hide.
+  // After Rider→Shop + customer login (parked) → show Rider switch icon.
+  const showRiderEntry = !isAuthenticated || !!parkedRider?.email;
+  const riderLit = !!parkedRider && isAuthenticated && !!riderBadge?.lit;
+  const riderIconLabel = !isAuthenticated
+    ? 'Login'
+    : (parkedRider ? 'Rider' : 'Login');
   const dropdownRef      = useRef(null);
   const lastScrollTarget = useRef(null);
 
@@ -359,11 +362,7 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
                           </em>
                         )}
                       </span>
-                      <span>
-                        {parkedRider && isAuthenticated && (role === 'user' || role === 'admin')
-                          ? 'Back to Rider'
-                          : 'Rider'}
-                      </span>
+                      <span>{riderIconLabel}</span>
                     </button>
                   </li>
                 )}
@@ -377,7 +376,13 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
                 <button
                   className={`header-action-item header-rider-action${riderLit ? ' is-lit' : ''}${parkedRider ? ' is-parked' : ''}`}
                   onClick={handleRiderIconClick}
-                  title="Return to Rider dashboard"
+                  title={
+                    !isAuthenticated
+                      ? 'Rider login'
+                      : parkedRider
+                        ? 'Return to Rider dashboard'
+                        : 'Rider login'
+                  }
                 >
                   <span className="icon-wrapper">
                     <i className="fas fa-motorcycle"></i>
@@ -387,7 +392,7 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
                       </span>
                     )}
                   </span>
-                  <span>Rider</span>
+                  <span>{riderIconLabel}</span>
                 </button>
               )}
 

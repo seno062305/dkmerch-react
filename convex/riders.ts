@@ -161,6 +161,8 @@ export const createRiderApplication = mutation({
     plateNumber: v.optional(v.string()),
     licenseNumber: v.optional(v.string()),
     password: v.optional(v.string()),
+    /** 6-digit unlock PIN — required for reopen after closing the rider app */
+    pin: v.optional(v.string()),
     riderPhoto: v.optional(v.union(v.string(), v.null())),
     validId1: v.optional(v.union(v.string(), v.null())),
     validId2: v.optional(v.union(v.string(), v.null())),
@@ -186,6 +188,12 @@ export const createRiderApplication = mutation({
     const verified = await assertRiderEmailVerified(db, email);
     if (!verified.ok) return { success: false, message: verified.message };
 
+    const pinRaw = String(args.pin || "").trim();
+    if (!PIN_SET_RE.test(pinRaw)) {
+      return { success: false, message: "Set a 6-digit PIN for unlocking the rider app." };
+    }
+    const pinHash = await hashPin(pinRaw);
+
     const existing = await db
       .query("riderApplications")
       .withIndex("by_email", q => q.eq("email", email))
@@ -207,6 +215,8 @@ export const createRiderApplication = mutation({
       plateNumber: args.plateNumber,
       licenseNumber: args.licenseNumber,
       password: args.password,
+      pin: pinHash,
+      pinLength: 6,
       riderPhoto,
       validId1: args.validId1,
       validId2: args.validId2,
@@ -593,14 +603,15 @@ function getRiderSessionIds(rider: any): string[] {
  * Mobile browsers pause heartbeats in background — keep a wide window so
  * another-device login still shows Yes/No instead of silent auto-logout.
  */
-const RIDER_SESSION_ACTIVE_MS = 15 * 60 * 1000;
+/** Recent heartbeat only — stale tabs / closed apps must not trigger Yes/No. */
+const RIDER_SESSION_ACTIVE_MS = 3 * 60 * 1000;
 
 function hasLiveRiderSession(rider: any, now = Date.now()): boolean {
   const ids = getRiderSessionIds(rider);
   if (ids.length === 0) return false;
   const at = Number(rider?.activeDeviceAt) || 0;
-  // Sessions exist but never heartbeated yet → still treat as open (gate Yes/No)
-  if (!at) return true;
+  // No heartbeat yet / stale → not live (avoid false "other device" notices)
+  if (!at) return false;
   return now - at < RIDER_SESSION_ACTIVE_MS;
 }
 
@@ -763,20 +774,12 @@ export const loginRider = mutation({
 
     // Direct login when: no live other device, or stuck wait with no response.
     // Owner tapping "No" (denied) must NOT take over on the next try.
+    // Stale/empty sessions → silent activate (no opened/kicked broadcast).
     if (!otherDeviceLive || stuckPending) {
-      const hadOtherSessions = existingIds.length > 0;
       await db.patch(rider._id, {
         ...activateRiderSessionPatch(sessionId, now, deviceName, location, platform),
-        ...(hadOtherSessions
-          ? {
-              loginBroadcast: makeRiderLoginBroadcast(
-                "opened",
-                { sessionId, deviceName, location },
-                now,
-              ),
-              kickedAt: now,
-            }
-          : { loginBroadcast: undefined }),
+        loginBroadcast: undefined,
+        kickedAt: undefined,
       } as any);
       return {
         success: true,
@@ -784,7 +787,7 @@ export const loginRider = mutation({
         rider: safeRider,
         sessionId,
         pendingApproval: false,
-        tookOver: hadOtherSessions,
+        tookOver: false,
         hasPin,
       };
     }
