@@ -21,6 +21,11 @@ import {
   clearRiderBrowsingFlag,
   isRiderBrowsingShop,
 } from "../lib/parkedRider";
+import {
+  parkCustomerSession,
+  getParkedCustomer,
+  clearParkedCustomer,
+} from "../lib/parkedCustomer";
 import { readAuthGate, isAuthGateLocked, clearAuthGate } from "../lib/authGate";
 import { collectLoginDeviceInfo } from "../utils/deviceInfo";
 import { consumeKeepSessionAfterUpdate } from "../utils/appUpdate";
@@ -1162,6 +1167,7 @@ export const AuthProvider = ({ children }) => {
     clearSessionAlive();
     clearPendingLogin();
     try { clearParkedRider(); } catch { /* ignore */ }
+    try { clearParkedCustomer(); } catch { /* ignore */ }
     try { localStorage.removeItem(LAST_ACTIVE_KEY); } catch { /* ignore */ }
     if (keepUnlock) {
       // Stay on PIN chrome — do not mark explicit logout / wipe unlock profile
@@ -1208,28 +1214,108 @@ export const AuthProvider = ({ children }) => {
     return { success: true, role: "rider", user: sessionRider };
   };
 
+  const [roleSwitchLoading, setRoleSwitchLoading] = useState(null); // 'to-shop' | 'to-rider' | null
+
+  const beginRoleSwitch = (direction) => {
+    setRoleSwitchLoading(direction === "to-rider" ? "to-rider" : "to-shop");
+  };
+  const endRoleSwitch = () => setRoleSwitchLoading(null);
+
+  const toCustomerSessionUser = (profile) => {
+    if (!profile?._id && !profile?.id) return null;
+    const role = profile.role === "admin" ? "admin" : "user";
+    return {
+      _id: profile._id || profile.id,
+      id: profile._id || profile.id,
+      name: profile.name || "",
+      username: profile.username || "",
+      email: profile.email || "",
+      phone: profile.phone || "",
+      role,
+      ...(profile.sessionId ? { sessionId: String(profile.sessionId) } : {}),
+    };
+  };
+
   /**
-   * Rider → Shop: park rider session (keep server session) and clear active auth
-   * so the customer homepage / login can load without bouncing back to /rider.
+   * Rider → Shop: park rider (keep server session). Restore parked/same customer
+   * if available so the shop account stays logged in — never force a logout.
    */
   const switchRiderToShop = () => {
     const prev = userRef.current;
     if (!prev || prev.role !== "rider") return { success: false, message: "Not a rider session." };
     parkRiderSession(prev);
-    // Soft-clear active auth only — do NOT endRiderSession
+
+    const riderEmail = String(prev.email || "").toLowerCase();
+    const parkedCust = getParkedCustomer();
+    const unlockCust = getDeviceUnlock();
+    let customerProfile = null;
+    if (parkedCust?._id) customerProfile = parkedCust;
+    else if (
+      unlockCust?._id
+      && (
+        !riderEmail
+        || !unlockCust.email
+        || String(unlockCust.email).toLowerCase() === riderEmail
+      )
+    ) {
+      customerProfile = unlockCust;
+    }
+
+    const customerSession = toCustomerSessionUser(customerProfile);
+    if (customerSession) {
+      // Stay signed in as customer — do NOT end rider/customer server sessions
+      clearParkedCustomer();
+      clearExplicitLogoutFlag();
+      try { clearAuthGate(); } catch { /* ignore */ }
+      writeAuthUser(customerSession);
+      markSessionAlive();
+      saveDeviceUnlock(customerSession);
+      userRef.current = customerSession;
+      setUser(customerSession);
+      setRole(customerSession.role);
+      setIsAuthenticated(true);
+      setNeedsDeviceUnlock(false);
+      if (customerSession._id) {
+        touchUserSession({
+          userId: String(customerSession._id),
+          sessionId: customerSession.sessionId ? String(customerSession.sessionId) : undefined,
+        }).catch(() => {});
+      }
+      return {
+        success: true,
+        parked: getParkedRider(),
+        restoredCustomer: true,
+        needsCustomerLogin: false,
+      };
+    }
+
+    // No customer session on this device — guest shop browse (rider still parked)
     clearAuthUser();
     clearSessionAlive();
+    userRef.current = null;
     setUser(null);
     setRole(null);
     setIsAuthenticated(false);
     setNeedsDeviceUnlock(false);
-    return { success: true, parked: getParkedRider() };
+    return {
+      success: true,
+      parked: getParkedRider(),
+      restoredCustomer: false,
+      needsCustomerLogin: true,
+    };
   };
 
-  /** Restore parked rider into active auth and open rider dashboard (no re-login). */
+  /** Restore parked rider; park active customer so shop login is kept. */
   const restoreParkedRider = () => {
     const parked = getParkedRider();
     if (!parked?.email) return { success: false, message: "No parked rider session." };
+
+    const prev = userRef.current;
+    if (prev && (prev.role === "user" || prev.role === "admin")) {
+      parkCustomerSession(prev);
+      // Soft-clear customer active slot only — do NOT endUserSession
+    }
+
     const sessionUser = {
       _id: parked._id || parked.id,
       id: parked._id || parked.id,
@@ -1239,17 +1325,19 @@ export const AuthProvider = ({ children }) => {
       ...(parked.sessionId ? { sessionId: String(parked.sessionId) } : {}),
     };
     clearRiderBrowsingFlag();
+    // Keep parked rider key until applySession (role=rider) clears it after restore
     clearParkedRider();
     applySession(sessionUser);
     return { success: true, user: sessionUser };
   };
 
-  // Keep parked rider server session alive while browsing shop
+  // Keep parked rider server session alive while browsing shop (guest or customer)
   useEffect(() => {
-    if (isAuthenticated) return undefined;
     const tick = () => {
       const parked = getParkedRider();
       if (!parked?.email) return;
+      // Active rider doesn't need parked heartbeat
+      if (userRef.current?.role === "rider") return;
       touchRiderSession({
         email: String(parked.email),
         sessionId: parked.sessionId ? String(parked.sessionId) : undefined,
@@ -1258,7 +1346,23 @@ export const AuthProvider = ({ children }) => {
     tick();
     const id = window.setInterval(tick, 20_000);
     return () => window.clearInterval(id);
-  }, [isAuthenticated, touchRiderSession]);
+  }, [isAuthenticated, role, touchRiderSession]);
+
+  // Keep parked customer server session alive while in rider app
+  useEffect(() => {
+    if (!isAuthenticated || role !== "rider") return undefined;
+    const tick = () => {
+      const parked = getParkedCustomer();
+      if (!parked?._id) return;
+      touchUserSession({
+        userId: String(parked._id),
+        sessionId: parked.sessionId ? String(parked.sessionId) : undefined,
+      }).catch(() => {});
+    };
+    tick();
+    const id = window.setInterval(tick, 20_000);
+    return () => window.clearInterval(id);
+  }, [isAuthenticated, role, touchUserSession]);
 
   return (
     <AuthContext.Provider
@@ -1280,6 +1384,9 @@ export const AuthProvider = ({ children }) => {
         getParkedRider,
         isRiderBrowsingShop,
         completeRiderPinUnlock,
+        roleSwitchLoading,
+        beginRoleSwitch,
+        endRoleSwitch,
       }}
     >
       {children}
@@ -1315,5 +1422,8 @@ export const useAuth = () => {
     getParkedRider: () => null,
     isRiderBrowsingShop: () => false,
     completeRiderPinUnlock: async () => ({ success: false }),
+    roleSwitchLoading: null,
+    beginRoleSwitch: () => {},
+    endRoleSwitch: () => {},
   };
 };

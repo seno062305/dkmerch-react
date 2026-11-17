@@ -47,6 +47,7 @@ import AppUpdateModal from './components/AppUpdateModal';
 import PointsClaimModal from './components/PointsClaimModal';
 import LoginModal from './components/LoginModal';
 import RiderLoginModal from './components/RiderLoginModal';
+import RoleSwitchLoading from './components/RoleSwitchLoading';
 
 import AdminLayout from './admin/AdminLayout';
 import AdminDashboard from './admin/AdminDashboard';
@@ -172,7 +173,10 @@ const RiderRoute = ({ children }) => {
 function AppContent() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, isAuthenticated, role, isReady, needsDeviceUnlock, clearDeviceUnlockPrompt, logout } = useAuth();
+  const {
+    user, isAuthenticated, role, isReady, needsDeviceUnlock, clearDeviceUnlockPrompt, logout,
+    roleSwitchLoading,
+  } = useAuth();
   const savePushSub = useMutation(api.pushSubscriptions.saveSubscription);
 
   const cartItems      = useCart();
@@ -576,6 +580,10 @@ function AppContent() {
                 handleLoginSuccess(loginRole);
               }}
             />
+          )}
+
+          {roleSwitchLoading && (
+            <RoleSwitchLoading direction={roleSwitchLoading} />
           )}
 
           {showCartModal && (

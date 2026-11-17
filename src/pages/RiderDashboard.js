@@ -907,7 +907,7 @@ const RiderNotifBell = ({ onGoToAvailable }) => {
 // Main dashboard
 // ─────────────────────────────────────────────────────────────────────────────
 const RiderDashboard = () => {
-  const { user, logout, switchRiderToShop } = useAuth();
+  const { user, logout, switchRiderToShop, beginRoleSwitch, endRoleSwitch } = useAuth();
   const { confirm } = useConfirm();
   const { showNotification } = useNotification();
   const navigate = useNavigate();
@@ -2140,25 +2140,35 @@ const RiderDashboard = () => {
           onClick={async () => {
             const ok = await confirm({
               title: 'Switch to Shop?',
-              message: 'You’ll open the DKMerch homepage. Your rider session stays parked — tap the Rider icon anytime to return without logging in again. If you don’t have a customer login yet, you’ll need to sign in as a customer to shop.',
+              message: 'Open the DKMerch homepage? Your rider account stays signed in (parked). If you’re already logged in as a customer on this device, you’ll stay logged in there too — no logout.',
               confirmLabel: 'Go to Shop',
               cancelLabel: 'Stay on Rider',
               variant: 'warning',
               icon: 'fa-store',
             });
             if (!ok) return;
-            const result = switchRiderToShop?.();
-            if (!result?.success) {
-              showNotification(result?.message || 'Could not switch to shop.', 'error');
-              return;
-            }
-            navigate('/', { replace: true });
-            // Prompt customer login if no customer session (we're now logged out of rider)
+            beginRoleSwitch?.('to-shop');
             try {
-              sessionStorage.setItem('dk_login_customers_only', '1');
-              sessionStorage.setItem('dk_rider_shop_switch', '1');
-            } catch { /* ignore */ }
-            window.dispatchEvent(new CustomEvent('openLoginModal', { detail: { customersOnly: true, fromRiderShop: true } }));
+              await new Promise((r) => setTimeout(r, 450));
+              const result = switchRiderToShop?.();
+              if (!result?.success) {
+                showNotification(result?.message || 'Could not switch to shop.', 'error');
+                return;
+              }
+              navigate('/', { replace: true });
+              if (result.needsCustomerLogin) {
+                try {
+                  sessionStorage.setItem('dk_login_customers_only', '1');
+                  sessionStorage.setItem('dk_rider_shop_switch', '1');
+                } catch { /* ignore */ }
+                window.dispatchEvent(new CustomEvent('openLoginModal', {
+                  detail: { customersOnly: true, fromRiderShop: true },
+                }));
+              }
+              await new Promise((r) => setTimeout(r, 700));
+            } finally {
+              endRoleSwitch?.();
+            }
           }}
         >
           <i className="fas fa-store"></i>

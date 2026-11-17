@@ -12,7 +12,15 @@ import RiderLoginModal from './RiderLoginModal';
 import RewardsModal from './RewardsModal';
 import CustomerNotificationBell from './CustomerNotificationBell';
 const Header = ({ cartCount, wishlistCount, onCartClick }) => {
-  const { user, isAuthenticated, logout, restoreParkedRider, getParkedRider } = useAuth();
+  const {
+    user,
+    isAuthenticated,
+    logout,
+    restoreParkedRider,
+    getParkedRider,
+    beginRoleSwitch,
+    endRoleSwitch,
+  } = useAuth();
   const { confirm } = useConfirm();
   const navigate = useNavigate();
   const location = useLocation();
@@ -215,14 +223,30 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
     if (role === 'rider') navigate('/rider', { replace: true });
   };
 
-  const handleRiderIconClick = () => {
+  const handleRiderIconClick = async () => {
     closeMobileMenu();
     if (parkedRider?.email) {
-      const res = restoreParkedRider?.();
-      if (res?.success) {
-        setParkedRider(null);
-        navigate('/rider', { replace: true });
-        return;
+      const ok = await confirm({
+        title: 'Switch to Rider app?',
+        message: 'Return to your rider dashboard? Your shop/customer account stays signed in on this device (parked) — no logout.',
+        confirmLabel: 'Go to Rider',
+        cancelLabel: 'Stay on Shop',
+        variant: 'warning',
+        icon: 'fa-motorcycle',
+      });
+      if (!ok) return;
+      beginRoleSwitch?.('to-rider');
+      try {
+        await new Promise((r) => setTimeout(r, 450));
+        const res = restoreParkedRider?.();
+        if (res?.success) {
+          setParkedRider(null);
+          navigate('/rider', { replace: true });
+          await new Promise((r) => setTimeout(r, 700));
+          return;
+        }
+      } finally {
+        endRoleSwitch?.();
       }
     }
     setShowRiderModal(true);
