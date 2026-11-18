@@ -1,14 +1,14 @@
 {
-  "latestBackup": "2026-11-17",
-  "date": "2026-11-17",
-  "timestamp": "2026-11-17T05:29:15.910Z",
+  "latestBackup": "2026-11-18",
+  "date": "2026-11-18",
+  "timestamp": "2026-11-18T04:55:19.462Z",
   "tables": {
     "users": {
       "count": 13,
       "status": "ok"
     },
     "orders": {
-      "count": 5,
+      "count": 9,
       "status": "ok"
     },
     "products": {
@@ -24,11 +24,11 @@
       "status": "ok"
     },
     "pickupRequests": {
-      "count": 9,
+      "count": 10,
       "status": "ok"
     },
     "riderLocations": {
-      "count": 1,
+      "count": 0,
       "status": "ok"
     },
     "reviews": {
@@ -40,10 +40,10 @@
       "status": "ok"
     },
     "riderNotifications": {
-      "count": 1,
+      "count": 0,
       "status": "ok"
     }
   },
-  "totalRecords": 78,
+  "totalRecords": 81,
   "status": "success"
 }
