@@ -477,8 +477,10 @@ const Settings = () => {
   }, [location.pathname]);
 
   // Sign-in notifications → Account Management + Where you're logged in
+  // Wait for auth hydrate on Vercel/PWA — early clean of ?open=devices was dropping the deep-link.
   useEffect(() => {
-    if (isForgotPasswordFlow || !isAuthenticated) return;
+    if (isForgotPasswordFlow) return;
+    if (!isReady || !isAuthenticated) return;
 
     let openDevices = false;
     let manage = false;
@@ -494,7 +496,8 @@ const Settings = () => {
 
     let params;
     try {
-      params = new URLSearchParams(location.search || '');
+      // Prefer live window search — React location.search may already be cleared
+      params = new URLSearchParams(window.location.search || location.search || '');
     } catch {
       params = new URLSearchParams();
     }
@@ -504,22 +507,27 @@ const Settings = () => {
     if (!manage && !openDevices) return;
 
     setActiveTab('manage');
-    if (openDevices) setShowDevicesModal(true);
+    if (openDevices) {
+      try { sessionStorage.setItem('dkmerch_open_devices', '1'); } catch { /* ignore */ }
+      setShowDevicesModal(true);
+    }
 
-    // Keep sessionStorage until modal close (survives Strict Mode remount).
-    // Clean the URL after paint so Back won't loop.
-    if (location.search || location.state?.openDevices || location.state?.activeTab === 'manage') {
+    // Keep sessionStorage until modal close. Clean URL after modal is up (not before auth).
+    if (location.search || window.location.search || location.state?.openDevices || location.state?.activeTab === 'manage') {
       const t = window.setTimeout(() => {
-        navigate('/settings', { replace: true, state: {} });
-      }, 50);
+        if (`${window.location.pathname}${window.location.search}` !== '/settings') {
+          navigate('/settings', { replace: true, state: {} });
+        }
+      }, 400);
       return () => window.clearTimeout(t);
     }
     return undefined;
-  }, [location.search, location.state, isAuthenticated, isForgotPasswordFlow, navigate]);
+  }, [location.search, location.state, isAuthenticated, isReady, isForgotPasswordFlow, navigate]);
 
-  // Notif click while already on Settings
+  // Notif click while already on Settings (in-app bell / SW postMessage)
   useEffect(() => {
     const onOpenDevices = () => {
+      try { sessionStorage.setItem('dkmerch_open_devices', '1'); } catch { /* ignore */ }
       setActiveTab('manage');
       setShowDevicesModal(true);
     };
@@ -531,7 +539,12 @@ const Settings = () => {
     if (isForgotPasswordFlow) return;
     // Wait for auth hydrate — early !isAuthenticated was kicking /settings deep-links back to Home
     if (!isReady) return;
-    if (!isAuthenticated) { navigate('/'); return; }
+    if (!isAuthenticated) {
+      // Don't bounce away while a devices deep-link is pending (auth still hydrating elsewhere)
+      if (devicesDeepLinkPending()) return;
+      navigate('/');
+      return;
+    }
     if (user) setAccountForm({ name: user.name || '', username: user.username || '', email: user.email || '', phone: user.phone || '' });
   }, [user, isAuthenticated, isReady, navigate, isForgotPasswordFlow]);
 
@@ -541,7 +554,10 @@ const Settings = () => {
     let open = false;
     try { open = sessionStorage.getItem('dkmerch_open_devices') === '1'; } catch { /* ignore */ }
     if (!open) {
-      try { open = new URLSearchParams(location.search || '').get('open') === 'devices'; } catch { /* ignore */ }
+      try {
+        const q = new URLSearchParams(window.location.search || location.search || '');
+        open = q.get('open') === 'devices' || q.get('tab') === 'manage';
+      } catch { /* ignore */ }
     }
     if (!open) return;
     setActiveTab('manage');

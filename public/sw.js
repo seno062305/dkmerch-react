@@ -88,19 +88,32 @@ function notifPath(raw) {
   }
 }
 
-/** Prefer installed PWA window; keep loginAlert deep-link + source=pwa */
+/** Prefer installed PWA window; keep loginAlert / devices deep-link + source=pwa */
 function openTargetPath(path, open) {
   try {
     const u = new URL(path || '/', self.location.origin);
     if (open === 'loginAlert') {
       u.searchParams.set('open', 'loginAlert');
     }
+    // Account opened / devices → Settings “Where you're logged in”
+    if (
+      open === 'devices'
+      || u.searchParams.get('open') === 'devices'
+      || u.searchParams.get('tab') === 'manage'
+      || (u.pathname.replace(/\/$/, '') === '/settings' && open === 'devices')
+    ) {
+      u.pathname = '/settings';
+      u.searchParams.set('tab', 'manage');
+      u.searchParams.set('open', 'devices');
+    }
     if (!u.searchParams.get('source')) {
       u.searchParams.set('source', 'pwa');
     }
     return `${u.pathname}${u.search}${u.hash}` || '/';
   } catch {
-    return open === 'loginAlert' ? '/?open=loginAlert&source=pwa' : '/?source=pwa';
+    if (open === 'loginAlert') return '/?open=loginAlert&source=pwa';
+    if (open === 'devices') return '/settings?tab=manage&open=devices&source=pwa';
+    return '/?source=pwa';
   }
 }
 

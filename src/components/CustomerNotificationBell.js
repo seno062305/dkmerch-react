@@ -161,11 +161,16 @@ export function CustomerNotificationPanel({ email, variant = 'dropdown', onNavig
 
     if (isDevicesNotification(n) || /open=devices/i.test(String(target || ''))) {
       try { sessionStorage.setItem('dkmerch_open_devices', '1'); } catch { /* ignore */ }
-      // Query string survives Strict Mode remounts better than location.state alone
-      navigate('/settings?tab=manage&open=devices');
+      // Query + state + event — production PWA was dropping state-only navigations
+      navigate('/settings?tab=manage&open=devices', {
+        state: { activeTab: 'manage', openDevices: true },
+      });
       window.setTimeout(() => {
         window.dispatchEvent(new Event('dkOpenDevices'));
-      }, 0);
+      }, 50);
+      window.setTimeout(() => {
+        window.dispatchEvent(new Event('dkOpenDevices'));
+      }, 300);
       if (!n.read && emailKey) {
         markMany({ email: emailKey, ids: [n._id], read: true }).catch(() => {});
       }

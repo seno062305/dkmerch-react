@@ -315,11 +315,15 @@ function AppContent() {
         // Push: Account opened / devices → Profile Where you're logged in
         if (open === 'devices' || (u.pathname.startsWith('/settings') && tab === 'manage')) {
           try { sessionStorage.setItem('dkmerch_open_devices', '1'); } catch { /* ignore */ }
+          // Keep query string — location.state alone is dropped on PWA/cold start remounts (Vercel)
+          const devicesUrl = '/settings?tab=manage&open=devices';
           window.dispatchEvent(new Event('dkOpenDevices'));
-          navigate('/settings', {
-            replace: true,
-            state: { activeTab: 'manage', openDevices: open === 'devices' || tab === 'manage' },
-          });
+          if (`${location.pathname}${location.search}` !== devicesUrl) {
+            navigate(devicesUrl, {
+              replace: true,
+              state: { activeTab: 'manage', openDevices: true },
+            });
+          }
           return;
         }
         const next = `${u.pathname}${u.search}${u.hash}`;
@@ -343,6 +347,14 @@ function AppContent() {
           window.dispatchEvent(new Event('dkOpenLoginAlert'));
         }
       }
+      // Persist devices deep-link before auth hydrate / remounts strip the query
+      if (
+        params.get('open') === 'devices'
+        || (window.location.pathname.startsWith('/settings') && params.get('tab') === 'manage')
+      ) {
+        sessionStorage.setItem('dkmerch_open_devices', '1');
+        window.dispatchEvent(new Event('dkOpenDevices'));
+      }
     } catch { /* ignore */ }
 
     const onSwMessage = (event) => {
@@ -352,6 +364,13 @@ function AppContent() {
         try { sessionStorage.setItem('dkmerch_open_login_alert', '1'); } catch { /* ignore */ }
         window.dispatchEvent(new Event('dkOpenLoginAlert'));
         navigate('/?open=loginAlert', { replace: true });
+      } else if (event.data.open === 'devices') {
+        try { sessionStorage.setItem('dkmerch_open_devices', '1'); } catch { /* ignore */ }
+        window.dispatchEvent(new Event('dkOpenDevices'));
+        navigate('/settings?tab=manage&open=devices', {
+          replace: true,
+          state: { activeTab: 'manage', openDevices: true },
+        });
       }
     };
 

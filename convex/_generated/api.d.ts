@@ -23,6 +23,7 @@ import type * as firebaseSync from "../firebaseSync.js";
 import type * as init from "../init.js";
 import type * as lib_orderSeq from "../lib/orderSeq.js";
 import type * as lib_passwordPolicy from "../lib/passwordPolicy.js";
+import type * as lib_paymentFees from "../lib/paymentFees.js";
 import type * as lib_personValidation from "../lib/personValidation.js";
 import type * as lib_pinHash from "../lib/pinHash.js";
 import type * as orders from "../orders.js";
@@ -69,6 +70,7 @@ declare const fullApi: ApiFromModules<{
   init: typeof init;
   "lib/orderSeq": typeof lib_orderSeq;
   "lib/passwordPolicy": typeof lib_passwordPolicy;
+  "lib/paymentFees": typeof lib_paymentFees;
   "lib/personValidation": typeof lib_personValidation;
   "lib/pinHash": typeof lib_pinHash;
   orders: typeof orders;

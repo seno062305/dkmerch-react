@@ -778,6 +778,7 @@ const getStockStatus = (stock) => {
 
 const StockPanelList = ({
   products,
+  panel,
   pageSize = 5,
   showPrice,
   rowClass,
@@ -795,9 +796,10 @@ const StockPanelList = ({
   >
     {products.map((product) => {
       const status = getStockStatus(product.stock);
-      const isEditing = editingStock === product._id;
+      // Scope edit UI to this panel so All Stock / Low Stock don't mirror each other
+      const isEditing = editingStock?.panel === panel && editingStock?.id === product._id;
       return (
-        <div key={product._id} className={`stock-list-row${rowClass ? ` ${rowClass}` : ''}${isEditing ? ' is-editing' : ''}`}>
+        <div key={`${panel}-${product._id}`} className={`stock-list-row${rowClass ? ` ${rowClass}` : ''}${isEditing ? ' is-editing' : ''}`}>
           <img className="stock-list-thumb" src={product.image} alt="" />
           <div className="stock-list-main">
             <strong className="stock-list-name" title={product.name}>{product.name}</strong>
@@ -826,7 +828,7 @@ const StockPanelList = ({
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
-                      onSaveEdit(product._id);
+                      onSaveEdit(panel, product._id);
                     }
                   }}
                   placeholder="0–999"
@@ -835,7 +837,7 @@ const StockPanelList = ({
                   title={stockError || 'Stock quantity'}
                   autoFocus
                 />
-                <button type="button" className="save-btn" onClick={() => onSaveEdit(product._id)} title="Save">
+                <button type="button" className="save-btn" onClick={() => onSaveEdit(panel, product._id)} title="Save">
                   <i className="fas fa-check"></i>
                 </button>
                 <button type="button" className="cancel-btn" onClick={onCancelEdit} title="Cancel">
@@ -856,7 +858,7 @@ const StockPanelList = ({
               <button
                 type="button"
                 className="edit-stock-btn stock-list-edit"
-                onClick={() => onStartEdit(product._id, product.stock)}
+                onClick={() => onStartEdit(panel, product._id, product.stock)}
                 title="Edit stock"
               >
                 <i className="fas fa-edit"></i>
@@ -880,6 +882,7 @@ const StockManagement = ({
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterGroup, setFilterGroup]       = useState('all');
   const [filterType, setFilterType]         = useState('all');
+  // { panel: 'all' | 'low', id } — panel-scoped so left/right lists don't mirror edit mode
   const [editingStock, setEditingStock]     = useState(null);
   const [stockValue, setStockValue]         = useState('');
   const [stockError, setStockError]         = useState('');
@@ -905,19 +908,28 @@ const StockManagement = ({
     return matchSearch && matchCat && matchGroup && matchType;
   });
 
-  const sortedFiltered   = [...filteredProducts].sort((a, b) => (a.stock ?? 0) - (b.stock ?? 0));
-  const lowStockProducts = sortedFiltered.filter(p => p.stock <= 10);
-  const lowStockCount    = products.filter(p => p.stock <= 10).length;
-  const totalStock       = products.reduce((s, p) => s + (p.stock || 0), 0);
-  const outOfStockCount  = products.filter(p => p.stock === 0).length;
+  // Split lists: low (≤10) only on the right; healthy (>10) only on the left — no duplicates
+  const sortedFiltered = [...filteredProducts].sort((a, b) => (a.stock ?? 0) - (b.stock ?? 0));
+  const lowStockProducts = sortedFiltered.filter((p) => (p.stock ?? 0) <= 10);
+  const healthyStockProducts = sortedFiltered
+    .filter((p) => (p.stock ?? 0) > 10)
+    .sort((a, b) => (a.stock ?? 0) - (b.stock ?? 0));
+  const lowStockCount   = products.filter((p) => (p.stock ?? 0) <= 10).length;
+  const totalStock      = products.reduce((s, p) => s + (p.stock || 0), 0);
+  const outOfStockCount = products.filter((p) => (p.stock ?? 0) === 0).length;
 
-  useEffect(() => { setAllPage(0); }, [searchTerm, filterCategory, filterGroup, filterType, allPageSize, products.length]);
-  useEffect(() => { setLowPage(0); }, [searchTerm, filterCategory, filterGroup, filterType, lowPageSize, products.length]);
+  useEffect(() => { setAllPage(0); }, [searchTerm, filterCategory, filterGroup, filterType, allPageSize, healthyStockProducts.length]);
+  useEffect(() => { setLowPage(0); }, [searchTerm, filterCategory, filterGroup, filterType, lowPageSize, lowStockProducts.length]);
 
-  const startEdit  = (productId, currentStock) => { setEditingStock(productId); setStockValue(String(currentStock)); setStockError(''); };
+  const startEdit  = (panel, productId, currentStock) => {
+    setEditingStock({ panel, id: productId });
+    setStockValue(String(currentStock));
+    setStockError('');
+  };
   const cancelEdit = () => { setEditingStock(null); setStockValue(''); setStockError(''); };
 
-  const saveEdit = async (productId) => {
+  const saveEdit = async (panel, productId) => {
+    if (editingStock?.panel !== panel || editingStock?.id !== productId) return;
     const val = stockValue.trim();
     if (!val) { setStockError('Stock cannot be empty.'); return; }
     if (!/^\d+$/.test(val)) { setStockError('Numbers only.'); return; }
@@ -944,7 +956,7 @@ const StockManagement = ({
     onStockValueChange,
   };
 
-  const pagedAll = sortedFiltered.slice(allPage * allPageSize, allPage * allPageSize + allPageSize);
+  const pagedAll = healthyStockProducts.slice(allPage * allPageSize, allPage * allPageSize + allPageSize);
   const pagedLow = lowStockProducts.slice(lowPage * lowPageSize, lowPage * lowPageSize + lowPageSize);
 
   return (
@@ -997,21 +1009,25 @@ const StockManagement = ({
         <div className="stock-panel">
           <div className="stock-panel-head">
             <div>
-              <h3><i className="fas fa-warehouse"></i> All Stock Levels</h3>
-              <p>{sortedFiltered.length} product{sortedFiltered.length !== 1 ? 's' : ''}</p>
+              <h3><i className="fas fa-warehouse"></i> In Stock</h3>
+              <p>{healthyStockProducts.length} product{healthyStockProducts.length !== 1 ? 's' : ''} with healthy levels</p>
             </div>
           </div>
-          {sortedFiltered.length === 0 ? (
+          {healthyStockProducts.length === 0 ? (
             <div className="empty-state stock-panel-empty">
               <i className="fas fa-box-open"></i>
-              <h3>No products found</h3>
-              <p>Try adjusting your search or filters.</p>
+              <h3>{filteredProducts.length === 0 ? 'No products found' : 'Nothing in stock yet'}</h3>
+              <p>
+                {filteredProducts.length === 0
+                  ? 'Try adjusting your search or filters.'
+                  : 'Items at 10 or below appear under Low Stock.'}
+              </p>
             </div>
           ) : (
             <>
-              <StockPanelList products={pagedAll} pageSize={allPageSize} showPrice {...tableProps} />
+              <StockPanelList panel="all" products={pagedAll} pageSize={allPageSize} showPrice {...tableProps} />
               <AdminPager
-                total={sortedFiltered.length}
+                total={healthyStockProducts.length}
                 page={allPage}
                 pageSize={allPageSize}
                 pageSizeOptions={STOCK_PAGE_SIZES}
@@ -1038,7 +1054,7 @@ const StockManagement = ({
             </div>
           ) : (
             <>
-              <StockPanelList products={pagedLow} pageSize={lowPageSize} rowClass="low-stock-row" {...tableProps} />
+              <StockPanelList panel="low" products={pagedLow} pageSize={lowPageSize} rowClass="low-stock-row" {...tableProps} />
               <AdminPager
                 total={lowStockProducts.length}
                 page={lowPage}
