@@ -382,6 +382,65 @@ export const updateOrderStatus = mutation({
   },
 });
 
+/** Admin accepts an LBC (outside rider area) order into the LBC shipping queue. */
+export const acceptLbcOrder = mutation({
+  args: { orderId: v.string() },
+  handler: async ({ db, scheduler }, { orderId }) => {
+    const order = await db
+      .query("orders")
+      .withIndex("by_orderId", (q) => q.eq("orderId", orderId))
+      .first();
+    if (!order) return { success: false, message: "Order not found." };
+
+    const status = String(order.orderStatus || "").toLowerCase();
+    if (status === "cancelled") {
+      return { success: false, message: "Canceled orders cannot be accepted for LBC." };
+    }
+    if ((order as any).lbcAcceptedAt) {
+      return { success: true, alreadyAccepted: true };
+    }
+    if (String(order.paymentStatus || "").toLowerCase() !== "paid") {
+      return { success: false, message: "Order must be paid before accepting for LBC." };
+    }
+
+    const now = new Date().toISOString();
+    const patch: Record<string, unknown> = {
+      lbcAcceptedAt: now,
+      deliveryMethod: "lbc",
+    };
+    // Confirm if still pending so it leaves the unpaid/pending queue cleanly
+    if (!status || status === "pending") {
+      patch.orderStatus = "confirmed";
+      patch.status = "Confirmed";
+      patch.confirmedAt = now;
+    }
+    await db.patch(order._id, patch as any);
+
+    if (order.email) {
+      await notifyCustomerInApp(db, {
+        email: order.email,
+        type: "order_update",
+        title: `LBC shipping · #${shortOrderId(orderId)}`,
+        body: "Admin accepted your order for LBC Express shipping. Tracking details will follow.",
+        url: `/track-order?order=${encodeURIComponent(orderId)}`,
+        orderId,
+      });
+      await scheduler.runAfter(0, internal.webPush.sendToEmail, {
+        email: order.email,
+        title: `LBC shipping · #${shortOrderId(orderId)}`,
+        body: "Your order was accepted for LBC Express. Tracking details will follow.",
+        url: `/track-order?order=${encodeURIComponent(orderId)}`,
+      });
+    }
+
+    if (!status || status === "pending") {
+      await onOrderConfirmed(scheduler, db, order, orderId);
+    }
+
+    return { success: true };
+  },
+});
+
 export const updateOrderFields = mutation({
   args: {
     orderId:             v.string(),

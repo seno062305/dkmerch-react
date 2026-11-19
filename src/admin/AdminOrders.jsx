@@ -492,11 +492,13 @@ const AdminOrders = () => {
   const storePin = { storeLat: storeSettings?.storeLat, storeLng: storeSettings?.storeLng };
   const updateOrderStatusMutation = useMutation(api.orders.updateOrderStatus);
   const updateOrderFieldsMutation = useMutation(api.orders.updateOrderFields);
+  const acceptLbcOrderMutation    = useMutation(api.orders.acceptLbcOrder);
   const deleteOrderMutation       = useMutation(api.orders.deleteOrder);
   const resolveRefundMutation     = useMutation(api.orders.resolveRefund);
   const rejectCustomerCancelMutation = useMutation(api.orders.rejectCustomerCancel);
   const approveCustomerCancelAction  = useAction(api.payments.approveCustomerCancel);
   const approveDamageRefundAction    = useAction(api.payments.approveDamageRefund);
+  const [acceptingLbcId, setAcceptingLbcId] = useState(null);
 
   const validOrders = orders.filter(o => o.orderId && o.items?.length > 0);
 
@@ -542,6 +544,24 @@ const AdminOrders = () => {
 
   const hasCancelRequest = (o) => o.cancelRequestStatus === 'requested';
   const hasAnyCancelRequest = (o) => !!o.cancelRequestStatus;
+
+  const isLbcDeliveryOrder = (o) => isLbcOrder(o, storePin);
+  const isLbcAccepted = (o) => !!o?.lbcAcceptedAt;
+  /** Paid LBC orders waiting for admin Accept (not yet in Accepted panel). */
+  const isLbcAwaitingAccept = (o) => {
+    if (!isLbcDeliveryOrder(o) || isCancelledStatus(o) || isLbcAccepted(o)) return false;
+    if (String(o.paymentStatus || '').toLowerCase() !== 'paid') return false;
+    const st = String(o.orderStatus || 'pending').toLowerCase();
+    return st === 'pending' || st === 'confirmed';
+  };
+  /** Accepted LBC queue — includes shipped/delivered after accept. */
+  const isLbcAcceptedQueue = (o) => {
+    if (!isLbcDeliveryOrder(o) || isCancelledStatus(o)) return false;
+    if (isLbcAccepted(o)) return true;
+    // Legacy LBC already past confirm without lbcAcceptedAt — treat shipped+ as accepted
+    const st = String(o.orderStatus || '').toLowerCase();
+    return st === 'shipped' || st === 'out_for_delivery' || st === 'completed';
+  };
 
   const matchesSearchDate = (order) => {
     const matchesSearch = !searchTerm || [order.orderId, order.customerName, order.email].some((f) =>
@@ -601,6 +621,7 @@ const AdminOrders = () => {
     pending:    validOrders.filter((o) => isPendingStatus(o) && !hasCancelRequest(o)).length,
     confirmed:  validOrders.filter((o) => isProcessingStatus(o) && !hasCancelRequest(o)).length,
     shipped:    validOrders.filter((o) => isShippedStatus(o) && !hasCancelRequest(o)).length,
+    lbc:        validOrders.filter((o) => isLbcAwaitingAccept(o) || isLbcAcceptedQueue(o)).length,
     refunds:    validOrders.filter(hasAnyRefund).length,
     cancelled:  validOrders.filter((o) => isCancelledStatus(o) || hasAnyCancelRequest(o)).length,
   };
@@ -701,6 +722,9 @@ const AdminOrders = () => {
         matchesTab = isProcessingStatus(order) && !hasCancelRequest(order);
       } else if (activeTab === 'shipped') {
         matchesTab = isShippedStatus(order) && !hasCancelRequest(order);
+      } else if (activeTab === 'lbc') {
+        // Right panel = accepted LBC orders (left panel holds awaiting accept)
+        matchesTab = isLbcAcceptedQueue(order);
       } else if (activeTab === 'refunds') {
         // Right list = resolved refunds (approved / rejected)
         matchesTab = isRefundResolved(order);
@@ -757,9 +781,62 @@ const AdminOrders = () => {
     );
   }, [validOrders, searchTerm, startDate, endDate]);
 
+  /** LBC tab left panel — paid LBC orders waiting for Accept. */
+  const lbcAwaitingOrders = useMemo(() => {
+    return sortOrdersForTab(
+      validOrders.filter((o) => isLbcAwaitingAccept(o) && matchesSearchDate(o)),
+      'pending'
+    );
+  }, [validOrders, searchTerm, startDate, endDate, storeSettings?.storeLat, storeSettings?.storeLng]);
+
   const mapStatusToTrackingStatus = (adminStatus) => {
     const statusMap = { pending: 'Processing', confirmed: 'Confirmed', shipped: 'Shipped', out_for_delivery: 'Out for Delivery', completed: 'Delivered', cancelled: 'Cancelled' };
     return statusMap[adminStatus] || 'Processing';
+  };
+
+  const handleAcceptLbc = async (order) => {
+    if (!order?.orderId) return;
+    const shortId = formatOrderShortId(order);
+    const ok = await confirm({
+      title: 'Accept for LBC shipping?',
+      message:
+        `Accept order #${shortId} for ${order.customerName || 'the customer'}?\n\n` +
+        `This moves it to the Accepted LBC list. Ship via LBC Express and send the tracking ID to the customer.`,
+      confirmLabel: 'Accept LBC',
+      cancelLabel: 'Cancel',
+      variant: 'primary',
+      icon: 'fa-truck',
+    });
+    if (!ok) return;
+    setAcceptingLbcId(order.orderId);
+    try {
+      const result = await acceptLbcOrderMutation({ orderId: order.orderId });
+      if (!result?.success) {
+        showNotification(result?.message || 'Could not accept LBC order.', 'error');
+        return;
+      }
+      if (selectedOrder?.orderId === order.orderId) {
+        setSelectedOrder((prev) => ({
+          ...prev,
+          lbcAcceptedAt: new Date().toISOString(),
+          deliveryMethod: 'lbc',
+          ...(String(prev?.orderStatus || '').toLowerCase() === 'pending'
+            ? { orderStatus: 'confirmed', status: 'Confirmed' }
+            : {}),
+        }));
+      }
+      showNotification(
+        result.alreadyAccepted
+          ? `Order #${shortId} was already accepted for LBC.`
+          : `Order #${shortId} accepted for LBC shipping.`,
+        'success'
+      );
+    } catch (err) {
+      console.error(err);
+      showNotification('Failed to accept LBC order.', 'error');
+    } finally {
+      setAcceptingLbcId(null);
+    }
   };
 
   const handleUpdateStatus = async (orderId, newOrderStatus) => {
@@ -981,6 +1058,7 @@ const AdminOrders = () => {
     { key: 'pending',   icon: 'fa-clock',         label: 'Pending' },
     { key: 'confirmed', icon: 'fa-spinner',       label: 'Processing' },
     { key: 'shipped',   icon: 'fa-shipping-fast', label: 'Shipped' },
+    { key: 'lbc',       icon: 'fa-truck',         label: 'LBC' },
     { key: 'refunds',   dkIcon: DK_ICONS.ordersRefunds, label: 'Refunds' },
     { key: 'cancelled', icon: 'fa-ban',           label: 'Canceled' },
   ];
@@ -990,6 +1068,7 @@ const AdminOrders = () => {
     pending: 'No pending orders',
     confirmed: 'No processing orders',
     shipped: 'No shipped orders',
+    lbc: 'No accepted LBC orders yet',
     refunds: 'No refunded orders yet',
     cancelled: 'No canceled orders',
   };
@@ -1201,7 +1280,7 @@ const AdminOrders = () => {
         )}
       </div>
 
-      {activeTab === 'refunds' || activeTab === 'cancelled' ? (
+      {activeTab === 'refunds' || activeTab === 'cancelled' || activeTab === 'lbc' ? (
         <div className="orders-split">
           <aside className="orders-split-left">
             <div className="orders-priority-head">
@@ -1214,6 +1293,11 @@ const AdminOrders = () => {
                     </h2>
                     <p>Pending customer refund requests</p>
                   </>
+                ) : activeTab === 'lbc' ? (
+                  <>
+                    <h2><i className="fas fa-truck"></i> Accepted LBC</h2>
+                    <p>Orders accepted for LBC Express shipping</p>
+                  </>
                 ) : (
                   <>
                     <h2><i className="fas fa-ban"></i> Request Cancel</h2>
@@ -1222,11 +1306,58 @@ const AdminOrders = () => {
                 )}
               </div>
               <span className="orders-priority-count">
-                {(activeTab === 'refunds' ? refundRequestOrders : cancelRequestOrders).length}
+                {(
+                  activeTab === 'refunds'
+                    ? refundRequestOrders
+                    : activeTab === 'lbc'
+                      ? filteredOrders
+                      : cancelRequestOrders
+                ).length}
               </span>
             </div>
 
-            {(activeTab === 'refunds' ? refundRequestOrders : cancelRequestOrders).length === 0 ? (
+            {activeTab === 'lbc' ? (
+              filteredOrders.length === 0 ? (
+                <div className="orders-priority-empty">
+                  <i className="fas fa-truck"></i>
+                  <p>No accepted LBC orders yet</p>
+                </div>
+              ) : (
+                <div className="orders-priority-list">
+                  {filteredOrders.map((order) => {
+                    const pm = getPaymentMethodLabel(order);
+                    return (
+                      <div key={order.orderId} className="orders-priority-card is-awaiting is-lbc-accepted">
+                        <div className="orders-priority-main">
+                          <div className="orders-priority-card-top">
+                            <strong>#{formatOrderShortId(order)}</strong>
+                            <span className="orders-refund-flag orders-refund-flag--lbc">
+                              <i className="fas fa-check"></i> Accepted
+                            </span>
+                          </div>
+                          <div className="orders-priority-customer">
+                            <span>{order.customerName || 'Customer'}</span>
+                            <small>{order.email || ''}</small>
+                          </div>
+                          <div className="orders-priority-meta">
+                            <span>₱{(order.finalTotal ?? order.total ?? 0).toLocaleString('en-PH')}</span>
+                            <span className="orders-priority-method" style={{ color: pm.color }}>
+                              <PaymentMethodMark pm={pm} /> {pm.label}
+                            </span>
+                            <span>{order.items?.length || 0} item(s)</span>
+                          </div>
+                        </div>
+                        <div className="orders-priority-actions">
+                          <button type="button" className="view-btn" onClick={() => setSelectedOrder(order)}>
+                            <i className="fas fa-eye"></i> View
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )
+            ) : (activeTab === 'refunds' ? refundRequestOrders : cancelRequestOrders).length === 0 ? (
               <div className="orders-priority-empty">
                 <i className="fas fa-check-circle"></i>
                 <p>{activeTab === 'refunds' ? 'No refund requests' : 'No cancel requests'}</p>
@@ -1286,6 +1417,14 @@ const AdminOrders = () => {
                     <DkIcon name={DK_ICONS.ordersRefunded} className="orders-dk-icon" size={16} alt="" />
                     Refunded
                   </>
+                ) : activeTab === 'lbc' ? (
+                  <>
+                    <i className="fas fa-truck"></i>
+                    LBC Incoming
+                    {lbcAwaitingOrders.length > 0 && (
+                      <span className="orders-list-caption-count">{lbcAwaitingOrders.length}</span>
+                    )}
+                  </>
                 ) : (
                   <>
                     <i className="fas fa-ban"></i>
@@ -1293,7 +1432,89 @@ const AdminOrders = () => {
                   </>
                 )}
               </div>
-              {renderOrdersTable()}
+              {activeTab === 'lbc' ? (
+                lbcAwaitingOrders.length === 0 ? (
+                  <div className="empty-orders">
+                    <i className="fas fa-inbox"></i>
+                    <p>No incoming LBC orders to accept</p>
+                  </div>
+                ) : (
+                  <div className="orders-table-container">
+                    <div className="dk-fixed-page dk-fixed-page--table" style={fixedPageStyle(Math.max(pageSize, lbcAwaitingOrders.length))}>
+                      <table className="orders-table">
+                        <thead>
+                          <tr>
+                            <th>Order ID</th>
+                            <th>Customer</th>
+                            <th>Items</th>
+                            <th>Total</th>
+                            <th>Payment</th>
+                            <th>Status</th>
+                            <th>Date</th>
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {lbcAwaitingOrders.map((order) => {
+                            const pm = getPaymentMethodLabel(order);
+                            const busy = acceptingLbcId === order.orderId;
+                            return (
+                              <tr key={order.orderId}>
+                                <td data-label="Order ID">
+                                  <strong>#{formatOrderShortId(order)}</strong>
+                                  <span className="orders-lbc-chip"><i className="fas fa-truck"></i> LBC</span>
+                                </td>
+                                <td data-label="Customer">
+                                  <div className="customer-info">
+                                    <strong>{order.customerName || '—'}</strong>
+                                    <small>{order.email || ''}</small>
+                                  </div>
+                                </td>
+                                <td data-label="Items">{order.items?.length || 0} item(s)</td>
+                                <td data-label="Total">₱{(order.finalTotal ?? order.total ?? 0).toLocaleString('en-PH')}</td>
+                                <td data-label="Payment">
+                                  <span className="orders-priority-method" style={{ color: pm.color }}>
+                                    <PaymentMethodMark pm={pm} /> {pm.label}
+                                  </span>
+                                </td>
+                                <td data-label="Status">
+                                  <span className="status-badge" style={{ backgroundColor: getStatusColor(order.orderStatus, order) }}>
+                                    {getStatusLabel(order.orderStatus, order)}
+                                  </span>
+                                </td>
+                                <td data-label="Date">
+                                  {order._creationTime
+                                    ? new Date(order._creationTime).toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                                    : '—'}
+                                </td>
+                                <td data-label="Actions">
+                                  <div className="orders-row-actions">
+                                    <button type="button" className="view-btn" onClick={() => setSelectedOrder(order)}>
+                                      <i className="fas fa-eye"></i> View
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="accept-btn"
+                                      onClick={() => handleAcceptLbc(order)}
+                                      disabled={busy}
+                                    >
+                                      {busy
+                                        ? <><i className="fas fa-spinner fa-spin"></i> Accepting…</>
+                                        : <><i className="fas fa-check"></i> Accept</>}
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )
+              ) : (
+                renderOrdersTable()
+              )}
             </div>
           </section>
         </div>
