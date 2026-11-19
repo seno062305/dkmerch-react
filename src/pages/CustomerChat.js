@@ -79,7 +79,7 @@ const CustomerChat = () => {
 
     const sync = () => {
       const mobile = window.matchMedia('(max-width: 768px)').matches;
-      const headerEl = document.querySelector('.header, .site-header, header.main-header');
+      const headerEl = document.querySelector('.main-header, .header, header');
       const headerH = headerEl
         ? Math.round(headerEl.getBoundingClientRect().height) || (mobile ? 56 : 64)
         : (mobile ? 56 : 64);
