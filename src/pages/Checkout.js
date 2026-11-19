@@ -12,7 +12,13 @@ import { useMutation, useQuery, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { runWithFailover } from '../lib/failoverWrite';
 import { failoverCheckoutAssist, isFailoverPayConfigured } from '../lib/failoverPayEmail';
-import { isWithinNCR, isWithinRiderRange } from '../utils/deliveryUtils';
+import {
+  isWithinNCR,
+  isWithinRiderRange,
+  isInPhilippinesBounds,
+  isPhilippinesLandResult,
+  PH_BOUNDS,
+} from '../utils/deliveryUtils';
 import { isAppOutdated } from '../utils/appUpdate';
 import { getOverlayRoot } from '../utils/scrollLock';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
@@ -146,6 +152,7 @@ const AddressMapPicker = ({
   onSelectSuggestion,
   savedCoords,
   onNCRViolation,
+  onPinValidated,
   storeLat,
   storeLng,
 }) => {
@@ -246,6 +253,12 @@ const AddressMapPicker = ({
 
   /** Drag / tap / search pin → reverse-geocode and autofill address fields. */
   const placePinAndAutofill = useCallback(async (lat, lng, { fly = false } = {}) => {
+    if (!isInPhilippinesBounds(lat, lng)) {
+      setStatusText('⚠️ Pin must be inside the Philippines');
+      onPinValidated?.(false);
+      return;
+    }
+
     if (reverseAbortRef.current) {
       try { reverseAbortRef.current.abort(); } catch { /* ignore */ }
     }
@@ -255,7 +268,6 @@ const AddressMapPicker = ({
     pinDrivenRef.current = true;
     suppressForwardGeocodeRef.current = true;
     applyPinOnMap(lat, lng, fieldsRef.current, { fly });
-    onSelectSuggestion({ ...fieldsRef.current, lat, lng });
     setGeocoding(true);
     setStatusText('Looking up address for this pin…');
 
@@ -274,33 +286,48 @@ const AddressMapPicker = ({
       const data = await res.json();
       if (controller.signal.aborted) return;
 
+      if (!isPhilippinesLandResult(data)) {
+        setStatusText('⚠️ Invalid pin — use land location inside the Philippines (not sea / other country)');
+        onPinValidated?.(false);
+        setPinSet(false);
+        return;
+      }
+
       const parsed = parseNominatimAddress(data);
       // Pin move always replaces street from lookup (do not keep the old street).
-      // Area fields may fall back if Nominatim omitted them.
       const merged = {
         address: parsed.address || '',
-        barangay: parsed.barangay || fieldsRef.current.barangay || '',
-        city: parsed.city || fieldsRef.current.city || '',
-        province: parsed.province || fieldsRef.current.province || '',
-        zipCode: parsed.zipCode || fieldsRef.current.zipCode || '',
+        barangay: parsed.barangay || '',
+        city: parsed.city || '',
+        province: parsed.province || '',
+        zipCode: parsed.zipCode || '',
       };
+      if (!merged.address && !merged.city) {
+        setStatusText('⚠️ Could not resolve a deliverable address here — move the pin to a street or barangay');
+        onPinValidated?.(false);
+        setPinSet(false);
+        return;
+      }
+
       fieldsRef.current = merged;
       suppressForwardGeocodeRef.current = true;
       pinDrivenRef.current = true;
       onFieldsChange(merged);
       onSelectSuggestion({ ...merged, lat, lng });
       applyPinOnMap(lat, lng, merged, { fly: false });
+      onPinValidated?.(true);
 
       const withinNCR = isWithinRiderRange(lat, lng, storeLat, storeLng);
       setStatusText(withinNCR
         ? (merged.address
           ? 'Address updated from pin — edit fields if needed'
-          : 'Pin set — enter street address manually')
+          : 'Pin set — confirm street address')
         : '⚠️ Outside rider area — address updated · LBC Express'
       );
     } catch (err) {
       if (err?.name === 'AbortError') return;
-      setStatusText('Pin set — could not look up address. Fill fields manually.');
+      setStatusText('Could not verify this pin. Try again or search a PH address.');
+      onPinValidated?.(false);
     } finally {
       if (reverseAbortRef.current === controller) {
         setGeocoding(false);
@@ -308,7 +335,7 @@ const AddressMapPicker = ({
       }
       setTimeout(() => { suppressForwardGeocodeRef.current = false; }, 2500);
     }
-  }, [applyPinOnMap, onFieldsChange, onSelectSuggestion, storeLat, storeLng]);
+  }, [applyPinOnMap, onFieldsChange, onSelectSuggestion, onPinValidated, storeLat, storeLng]);
 
   const geocodeFilledAddress = useCallback(async () => {
     if (suppressForwardGeocodeRef.current || pinDrivenRef.current) return false;
@@ -331,19 +358,27 @@ const AddressMapPicker = ({
         headers: { 'Accept-Language': 'en', 'User-Agent': 'DKMerchCheckout/1.0' },
       });
       const data = await res.json();
-      if (data?.length > 0) {
-        commitPin(parseFloat(data[0].lat), parseFloat(data[0].lon));
-        setStatusText('Showing your filled address — drag pin to fine-tune');
-        setGeocoding(false);
-        return true;
+      const hit = data?.[0];
+      if (hit && isPhilippinesLandResult(hit)) {
+        const lat = parseFloat(hit.lat);
+        const lng = parseFloat(hit.lon);
+        if (isInPhilippinesBounds(lat, lng)) {
+          commitPin(lat, lng);
+          onPinValidated?.(true);
+          setStatusText('Showing your filled address — drag pin to fine-tune');
+          setGeocoding(false);
+          return true;
+        }
       }
-      setStatusText('Address not found on map — search below or tap to pin');
+      onPinValidated?.(false);
+      setStatusText('Address not found in the Philippines — use a real PH address or pin on land');
     } catch {
-      setStatusText('Could not locate address — search or tap the map');
+      onPinValidated?.(false);
+      setStatusText('Could not locate address — search or tap the map inside PH');
     }
     setGeocoding(false);
     return false;
-  }, [commitPin]);
+  }, [commitPin, onPinValidated]);
 
   // Init / tear down map when user opens pin panel
   useEffect(() => {
@@ -364,13 +399,22 @@ const AddressMapPicker = ({
       const startLng = savedCoords?.lng ?? 120.9842;
       const startZoom = savedCoords ? 16 : 11;
 
+      const phBounds = L.latLngBounds(
+        [PH_BOUNDS.minLat, PH_BOUNDS.minLng],
+        [PH_BOUNDS.maxLat, PH_BOUNDS.maxLng],
+      );
       const map = L.map(mapRef.current, {
         zoomControl: false,
         tap: false,
         scrollWheelZoom: true,
         minZoom: 5,
         maxZoom: 19,
-      }).setView([startLat, startLng], startZoom);
+        maxBounds: phBounds,
+        maxBoundsViscosity: 1.0,
+      }).setView(
+        isInPhilippinesBounds(startLat, startLng) ? [startLat, startLng] : [14.5995, 120.9842],
+        startZoom,
+      );
       L.control.zoom({ position: 'bottomright' }).addTo(map);
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -712,14 +756,24 @@ const CheckoutFullscreenMap = ({
         const L = window.L;
         const startLat = coords?.lat ?? 14.5995;
         const startLng = coords?.lng ?? 120.9842;
-        const hasPin = coords?.lat != null && coords?.lng != null;
+        const hasPin = coords?.lat != null && coords?.lng != null
+          && isInPhilippinesBounds(startLat, startLng);
+        const phBounds = L.latLngBounds(
+          [PH_BOUNDS.minLat, PH_BOUNDS.minLng],
+          [PH_BOUNDS.maxLat, PH_BOUNDS.maxLng],
+        );
         const map = L.map(mapRef.current, {
           zoomControl: false,
           tap: false,
           scrollWheelZoom: true,
           minZoom: 5,
           maxZoom: 19,
-        }).setView([startLat, startLng], hasPin ? 17 : 12);
+          maxBounds: phBounds,
+          maxBoundsViscosity: 1.0,
+        }).setView(
+          hasPin ? [startLat, startLng] : [14.5995, 120.9842],
+          hasPin ? 17 : 12,
+        );
         L.control.zoom({ position: 'bottomright' }).addTo(map);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -1148,6 +1202,9 @@ const Checkout = () => {
   const [addressCoords, setAddressCoords] = useState(null);
   const [savedCoords,   setSavedCoords]   = useState(null);
   const [isOutsideNCR,  setIsOutsideNCR]  = useState(false);
+  /** True only when pin/geocode resolved to land inside the Philippines */
+  const [addressVerified, setAddressVerified] = useState(false);
+  const [verifyingAddress, setVerifyingAddress] = useState(false);
   const [showSavedFullMap, setShowSavedFullMap] = useState(false);
 
   // ── For reward orders, use 1 qty item for shipping calc ──────────────────
@@ -1196,9 +1253,19 @@ const Checkout = () => {
     setIsEditingAddress(!init.address || !init.barangay || !init.city || !init.province || !init.zipCode);
     if (profile?.addressLat && profile?.addressLng) {
       const coords = { lat: profile.addressLat, lng: profile.addressLng };
-      setSavedCoords(coords);
-      setAddressCoords(coords);
-      setIsOutsideNCR(!isWithinRiderRange(coords.lat, coords.lng, STORE_LAT, STORE_LNG));
+      if (isInPhilippinesBounds(coords.lat, coords.lng)) {
+        setSavedCoords(coords);
+        setAddressCoords(coords);
+        setAddressVerified(true);
+        setIsOutsideNCR(!isWithinRiderRange(coords.lat, coords.lng, STORE_LAT, STORE_LNG));
+      } else {
+        setSavedCoords(null);
+        setAddressCoords(null);
+        setAddressVerified(false);
+        setIsEditingAddress(true);
+      }
+    } else {
+      setAddressVerified(false);
     }
   }, [isAuthenticated, navigate, showNotification, user, savedProfile, STORE_LAT, STORE_LNG]);
 
@@ -1283,6 +1350,8 @@ const Checkout = () => {
       province: fields.province ?? prev.province,
       zipCode: fields.zipCode ?? prev.zipCode,
     }));
+    // Typed changes must be re-verified on Save / pin (blocks fake addresses)
+    setAddressVerified(false);
   };
 
   const handleAddressSelect = ({ address, barangay, city, province, zipCode, lat, lng }) => {
@@ -1294,11 +1363,35 @@ const Checkout = () => {
       province: province ?? prev.province,
       zipCode: zipCode ?? prev.zipCode,
     }));
-    if (lat != null && lng != null) {
+    if (lat != null && lng != null && isInPhilippinesBounds(lat, lng)) {
       const coords = { lat, lng };
       setAddressCoords(coords);
       setSavedCoords(coords);
+      setAddressVerified(true);
+      setIsOutsideNCR(!isWithinRiderRange(lat, lng, STORE_LAT, STORE_LNG));
     }
+  };
+
+  /** Geocode typed fields — must resolve to land inside PH or payment stays blocked. */
+  const verifyPhilippinesAddress = async (fields) => {
+    const query = buildFullAddress(fields);
+    const params = new URLSearchParams({
+      format: 'json',
+      q: query,
+      countrycodes: 'ph',
+      limit: '1',
+      addressdetails: '1',
+    });
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
+      headers: { 'Accept-Language': 'en', 'User-Agent': 'DKMerchCheckout/1.0' },
+    });
+    const data = await res.json();
+    const hit = data?.[0];
+    if (!hit || !isPhilippinesLandResult(hit)) return null;
+    const lat = parseFloat(hit.lat);
+    const lng = parseFloat(hit.lon);
+    if (!isInPhilippinesBounds(lat, lng)) return null;
+    return { lat, lng, hit };
   };
 
   const isContactComplete = () =>
@@ -1310,7 +1403,10 @@ const Checkout = () => {
     savedAddress.barangay.trim() &&
     savedAddress.city.trim() &&
     savedAddress.province.trim() &&
-    savedAddress.zipCode.trim();
+    savedAddress.zipCode.trim() &&
+    addressVerified &&
+    addressCoords &&
+    isInPhilippinesBounds(addressCoords.lat, addressCoords.lng);
 
   const isFormReady = () =>
     isContactComplete() && isAddressComplete() && !isEditingContact && !isEditingAddress;
@@ -1342,6 +1438,47 @@ const Checkout = () => {
     if (!formData.city.trim()) { showNotification('Please enter your city', 'error'); return; }
     if (!formData.province.trim()) { showNotification('Please enter your province', 'error'); return; }
     if (!formData.zipCode.trim()) { showNotification('Please enter your ZIP code', 'error'); return; }
+
+    setVerifyingAddress(true);
+    let coords = addressCoords;
+    let verified = addressVerified && coords && isInPhilippinesBounds(coords.lat, coords.lng);
+    try {
+      // Always re-check typed address against PH map (blocks fake / foreign / sea)
+      const found = await verifyPhilippinesAddress({
+        address: formData.address,
+        barangay: formData.barangay,
+        city: formData.city,
+        province: formData.province,
+        zipCode: formData.zipCode,
+      });
+      if (!found) {
+        setAddressVerified(false);
+        setAddressCoords(null);
+        showNotification(
+          'Address must be a real, locatable place in the Philippines. Fake or foreign addresses cannot be used for payment.',
+          'error'
+        );
+        return;
+      }
+      coords = { lat: found.lat, lng: found.lng };
+      verified = true;
+      setAddressCoords(coords);
+      setSavedCoords(coords);
+      setAddressVerified(true);
+      setIsOutsideNCR(!isWithinRiderRange(coords.lat, coords.lng, STORE_LAT, STORE_LNG));
+    } catch {
+      setAddressVerified(false);
+      showNotification('Could not verify address. Check your connection and try again.', 'error');
+      return;
+    } finally {
+      setVerifyingAddress(false);
+    }
+
+    if (!verified || !coords) {
+      showNotification('Pin or locate a valid Philippines address before saving.', 'error');
+      return;
+    }
+
     setSavedAddress({
       address: formData.address,
       barangay: formData.barangay,
@@ -1350,6 +1487,7 @@ const Checkout = () => {
       zipCode: formData.zipCode,
     });
     setIsEditingAddress(false);
+    const outside = !isWithinRiderRange(coords.lat, coords.lng, STORE_LAT, STORE_LNG);
     try {
       await saveProfile({
         userId: user?._id || user?.id,
@@ -1359,10 +1497,11 @@ const Checkout = () => {
         city: formData.city,
         province: formData.province,
         zipCode: formData.zipCode,
-        ...(addressCoords ? { addressLat: addressCoords.lat, addressLng: addressCoords.lng } : {}),
+        addressLat: coords.lat,
+        addressLng: coords.lng,
       });
       showNotification(
-        addressCoords && isOutsideNCR
+        outside
           ? 'Address saved — this order will ship via LBC Express.'
           : 'Shipping address saved!',
         'success'
@@ -1373,7 +1512,12 @@ const Checkout = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!isFormReady()) {
-      showNotification('Please fill in and save all required fields', 'error');
+      showNotification(
+        !addressVerified
+          ? 'Use a real, locatable Philippines address (not sea / other country / made-up text) before paying.'
+          : 'Please fill in and save all required fields',
+        'error'
+      );
       if (!isContactComplete()) setIsEditingContact(true);
       if (!isAddressComplete()) setIsEditingAddress(true);
       return;
@@ -1862,6 +2006,7 @@ const Checkout = () => {
                         onSelectSuggestion={handleAddressSelect}
                         savedCoords={savedCoords}
                         onNCRViolation={setIsOutsideNCR}
+                        onPinValidated={setAddressVerified}
                         storeLat={STORE_LAT}
                         storeLng={STORE_LNG}
                       />
@@ -2115,11 +2260,11 @@ const Checkout = () => {
 
                 <button
                   type="submit"
-                  className={`btn btn-primary btn-checkout${(!isFormReady() || loading) ? ' btn-checkout-disabled' : ''}`}
-                  disabled={loading || !isFormReady()}
+                  className={`btn btn-primary btn-checkout${(!isFormReady() || loading || verifyingAddress) ? ' btn-checkout-disabled' : ''}`}
+                  disabled={loading || verifyingAddress || !isFormReady()}
                 >
-                  {loading
-                    ? <><i className="fas fa-spinner fa-spin"></i> Processing...</>
+                  {loading || verifyingAddress
+                    ? <><i className="fas fa-spinner fa-spin"></i> {verifyingAddress ? 'Verifying address…' : 'Processing...'}</>
                     : !isFormReady()
                       ? <><i className="fas fa-lock"></i> Complete Your Info First</>
                       : Number(finalTotal || 0) <= 0
@@ -2130,12 +2275,15 @@ const Checkout = () => {
                   }
                 </button>
 
-                {!isFormReady() && !loading && (
+                {!isFormReady() && !loading && !verifyingAddress && (
                   <p className="form-incomplete-hint">
                     <i className="fas fa-exclamation-circle"></i>{' '}
                     {isEditingContact ? 'Click "Save" on Contact Information to continue.'
-                      : isEditingAddress ? 'Click "Save" on Shipping Address to continue.'
-                      : 'Fill in and save your contact and address info above.'}
+                      : isEditingAddress
+                        ? 'Enter a real Philippines address (or pin on land) then Save — fake / foreign / sea locations cannot be paid.'
+                        : !addressVerified
+                          ? 'Shipping address must be verified on the Philippines map before payment.'
+                          : 'Fill in and save your contact and address info above.'}
                   </p>
                 )}
 

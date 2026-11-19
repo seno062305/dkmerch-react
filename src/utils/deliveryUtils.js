@@ -1,11 +1,68 @@
 /** Shared store-radius / LBC delivery helpers */
 
+/** Approximate Philippines land bbox — pins outside this are blocked. */
+export const PH_BOUNDS = {
+  minLat: 4.2,
+  maxLat: 21.5,
+  minLng: 116.0,
+  maxLng: 127.0,
+};
+
 /** Legacy Metro Manila box — kept only for old labels; prefer store radius. */
 export const NCR_BOUNDS = {
   minLat: 14.35,
   maxLat: 14.80,
   minLng: 120.86,
   maxLng: 121.15,
+};
+
+export const isInPhilippinesBounds = (lat, lng) => {
+  const la = Number(lat);
+  const ln = Number(lng);
+  if (!Number.isFinite(la) || !Number.isFinite(ln)) return false;
+  return (
+    la >= PH_BOUNDS.minLat && la <= PH_BOUNDS.maxLat &&
+    ln >= PH_BOUNDS.minLng && ln <= PH_BOUNDS.maxLng
+  );
+};
+
+/**
+ * Nominatim reverse/search result must be land in the Philippines
+ * (blocks other countries, ocean/sea, and empty water pins).
+ */
+export const isPhilippinesLandResult = (data) => {
+  if (!data || typeof data !== 'object') return false;
+  const a = data.address || {};
+  const cc = String(a.country_code || '').toLowerCase();
+  const display = String(data.display_name || '');
+  if (cc && cc !== 'ph') return false;
+  if (!cc && !/philippines/i.test(display)) return false;
+
+  const cls = String(data.class || '').toLowerCase();
+  const typ = String(data.type || '').toLowerCase();
+  const waterTypes = new Set([
+    'water', 'bay', 'ocean', 'sea', 'strait', 'channel', 'coastline',
+    'river', 'wetland', 'reef', 'lagoon', 'reservoir',
+  ]);
+  if (cls === 'waterway') return false;
+  if (cls === 'natural' && waterTypes.has(typ)) return false;
+  if (cls === 'place' && (typ === 'ocean' || typ === 'sea')) return false;
+  if (/^(philippine sea|south china sea|celebes sea|sulu sea|pacific ocean)\b/i.test(display.trim())) {
+    return false;
+  }
+
+  const hasLocality = !!(
+    a.city || a.town || a.municipality || a.village || a.suburb
+    || a.county || a.state || a.province || a.region || a.city_district
+  );
+  if (!hasLocality) return false;
+
+  const lat = parseFloat(data.lat);
+  const lon = parseFloat(data.lon);
+  if (Number.isFinite(lat) && Number.isFinite(lon) && !isInPhilippinesBounds(lat, lon)) {
+    return false;
+  }
+  return true;
 };
 
 export const LBC_TRACK_URL = 'https://www.lbcexpress.com/track/';
