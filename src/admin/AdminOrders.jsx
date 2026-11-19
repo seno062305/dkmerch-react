@@ -878,7 +878,7 @@ const AdminOrders = () => {
       showNotification(
         result.alreadyApproved
           ? `Order #${shortId} was already approved.`
-          : `Order #${shortId} approved as delivered via LBC. Customer notified.`,
+          : `Order #${shortId} confirmed delivered via LBC. Customer notified.`,
         'success'
       );
     } catch (err) {
