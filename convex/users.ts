@@ -306,11 +306,9 @@ const LOGIN_ALERT_TTL_MS = 60 * 1000;
 const LOGIN_BROADCAST_TTL_MS = 10 * 60 * 1000;
 /**
  * Treat another device as still open if it heartbeated within this window.
- * Mobile browsers pause timers in background — 90s was too short and caused
- * silent takeovers (auto-logout with no Yes/No notice).
+ * Wide enough for mobile background tabs; empty/stale (no heartbeat) → direct login.
  */
-/** Recent heartbeat only — stale/parked leftovers must not look like another live device. */
-const USER_SESSION_ACTIVE_MS = 3 * 60 * 1000;
+const USER_SESSION_ACTIVE_MS = 12 * 60 * 1000;
 
 function isLoginAlertExpired(alert: any, now = Date.now()) {
   if (!alert) return true;

@@ -604,7 +604,7 @@ function getRiderSessionIds(rider: any): string[] {
  * another-device login still shows Yes/No instead of silent auto-logout.
  */
 /** Recent heartbeat only — stale tabs / closed apps must not trigger Yes/No. */
-const RIDER_SESSION_ACTIVE_MS = 3 * 60 * 1000;
+const RIDER_SESSION_ACTIVE_MS = 12 * 60 * 1000;
 
 function hasLiveRiderSession(rider: any, now = Date.now()): boolean {
   const ids = getRiderSessionIds(rider);
@@ -775,9 +775,11 @@ export const loginRider = mutation({
     // Direct login when: no live other device, or stuck wait with no response.
     // Owner tapping "No" (denied) must NOT take over on the next try.
     // Stale/empty sessions → silent activate (no opened/kicked broadcast).
+    // Prefer caller's parked/local sessionId instead of minting a new one.
     if (!otherDeviceLive || stuckPending) {
+      const sid = currentSessionId || sessionId;
       await db.patch(rider._id, {
-        ...activateRiderSessionPatch(sessionId, now, deviceName, location, platform),
+        ...activateRiderSessionPatch(sid, now, deviceName, location, platform),
         loginBroadcast: undefined,
         kickedAt: undefined,
       } as any);
@@ -785,7 +787,7 @@ export const loginRider = mutation({
         success: true,
         riderExists: true,
         rider: safeRider,
-        sessionId,
+        sessionId: sid,
         pendingApproval: false,
         tookOver: false,
         hasPin,

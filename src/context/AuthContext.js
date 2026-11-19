@@ -178,12 +178,43 @@ export const AuthProvider = ({ children }) => {
    * Pending new-device login while THIS device is still signed in.
    * Query stays active during PIN; Yes/No UI waits until unlock (homepage).
    */
+  // Parked shop customer while in rider app — still receive Yes/No for that account
+  const [parkedCustSnap, setParkedCustSnap] = useState(() => {
+    try { return getParkedCustomer(); } catch { return null; }
+  });
+  // Parked rider while browsing shop — still receive Yes/No for that account
+  const [parkedRiderSnap, setParkedRiderSnap] = useState(() => {
+    try { return getParkedRider(); } catch { return null; }
+  });
+  useEffect(() => {
+    const sync = () => {
+      try { setParkedCustSnap(getParkedCustomer()); } catch { setParkedCustSnap(null); }
+      try { setParkedRiderSnap(getParkedRider()); } catch { setParkedRiderSnap(null); }
+    };
+    sync();
+    window.addEventListener("focus", sync);
+    const id = window.setInterval(sync, 4000);
+    return () => {
+      window.removeEventListener("focus", sync);
+      window.clearInterval(id);
+    };
+  }, [isAuthenticated, role]);
+
   const pendingLoginAlert = useQuery(
     api.users.getPendingLoginAlert,
     isAuthenticated
       && user?._id
       && (user.role === "user" || user.role === "admin")
       ? { userId: String(user._id) }
+      : "skip"
+  );
+
+  const pendingParkedCustomerLoginAlert = useQuery(
+    api.users.getPendingLoginAlert,
+    isAuthenticated
+      && user?.role === "rider"
+      && parkedCustSnap?._id
+      ? { userId: String(parkedCustSnap._id) }
       : "skip"
   );
 
@@ -196,6 +227,15 @@ export const AuthProvider = ({ children }) => {
       : "skip"
   );
 
+  const parkedCustomerLoginBroadcast = useQuery(
+    api.users.getLoginBroadcast,
+    isAuthenticated
+      && user?.role === "rider"
+      && parkedCustSnap?._id
+      ? { userId: String(parkedCustSnap._id) }
+      : "skip"
+  );
+
   const pendingRiderLoginAlert = useQuery(
     api.riders.getPendingRiderLoginAlert,
     isAuthenticated && user?.role === "rider" && user?.email
@@ -203,10 +243,27 @@ export const AuthProvider = ({ children }) => {
       : "skip"
   );
 
+  const pendingParkedRiderLoginAlert = useQuery(
+    api.riders.getPendingRiderLoginAlert,
+    // Shop (or guest) with parked rider — still get Yes/No for that rider account
+    user?.role !== "rider"
+      && parkedRiderSnap?.email
+      ? { email: String(parkedRiderSnap.email) }
+      : "skip"
+  );
+
   const riderLoginBroadcast = useQuery(
     api.riders.getRiderLoginBroadcast,
     isAuthenticated && user?.role === "rider" && user?.email
       ? { email: String(user.email) }
+      : "skip"
+  );
+
+  const parkedRiderLoginBroadcast = useQuery(
+    api.riders.getRiderLoginBroadcast,
+    user?.role !== "rider"
+      && parkedRiderSnap?.email
+      ? { email: String(parkedRiderSnap.email) }
       : "skip"
   );
 
@@ -512,6 +569,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   // Show FB-style alert on EVERY device still signed into this account
+  // (incl. parked shop customer while the rider app is open)
   useEffect(() => {
     const current = userRef.current;
     const customerLoading =
@@ -523,16 +581,91 @@ export const AuthProvider = ({ children }) => {
       isAuthenticated
       && current?.role === "rider"
       && pendingRiderLoginAlert === undefined;
+    const parkedCustLoading =
+      isAuthenticated
+      && current?.role === "rider"
+      && parkedCustSnap?._id
+      && pendingParkedCustomerLoginAlert === undefined;
+    const parkedRiderLoading =
+      current?.role !== "rider"
+      && parkedRiderSnap?.email
+      && pendingParkedRiderLoginAlert === undefined;
     // Query still loading — don't clear / skip the notice
-    if (customerLoading || riderLoading) return;
+    if (customerLoading || riderLoading || parkedCustLoading || parkedRiderLoading) return;
 
-    // Strict role split — same email must not show customer alerts on rider (or vice versa)
-    const pending =
-      current?.role === "rider"
-        ? (pendingRiderLoginAlert || null)
-        : (current?.role === "user" || current?.role === "admin")
-          ? (pendingLoginAlert || null)
-          : null;
+    let pending = null;
+    let previousUser = current;
+
+    if (current?.role === "rider") {
+      // Shop account notice while rider has a parked customer session
+      const parkedPending = pendingParkedCustomerLoginAlert || null;
+      const parked = (() => { try { return getParkedCustomer(); } catch { return null; } })();
+      if (
+        parkedPending
+        && parked?._id
+        && String(parked.sessionId || "") !== String(parkedPending.sessionId || "")
+      ) {
+        pending = parkedPending;
+        previousUser = {
+          _id: parked._id,
+          id: parked._id || parked.id,
+          name: parked.name || "",
+          username: parked.username || "",
+          email: parked.email || "",
+          phone: parked.phone || "",
+          role: parked.role === "admin" ? "admin" : "user",
+          ...(parked.sessionId ? { sessionId: String(parked.sessionId) } : {}),
+        };
+      } else {
+        pending = pendingRiderLoginAlert || null;
+        previousUser = current;
+      }
+    } else if (current?.role === "user" || current?.role === "admin") {
+      // Active shop notice first; parked rider notice if shop has none
+      const parkedR = (() => { try { return getParkedRider(); } catch { return null; } })();
+      const parkedRPending = pendingParkedRiderLoginAlert || null;
+      if (pendingLoginAlert) {
+        pending = pendingLoginAlert;
+        previousUser = current;
+      } else if (
+        parkedRPending
+        && parkedR?.email
+        && String(parkedR.sessionId || "") !== String(parkedRPending.sessionId || "")
+      ) {
+        pending = parkedRPending;
+        previousUser = {
+          _id: parkedR._id || parkedR.id,
+          id: parkedR._id || parkedR.id,
+          name: parkedR.name || "Rider",
+          email: parkedR.email,
+          role: "rider",
+          ...(parkedR.sessionId ? { sessionId: String(parkedR.sessionId) } : {}),
+        };
+      } else {
+        pending = null;
+        previousUser = current;
+      }
+    } else if (!current || !isAuthenticated) {
+      // Guest browsing shop with parked rider
+      const parkedR = (() => { try { return getParkedRider(); } catch { return null; } })();
+      const parkedRPending = pendingParkedRiderLoginAlert || null;
+      if (
+        parkedRPending
+        && parkedR?.email
+        && String(parkedR.sessionId || "") !== String(parkedRPending.sessionId || "")
+      ) {
+        pending = parkedRPending;
+        previousUser = {
+          _id: parkedR._id || parkedR.id,
+          id: parkedR._id || parkedR.id,
+          name: parkedR.name || "Rider",
+          email: parkedR.email,
+          role: "rider",
+          ...(parkedR.sessionId ? { sessionId: String(parkedR.sessionId) } : {}),
+        };
+      }
+    }
+
     if (!pending) {
       // Don't wipe a held confirmation (approved/denied local UI); only clear live pending
       setSecurityAlert((prev) => (prev?.mode === "pending" ? null : prev));
@@ -540,9 +673,10 @@ export const AuthProvider = ({ children }) => {
     }
     if (holdLogoutConfirmRef.current) return;
     // Show above PIN too (modal z-index is higher) so the notice never "disappears"
-    if (!current) return;
+    if (!previousUser) return;
     // Don't show Yes/No on the device that is waiting for approval
-    if (String(current.sessionId || "") === String(pending.sessionId || "")) return;
+    if (String(previousUser.sessionId || "") === String(pending.sessionId || "")) return;
+    if (String(current?.sessionId || "") === String(pending.sessionId || "")) return;
     try { clearAuthGate(); } catch { /* ignore */ }
     let shouldToast = false;
     setSecurityAlert((prev) => {
@@ -552,7 +686,7 @@ export const AuthProvider = ({ children }) => {
       if (!same) shouldToast = true;
       return {
         alert: pending,
-        previousUser: current,
+        previousUser,
         mode: "pending",
       };
     });
@@ -569,21 +703,44 @@ export const AuthProvider = ({ children }) => {
       });
     }
     clearLoginAlertDeepLink();
-  }, [pendingLoginAlert, pendingRiderLoginAlert, isAuthenticated, showNotification]);
+  }, [
+    pendingLoginAlert,
+    pendingParkedCustomerLoginAlert,
+    pendingParkedRiderLoginAlert,
+    pendingRiderLoginAlert,
+    parkedCustSnap,
+    parkedRiderSnap,
+    isAuthenticated,
+    showNotification,
+  ]);
 
   // Fan-out toast on ALL devices when account is requested / opened / blocked
   useEffect(() => {
     const current = userRef.current;
-    if (!current || !isAuthenticated) return;
-    const broadcast =
-      current.role === "rider"
-        ? (riderLoginBroadcast || null)
-        : (current.role === "user" || current.role === "admin")
-          ? (loginBroadcast || null)
-          : null;
+    let broadcast = null;
+    if (current?.role === "rider") {
+      if (!isAuthenticated) return;
+      broadcast = parkedCustomerLoginBroadcast || riderLoginBroadcast || null;
+    } else if (current?.role === "user" || current?.role === "admin") {
+      if (!isAuthenticated) return;
+      broadcast = loginBroadcast || parkedRiderLoginBroadcast || null;
+    } else {
+      // Guest with parked rider
+      broadcast = parkedRiderLoginBroadcast || null;
+    }
     if (!broadcast?.kind || !broadcast?.at) return;
     // Waiting new device already has its own pending-approval UI
-    if (String(current.sessionId || "") === String(broadcast.sessionId || "")) return;
+    if (String(current?.sessionId || "") === String(broadcast.sessionId || "")) return;
+    const parkedCust = (() => { try { return getParkedCustomer(); } catch { return null; } })();
+    if (
+      parkedCust?.sessionId
+      && String(parkedCust.sessionId) === String(broadcast.sessionId || "")
+    ) return;
+    const parkedR = (() => { try { return getParkedRider(); } catch { return null; } })();
+    if (
+      parkedR?.sessionId
+      && String(parkedR.sessionId) === String(broadcast.sessionId || "")
+    ) return;
 
     const key = `${broadcast.kind}:${broadcast.sessionId}:${broadcast.at}`;
     if (seenLoginBroadcastRef.current === key) return;
@@ -615,7 +772,7 @@ export const AuthProvider = ({ children }) => {
         }
       } catch { /* ignore */ }
     });
-  }, [loginBroadcast, riderLoginBroadcast, isAuthenticated, showNotification]);
+  }, [loginBroadcast, parkedCustomerLoginBroadcast, parkedRiderLoginBroadcast, riderLoginBroadcast, isAuthenticated, showNotification]);
 
   // Push tap — open Yes/No as soon as pending alert is available (even over PIN)
   useEffect(() => {
