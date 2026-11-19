@@ -290,8 +290,13 @@ async function onOrderConfirmed(
     });
   }
 
-  // Outside NCR → LBC Express only — do not notify motorcycle riders
-  if (isLbc) return;
+  // Outside NCR → LBC Express only — chat order details to customer; skip riders
+  if (isLbc) {
+    await scheduler.runAfter(0, internal.supportChat.sendLbcOrderConfirmedChat, {
+      orderId,
+    });
+    return;
+  }
 
   await scheduler.runAfter(0, internal.sendEmail.sendRiderNewOrderEmail, {
     orderId,
@@ -408,6 +413,12 @@ export const approveLbcDelivery = mutation({
     }
     if (String(order.paymentStatus || "").toLowerCase() !== "paid") {
       return { success: false, message: "Order must be paid before approving LBC delivery." };
+    }
+    if (String(order.orderStatus || "").toLowerCase() === "pending") {
+      return {
+        success: false,
+        message: "Confirm the paid order first — then approve LBC delivery from the LBC tab.",
+      };
     }
 
     const proof = String(photo || "").trim();

@@ -1,7 +1,78 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 
 const normalizeEmail = (email: string) => String(email || "").trim().toLowerCase();
+
+function peso(n: number) {
+  return `₱${Number(n || 0).toLocaleString("en-PH")}`;
+}
+
+function shortOrderId(orderId: string) {
+  return String(orderId || "").slice(-8).toUpperCase();
+}
+
+/** Build the LBC order-details chat body (mirrors admin Order Details). */
+function buildLbcOrderDetailsMessage(order: any) {
+  const shortId = shortOrderId(order.orderId);
+  const name = String(order.customerName || "Customer").trim() || "Customer";
+  const items = Array.isArray(order.items) ? order.items : [];
+  const subtotal = items.reduce(
+    (sum: number, item: any) =>
+      sum + Number(item.price || 0) * Number(item.quantity || item.qty || 1),
+    0,
+  );
+  const shipping = Number(order.shippingFee ?? 0);
+  const total = Number(order.finalTotal ?? order.total ?? subtotal + shipping);
+  const payment =
+    String(order.paymentMethod || "").trim() || "GCash / Maya";
+  const dateSrc = order.paidAt || order.confirmedAt || order.createdAt;
+  const dateLabel = dateSrc
+    ? new Date(dateSrc).toLocaleString("en-PH", {
+        month: "numeric",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        second: "2-digit",
+      })
+    : "—";
+
+  const itemLines = items.length
+    ? items
+        .map((item: any) => {
+          const qty = Number(item.quantity || item.qty || 1);
+          const price = Number(item.price || 0);
+          return `• ${item.name || "Item"} — ${peso(price)} × ${qty}`;
+        })
+        .join("\n")
+    : "• (no items listed)";
+
+  const address = String(order.shippingAddress || "N/A").trim() || "N/A";
+
+  return [
+    `Hi ${name}!`,
+    ``,
+    `Your LBC order has been confirmed by DKMerch. Here's your order summary:`,
+    ``,
+    `📦 Order #${shortId}`,
+    `📅 Date: ${dateLabel}`,
+    `💳 Payment: ${payment} · Paid`,
+    ``,
+    `🛍️ Items (${items.length}):`,
+    itemLines,
+    ``,
+    `Subtotal: ${peso(subtotal)}`,
+    shipping > 0
+      ? `Shipping: ${peso(shipping)}`
+      : `Shipping: LBC — arrange with admin`,
+    `Total: ${peso(total)}`,
+    ``,
+    `📍 Delivery Address:`,
+    address,
+    ``,
+    `We'll ship via LBC Express. Reply here if you have questions!`,
+  ].join("\n");
+}
 
 async function findThreadByEmail(db: any, email: string) {
   return await db
@@ -234,6 +305,73 @@ export const sendAdminMessage = mutation({
     });
     await upsertPresence(db, "admin", now);
     return { success: true };
+  },
+});
+
+/**
+ * After admin confirms a paid LBC order: auto-open/create support chat
+ * and send the order-details summary to the customer.
+ */
+export const sendLbcOrderConfirmedChat = internalMutation({
+  args: { orderId: v.string() },
+  handler: async ({ db }, { orderId }) => {
+    const order = await db
+      .query("orders")
+      .withIndex("by_orderId", (q: any) => q.eq("orderId", orderId))
+      .first();
+    if (!order?.email) return { success: false, reason: "no_email" };
+
+    const email = normalizeEmail(order.email);
+    if (!email) return { success: false, reason: "no_email" };
+
+    const body = buildLbcOrderDetailsMessage(order);
+    const preview = `LBC order #${shortOrderId(orderId)} confirmed`;
+    const now = Date.now();
+    let thread = await findThreadByEmail(db, email);
+
+    if (!thread) {
+      const threadId = await db.insert("supportThreads", {
+        customerEmail: email,
+        customerName: order.customerName || "Customer",
+        customerUserId: order.userId ? String(order.userId) : undefined,
+        lastMessageAt: now,
+        lastMessagePreview: preview,
+        unreadByAdmin: 0,
+        unreadByCustomer: 1,
+        status: "open",
+        updatedAt: now,
+        createdAt: now,
+      });
+      await db.insert("supportMessages", {
+        threadId,
+        senderRole: "admin",
+        senderName: "DKMerch Admin",
+        body,
+        createdAt: now,
+      });
+      await upsertPresence(db, "admin", now);
+      return { success: true, threadId };
+    }
+
+    await db.insert("supportMessages", {
+      threadId: thread._id,
+      senderRole: "admin",
+      senderName: "DKMerch Admin",
+      body,
+      createdAt: now,
+    });
+    await db.patch(thread._id, {
+      customerName: order.customerName || thread.customerName,
+      lastMessageAt: now,
+      lastMessagePreview: preview,
+      unreadByCustomer: (thread.unreadByCustomer || 0) + 1,
+      status: "open",
+      archivedAt: 0,
+      adminOnlineAt: now,
+      updatedAt: now,
+    });
+    await upsertPresence(db, "admin", now);
+    return { success: true, threadId: thread._id };
   },
 });
 

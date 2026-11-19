@@ -555,12 +555,13 @@ const AdminOrders = () => {
     || (isLbcDeliveryOrder(o)
       && String(o.orderStatus || '').toLowerCase() === 'completed'
       && !!o?.deliveryProofPhoto);
-  /** Paid LBC orders waiting for admin Approve + delivery proof. */
+  /** Paid + admin-confirmed LBC orders waiting for Approve + delivery proof. */
   const isLbcAwaitingAccept = (o) => {
     if (!isLbcDeliveryOrder(o) || isCancelledStatus(o) || isLbcApproved(o)) return false;
     if (String(o.paymentStatus || '').toLowerCase() !== 'paid') return false;
     const st = String(o.orderStatus || 'pending').toLowerCase();
-    return st !== 'completed' && st !== 'cancelled';
+    // Only after Confirm Order — unpaid/pending paid orders stay out of LBC tab
+    return st === 'confirmed' || st === 'shipped' || st === 'out_for_delivery';
   };
   /** Approved LBC (delivered with proof). */
   const isLbcAcceptedQueue = (o) => {
@@ -877,7 +878,7 @@ const AdminOrders = () => {
       const ok = await confirm({
         title: 'Confirm this order?',
         message: lbc
-          ? `Confirm order #${shortId} for ${customer}?\n\nThis is outside the rider delivery area (LBC Express). It will NOT appear in the rider Available tab — ship via LBC and send the tracking ID to the customer.`
+          ? `Confirm order #${shortId} for ${customer}?\n\nThis LBC Express order will move to the LBC tab, and the customer will get an automatic chat with their order details.`
           : `Confirm order #${shortId} for ${customer}?\n\nThis marks the order as confirmed and makes it available for riders to scan and accept.`,
         confirmLabel: 'Confirm Order',
         cancelLabel: 'Cancel',
@@ -901,6 +902,12 @@ const AdminOrders = () => {
       await updateOrderStatusMutation({ orderId, status: mapStatusToTrackingStatus(newOrderStatus), orderStatus: newOrderStatus });
       if (selectedOrder?.orderId === orderId) {
         setSelectedOrder(prev => ({ ...prev, orderStatus: newOrderStatus, status: mapStatusToTrackingStatus(newOrderStatus) }));
+      }
+      if (newOrderStatus === 'confirmed' && isLbcOrder(order, storePin)) {
+        showNotification(
+          `Order #${shortId} confirmed — moved to LBC tab. Order details sent to customer chat.`,
+          'success'
+        );
       }
     } catch (err) {
       console.error('Failed to update status:', err);
@@ -1821,7 +1828,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
           {isPaid && currentStatus === 'pending' && !isLbc && <div className="flow-notice success"><i className="fas fa-check-circle"></i><div><strong>Payment received!</strong><p>Confirm order below. Riders can then claim it by scanning the waybill.</p></div></div>}
           {isPaid && currentStatus === 'pending' && isLbc && <div className="flow-notice success"><i className="fas fa-box"></i><div><strong>Payment received — LBC Express</strong><p>Confirm below. This outside-NCR order will not go to riders; ship via LBC and send the tracking ID to the customer.</p></div></div>}
           {isPaid && currentStatus === 'confirmed' && !isLbc && <div className="flow-notice info"><i className="fas fa-motorcycle"></i><div><strong>Processing</strong><p>Order confirmed — visible to riders. They claim it by scanning the waybill.</p></div></div>}
-          {isPaid && currentStatus === 'confirmed' && isLbc && <div className="flow-notice info"><i className="fas fa-truck"></i><div><strong>Processing — LBC</strong><p>Not shown to riders. Ship via LBC Express and send the LBC tracking / order ID to the customer.</p></div></div>}
+          {isPaid && currentStatus === 'confirmed' && isLbc && <div className="flow-notice info"><i className="fas fa-truck"></i><div><strong>Processing — LBC</strong><p>Now in the LBC tab. Customer was sent an order-details chat. Upload delivery proof there to Approve.</p></div></div>}
           {isRiderManaged && <div className="flow-notice purple"><i className="fas fa-shipping-fast"></i><div><strong>Rider is handling delivery</strong><p>Rider confirms via OTP + photo proof.</p></div></div>}
           {order.cancelRequestStatus === 'requested' && (
             <div className="flow-notice warning">
