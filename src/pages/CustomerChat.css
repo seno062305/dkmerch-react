@@ -4,7 +4,8 @@
   left: 0;
   right: 0;
   top: var(--chat-top, 64px);
-  bottom: var(--chat-bottom, calc(64px + env(safe-area-inset-bottom, 0px)));
+  /* Match CustomerBottomNav: 64 content + 4 top pad + safe-area (content-box) */
+  bottom: var(--chat-bottom, calc(68px + env(safe-area-inset-bottom, 0px)));
   height: auto;
   max-height: none;
   background: linear-gradient(180deg, #fff5f8 0%, #f8fafc 45%, #fff 100%);
@@ -237,12 +238,17 @@
 
 .customer-chat-composer {
   display: flex;
+  align-items: center;
   gap: 8px;
-  /* No safe-area pad here — bottom nav already owns it; avoids leftover gap after keyboard */
+  /* Stuck at bottom of chat shell — scrolls stay in messages only */
+  position: sticky;
+  bottom: 0;
+  z-index: 6;
   padding: 10px 12px;
   border-top: 1px solid #eef2f7;
   background: #fff;
   flex-shrink: 0;
+  box-shadow: 0 -6px 16px rgba(15, 23, 42, 0.04);
 }
 
 .customer-chat-composer input[type="text"] {
@@ -291,7 +297,7 @@
 @media (max-width: 768px) {
   .customer-chat-page {
     top: var(--chat-top, 56px);
-    bottom: var(--chat-bottom, calc(64px + env(safe-area-inset-bottom, 0px)));
+    bottom: var(--chat-bottom, calc(68px + env(safe-area-inset-bottom, 0px)));
   }
 }
 

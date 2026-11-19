@@ -66,46 +66,67 @@ const CustomerChat = () => {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   }, []);
 
-  // Pin chat flush between header and bottom nav; when keyboard opens, sit on keyboard top (no gap)
+  // Pin chat between header and bottom nav; keep composer above nav / keyboard
   useEffect(() => {
     const root = document.documentElement;
+    const measureNavH = () => {
+      const nav = document.querySelector('.customer-bottom-nav');
+      if (!nav) return 0;
+      const h = Math.round(nav.getBoundingClientRect().height);
+      // content-box 64 + top pad 4 + safe-area — never undershoot
+      return Math.max(h, 68);
+    };
+
     const sync = () => {
       const mobile = window.matchMedia('(max-width: 768px)').matches;
-      const headerH = mobile ? 56 : 64;
-      const nav = document.querySelector('.customer-bottom-nav');
-      const bnavH = mobile && nav ? Math.round(nav.getBoundingClientRect().height) : 0;
+      const headerEl = document.querySelector('.header, .site-header, header.main-header');
+      const headerH = headerEl
+        ? Math.round(headerEl.getBoundingClientRect().height) || (mobile ? 56 : 64)
+        : (mobile ? 56 : 64);
+      const bnavH = mobile ? (measureNavH() || 68) : 0;
       const vv = window.visualViewport;
       const layoutH = window.innerHeight;
+      const active = document.activeElement;
+      const typing =
+        active &&
+        (active.matches?.('input, textarea') || active.getAttribute?.('contenteditable') === 'true');
 
       if (vv && mobile) {
-        const keyboardOpen = vv.height < layoutH - 140;
+        const inset = Math.max(0, Math.round(layoutH - (vv.offsetTop + vv.height)));
+        // Require real keyboard shrink + focus so browser chrome alone won't tuck composer under nav
+        const keyboardOpen = typing && inset > 120 && vv.height < layoutH - 120;
         if (keyboardOpen) {
+          document.body.classList.add('chat-keyboard-open');
           const top = Math.max(0, Math.round(vv.offsetTop + headerH));
-          const bottom = Math.max(0, Math.round(layoutH - (vv.offsetTop + vv.height)));
           root.style.setProperty('--chat-top', `${top}px`);
-          root.style.setProperty('--chat-bottom', `${bottom}px`);
+          root.style.setProperty('--chat-bottom', `${inset}px`);
           return;
         }
       }
+      document.body.classList.remove('chat-keyboard-open');
       root.style.setProperty('--chat-top', `${headerH}px`);
       root.style.setProperty('--chat-bottom', mobile ? `${bnavH}px` : '0px');
     };
 
     sync();
+    const retryIds = [50, 150, 400].map((ms) => setTimeout(sync, ms));
     const vv = window.visualViewport;
     vv?.addEventListener('resize', sync);
     vv?.addEventListener('scroll', sync);
     window.addEventListener('resize', sync);
     window.addEventListener('orientationchange', sync);
     window.addEventListener('focusin', sync);
-    window.addEventListener('focusout', () => setTimeout(sync, 50));
+    const onFocusOut = () => setTimeout(sync, 80);
+    window.addEventListener('focusout', onFocusOut);
     return () => {
+      retryIds.forEach(clearTimeout);
       vv?.removeEventListener('resize', sync);
       vv?.removeEventListener('scroll', sync);
       window.removeEventListener('resize', sync);
       window.removeEventListener('orientationchange', sync);
       window.removeEventListener('focusin', sync);
-      window.removeEventListener('focusout', sync);
+      window.removeEventListener('focusout', onFocusOut);
+      document.body.classList.remove('chat-keyboard-open');
       root.style.removeProperty('--chat-top');
       root.style.removeProperty('--chat-bottom');
     };

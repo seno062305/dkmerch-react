@@ -132,4 +132,11 @@
     max-width: none !important;
     max-height: calc(70vh - 100px) !important;
   }
+
+  /* While typing in support chat, free the composer above the keyboard */
+  body.chat-keyboard-open .customer-bottom-nav {
+    transform: translateY(110%);
+    pointer-events: none;
+    visibility: hidden;
+  }
 }
