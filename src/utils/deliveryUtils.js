@@ -54,8 +54,11 @@ export const isPhilippinesLandResult = (data) => {
   const hasLocality = !!(
     a.city || a.town || a.municipality || a.village || a.suburb
     || a.county || a.state || a.province || a.region || a.city_district
+    || a.barangay || a.neighbourhood || a.hamlet || a.quarter
+    || a.road || a.pedestrian || a.residential
   );
-  if (!hasLocality) return false;
+  // PH country_code + in-bounds is enough even if locality tags are sparse
+  if (!hasLocality && cc !== 'ph') return false;
 
   const lat = parseFloat(data.lat);
   const lon = parseFloat(data.lon);

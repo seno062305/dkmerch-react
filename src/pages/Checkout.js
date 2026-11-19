@@ -302,7 +302,7 @@ const AddressMapPicker = ({
         province: parsed.province || '',
         zipCode: parsed.zipCode || '',
       };
-      if (!merged.address && !merged.city) {
+      if (!merged.address && !merged.city && !merged.barangay) {
         setStatusText('⚠️ Could not resolve a deliverable address here — move the pin to a street or barangay');
         onPinValidated?.(false);
         setPinSet(false);
@@ -351,15 +351,15 @@ const AddressMapPicker = ({
         format: 'json',
         q: query,
         countrycodes: 'ph',
-        limit: '1',
+        limit: '3',
         addressdetails: '1',
       });
       const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
         headers: { 'Accept-Language': 'en', 'User-Agent': 'DKMerchCheckout/1.0' },
       });
       const data = await res.json();
-      const hit = data?.[0];
-      if (hit && isPhilippinesLandResult(hit)) {
+      const hit = (data || []).find((d) => isPhilippinesLandResult(d));
+      if (hit) {
         const lat = parseFloat(hit.lat);
         const lng = parseFloat(hit.lon);
         if (isInPhilippinesBounds(lat, lng)) {
@@ -1350,8 +1350,8 @@ const Checkout = () => {
       province: fields.province ?? prev.province,
       zipCode: fields.zipCode ?? prev.zipCode,
     }));
-    // Typed changes must be re-verified on Save / pin (blocks fake addresses)
-    setAddressVerified(false);
+    // Keep pin verification if coords already locked to PH land;
+    // Save still re-checks. Don't wipe verified on autofill from pin.
   };
 
   const handleAddressSelect = ({ address, barangay, city, province, zipCode, lat, lng }) => {
@@ -1372,22 +1372,40 @@ const Checkout = () => {
     }
   };
 
-  /** Geocode typed fields — must resolve to land inside PH or payment stays blocked. */
+  /** Reverse-check a pin is still PH land. */
+  const verifyPhilippinesPin = async (lat, lng) => {
+    if (!isInPhilippinesBounds(lat, lng)) return null;
+    const params = new URLSearchParams({
+      format: 'json',
+      lat: String(lat),
+      lon: String(lng),
+      zoom: '18',
+      addressdetails: '1',
+    });
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?${params}`, {
+      headers: { Accept: 'application/json', 'Accept-Language': 'en' },
+    });
+    const data = await res.json();
+    if (!isPhilippinesLandResult(data)) return null;
+    return { lat, lng, hit: data };
+  };
+
+  /** Forward-geocode typed fields — must resolve to land inside PH. */
   const verifyPhilippinesAddress = async (fields) => {
     const query = buildFullAddress(fields);
     const params = new URLSearchParams({
       format: 'json',
       q: query,
       countrycodes: 'ph',
-      limit: '1',
+      limit: '3',
       addressdetails: '1',
     });
     const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
       headers: { 'Accept-Language': 'en', 'User-Agent': 'DKMerchCheckout/1.0' },
     });
     const data = await res.json();
-    const hit = data?.[0];
-    if (!hit || !isPhilippinesLandResult(hit)) return null;
+    const hit = (data || []).find((d) => isPhilippinesLandResult(d));
+    if (!hit) return null;
     const lat = parseFloat(hit.lat);
     const lng = parseFloat(hit.lon);
     if (!isInPhilippinesBounds(lat, lng)) return null;
@@ -1441,27 +1459,31 @@ const Checkout = () => {
 
     setVerifyingAddress(true);
     let coords = addressCoords;
-    let verified = addressVerified && coords && isInPhilippinesBounds(coords.lat, coords.lng);
     try {
-      // Always re-check typed address against PH map (blocks fake / foreign / sea)
-      const found = await verifyPhilippinesAddress({
-        address: formData.address,
-        barangay: formData.barangay,
-        city: formData.city,
-        province: formData.province,
-        zipCode: formData.zipCode,
-      });
+      let found = null;
+      // Prefer verifying the existing map pin (avoids false fails when typed text
+      // doesn't forward-geocode the same as reverse-geocode from the pin).
+      if (coords && isInPhilippinesBounds(coords.lat, coords.lng)) {
+        found = await verifyPhilippinesPin(coords.lat, coords.lng);
+      }
+      if (!found) {
+        found = await verifyPhilippinesAddress({
+          address: formData.address,
+          barangay: formData.barangay,
+          city: formData.city,
+          province: formData.province,
+          zipCode: formData.zipCode,
+        });
+      }
       if (!found) {
         setAddressVerified(false);
-        setAddressCoords(null);
         showNotification(
-          'Address must be a real, locatable place in the Philippines. Fake or foreign addresses cannot be used for payment.',
+          'Use a real Philippines address on land. Sea, other countries, or made-up text cannot be saved.',
           'error'
         );
         return;
       }
       coords = { lat: found.lat, lng: found.lng };
-      verified = true;
       setAddressCoords(coords);
       setSavedCoords(coords);
       setAddressVerified(true);
@@ -1474,8 +1496,8 @@ const Checkout = () => {
       setVerifyingAddress(false);
     }
 
-    if (!verified || !coords) {
-      showNotification('Pin or locate a valid Philippines address before saving.', 'error');
+    if (!coords) {
+      showNotification('Pin a location on the map inside the Philippines, then Save.', 'error');
       return;
     }
 
