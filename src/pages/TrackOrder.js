@@ -1126,7 +1126,7 @@ const TrackOrder = ({ onProductClick }) => {
             {(order.items?.length || 1) > 1 && <span className="order-and-more"> +{order.items.length - 1} more</span>}
           </p>
           <div className="order-card-meta-line">
-            <span className="order-card-price">₱{order.total?.toLocaleString()}</span>
+            <span className="order-card-price">₱{(order.finalTotal ?? order.total ?? 0).toLocaleString('en-PH')}</span>
             {ordDate && (
               <span className="order-card-date">
                 {ordDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
@@ -1484,6 +1484,19 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
   const showDeliverySplit = !!(order.riderInfo && !isCancelled && !isLbcOrder(order));
   const refundAmount     = (order.finalTotal ?? order.total ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2 });
   const { canRefund, hoursLeft, minsLeft, expired } = getRefundWindow(order);
+  const itemsSubtotal = (order.items || []).reduce((sum, item) => {
+    const qty = Number(item.quantity || item.qty || 1);
+    return sum + Number(item.price || 0) * qty;
+  }, 0);
+  const summarySubtotal = Number(order.subtotal ?? itemsSubtotal) || 0;
+  const summaryShipping = Number(order.shippingFee ?? 0) || 0;
+  const summaryDiscount = Number(order.discountAmount ?? 0) || 0;
+  const summaryOriginal = Number(order.total ?? (summarySubtotal + summaryShipping)) || 0;
+  const summaryTotal = Number(
+    order.finalTotal ?? (summaryOriginal - summaryDiscount)
+  ) || 0;
+  const summaryHasPromo = !!(order.promoCode && summaryDiscount > 0);
+  const summaryIsLbc = isLbcOrder(order);
 
   useBodyScrollLock(true);
 
@@ -1820,11 +1833,48 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
                     {isPreOrder && releaseDate && <span className="item-preorder-release"><i className="fas fa-calendar-alt"></i> Expected: {new Date(releaseDate).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}</span>}
                     <span>Qty: {qty}</span>
                   </div>
-                  <div className="item-price">₱{((item.price || product?.price || 0) * qty).toLocaleString()}</div>
+                  <div className="item-price">₱{((item.price || product?.price || 0) * qty).toLocaleString('en-PH')}</div>
                 </div>
               );
             })}
-            <div className="order-items-total"><strong>Total</strong><strong>₱{order.total?.toLocaleString()}</strong></div>
+          </div>
+
+          <div className="customer-order-summary">
+            <h3><i className="fas fa-calculator"></i> Order Summary</h3>
+            <div className="customer-order-totals">
+              <div className="customer-total-row">
+                <span>Subtotal:</span>
+                <strong>₱{summarySubtotal.toLocaleString('en-PH')}</strong>
+              </div>
+              <div className="customer-total-row">
+                <span>Shipping:</span>
+                <strong>
+                  {summaryIsLbc
+                    ? (summaryShipping > 0
+                      ? `₱${summaryShipping.toLocaleString('en-PH')} · LBC`
+                      : 'LBC · arrange with admin')
+                    : summaryShipping === 0
+                      ? 'FREE'
+                      : `₱${summaryShipping.toLocaleString('en-PH')}`}
+                </strong>
+              </div>
+              {summaryHasPromo && (
+                <>
+                  <div className="customer-total-row customer-total-row--promo">
+                    <span><i className="fas fa-tag"></i> Promo ({order.promoCode}):</span>
+                    <strong>−₱{summaryDiscount.toLocaleString('en-PH')}</strong>
+                  </div>
+                  <div className="customer-total-row customer-total-row--muted">
+                    <span>Original:</span>
+                    <strong>₱{summaryOriginal.toLocaleString('en-PH')}</strong>
+                  </div>
+                </>
+              )}
+              <div className="customer-total-row customer-total-row--grand">
+                <span>{summaryHasPromo ? 'Final Charged:' : 'Total:'}</span>
+                <strong>₱{summaryTotal.toLocaleString('en-PH')}</strong>
+              </div>
+            </div>
           </div>
 
         </div>
