@@ -1293,7 +1293,9 @@ const TrackOrder = ({ onProductClick }) => {
               {FILTERS.map(f => (
                 <button key={f.key} className={`orders-tab-btn ${filter === f.key ? 'active' : ''}`} onClick={() => handleFilterClick(f.key)}>
                   <span className="tab-label">{f.label}</span>
-                  {f.count > 0 && <span className={`tab-count ${filter === f.key ? 'tab-count-active' : ''}`}>{f.count}</span>}
+                  <span className={`tab-count ${filter === f.key ? 'tab-count-active' : ''} ${f.count === 0 ? 'tab-count-zero' : ''}`}>
+                    {f.count}
+                  </span>
                 </button>
               ))}
             </div>
@@ -1309,12 +1311,16 @@ const TrackOrder = ({ onProductClick }) => {
               <div className="orders-empty">
                 <i className="fas fa-shopping-bag orders-empty-icon" aria-hidden="true"></i>
                 <h3>{filter === 'active' ? 'No Orders Yet' : `No ${activeTab?.label} Yet`}</h3>
-                <p>{filter === 'active' && 'No active orders. Delivered and cancelled are under their own tabs.'}{filter === 'delivered' && 'No delivered orders.'}{filter === 'cancelled' && 'No cancelled orders.'}</p>
-                {filter === 'active' && (
+                <p>
+                  {filter === 'active' && 'No active orders. Delivered and cancelled are under their own tabs.'}
+                  {filter === 'delivered' && 'No delivered orders.'}
+                  {filter === 'cancelled' && 'No cancelled orders.'}
+                </p>
+                <div className="orders-empty-actions">
                   <button className="btn btn-primary" onClick={() => navigate('/collections')}>
                     <i className="fas fa-shopping-bag"></i> Start Shopping
                   </button>
-                )}
+                </div>
               </div>
             ) : (
               <div className="orders-grid">{filteredOrders.map(order => (
