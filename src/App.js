@@ -296,6 +296,7 @@ function AppContent() {
         const u = new URL(rawUrl, window.location.origin);
         if (u.origin !== window.location.origin) return;
         const open = u.searchParams.get('open') || '';
+        const tab = u.searchParams.get('tab') || '';
         if (open === 'loginAlert') {
           const riderAlert = u.pathname.startsWith('/rider');
           // Same email can be customer + rider — don't cross-open the wrong app's Yes/No
@@ -309,6 +310,16 @@ function AppContent() {
           if (`${location.pathname}${location.search}` !== target) {
             navigate(target, { replace: true });
           }
+          return;
+        }
+        // Push: Account opened / devices → Profile Where you're logged in
+        if (open === 'devices' || (u.pathname.startsWith('/settings') && tab === 'manage')) {
+          try { sessionStorage.setItem('dkmerch_open_devices', '1'); } catch { /* ignore */ }
+          window.dispatchEvent(new Event('dkOpenDevices'));
+          navigate('/settings', {
+            replace: true,
+            state: { activeTab: 'manage', openDevices: open === 'devices' || tab === 'manage' },
+          });
           return;
         }
         const next = `${u.pathname}${u.search}${u.hash}`;

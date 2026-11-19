@@ -44,18 +44,30 @@ function typeBadge(type) {
   }
 }
 
+export function isDevicesNotification(n) {
+  const type = String(n?.type || '');
+  const url = String(n?.url || '');
+  const title = String(n?.title || '');
+  return (
+    type === 'login_alert'
+    || type === 'login_opened'
+    || type === 'login_blocked'
+    || /open=devices/i.test(url)
+    || /open=loginAlert/i.test(url)
+    || /tab=manage/i.test(url)
+    || /opened on another device/i.test(title)
+    || /sign-in request/i.test(title)
+    || /new login/i.test(title)
+  );
+}
+
 export function resolveNotificationTarget(n) {
   const type = String(n?.type || '');
   const url = String(n?.url || '');
   const orderId = String(n?.orderId || '').trim();
 
   // Sign-in / security notices → Where you're logged in
-  if (
-    type === 'login_alert'
-    || type === 'login_opened'
-    || type === 'login_blocked'
-    || /open=loginAlert/i.test(url)
-  ) {
+  if (isDevicesNotification(n)) {
     return '/settings?tab=manage&open=devices';
   }
 
@@ -151,6 +163,15 @@ export function CustomerNotificationPanel({ email, variant = 'dropdown', onNavig
     if (!target) return;
     if (String(n?.type || '') === 'shipping_fee' || target === '/collections') {
       goToCustomerTab(navigate, location.pathname, '/collections');
+      return;
+    }
+    // Account opened / sign-in notices → Profile Account Management + devices modal
+    if (isDevicesNotification(n) || /open=devices/i.test(target)) {
+      try { sessionStorage.setItem('dkmerch_open_devices', '1'); } catch { /* ignore */ }
+      window.dispatchEvent(new Event('dkOpenDevices'));
+      navigate('/settings', {
+        state: { activeTab: 'manage', openDevices: true },
+      });
       return;
     }
     navigate(target);

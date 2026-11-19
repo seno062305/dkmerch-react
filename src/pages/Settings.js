@@ -457,20 +457,55 @@ const Settings = () => {
   // Sign-in notifications deep-link → Account Management + Where you're logged in
   useEffect(() => {
     if (isForgotPasswordFlow || !isAuthenticated) return;
+
+    let manage = false;
+    let openDevices = false;
+
+    try {
+      if (sessionStorage.getItem('dkmerch_open_devices') === '1') {
+        manage = true;
+        openDevices = true;
+        sessionStorage.removeItem('dkmerch_open_devices');
+      }
+    } catch { /* ignore */ }
+
+    if (location.state?.activeTab === 'manage') manage = true;
+    if (location.state?.openDevices) openDevices = true;
+
     let params;
     try {
       params = new URLSearchParams(location.search || '');
     } catch {
-      return;
+      params = new URLSearchParams();
     }
     const tab = String(params.get('tab') || '').toLowerCase();
     const open = String(params.get('open') || '').toLowerCase();
-    if (tab !== 'manage' && open !== 'devices') return;
-    if (tab === 'manage' || open === 'devices') setActiveTab('manage');
-    if (open === 'devices') setShowDevicesModal(true);
-    // Clear query so Back doesn't re-open the modal
-    navigate('/settings', { replace: true });
-  }, [location.search, isAuthenticated, isForgotPasswordFlow, navigate]);
+    if (tab === 'manage') manage = true;
+    if (open === 'devices') openDevices = true;
+
+    if (!manage && !openDevices) return;
+
+    if (manage || openDevices) setActiveTab('manage');
+    if (openDevices) {
+      // Defer so Settings finish mounting before modal portal
+      requestAnimationFrame(() => setShowDevicesModal(true));
+    }
+
+    // Clear query/state so Back doesn't re-open the modal
+    if (location.search || location.state?.openDevices || location.state?.activeTab === 'manage') {
+      navigate('/settings', { replace: true, state: {} });
+    }
+  }, [location.search, location.state, isAuthenticated, isForgotPasswordFlow, navigate]);
+
+  // Same deep-link when already on Settings (notif click dispatches this)
+  useEffect(() => {
+    const onOpenDevices = () => {
+      setActiveTab('manage');
+      setShowDevicesModal(true);
+    };
+    window.addEventListener('dkOpenDevices', onOpenDevices);
+    return () => window.removeEventListener('dkOpenDevices', onOpenDevices);
+  }, []);
 
   useEffect(() => {
     if (isForgotPasswordFlow) return;
