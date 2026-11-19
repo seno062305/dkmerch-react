@@ -33,6 +33,10 @@
 }
 .help-legal-topic h2 {
   margin-bottom: 6px;
+  color: var(--primary-color);
+}
+.help-legal-topic h2 i {
+  color: var(--primary-color);
 }
 .help-legal-updated {
   margin: 0 0 12px;
