@@ -18,6 +18,7 @@ const OrderSuccess = () => {
   const { role, isReady } = useAuth();
   const checkPaymentStatus = useAction(api.payments.checkPaymentStatus);
 
+  // checking | paid | unpaid — never treat "redirect only" as paid
   const [status, setStatus] = useState('checking');
 
   const order = useQuery(
@@ -53,9 +54,8 @@ const OrderSuccess = () => {
     if (order === undefined) return; // still loading
     if (!orderId) return;
 
-    // Already paid — finish flow
+    // Already paid in DB (PayMongo confirmed earlier)
     if (order?.paymentStatus === 'paid') {
-      // Staff accounts should not stay on customer success UI
       if (isReady && (role === 'admin' || role === 'rider')) {
         goPayerHome();
         return;
@@ -64,21 +64,18 @@ const OrderSuccess = () => {
       return;
     }
 
-    // Retry up to 6x with increasing delays to wait for PayMongo to confirm
+    // Poll PayMongo — only mark paid when API confirms a successful payment
     let cancelled = false;
     const verifyWithRetry = async () => {
-      const delays = [2000, 2500, 3000, 3000, 3000, 3000]; // ~16 seconds max
+      const delays = [1500, 2000, 2500, 3000, 3000, 3000]; // ~15s
       for (let attempt = 0; attempt < delays.length; attempt++) {
         if (cancelled) return;
-        await new Promise(res => setTimeout(res, delays[attempt]));
+        await new Promise((res) => setTimeout(res, delays[attempt]));
         if (cancelled) return;
         try {
           const result = await checkPaymentStatus({ orderId });
 
           if (result?.status === 'paid') {
-            // Payment Received email is sent server-side in markOrderPaid
-            // only after PayMongo confirms the payment is fully paid.
-
             if (isReady && (role === 'admin' || role === 'rider')) {
               goPayerHome();
               return;
@@ -86,32 +83,27 @@ const OrderSuccess = () => {
             setStatus('paid');
             return;
           }
-
-          console.log(`Payment check attempt ${attempt + 1}: still pending...`);
         } catch (err) {
           console.warn(`Payment verification attempt ${attempt + 1} failed:`, err);
         }
-
-        // Last attempt — treat PayMongo redirect as paid
-        if (attempt === delays.length - 1) {
-          if (isReady && (role === 'admin' || role === 'rider')) {
-            goPayerHome();
-            return;
-          }
-          setStatus('paid');
-        }
       }
+
+      // Still not paid after retries — do NOT fake success
+      if (cancelled) return;
+      if (isReady && (role === 'admin' || role === 'rider')) {
+        goPayerHome();
+        return;
+      }
+      setStatus('unpaid');
     };
 
     verifyWithRetry();
     return () => { cancelled = true; };
   }, [order, orderId, role, isReady, checkPaymentStatus, goPayerHome]);
 
-  // If staff lands here before order query resolves, still bounce off customer UI
   useEffect(() => {
     if (!isReady || !orderId) return;
     if (role !== 'admin' && role !== 'rider') return;
-    // Give verification a moment, then force home if still here
     const t = setTimeout(() => {
       if (role === 'admin' || role === 'rider') goPayerHome();
     }, 4500);
@@ -129,10 +121,46 @@ const OrderSuccess = () => {
             <i className="fas fa-spinner fa-spin"></i>
             <p>
               {isStaff
-                ? 'Payment received — returning to your dashboard…'
-                : 'Confirming your payment...'}
+                ? 'Checking payment — returning to your dashboard…'
+                : 'Confirming your payment with PayMongo...'}
             </p>
           </div>
+        ) : status === 'unpaid' ? (
+          <>
+            <div className="success-icon-wrap">
+              <div className="success-icon success-icon--pending">
+                <i className="fas fa-clock"></i>
+              </div>
+            </div>
+
+            <h1 className="success-title">Payment not completed</h1>
+            <p className="success-subtitle">
+              We didn’t receive a confirmed payment from PayMongo yet.
+              If you closed or went back before finishing GCash/Maya, your order is still unpaid.
+            </p>
+
+            {orderId && (
+              <div className="success-order-id">
+                <span className="order-id-label">Order ID</span>
+                <span className="order-id-value">{orderId}</span>
+              </div>
+            )}
+
+            <div className="success-actions">
+              <button
+                className="btn-track-order"
+                onClick={() => navigate(`/track-order?orderId=${encodeURIComponent(orderId)}`)}
+              >
+                <i className="fas fa-credit-card"></i> Continue / Pay Now
+              </button>
+              <button
+                className="btn-back-home"
+                onClick={goPayerHome}
+              >
+                <i className="fas fa-home"></i> Back to Home
+              </button>
+            </div>
+          </>
         ) : (
           <>
             <div className="success-icon-wrap">
@@ -180,7 +208,7 @@ const OrderSuccess = () => {
             <div className="success-actions">
               <button
                 className="btn-track-order"
-                onClick={() => navigate(`/track-order?orderId=${orderId}`)}
+                onClick={() => navigate(`/track-order?orderId=${encodeURIComponent(orderId)}`)}
               >
                 <i className="fas fa-list-alt"></i> Track My Order
               </button>

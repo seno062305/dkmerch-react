@@ -51,6 +51,9 @@
   color: #fff;
   font-size: 36px;
 }
+.success-icon--pending {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+}
 
 @keyframes popIn {
   0%   { transform: scale(0); opacity: 0; }

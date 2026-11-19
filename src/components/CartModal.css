@@ -533,8 +533,9 @@ body.cart-modal-open {
 
 .cart-promo-applied {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
+  flex-wrap: wrap;
   background: linear-gradient(135deg, #f0fdf4, #dcfce7);
   border: 1.5px solid #e5e7eb;
   border-radius: 10px;
@@ -544,12 +545,18 @@ body.cart-modal-open {
 
 .cart-promo-applied-left {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   min-width: 0;
+  flex: 1 1 160px;
 }
 
-.cart-promo-icon { font-size: 18px; flex-shrink: 0; }
+.cart-promo-applied-left > div {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.cart-promo-icon { font-size: 18px; flex-shrink: 0; margin-top: 2px; }
 
 .cart-promo-code {
   display: block;
@@ -558,6 +565,8 @@ body.cart-modal-open {
   color: #15803d;
   font-family: 'Courier New', monospace;
   letter-spacing: 1px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .cart-promo-desc {
@@ -566,6 +575,9 @@ body.cart-modal-open {
   color: #4ade80;
   margin-top: 2px;
   font-weight: 500;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.4;
 }
 
 .cart-promo-remove {
@@ -765,6 +777,7 @@ body.cart-modal-open {
   padding: 4px 12px;
   white-space: nowrap;
   flex-shrink: 0;
+  align-self: flex-start;
 }
 
 /* ── Per-item promo styles ── */

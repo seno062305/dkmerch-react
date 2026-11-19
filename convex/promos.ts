@@ -177,6 +177,33 @@ export const createPromo = mutation({
   },
 });
 
+/**
+ * One-shot: set every currently active promo to expire in N minutes (PH time).
+ * Run: npx convex run promos:setActivePromosExpireInMinutes '{"minutes":5}'
+ */
+export const setActivePromosExpireInMinutes = mutation({
+  args: { minutes: v.number() },
+  handler: async ({ db }, { minutes }) => {
+    const mins = Math.max(1, Math.min(1440, Math.floor(Number(minutes) || 5)));
+    const nowMs = Date.now();
+    const endMs = nowMs + mins * 60 * 1000;
+    // Store as Asia/Manila calendar date + time (matches toUtcMs)
+    const ph = new Date(endMs + PH_OFFSET_MS);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const endDate = `${ph.getUTCFullYear()}-${pad(ph.getUTCMonth() + 1)}-${pad(ph.getUTCDate())}`;
+    const endTime = `${pad(ph.getUTCHours())}:${pad(ph.getUTCMinutes())}`;
+
+    const promos = await db.query("promos").collect();
+    const updated: string[] = [];
+    for (const p of promos) {
+      if (!isPromoValid(p, nowMs).valid) continue;
+      await db.patch(p._id, { endDate, endTime, isActive: true });
+      updated.push(String(p.code || p._id));
+    }
+    return { success: true, minutes: mins, endDate, endTime, updated };
+  },
+});
+
 // ── Update promo ──
 export const updatePromo = mutation({
   args: {

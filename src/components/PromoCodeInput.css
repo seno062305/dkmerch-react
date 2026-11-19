@@ -181,19 +181,26 @@
 /* ── Applied state ── */
 .promo-applied-info {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 10px;
 }
 
 .promo-applied-left {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   min-width: 0;
+  flex: 1 1 160px;
 }
 
-.promo-applied-icon { font-size: 20px; flex-shrink: 0; }
+.promo-applied-left > div {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.promo-applied-icon { font-size: 20px; flex-shrink: 0; margin-top: 2px; }
 
 .promo-applied-code {
   display: block;
@@ -202,6 +209,8 @@
   color: #15803d;
   font-family: 'Courier New', monospace;
   letter-spacing: 1px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .promo-applied-desc {
@@ -209,6 +218,9 @@
   font-size: 11px;
   color: #22c55e;
   margin-top: 2px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.4;
 }
 
 .promo-remove-btn {

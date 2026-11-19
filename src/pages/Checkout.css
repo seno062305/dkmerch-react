@@ -1320,9 +1320,10 @@ html { scroll-behavior: smooth; }
 /* Applied promo card in checkout */
 .promo-applied-checkout {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 10px 12px;
   background: linear-gradient(135deg, #f0fdf4, #dcfce7);
   border: 1.5px solid #e5e7eb;
   border-radius: var(--radius-md);
@@ -1331,12 +1332,18 @@ html { scroll-behavior: smooth; }
 
 .promo-applied-left {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
   min-width: 0;
+  flex: 1 1 200px;
 }
 
-.promo-applied-icon { font-size: 22px; flex-shrink: 0; }
+.promo-applied-left > div {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.promo-applied-icon { font-size: 22px; flex-shrink: 0; margin-top: 2px; }
 
 .promo-applied-code {
   display: block;
@@ -1345,6 +1352,8 @@ html { scroll-behavior: smooth; }
   color: #15803d;
   font-family: 'Courier New', monospace;
   letter-spacing: 1.5px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .promo-applied-desc {
@@ -1353,6 +1362,10 @@ html { scroll-behavior: smooth; }
   color: #4ade80;
   margin-top: 3px;
   font-weight: 500;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.45;
+  padding-right: 0;
 }
 
 .promo-remove-checkout {
@@ -1497,9 +1510,10 @@ html { scroll-behavior: smooth; }
 /* ── Promo Applied section (read-only) ── */
 .promo-applied-checkout {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 10px 12px;
   background: linear-gradient(135deg, #f0fdf4, #dcfce7);
   border: 1.5px solid #e5e7eb;
   border-radius: var(--radius-md);
@@ -1508,12 +1522,18 @@ html { scroll-behavior: smooth; }
 
 .promo-applied-left {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
   min-width: 0;
+  flex: 1 1 200px;
 }
 
-.promo-applied-icon { font-size: 22px; flex-shrink: 0; }
+.promo-applied-left > div {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.promo-applied-icon { font-size: 22px; flex-shrink: 0; margin-top: 2px; }
 
 .promo-applied-code {
   display: block;
@@ -1522,6 +1542,8 @@ html { scroll-behavior: smooth; }
   color: #15803d;
   font-family: 'Courier New', monospace;
   letter-spacing: 1.5px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .promo-applied-desc {
@@ -1530,6 +1552,9 @@ html { scroll-behavior: smooth; }
   color: #4ade80;
   margin-top: 3px;
   font-weight: 500;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.45;
 }
 
 .promo-checkout-applied-badge {
@@ -1545,6 +1570,7 @@ html { scroll-behavior: smooth; }
   padding: 5px 12px;
   flex-shrink: 0;
   white-space: nowrap;
+  align-self: flex-start;
 }
 
 /* ── Summary totals extras ── */

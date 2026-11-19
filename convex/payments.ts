@@ -265,21 +265,20 @@ export const checkPaymentStatus = action({
         if (response.ok) {
           const data                = await response.json();
           const attrs               = data.data?.attributes;
-          const sessionStatus       = attrs?.status;
           const paymentIntentStatus = attrs?.payment_intent?.attributes?.status;
           const payments: any[]     = attrs?.payments ?? [];
           const hasSucceededPayment = payments.some((p: any) => p.attributes?.status === "paid");
 
           const paymentMethod = extractPaymentMethod(payments, attrs);
 
-          if (sessionStatus === "completed" || paymentIntentStatus === "succeeded" || hasSucceededPayment) {
+          // Only mark paid when PayMongo confirms a real payment —
+          // never on browser redirect alone (back-out without paying).
+          if (hasSucceededPayment || paymentIntentStatus === "succeeded") {
             await ctx.runMutation(api.payments.markOrderPaid, { orderId, paymentMethod });
             return { status: "paid", paymentMethod };
           }
 
-          if (!hasSucceededPayment) {
-            return { status: "pending", paymentMethod: "" };
-          }
+          return { status: "pending", paymentMethod: "" };
         }
       } catch (err) {
         console.warn("PayMongo API check failed:", err);
