@@ -1288,7 +1288,6 @@ const TrackOrder = ({ onProductClick }) => {
         <div className="container">
           <section className="track-order-page">
             {refundSuccess && <div className="refund-success-toast"><i className="fas fa-check-circle"></i> Refund request submitted! We'll review it within 1-3 business days.</div>}
-            <LbcTrackPanel />
             <div className="orders-tab-bar">
               {FILTERS.map(f => (
                 <button key={f.key} className={`orders-tab-btn ${filter === f.key ? 'active' : ''}`} onClick={() => handleFilterClick(f.key)}>
@@ -1372,7 +1371,6 @@ const TrackOrder = ({ onProductClick }) => {
       <div className="page-header"><div className="container"><h1 className="page-title">Track Your Order</h1><p className="page-description">Enter your email to view your order status</p></div></div>
       <div className="container">
         <section className="track-order-page">
-          <LbcTrackPanel />
           <div className="tracking-form-section">
             <div className="tracking-form">
               <h2>Find My Orders</h2>
@@ -1381,7 +1379,7 @@ const TrackOrder = ({ onProductClick }) => {
                 <button type="submit" className="btn btn-primary"><i className="fas fa-search"></i> Find My Orders</button>
               </form>
             </div>
-            <div className="tracking-info"><h3>How to Track</h3><ul><li><i className="fas fa-check"></i> Enter your email address</li><li><i className="fas fa-check"></i> View all your orders</li><li><i className="fas fa-check"></i> See real-time status</li><li><i className="fas fa-truck"></i> Outside NCR? Admin sends your LBC ID — use LBC Tracker above</li></ul></div>
+            <div className="tracking-info"><h3>How to Track</h3><ul><li><i className="fas fa-check"></i> Enter your email address</li><li><i className="fas fa-check"></i> View all your orders</li><li><i className="fas fa-check"></i> See real-time status</li><li><i className="fas fa-truck"></i> Outside NCR? Use the LBC button on your LBC order card</li></ul></div>
           </div>
           {showTrackedOrders && (
             <div ref={trackedOrdersRef} className="tracked-orders-section">
