@@ -193,6 +193,9 @@ const AdminDashboard = () => {
     const inTransitOrders = validOrders.filter(isInTransit);
     const completedOrders = validOrders.filter(isCompleted);
     const cancelledOrders = validOrders.filter(isCancelled);
+    const walkInOrders = validOrders.filter(
+      (o) => !!o.isWalkIn || String(o.deliveryMethod || '').toLowerCase() === 'store'
+    );
     const outForDeliveryOrders = validOrders.filter(
       (o) => orderStatusOf(o) === 'out_for_delivery'
     );
@@ -218,6 +221,7 @@ const AdminDashboard = () => {
       inTransit:       inTransitOrders.length,
       outForDelivery:  outForDeliveryOrders.length,
       completedOrders: completedOrders.length,
+      walkInOrders:    walkInOrders.length,
       cancelledOrders: cancelledOrders.length,
       otherOrders,
       totalUsers:      regularUsers.length,
@@ -255,6 +259,7 @@ const AdminDashboard = () => {
           { label: 'Processing', value: stats.processing, color: '#2563eb' },
           { label: 'In Transit (Shipped / Out for Delivery)', value: stats.inTransit, color: '#f97316' },
           { label: 'Completed (incl. LBC)', value: stats.completedOrders, color: '#16a34a' },
+          { label: 'Walk-in / Manual', value: stats.walkInOrders, color: '#059669' },
           { label: 'Canceled', value: stats.cancelledOrders, color: '#64748b' },
           ...(stats.otherOrders > 0
             ? [{ label: 'Other / Legacy', value: stats.otherOrders, color: '#94a3b8' }]
@@ -307,6 +312,7 @@ const AdminDashboard = () => {
       { metric: 'In Transit', value: stats.inTransit },
       { metric: 'Out for Delivery', value: stats.outForDelivery },
       { metric: 'Completed Orders (incl. LBC)', value: stats.completedOrders },
+      { metric: 'Walk-in / Manual Sales', value: stats.walkInOrders },
       { metric: 'Canceled', value: stats.cancelledOrders },
       ...(stats.otherOrders > 0 ? [{ metric: 'Other / Legacy', value: stats.otherOrders }] : []),
       { metric: 'Registered Users', value: stats.totalUsers },
@@ -404,7 +410,7 @@ const AdminDashboard = () => {
       label: 'Total Orders',
       value: ordersReady ? String(stats.totalOrders) : null,
       hint: ordersReady
-        ? `${stats.completedOrders} completed · ${stats.pendingConfirm} pending`
+        ? `${stats.completedOrders} completed · ${stats.walkInOrders} walk-in · ${stats.pendingConfirm} pending`
         : 'Loading…',
       color: '#14b8a6',
       tone: 'orders',

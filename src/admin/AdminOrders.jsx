@@ -2717,6 +2717,7 @@ const CancelReasonModal = ({ order, onConfirm, onClose }) => {
 ══════════════════════════════════════ */
 const WalkInRecordModal = ({ onClose, onSubmit }) => {
   useBodyScrollLock(true);
+  const { confirm } = useConfirm();
   const products = useQuery(api.products.getAllProductsAdmin) || [];
   const [search, setSearch] = useState('');
   const [lines, setLines] = useState([]); // { id, name, price, stock, image, quantity }
@@ -2794,11 +2795,31 @@ const WalkInRecordModal = ({ onClose, onSubmit }) => {
 
   const removeLine = (id) => setLines((prev) => prev.filter((l) => l.id !== id));
 
+  const payLabel =
+    paymentMethod === 'gcash' ? 'GCash' : paymentMethod === 'maya' ? 'Maya' : 'Cash';
+
   const handleSave = async () => {
     if (!lines.length) {
       setError('Add at least one product.');
       return;
     }
+    const itemSummary = lines
+      .map((l) => `• ${l.name} × ${l.quantity}`)
+      .join('\n');
+    const ok = await confirm({
+      title: 'Confirm walk-in sale?',
+      message:
+        `Record this walk-in sale?\n\n${itemSummary}\n\n` +
+        `Payment: ${payLabel}\n` +
+        `Total: ₱${Number(total || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n\n` +
+        `Stock will be deducted from inventory.`,
+      confirmLabel: 'Save & Deduct Stock',
+      cancelLabel: 'Cancel',
+      variant: 'primary',
+      icon: 'fa-store',
+    });
+    if (!ok) return;
+
     setSaving(true);
     setError('');
     try {
@@ -2950,7 +2971,6 @@ const WalkInRecordModal = ({ onClose, onSubmit }) => {
                   <option value="cash">Cash</option>
                   <option value="gcash">GCash</option>
                   <option value="maya">Maya</option>
-                  <option value="card">Card</option>
                 </select>
               </label>
               <label>

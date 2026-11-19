@@ -203,7 +203,13 @@ export const createWalkInOrder = mutation({
 
     const subtotal = built.reduce((sum, i) => sum + i.price * i.quantity, 0);
     const now = new Date().toISOString();
-    const paymentMethod = String(args.paymentMethod || "cash").trim() || "cash";
+    const rawPay = String(args.paymentMethod || "cash").trim().toLowerCase();
+    const paymentMethod =
+      rawPay === "gcash" || rawPay.includes("gcash")
+        ? "gcash"
+        : rawPay === "maya" || rawPay.includes("maya") || rawPay.includes("paymaya")
+          ? "maya"
+          : "cash";
     const customerName =
       String(args.customerName || "").trim() || "Walk-in Customer";
     const email =
