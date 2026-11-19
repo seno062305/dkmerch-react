@@ -60,7 +60,8 @@ export async function evaluateOrderStock(db: any, order: any) {
   return { ok: true, message: "Stock available.", shortages: [] as any[] };
 }
 
-async function deductStockForPaidOrder(db: any, order: any) {
+/** Idempotent stock deduct after a paid sale (online or walk-in). */
+export async function deductStockForPaidOrder(db: any, order: any) {
   if (!order || order.stockDeducted) return { deducted: false, skipped: true };
   if (order.isRewardOrder) {
     await db.patch(order._id, { stockDeducted: true, stockIssue: false });
@@ -79,6 +80,8 @@ async function deductStockForPaidOrder(db: any, order: any) {
   await db.patch(order._id, { stockDeducted: true, stockIssue });
   return { deducted: true, stockIssue };
 }
+
+export { findProductForOrderItem };
 
 // ✅ Works in both Node.js and Convex edge runtime (no Buffer dependency)
 function toBase64(str: string): string {

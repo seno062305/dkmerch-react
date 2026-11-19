@@ -26,9 +26,13 @@ const getPaymentMethodLabel = (order) => {
   if (raw === 'gcash' || raw.includes('gcash'))   return { label: 'GCash', brand: 'gcash', color: '#007fff' };
   if (raw === 'maya'  || raw.includes('maya') || raw.includes('paymaya')) return { label: 'Maya', brand: 'maya', color: '#00b4aa' };
   if (raw === 'card'  || raw.includes('card'))    return { label: 'Card', icon: 'fa-credit-card', color: '#6366f1' };
+  if (raw === 'cash' || raw.includes('cash'))     return { label: 'Cash', icon: 'fa-money-bill-wave', color: '#059669' };
   if (raw.includes('paymongo') || raw.includes('online')) return { label: 'GCash / Maya', brands: ['gcash', 'maya'], color: '#6b7280' };
   return { label: order.paymentMethod || '—', icon: 'fa-money-bill', color: '#9ca3af' };
 };
+
+const isWalkInOrder = (o) =>
+  !!o?.isWalkIn || String(o?.deliveryMethod || '').toLowerCase() === 'store';
 
 const REFUND_METHOD_LABELS = {
   gcash: { label: 'GCash', brand: 'gcash', color: '#007fff' },
@@ -505,6 +509,8 @@ const AdminOrders = () => {
   const [lbcApproveOrder, setLbcApproveOrder] = useState(null);
   const [lbcApprovePhoto, setLbcApprovePhoto] = useState('');
   const lbcProofInputRef = useRef(null);
+  const [showWalkInModal, setShowWalkInModal] = useState(false);
+  const createWalkInOrderMutation = useMutation(api.orders.createWalkInOrder);
 
   const validOrders = orders.filter(o => o.orderId && o.items?.length > 0);
 
@@ -637,6 +643,7 @@ const AdminOrders = () => {
     // LBC tab = pipeline only; finished LBC deliveries live under Completed
     lbc:        validOrders.filter((o) => isLbcAwaitingAccept(o)).length,
     completed:  validOrders.filter((o) => isCompletedStatus(o)).length,
+    manual:     validOrders.filter((o) => isWalkInOrder(o)).length,
     refunds:    validOrders.filter(hasAnyRefund).length,
     cancelled:  validOrders.filter((o) => isCancelledStatus(o) || hasAnyCancelRequest(o)).length,
   };
@@ -737,8 +744,10 @@ const AdminOrders = () => {
         // In-transit rider deliveries only — completed go to Completed; LBC under LBC/Completed
         matchesTab = isShippedStatus(order) && !hasCancelRequest(order) && !isLbcDeliveryOrder(order);
       } else if (activeTab === 'completed') {
-        // Rider + LBC successful deliveries
+        // Rider + LBC successful deliveries (+ walk-ins count as completed sales)
         matchesTab = isCompletedStatus(order);
+      } else if (activeTab === 'manual') {
+        matchesTab = isWalkInOrder(order);
       } else if (activeTab === 'lbc') {
         // Left panel = awaiting accept; completed LBC orders are under Completed
         matchesTab = false;
@@ -1107,6 +1116,7 @@ const AdminOrders = () => {
     { key: 'shipped',   icon: 'fa-shipping-fast', label: 'Shipped' },
     { key: 'lbc',       icon: 'fa-truck',         label: 'LBC' },
     { key: 'completed', icon: 'fa-check-circle',  label: 'Completed' },
+    { key: 'manual',    icon: 'fa-store',         label: 'Manual' },
     { key: 'refunds',   dkIcon: DK_ICONS.ordersRefunds, label: 'Refunds' },
     { key: 'cancelled', icon: 'fa-ban',           label: 'Canceled' },
   ];
@@ -1118,6 +1128,7 @@ const AdminOrders = () => {
     shipped: 'No shipped orders',
     lbc: 'Finished LBC deliveries are under Completed',
     completed: 'No completed orders yet',
+    manual: 'No walk-in sales yet — record one above',
     refunds: 'No refunded orders yet',
     cancelled: 'No canceled orders',
   };
@@ -1131,6 +1142,8 @@ const AdminOrders = () => {
               <DkIcon name={DK_ICONS.ordersRefunded} className="orders-dk-icon" size={28} alt="" />
             ) : activeTab === 'lbc' ? (
               <i className="fas fa-truck"></i>
+            ) : activeTab === 'manual' ? (
+              <i className="fas fa-store"></i>
             ) : (
               <i className={`fas ${activeTab === 'cancelled' ? 'fa-ban' : 'fa-inbox'}`}></i>
             )}
@@ -1226,7 +1239,9 @@ const AdminOrders = () => {
                       </td>
                     )}
                     <td data-label="Rider">
-                      {isLbcDeliveryOrder(order) ? (
+                      {isWalkInOrder(order) ? (
+                        <span className="orders-walkin-chip"><i className="fas fa-store"></i> Walk-in</span>
+                      ) : isLbcDeliveryOrder(order) ? (
                         <span className="orders-lbc-chip orders-lbc-chip--rider"><i className="fas fa-truck"></i> LBC</span>
                       ) : order.riderInfo ? (
                         <div style={{ fontSize: '12px' }}><strong>{order.riderInfo.name}</strong><div style={{ color: '#888' }}>{order.riderInfo.plate}</div></div>
@@ -1285,6 +1300,16 @@ const AdminOrders = () => {
       <div className="orders-page-intro">
         <h2>Orders</h2>
         <OrderStatusLegend />
+        <button
+          type="button"
+          className="orders-manual-record-btn"
+          onClick={() => {
+            setActiveTab('manual');
+            setShowWalkInModal(true);
+          }}
+        >
+          <i className="fas fa-cash-register"></i> Manual Record
+        </button>
       </div>
       <div className="orders-tabs">
         {tabs.map((t) => {
@@ -1513,8 +1538,44 @@ const AdminOrders = () => {
         </div>
       ) : (
         <div className="orders-container orders-container--full">
+          {activeTab === 'manual' && (
+            <div className="orders-manual-banner">
+              <div className="orders-manual-banner-copy">
+                <h3><i className="fas fa-store"></i> Walk-in / Manual Record</h3>
+                <p>Record in-store sales — product, quantity, and current price. Stock is deducted when you save.</p>
+              </div>
+              <button
+                type="button"
+                className="orders-manual-record-btn orders-manual-record-btn--solid"
+                onClick={() => setShowWalkInModal(true)}
+              >
+                <i className="fas fa-plus"></i> Record Sale
+              </button>
+            </div>
+          )}
           {renderOrdersTable()}
         </div>
+      )}
+
+      {showWalkInModal && (
+        <WalkInRecordModal
+          onClose={() => setShowWalkInModal(false)}
+          onSubmit={async (payload) => {
+            try {
+              const result = await createWalkInOrderMutation(payload);
+              showNotification(
+                `Walk-in sale recorded · #${formatOrderShortId(result?.orderId || result)} · ₱${Number(result?.total || 0).toLocaleString('en-PH')}`,
+                'success'
+              );
+              setShowWalkInModal(false);
+              setActiveTab('manual');
+            } catch (err) {
+              const msg = String(err?.data || err?.message || err || 'Failed to record sale');
+              showNotification(msg.replace(/^.*Error:\s*/i, '').slice(0, 180), 'error');
+              throw err;
+            }
+          }}
+        />
       )}
 
       {lbcApproveOrder && createPortal(
@@ -2648,6 +2709,293 @@ const CancelReasonModal = ({ order, onConfirm, onClose }) => {
         </div>
       </div>
     </div>
+  );
+};
+
+/* ══════════════════════════════════════
+   Walk-in / Manual Record modal
+══════════════════════════════════════ */
+const WalkInRecordModal = ({ onClose, onSubmit }) => {
+  useBodyScrollLock(true);
+  const products = useQuery(api.products.getAllProductsAdmin) || [];
+  const [search, setSearch] = useState('');
+  const [lines, setLines] = useState([]); // { id, name, price, stock, image, quantity }
+  const [customerName, setCustomerName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [notes, setNotes] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const available = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return products
+      .filter((p) => {
+        if (p.status === 'archived' || p.status === 'hidden') return false;
+        const stock = Number(p.stock);
+        if (Number.isFinite(stock) && stock <= 0) return false;
+        if (!q) return true;
+        return (
+          String(p.name || '').toLowerCase().includes(q)
+          || String(p.category || '').toLowerCase().includes(q)
+        );
+      })
+      .slice(0, 40);
+  }, [products, search]);
+
+  const total = lines.reduce((sum, l) => sum + Number(l.price || 0) * Number(l.quantity || 0), 0);
+
+  const addProduct = (product) => {
+    const id = String(product._id);
+    const stock = Number(product.stock);
+    setLines((prev) => {
+      const existing = prev.find((l) => l.id === id);
+      if (existing) {
+        const nextQty = existing.quantity + 1;
+        if (Number.isFinite(stock) && nextQty > stock) {
+          setError(`Only ${stock} left for ${product.name}`);
+          return prev;
+        }
+        setError('');
+        return prev.map((l) => (l.id === id ? { ...l, quantity: nextQty } : l));
+      }
+      if (Number.isFinite(stock) && stock < 1) {
+        setError(`${product.name} is out of stock`);
+        return prev;
+      }
+      setError('');
+      return [
+        ...prev,
+        {
+          id,
+          name: product.name,
+          price: Number(product.price) || 0,
+          stock: Number.isFinite(stock) ? stock : null,
+          image: product.image || '',
+          quantity: 1,
+        },
+      ];
+    });
+  };
+
+  const setQty = (id, qty) => {
+    const n = Math.max(1, Math.floor(Number(qty) || 1));
+    setLines((prev) =>
+      prev.map((l) => {
+        if (l.id !== id) return l;
+        const max = l.stock != null ? l.stock : n;
+        const quantity = Math.min(n, max);
+        if (quantity < n) setError(`Only ${max} left for ${l.name}`);
+        else setError('');
+        return { ...l, quantity };
+      })
+    );
+  };
+
+  const removeLine = (id) => setLines((prev) => prev.filter((l) => l.id !== id));
+
+  const handleSave = async () => {
+    if (!lines.length) {
+      setError('Add at least one product.');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      await onSubmit({
+        customerName: customerName.trim() || undefined,
+        phone: phone.trim() || undefined,
+        paymentMethod,
+        notes: notes.trim() || undefined,
+        items: lines.map((l) => ({ id: l.id, quantity: l.quantity })),
+      });
+    } catch (err) {
+      const msg = String(err?.data || err?.message || err || '');
+      if (msg) setError(msg.replace(/^\[.*?\]\s*/i, '').slice(0, 200));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return createPortal(
+    <div className="walkin-overlay" onClick={onClose}>
+      <div
+        className="walkin-modal"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="walkin-title"
+      >
+        <div className="walkin-header">
+          <div>
+            <h3 id="walkin-title"><i className="fas fa-cash-register"></i> Manual Record</h3>
+            <p>Walk-in sale — prices match current product prices. Stock deducts on save.</p>
+          </div>
+          <button type="button" className="close-btn" onClick={onClose} aria-label="Close">
+            <i className="fas fa-times"></i>
+          </button>
+        </div>
+
+        <div className="walkin-body">
+          <div className="walkin-col walkin-col--products">
+            <label className="walkin-label">Available products</label>
+            <input
+              type="search"
+              className="walkin-search"
+              placeholder="Search product name or category…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              autoFocus
+            />
+            <div className="walkin-product-list">
+              {available.length === 0 ? (
+                <div className="walkin-empty">No matching products with stock.</div>
+              ) : (
+                available.map((p) => {
+                  const stock = Number(p.stock);
+                  return (
+                    <button
+                      key={p._id}
+                      type="button"
+                      className="walkin-product-row"
+                      onClick={() => addProduct(p)}
+                    >
+                      {p.image ? (
+                        <img src={p.image} alt="" className="walkin-product-thumb" />
+                      ) : (
+                        <span className="walkin-product-thumb walkin-product-thumb--empty">
+                          <i className="fas fa-box"></i>
+                        </span>
+                      )}
+                      <span className="walkin-product-meta">
+                        <strong>{p.name}</strong>
+                        <small>
+                          ₱{Number(p.price || 0).toLocaleString('en-PH')}
+                          {Number.isFinite(stock) ? ` · ${stock} in stock` : ''}
+                        </small>
+                      </span>
+                      <i className="fas fa-plus walkin-product-add"></i>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          <div className="walkin-col walkin-col--cart">
+            <label className="walkin-label">Items in this sale</label>
+            {lines.length === 0 ? (
+              <div className="walkin-empty">Tap a product to add it.</div>
+            ) : (
+              <ul className="walkin-lines">
+                {lines.map((l) => (
+                  <li key={l.id} className="walkin-line">
+                    <div className="walkin-line-info">
+                      <strong>{l.name}</strong>
+                      <small>₱{Number(l.price).toLocaleString('en-PH')} each</small>
+                    </div>
+                    <div className="walkin-line-qty">
+                      <button type="button" onClick={() => setQty(l.id, l.quantity - 1)} disabled={l.quantity <= 1 || saving}>−</button>
+                      <input
+                        type="number"
+                        min={1}
+                        max={l.stock ?? undefined}
+                        value={l.quantity}
+                        onChange={(e) => setQty(l.id, e.target.value)}
+                        disabled={saving}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setQty(l.id, l.quantity + 1)}
+                        disabled={saving || (l.stock != null && l.quantity >= l.stock)}
+                      >
+                        +
+                      </button>
+                    </div>
+                    <strong className="walkin-line-total">
+                      ₱{(l.price * l.quantity).toLocaleString('en-PH')}
+                    </strong>
+                    <button type="button" className="walkin-line-remove" onClick={() => removeLine(l.id)} disabled={saving} aria-label="Remove">
+                      <i className="fas fa-trash"></i>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <div className="walkin-fields">
+              <label>
+                Customer name <em>(optional)</em>
+                <input
+                  type="text"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  placeholder="Walk-in Customer"
+                  disabled={saving}
+                />
+              </label>
+              <label>
+                Phone <em>(optional)</em>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                  placeholder="09XXXXXXXXX"
+                  disabled={saving}
+                />
+              </label>
+              <label>
+                Payment method
+                <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} disabled={saving}>
+                  <option value="cash">Cash</option>
+                  <option value="gcash">GCash</option>
+                  <option value="maya">Maya</option>
+                  <option value="card">Card</option>
+                </select>
+              </label>
+              <label>
+                Notes <em>(optional)</em>
+                <input
+                  type="text"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="e.g. paid at counter"
+                  disabled={saving}
+                  maxLength={200}
+                />
+              </label>
+            </div>
+
+            {error && (
+              <div className="walkin-error">
+                <i className="fas fa-exclamation-circle"></i> {error}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="walkin-footer">
+          <div className="walkin-grand">
+            <span>Total</span>
+            <strong>₱{total.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+          </div>
+          <div className="walkin-footer-actions">
+            <button type="button" className="walkin-cancel" onClick={onClose} disabled={saving}>Cancel</button>
+            <button
+              type="button"
+              className="walkin-submit"
+              onClick={handleSave}
+              disabled={saving || !lines.length}
+            >
+              {saving
+                ? <><i className="fas fa-spinner fa-spin"></i> Saving…</>
+                : <><i className="fas fa-check"></i> Save &amp; Deduct Stock</>}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    getOverlayRoot?.() || document.body
   );
 };
 

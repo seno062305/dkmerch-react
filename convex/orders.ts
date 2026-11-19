@@ -10,6 +10,7 @@ import {
   resetOrderCounter,
 } from "./lib/orderSeq";
 import { insertCustomerNotification } from "./customerNotifications";
+import { deductStockForPaidOrder, findProductForOrderItem } from "./payments";
 
 function shortOrderId(orderId: string): string {
   return String(orderId || "").slice(-8).toUpperCase();
@@ -132,6 +133,116 @@ export const createOrder = mutation({
     const { orderId: _ignored, ...rest } = args;
     await db.insert("orders", { ...rest, orderId, orderSeq });
     return { success: true, orderId, orderSeq };
+  },
+});
+
+/**
+ * Admin Manual Record — in-store / walk-in sale.
+ * Uses current product prices, marks paid + completed, and deducts stock once.
+ */
+export const createWalkInOrder = mutation({
+  args: {
+    customerName: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    email: v.optional(v.string()),
+    paymentMethod: v.string(),
+    notes: v.optional(v.string()),
+    items: v.array(
+      v.object({
+        id: v.string(),
+        quantity: v.number(),
+      })
+    ),
+  },
+  handler: async ({ db }, args) => {
+    const lines = Array.isArray(args.items) ? args.items : [];
+    if (!lines.length) throw new Error("Add at least one product.");
+
+    const built: {
+      id: string;
+      name: string;
+      price: number;
+      image: string;
+      quantity: number;
+      category?: string;
+      isPreOrder?: boolean;
+      releaseDate?: string | null;
+    }[] = [];
+    const shortages: string[] = [];
+
+    for (const line of lines) {
+      const qty = Math.floor(Number(line.quantity) || 0);
+      if (qty <= 0) throw new Error("Quantity must be at least 1.");
+      const product = await findProductForOrderItem(db, { id: line.id });
+      if (!product) throw new Error(`Product not found: ${line.id}`);
+      const stock = Number((product as any).stock);
+      if (Number.isFinite(stock) && stock < qty) {
+        shortages.push(
+          `${(product as any).name || "Item"} (need ${qty}, left ${Math.max(0, stock)})`
+        );
+        continue;
+      }
+      built.push({
+        id: String((product as any)._id),
+        name: String((product as any).name || "Item"),
+        price: Number((product as any).price) || 0,
+        image: String((product as any).image || ""),
+        quantity: qty,
+        category: (product as any).category
+          ? String((product as any).category)
+          : undefined,
+        isPreOrder: !!(product as any).isPreOrder,
+        releaseDate: (product as any).releaseDate ?? null,
+      });
+    }
+
+    if (shortages.length) {
+      throw new Error(`Out of stock: ${shortages.join("; ")}`);
+    }
+    if (!built.length) throw new Error("Add at least one product.");
+
+    const subtotal = built.reduce((sum, i) => sum + i.price * i.quantity, 0);
+    const now = new Date().toISOString();
+    const paymentMethod = String(args.paymentMethod || "cash").trim() || "cash";
+    const customerName =
+      String(args.customerName || "").trim() || "Walk-in Customer";
+    const email =
+      String(args.email || "").trim() || "walkin@dkmerch.local";
+    const phone = String(args.phone || "").trim() || undefined;
+    const notes = String(args.notes || "").trim() || "Walk-in sale (Manual Record)";
+
+    await ensureOrderCounterSeeded(db);
+    const orderSeq = await allocateOrderSeq(db);
+    const orderId = buildOrderId(orderSeq);
+
+    const docId = await db.insert("orders", {
+      orderId,
+      orderSeq,
+      email,
+      customerName,
+      phone,
+      items: built,
+      total: subtotal,
+      subtotal,
+      shippingFee: 0,
+      finalTotal: subtotal,
+      status: "Completed",
+      orderStatus: "completed",
+      deliveryMethod: "store",
+      shippingAddress: "In-store / Walk-in",
+      paymentMethod,
+      paymentStatus: "paid",
+      paidAt: now,
+      deliveryConfirmedAt: now,
+      notes,
+      isWalkIn: true,
+      paymentReceivedEmailSent: true, // no customer email for walk-in placeholder
+    });
+
+    const order = await db.get(docId);
+    await deductStockForPaidOrder(db, order);
+
+    return { success: true, orderId, orderSeq, total: subtotal };
   },
 });
 

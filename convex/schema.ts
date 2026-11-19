@@ -315,6 +315,8 @@ export default defineSchema({
     pointsAwarded:         v.optional(v.boolean()),
     isRewardOrder:         v.optional(v.boolean()),
     rewardTicketCode:      v.optional(v.string()),
+    /** In-store / walk-in sale recorded by admin (Manual Record tab) */
+    isWalkIn:              v.optional(v.boolean()),
     /** Monotonic store-wide order number (1, 2, 3…) — allocated under a Convex lock */
     orderSeq:              v.optional(v.number()),
   })
