@@ -21,10 +21,9 @@ import './Checkout.css';
 // ─── LALAMOVE SHIPPING CONFIG ─────────────────────────────────────────────────
 const LALAMOVE_CONFIG = {
   baseFare:          49,
-  freeKm:            1,
+  freeKm:            1, // first 1 km included in base fare
   ratePerKm:         10,
   maxReasonableKm:   25,
-  extraItemFee:      10,
   heavySurcharge:    50,
   heavyThresholdKg:  10,
   categoryWeights: {
@@ -64,7 +63,6 @@ function calcLalamoveShipping(storeLat, storeLng, lat, lng, cartItems = [], prod
   fee += Math.ceil(chargeableKm) * cfg.ratePerKm;
 
   const totalQty = cartItems.reduce((sum, item) => sum + (item.qty ?? item.quantity ?? 1), 0);
-  if (totalQty > 1) fee += (totalQty - 1) * cfg.extraItemFee;
 
   let totalWeightKg = 0;
   cartItems.forEach(item => {
@@ -88,12 +86,6 @@ function calcLalamoveShipping(storeLat, storeLng, lat, lng, cartItems = [], prod
     });
   } else {
     breakdown.push({ label: `Distance (${km} km — within free ${cfg.freeKm} km)`, amount: 0 });
-  }
-  if (totalQty > 1) {
-    breakdown.push({
-      label:  `Extra items (${totalQty - 1} item${totalQty > 2 ? 's' : ''} × ₱${cfg.extraItemFee})`,
-      amount: (totalQty - 1) * cfg.extraItemFee,
-    });
   }
   if (totalWeightKg > cfg.heavyThresholdKg) {
     breakdown.push({ label: `Heavy load surcharge (${totalWeightKg.toFixed(1)} kg)`, amount: cfg.heavySurcharge });
