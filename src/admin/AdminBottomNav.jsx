@@ -11,6 +11,7 @@ const MORE_LINKS = [
   { to: '/admin/users', icon: 'fa-users', label: 'User Management' },
   { to: '/admin/rewards', icon: 'fa-star', label: 'Rewards' },
   { to: '/admin/settings', icon: 'fa-cog', label: 'Settings' },
+  { to: '/admin/store-details', icon: 'fa-store', label: 'Store Details' },
 ];
 
 const MORE_PATHS = new Set(MORE_LINKS.map((l) => l.to));
@@ -39,7 +40,10 @@ const AdminBottomNav = () => {
   const pendingRedemptions = allRedemptions.filter((r) => r.status === 'pending').length;
 
   const path = location.pathname;
-  const moreActive = MORE_PATHS.has(path) || path.startsWith('/admin/backup');
+  const moreActive =
+    MORE_PATHS.has(path)
+    || path.startsWith('/admin/backup')
+    || path.startsWith('/admin/store-details');
 
   const handleLogout = async () => {
     const ok = await confirm({

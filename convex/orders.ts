@@ -1236,6 +1236,56 @@ export const requestRefund = mutation({
 });
 
 /**
+ * Re-open a damage refund as "requested" so admin can re-test Return Payment.
+ * Does not change orderStatus (e.g. stays completed/delivered).
+ */
+export const reopenRefundRequest = mutation({
+  args: {
+    orderId: v.string(),
+  },
+  handler: async ({ db }, { orderId }) => {
+    const order = await db.query("orders")
+      .withIndex("by_orderId", (q) => q.eq("orderId", orderId))
+      .first();
+    if (!order) return { success: false, error: "Order not found." };
+
+    const now = new Date().toISOString();
+    const amount = Number((order as any).finalTotal ?? (order as any).total ?? (order as any).refundAmount ?? 0);
+    const history = Array.isArray((order as any).refundHistory) ? [...(order as any).refundHistory] : [];
+    history.push({
+      status: "requested",
+      reason: (order as any).refundReason || "damaged",
+      refundMethod: (order as any).refundMethod || "",
+      refundAccountName: (order as any).refundAccountName || "",
+      refundAccountNumber: (order as any).refundAccountNumber || "",
+      refundComment: (order as any).refundComment || "",
+      refundPhotoId: (order as any).refundPhotoId || "",
+      refundAmount: amount,
+      requestedAt: now,
+      adminNote: "",
+      reopenedForTest: true,
+    });
+
+    await db.patch(order._id, {
+      refundStatus: "requested",
+      refundRequestedAt: now,
+      refundResolvedAt: undefined,
+      refundPaidAt: undefined,
+      refundAdminNote: undefined,
+      refundPayStartedAt: undefined,
+      paymongoRefundId: undefined,
+      returnPaymentLinkId: undefined,
+      returnPaymentLinkUrl: undefined,
+      refundAdminProofId: undefined,
+      refundAmount: amount,
+      refundHistory: history,
+    } as any);
+
+    return { success: true, orderId, refundStatus: "requested" };
+  },
+});
+
+/**
  * Reset Return Payment progress so admin can re-test PayMongo
  * (clears false "paid" state after backing out of checkout).
  * Only works while refund is still "requested" / order still pending paid.

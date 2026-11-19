@@ -95,8 +95,8 @@ export const approveSession = mutation({
       user = all.find((u) => String(u.email || "").trim().toLowerCase() === emailNorm) || null;
     }
     if (!user) return { success: false, error: "Account not found." };
-    if (user.role !== "user") {
-      return { success: false, error: "Only customer accounts can use Quick Sign In." };
+    if (user.role !== "user" && user.role !== "admin") {
+      return { success: false, error: "Only customer or admin accounts can use Quick Sign In." };
     }
     if (
       user.status === "suspended"
@@ -108,6 +108,7 @@ export const approveSession = mutation({
       return { success: false, error: "This account cannot sign in right now." };
     }
 
+    const role = user.role === "admin" ? "admin" : "user";
     await db.patch(row._id, {
       status: "approved",
       approvedAt: Date.now(),
@@ -116,7 +117,7 @@ export const approveSession = mutation({
       userName: user.name,
       username: user.username,
       phone: user.phone || "",
-      role: "user",
+      role,
     });
 
     return { success: true };

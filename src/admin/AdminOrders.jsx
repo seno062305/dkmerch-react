@@ -1029,12 +1029,12 @@ const AdminOrders = () => {
     if (newOrderStatus === 'confirmed') {
       const lbc = isLbcOrder(order, storePin);
       const ok = await confirm({
-        title: 'Confirm this order?',
+        title: 'Confirm Order?',
         message: lbc
-          ? `Confirm order #${shortId} for ${customer}?\n\nThis LBC Express order will move to the LBC tab, and the customer will get an automatic chat with their order details.`
-          : `Confirm order #${shortId} for ${customer}?\n\nThis marks the order as confirmed for riders, and the customer will get an automatic chat with their order details.`,
-        confirmLabel: 'Confirm Order',
-        cancelLabel: 'Cancel',
+          ? `Confirm order #${shortId} for ${customer}?\n\n• Moves to LBC tab\n• Customer gets order details in chat\n• Cancel will no longer be available after this`
+          : `Confirm order #${shortId} for ${customer}?\n\n• Visible to riders for pickup\n• Customer gets order details in chat\n• Cancel will no longer be available after this`,
+        confirmLabel: 'Yes, Confirm Order',
+        cancelLabel: 'Back',
         variant: 'primary',
         icon: 'fa-check-circle',
       });

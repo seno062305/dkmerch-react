@@ -59,6 +59,7 @@ import AdminSalesReports from './admin/AdminSalesReports';
 import AdminUsers from './admin/AdminUsers';
 import AdminRiders from './admin/AdminRiders';
 import AdminBackup from './admin/AdminBackup';
+import AdminStoreDetails from './admin/AdminStoreDetails';
 import AdminRewards from './admin/AdminRewards';
 import Checkout from './pages/Checkout';
 import OrderSuccess from './pages/OrderSuccess';
@@ -560,6 +561,7 @@ function AppContent() {
               <Route path="rewards"       element={<AdminRewards />} />
               <Route path="chat"          element={<AdminChat />} />
               <Route path="settings"      element={<AdminBackup />} />
+              <Route path="store-details" element={<AdminStoreDetails />} />
               <Route path="backup"        element={<AdminBackup />} />
             </Route>
           </Routes>

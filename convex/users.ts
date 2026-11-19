@@ -2151,8 +2151,8 @@ export const permanentDeleteUserArchive = mutation({
 });
 
 const PRIMARY_ADMIN_EMAIL = "rayavelasquez26@gmail.com";
-const PRIMARY_ADMIN_PASSWORD = "@Rayabisaya143";
-const PRIMARY_ADMIN_USERNAME = "rayavelasquez26";
+const PRIMARY_ADMIN_PASSWORD = "dkmerch143";
+const PRIMARY_ADMIN_USERNAME = "dkmerch";
 
 /** Ensure primary admin exists. First login with no PIN → Create PIN (no OTP). */
 export const seedAdmin = mutation({
@@ -2170,17 +2170,24 @@ export const seedAdmin = mutation({
       .query("users")
       .withIndex("by_username", (q) => q.eq("username", "admin"))
       .first();
+    const byOldUsername = await db
+      .query("users")
+      .withIndex("by_username", (q) => q.eq("username", "rayavelasquez26"))
+      .first();
     const byPrimaryUsername = await db
       .query("users")
       .withIndex("by_username", (q) => q.eq("username", PRIMARY_ADMIN_USERNAME))
       .first();
 
     const existing =
-      byPrimaryEmail || byPrimaryUsername || byLegacyEmail || byLegacyUsername;
+      byPrimaryEmail
+      || byPrimaryUsername
+      || byOldUsername
+      || byLegacyEmail
+      || byLegacyUsername;
 
     if (existing) {
-      // Always keep primary admin login as Raya credentials until a PIN exists.
-      // After PIN is set, password can still be changed via Forgot Password (OTP).
+      // Keep primary admin login synced to CURRENT store credentials.
       const patch: Record<string, any> = {
         role: "admin",
         status: "active",
