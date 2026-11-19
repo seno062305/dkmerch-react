@@ -1214,7 +1214,7 @@ const AdminProducts = () => {
             {lowStockCount > 0 && <span className="low-pill">{lowStockCount}</span>}
           </button>
         </div>
-        {activeView !== 'catalog' && (
+        {activeView === 'products' && (
           <button className="add-product-btn" onClick={openAdd}>
             <i className="fas fa-plus"></i> Add Product
           </button>
