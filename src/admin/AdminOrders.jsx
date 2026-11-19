@@ -2286,18 +2286,18 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
             )}
             {!isDone && !isRiderManaged && (
               <div className="status-buttons">
-                <div className="status-btn-wrapper">
-                  <button
-                    className={`status-btn confirmed ${currentStatus === 'confirmed' ? 'is-current' : ''} ${!canConfirm ? 'is-blocked' : ''}`}
-                    onClick={() => canConfirm && onUpdateStatus(order.orderId, 'confirmed')}
-                    disabled={!canConfirm}
-                  >
-                    <i className="fas fa-check-circle"></i><span>Confirm Order</span>
-                    {currentStatus === 'confirmed' && <span className="current-indicator">Processing</span>}
-                  </button>
-                  {!isPaid && <div className="block-reason"><i className="fas fa-lock"></i> Awaiting payment</div>}
-                  {isPaid && currentStatus === 'confirmed' && <div className="block-reason" style={{ color: '#0ea5e9' }}><i className="fas fa-check"></i> Processing — order confirmed</div>}
-                </div>
+                {currentStatus === 'pending' && (
+                  <div className="status-btn-wrapper">
+                    <button
+                      className={`status-btn confirmed ${!canConfirm ? 'is-blocked' : ''}`}
+                      onClick={() => canConfirm && onUpdateStatus(order.orderId, 'confirmed')}
+                      disabled={!canConfirm}
+                    >
+                      <i className="fas fa-check-circle"></i><span>Confirm Order</span>
+                    </button>
+                    {!isPaid && <div className="block-reason"><i className="fas fa-lock"></i> Awaiting payment</div>}
+                  </div>
+                )}
                 {isLbc && isPaid && currentStatus === 'confirmed' && (
                   <div className="status-btn-wrapper status-btn-wrapper--lbc-ship">
                     <div className="lbc-ship-box">
