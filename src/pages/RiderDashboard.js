@@ -1677,17 +1677,7 @@ const RiderDashboard = () => {
     <div className="rider-dashboard rider-dashboard--bottom-nav">
       <header className="rider-topbar">
         <div className="rider-topbar-brand">
-          {riderInfo?.riderPhoto ? (
-            <img
-              src={riderInfo.riderPhoto}
-              alt={riderInfo.fullName || 'Rider'}
-              className="rider-topbar-photo"
-            />
-          ) : (
-            <span className="rider-topbar-avatar" aria-hidden="true">
-              <i className="fas fa-user"></i>
-            </span>
-          )}
+          <i className="fas fa-motorcycle" aria-hidden="true"></i>
           <div>
             <strong>DKMerch</strong>
             <span>{tabTitle}</span>

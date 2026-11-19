@@ -33,25 +33,17 @@
   gap: 10px;
 }
 .rider-topbar-brand > i {
-  color: #fc1268;
-  font-size: 20px;
-}
-.rider-topbar-photo,
-.rider-topbar-avatar {
   width: 36px;
   height: 36px;
   border-radius: 50%;
   flex-shrink: 0;
-  object-fit: cover;
-  border: 2px solid #fce7f3;
-}
-.rider-topbar-avatar {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   background: #fdf2f8;
   color: #fc1268;
-  font-size: 16px;
+  font-size: 17px;
+  line-height: 1;
 }
 .rider-info-preview-head {
   display: flex;
@@ -298,11 +290,21 @@
   font-size: 20px;
 }
 .rider-avatar.large {
-  width: 72px;
-  height: 72px;
-  font-size: 72px;
+  width: 88px;
+  height: 88px;
   margin: 0 auto;
   color: #fc1268;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #fdf2f8;
+  border: 3px solid #fce7f3;
+}
+.rider-avatar.large i {
+  font-size: 52px;
+  line-height: 1;
+  display: block;
 }
 .rider-avatar-photo.large {
   width: 88px;
@@ -318,15 +320,15 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  margin-top: 6px;
+  gap: 6px;
+  margin-top: 10px;
 }
 .rider-plate-label {
   font-size: 11px;
-  font-weight: 700;
-  color: #64748b;
+  font-weight: 800;
+  color: #475569;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
 }
 .rider-profile-card-info,
 .rider-profile-settings {
@@ -474,19 +476,23 @@
 .rider-profile-info span { color: #64748b; font-size: 11px; text-transform: capitalize; }
 
 .rider-plate {
-  background: #ffd6e7;
-  color: #fc1268 !important;
-  padding: 4px 12px;
-  border-radius: 8px;
-  font-size: 14px !important;
-  font-weight: 800;
+  background: #fff;
+  color: #9d174d !important;
+  padding: 8px 16px;
+  border-radius: 10px;
+  border: 2px solid #fc1268;
+  font-size: 18px !important;
+  font-weight: 900;
   width: fit-content;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
+  line-height: 1.2;
+  box-shadow: 0 2px 0 #fce7f3;
 }
 .rider-profile-hero .rider-plate {
-  font-size: 16px !important;
-  padding: 6px 14px;
+  font-size: 20px !important;
+  padding: 10px 18px;
+  color: #831843 !important;
 }
 
 .rider-nav {
