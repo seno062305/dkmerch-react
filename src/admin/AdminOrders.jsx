@@ -1427,7 +1427,7 @@ const AdminOrders = () => {
                           <span>{order.items?.length || 0} item(s)</span>
                         </div>
                       </div>
-                      <div className="orders-priority-actions">
+                      <div className={`orders-priority-actions${isLbcPanel ? ' orders-priority-actions--row' : ''}`}>
                         <button type="button" className="view-btn" onClick={() => setSelectedOrder(order)}>
                           <i className="fas fa-eye"></i> {isLbcPanel ? 'View' : 'Review'}
                         </button>
@@ -1435,8 +1435,12 @@ const AdminOrders = () => {
                           <button
                             type="button"
                             className="orders-priority-confirm"
-                            onClick={() => openLbcApprove(order)}
+                            onClick={() => {
+                              if (busy || !canConfirmDeliver) return;
+                              openLbcApprove(order);
+                            }}
                             disabled={busy || !canConfirmDeliver}
+                            aria-disabled={busy || !canConfirmDeliver}
                             title={canConfirmDeliver ? 'Confirm Deliver' : 'Mark as Shipped first from View'}
                           >
                             {busy
@@ -1445,9 +1449,6 @@ const AdminOrders = () => {
                           </button>
                         )}
                       </div>
-                      {isLbcPanel && !canConfirmDeliver && (
-                        <p className="orders-lbc-ship-hint">Mark Shipped in View first</p>
-                      )}
                     </div>
                   );
                 })}

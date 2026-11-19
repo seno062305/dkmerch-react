@@ -259,12 +259,25 @@
   flex-shrink: 0;
   margin-left: auto;
 }
+.orders-priority-actions--row {
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 6px;
+}
 
 .orders-priority-actions .view-btn,
 .orders-priority-confirm {
   width: 100%;
   justify-content: center;
   white-space: nowrap;
+}
+.orders-priority-actions--row .view-btn,
+.orders-priority-actions--row .orders-priority-confirm {
+  width: auto;
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  font-size: 11px;
 }
 
 .orders-priority-confirm {
@@ -280,7 +293,16 @@
   align-items: center;
   gap: 6px;
 }
-.orders-priority-confirm:hover { background: #15803d; }
+.orders-priority-confirm:hover:not(:disabled) { background: #15803d; }
+.orders-priority-confirm:disabled {
+  background: #94a3b8;
+  color: #fff;
+  cursor: not-allowed;
+  opacity: 0.7;
+  box-shadow: none;
+  transform: none;
+  pointer-events: none;
+}
 
 .orders-split-right {
   min-width: 0;
@@ -365,13 +387,6 @@
 }
 .orders-lbc-chip--rider {
   margin-left: 0;
-}
-.orders-lbc-ship-hint {
-  margin: 0;
-  padding: 0 12px 10px;
-  font-size: 11px;
-  font-weight: 600;
-  color: #b45309;
 }
 .orders-priority-card.is-lbc-accepted {
   border-color: #bfdbfe;
