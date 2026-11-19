@@ -25,10 +25,36 @@ async function maxExistingOrderSeq(db: any): Promise<number> {
 
   const recent = await db.query("orders").order("desc").take(200);
   for (const o of recent) {
-    if (isReasonableSeq(o.orderSeq)) max = Math.max(max, o.orderSeq);
-    max = Math.max(max, seqFromOrderId(o.orderId));
+    // Prefer orderSeq (can be renumbered after a data clear). Only parse orderId when seq is missing.
+    if (isReasonableSeq(o.orderSeq)) {
+      max = Math.max(max, o.orderSeq);
+    } else {
+      max = Math.max(max, seqFromOrderId(o.orderId));
+    }
   }
   return max;
+}
+
+/** After wipe/archive of orders — next checkout should start at #1 again. */
+export async function resetOrderCounter(db: any): Promise<{ nextSeq: number }> {
+  const floor = await maxExistingOrderSeq(db);
+  const nextSeq = floor > 0 ? floor + 1 : 1;
+
+  const counters = await db
+    .query("orderCounters")
+    .withIndex("by_name", (q: any) => q.eq("name", "orders"))
+    .collect();
+  counters.sort((a: any, b: any) => a._creationTime - b._creationTime);
+
+  if (counters.length === 0) {
+    await db.insert("orderCounters", { name: "orders", nextSeq });
+  } else {
+    await db.patch(counters[0]._id, { nextSeq });
+    for (let i = 1; i < counters.length; i++) {
+      await db.delete(counters[i]._id);
+    }
+  }
+  return { nextSeq };
 }
 
 /**

@@ -2,6 +2,7 @@
 import { query, mutation, internalMutation, internalQuery } from './_generated/server';
 import { v } from 'convex/values';
 import { internal } from './_generated/api';
+import { resetOrderCounter } from './lib/orderSeq';
 
 // ── QUERIES ──────────────────────────────────────────────────────────────────
 
@@ -505,6 +506,9 @@ export const archiveTable = mutation({
       storageId,
     });
     for (const row of rows) await ctx.db.delete(row._id);
+    if (table === 'orders') {
+      await resetOrderCounter(ctx.db);
+    }
     await ctx.db.insert('activityLogs', {
       action: 'table_archive',
       actorEmail: auth.admin.email,
@@ -532,6 +536,9 @@ export const clearTable = mutation({
     if (!auth.ok) return { success: false, message: auth.message };
     const rows = await ctx.db.query(table as any).collect();
     for (const row of rows) await ctx.db.delete(row._id);
+    if (table === 'orders') {
+      await resetOrderCounter(ctx.db);
+    }
     await ctx.db.insert('activityLogs', {
       action: 'table_wipe',
       actorEmail: auth.admin.email,
