@@ -11,6 +11,16 @@
   padding: 50px 0;
 }
 
+/* Customer Service sits at the top with tight spacing */
+.help-main .help-page {
+  padding-top: 8px;
+}
+.help-customer-service {
+  padding-top: 8px !important;
+  padding-bottom: 16px !important;
+  margin-top: 0;
+}
+
 .help-main .page-title {
   color: var(--dark-color);
   text-shadow: none;
@@ -192,7 +202,7 @@
 
 .help-cs-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 18px;
 }
@@ -248,13 +258,27 @@
 
 /* Responsive */
 @media (max-width: 768px) {
-  .help-section { padding: 35px 0; }
+  .help-section { padding: 28px 0; }
   .help-section h2 { font-size: 17px; }
   .faq-grid, .info-content, .contact-options { grid-template-columns: 1fr; }
-  .help-cs-grid { grid-template-columns: 1fr 1fr; }
+  .help-cs-grid { grid-template-columns: 1fr; }
+  /* Keep Customer Service quick links visible while scrolling Help sections */
+  .help-customer-service {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    background: #fff;
+    padding-top: 6px !important;
+    padding-bottom: 10px !important;
+    border-bottom: 1px solid #eef2f7;
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.04);
+  }
+  .help-cs-intro { margin-bottom: 10px; font-size: 13px; }
+  .help-cs-grid { margin-bottom: 10px; }
 }
 
 @media (max-width: 576px) {
-  .help-section { padding: 25px 0; }
-  .help-section h2 { font-size: 15px; }
+  .help-section { padding: 20px 0; }
+  .help-section h2 { font-size: 15px; margin-bottom: 16px; }
+  .help-main .help-page { padding-top: 4px; }
 }

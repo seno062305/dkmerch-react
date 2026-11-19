@@ -536,7 +536,8 @@ function AppContent() {
 
           {/* Hide footer/nav under PIN / login gate — they steal taps (Reset → Home) */}
           {!hideHeaderFooter && !hideFooterOnly && !showLoginModal && <Footer />}
-          {showCustomerNav && !showLoginModal && <CustomerBottomNav />}
+          {/* Keep mounted across tabs; modals only disable pointer-events via CSS */}
+          {showCustomerNav && <CustomerBottomNav />}
           {showChatBot && !showLoginModal && <DKMerchChatBot />}
           <PointsClaimModal />
 

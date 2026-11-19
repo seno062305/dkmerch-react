@@ -23,7 +23,6 @@ const Help = () => {
     } else {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  // FIXED: use primitives, not the whole location object
   }, [location.hash, location.pathname]);
 
   const handleServiceNav = (e, path) => {
@@ -33,7 +32,6 @@ const Help = () => {
 
   return (
     <main className="help-main">
-      {/* Same page-header structure as PreOrder */}
       <div className="page-header">
         <div className="container">
           <h1 className="page-title">Help Center</h1>
@@ -44,7 +42,6 @@ const Help = () => {
       <div className="container">
         <div className="help-page">
 
-          {/* Customer Service — moved from footer (esp. mobile) */}
           <section id="customer-service" className="help-section help-customer-service">
             <h2><i className="fas fa-headset"></i> Customer Service</h2>
             <p className="help-cs-intro">Quick links and support — same tools that used to live in the site footer.</p>
@@ -60,13 +57,6 @@ const Help = () => {
                   <span>{link.label}</span>
                 </Link>
               ))}
-              <a href="#contact" className="help-cs-card" onClick={(e) => {
-                e.preventDefault();
-                document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              }}>
-                <i className="fas fa-envelope"></i>
-                <span>Contact Us</span>
-              </a>
             </div>
             <div className="help-cs-contact">
               <p><i className="fas fa-phone"></i> +63 912 345 6789</p>
@@ -75,7 +65,6 @@ const Help = () => {
             </div>
           </section>
 
-          {/* FAQ */}
           <section id="faq" className="help-section">
             <h2><i className="fas fa-question-circle"></i> Frequently Asked Questions</h2>
             <div className="faq-grid">
@@ -107,7 +96,6 @@ const Help = () => {
             </div>
           </section>
 
-          {/* Shipping */}
           <section id="shipping" className="help-section">
             <h2><i className="fas fa-shipping-fast"></i> Shipping Information</h2>
             <div className="info-content">
@@ -139,7 +127,6 @@ const Help = () => {
             </div>
           </section>
 
-          {/* Returns / Refunds */}
           <section id="returns" className="help-section">
             <h2><i className="fas fa-undo"></i> Refund Policy</h2>
             <div className="info-content">
@@ -167,36 +154,6 @@ const Help = () => {
                   If admin has not confirmed your order yet, you can request cancellation from Track Order.
                   Paid orders may need GCash/Maya details so an approved refund can be sent.
                 </p>
-              </div>
-              <div className="info-card">
-                <h3>Other concerns</h3>
-                <p>Email <a href="mailto:dkmerchtest@gmail.com">dkmerchtest@gmail.com</a> or use Live Chat (login required).</p>
-              </div>
-            </div>
-          </section>
-
-          {/* Contact */}
-          <section id="contact" className="help-section contact-section">
-            <h2><i className="fas fa-envelope"></i> Still Need Help?</h2>
-            <p>Our customer support team is here to assist you!</p>
-            <div className="contact-options">
-              <div className="contact-option">
-                <i className="fas fa-envelope"></i>
-                <h3>Email Us</h3>
-                <p>dkmerchtest@gmail.com</p>
-                <p className="response-time">Response within 24 hours</p>
-              </div>
-              <div className="contact-option">
-                <i className="fas fa-phone"></i>
-                <h3>Call Us</h3>
-                <p>+63 912 345 6789</p>
-                <p className="response-time">Mon-Sat: 9AM-6PM</p>
-              </div>
-              <div className="contact-option">
-                <i className="fab fa-facebook-messenger"></i>
-                <h3>Live Chat</h3>
-                <p>Chat with us on Facebook</p>
-                <p className="response-time">Mon-Sat: 9AM-6PM</p>
               </div>
             </div>
           </section>
