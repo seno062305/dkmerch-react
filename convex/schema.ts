@@ -252,9 +252,13 @@ export default defineSchema({
       /** Rider device brand/model (e.g. Chrome on Infinix Hot 40) */
       deviceLabel: v.optional(v.string()),
       riderName: v.optional(v.string()),
+      /** Optional photo proof (data URL) for this failed attempt */
+      photo: v.optional(v.string()),
       at: v.string(),
     }))),
     deliveryFailedAttemptCount: v.optional(v.number()),
+    /** True when order closed after 3 failed attempts (Completed · Failed Delivery) */
+    deliveryFailedFinal: v.optional(v.boolean()),
     cancelReason: v.optional(v.string()),
     cancelRequestStatus: v.optional(v.string()),
     cancelRequestReason: v.optional(v.string()),

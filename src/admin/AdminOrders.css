@@ -763,6 +763,25 @@
   color: #a8a29e;
   font-weight: 600;
 }
+.failed-attempt-admin-photo-wrap {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.failed-attempt-admin-photo {
+  width: 88px;
+  height: 66px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #fdba74;
+}
+.failed-attempt-admin-photo-wrap a {
+  font-size: 12px;
+  font-weight: 700;
+  color: #fc1268;
+  text-decoration: none;
+}
 
 .customer-note-box {
   margin-top: 14px;

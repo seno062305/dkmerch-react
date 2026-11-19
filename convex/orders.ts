@@ -521,7 +521,7 @@ const FAILED_ATTEMPT_REASONS: Record<string, string> = {
   no_answer: "Cannot be reached",
 };
 
-/** Rider reports unsuccessful delivery handoff (max 3). Keeps order out_for_delivery. */
+/** Rider reports unsuccessful delivery handoff (max 3). 3rd attempt → Failed Delivery completed. */
 export const reportFailedDeliveryAttempt = mutation({
   args: {
     orderId: v.string(),
@@ -535,6 +535,8 @@ export const reportFailedDeliveryAttempt = mutation({
     address: v.optional(v.string()),
     /** Rider phone/browser label (e.g. Chrome on Infinix) */
     deviceLabel: v.optional(v.string()),
+    /** Optional photo proof (data URL / base64) */
+    photo: v.optional(v.string()),
   },
   handler: async ({ db, scheduler }, args) => {
     const order = await db
@@ -547,8 +549,8 @@ export const reportFailedDeliveryAttempt = mutation({
     if (status !== "out_for_delivery") {
       return { success: false, message: "Order must be out for delivery." };
     }
-    if (order.deliveryOtpVerified || status === "completed") {
-      return { success: false, message: "Order already delivered." };
+    if (order.deliveryOtpVerified || (order as any).deliveryFailedFinal) {
+      return { success: false, message: "Order already closed." };
     }
 
     const existing: any[] = Array.isArray(order.deliveryFailedAttempts)
@@ -570,12 +572,27 @@ export const reportFailedDeliveryAttempt = mutation({
         requiresReason: true,
       };
     }
-    if (reasonCode && FAILED_ATTEMPT_REASONS[reasonCode]) {
+    if (reasonCode === "other") {
+      reason = reason.slice(0, 280);
+      if (!reason) {
+        return {
+          success: false,
+          message: "Type the other reason for this failed attempt.",
+          requiresReason: true,
+        };
+      }
+    } else if (reasonCode && FAILED_ATTEMPT_REASONS[reasonCode]) {
       reason = FAILED_ATTEMPT_REASONS[reasonCode];
     }
     if (!reason) {
       return { success: false, message: "Select a valid reason for this failed attempt." };
     }
+
+    const photoRaw = args.photo ? String(args.photo) : "";
+    if (photoRaw && photoRaw.length > 900_000) {
+      return { success: false, message: "Photo is too large. Please use a smaller image." };
+    }
+    const photo = photoRaw || "";
 
     const timelineMsg =
       `Delivery attempt was unsuccessful : Recipient Request Reschedule Delivery — Reason: ${reason}`;
@@ -601,15 +618,43 @@ export const reportFailedDeliveryAttempt = mutation({
         : {}),
       ...(address ? { address } : {}),
       ...(deviceLabel ? { deviceLabel } : {}),
+      ...(photo ? { photo } : {}),
       riderName,
       at,
     };
     existing.push(entry);
 
-    await db.patch(order._id, {
+    const isFinalFail = existing.length >= FAILED_ATTEMPT_MAX;
+    const patch: Record<string, unknown> = {
       deliveryFailedAttempts: existing,
       deliveryFailedAttemptCount: existing.length,
-    });
+    };
+    if (isFinalFail) {
+      patch.orderStatus = "completed";
+      patch.status = "Failed Delivery";
+      patch.deliveryFailedFinal = true;
+      patch.deliveryConfirmedAt = at;
+    }
+    await db.patch(order._id, patch as any);
+
+    if (isFinalFail) {
+      const pickups = await db.query("pickupRequests").collect();
+      for (const p of pickups) {
+        if (
+          String(p.orderId) === String(args.orderId)
+          && ["approved", "out_for_delivery", "scanned", "pending"].includes(String(p.status || ""))
+        ) {
+          await db.patch(p._id, { status: "completed" });
+        }
+      }
+      const locs = await db
+        .query("riderLocations")
+        .withIndex("by_orderId", (q) => q.eq("orderId", String(args.orderId)))
+        .collect();
+      for (const loc of locs) {
+        await db.patch(loc._id, { isTracking: false, updatedAt: Date.now() } as any);
+      }
+    }
 
     const shortId = shortOrderId(args.orderId);
     const customer = order.customerName || "Customer";
@@ -617,6 +662,7 @@ export const reportFailedDeliveryAttempt = mutation({
     const placeLabel = address || "map pin (tap to view)";
     const attemptLabel = `Attempt ${attempt}/${FAILED_ATTEMPT_MAX}`;
     const devicePart = deviceLabel ? ` · Device: ${deviceLabel}` : "";
+    const finalPart = isFinalFail ? " · Order closed as Failed Delivery (3/3)." : "";
 
     await db.insert("riderNotifications", {
       type: "delivery_failed_attempt",
@@ -625,7 +671,7 @@ export const reportFailedDeliveryAttempt = mutation({
       total: Number(order.finalTotal ?? order.total ?? 0),
       message:
         `⚠️ ${riderName} reported failed delivery (${attemptLabel}) for Order #${shortId} · ${customer}. ` +
-        `Last seen: ${placeLabel}${devicePart} · ${timelineMsg}`,
+        `Last seen: ${placeLabel}${devicePart} · ${timelineMsg}${finalPart}`,
       createdAt: at,
       read: false,
       lat,
@@ -636,18 +682,24 @@ export const reportFailedDeliveryAttempt = mutation({
     });
 
     if (order.email) {
+      const title = isFinalFail
+        ? `Failed Delivery · #${shortId}`
+        : `Delivery attempt unsuccessful · #${shortId}`;
+      const body = isFinalFail
+        ? `${timelineMsg} This order is now closed after 3 unsuccessful attempts.`
+        : timelineMsg;
       await notifyCustomerInApp(db, {
         email: order.email,
-        type: "delivery_failed_attempt",
-        title: `Delivery attempt unsuccessful · #${shortId}`,
-        body: timelineMsg,
+        type: isFinalFail ? "delivery_failed_final" : "delivery_failed_attempt",
+        title,
+        body,
         url: `/track-order?order=${encodeURIComponent(args.orderId)}`,
         orderId: args.orderId,
       });
       await scheduler.runAfter(0, internal.webPush.sendToEmail, {
         email: order.email,
-        title: `Delivery attempt unsuccessful · #${shortId}`,
-        body: timelineMsg,
+        title,
+        body,
         url: `/track-order?order=${encodeURIComponent(args.orderId)}`,
       });
     }
@@ -657,6 +709,7 @@ export const reportFailedDeliveryAttempt = mutation({
       attempt,
       maxAttempts: FAILED_ATTEMPT_MAX,
       reason: reason || null,
+      finalizedFailed: isFinalFail,
     };
   },
 });

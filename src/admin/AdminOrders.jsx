@@ -718,12 +718,18 @@ const AdminOrders = () => {
     return filteredOrders.slice(start, start + pageSize);
   }, [filteredOrders, page, pageSize]);
 
-  const getStatusColor = (status) => {
+  const getStatusColor = (status, order = null) => {
+    if (order?.deliveryFailedFinal || String(order?.status || status || '').toLowerCase() === 'failed delivery') {
+      return '#dc2626';
+    }
     const colors = { pending: '#ffc107', confirmed: '#0ea5e9', shipped: '#6366f1', out_for_delivery: '#f97316', completed: '#28a745', cancelled: '#dc3545' };
     return colors[status] || '#6c757d';
   };
 
-  const getStatusLabel = (status) => {
+  const getStatusLabel = (status, order = null) => {
+    if (order?.deliveryFailedFinal || String(order?.status || status || '').toLowerCase() === 'failed delivery') {
+      return 'Failed Delivery';
+    }
     const labels = {
       pending: 'Pending',
       confirmed: 'Processing',
@@ -1058,7 +1064,7 @@ const AdminOrders = () => {
                     </td>
                     <td data-label="Payment"><span className={`payment-badge ${order.paymentStatus === 'paid' ? 'paid' : 'pending'}`}>{order.paymentStatus === 'paid' ? 'Paid' : 'Pending'}</span></td>
                     <td data-label="Method"><span className="method-badge" style={{ color: pm.color, display: 'inline-flex', alignItems: 'center', gap: 6 }}><PaymentMethodMark pm={pm} /> {pm.label}</span></td>
-                    <td data-label="Status"><span className="status-badge" style={{ backgroundColor: getStatusColor(order.orderStatus) }}>{getStatusLabel(order.orderStatus)}</span></td>
+                    <td data-label="Status"><span className="status-badge" style={{ backgroundColor: getStatusColor(order.orderStatus, order) }}>{getStatusLabel(order.orderStatus, order)}</span></td>
                     {activeTab === 'refunds' && (
                       <td data-label="Request">
                         {order.refundStatus === 'approved'  && <span className="refund-table-badge refund-table-approved"><i className="fas fa-check-circle"></i> Refund Approved</span>}
@@ -1458,7 +1464,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
           <div>
             <h2>Order #{formatOrderShortId(order)}</h2>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
-              <span className="status-badge" style={{ backgroundColor: getStatusColor(order.orderStatus) }}>{getStatusLabel(order.orderStatus)}</span>
+              <span className="status-badge" style={{ backgroundColor: getStatusColor(order.orderStatus, order) }}>{getStatusLabel(order.orderStatus, order)}</span>
               <span className={`payment-badge ${isPaid ? 'paid' : 'pending'}`}>{isPaid ? 'Paid' : 'Payment Pending'}</span>
               <span className="method-badge-pill" style={{ color: pm.color, borderColor: pm.color + '44', display: 'inline-flex', alignItems: 'center', gap: 6 }}><PaymentMethodMark pm={pm} /> {pm.label}</span>
               {hasPromo && <span className="promo-admin-pill"><i className="fas fa-tag"></i> {order.promoCode}</span>}
@@ -1588,6 +1594,12 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                               View on map
                             </a>
                           )}
+                        </div>
+                      )}
+                      {a?.photo && (
+                        <div className="failed-attempt-admin-photo-wrap">
+                          <img src={a.photo} alt={`Failed attempt ${a?.attempt || idx + 1}`} className="failed-attempt-admin-photo" />
+                          <a href={a.photo} target="_blank" rel="noopener noreferrer">Open photo</a>
                         </div>
                       )}
                     </div>

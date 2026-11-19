@@ -968,6 +968,31 @@
 
 .timeline-item.cancelled-step .timeline-marker i { color: white; }
 
+.timeline-fail-photo-btn {
+  margin-top: 8px;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.timeline-fail-photo {
+  width: 96px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #fecaca;
+  display: block;
+}
+.timeline-fail-photo-btn span {
+  font-size: 11px;
+  font-weight: 700;
+  color: #c2410c;
+}
 .timeline-item.failed-attempt-step .timeline-marker {
   background: #0d9488;
   border-color: white;

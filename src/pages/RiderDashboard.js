@@ -930,6 +930,9 @@ const RiderDashboard = () => {
   const [failingId, setFailingId]                   = useState(null);
   const [failReasonOpen, setFailReasonOpen]         = useState(null);
   const [failReasonCode, setFailReasonCode]         = useState('');
+  const [failReasonOther, setFailReasonOther]       = useState('');
+  const [failReasonPhoto, setFailReasonPhoto]       = useState('');
+  const failPhotoInputRef = useRef(null);
   const [notifyingId, setNotifyingId]               = useState(null);
   const [acceptingId, setAcceptingId]               = useState(null);
   const [pickupDateFrom, setPickupDateFrom]         = useState('');
@@ -1461,8 +1464,9 @@ const RiderDashboard = () => {
 
   const FAILED_ATTEMPT_MAX = 3;
   const FAILED_REASON_OPTIONS = [
-    { code: 'customer_no_show', label: 'Customer did not show up / not at the address' },
-    { code: 'cannot_be_reached', label: 'Cannot be reached' },
+    { code: 'customer_no_show', label: 'Customer did not show up / not at the address', icon: 'fa-user-slash' },
+    { code: 'cannot_be_reached', label: 'Cannot be reached', icon: 'fa-phone-slash' },
+    { code: 'other', label: 'Other reason', icon: 'fa-pen' },
   ];
 
   const getFailedAttemptCount = (order) => {
@@ -1471,7 +1475,14 @@ const RiderDashboard = () => {
     return Array.isArray(order.deliveryFailedAttempts) ? order.deliveryFailedAttempts.length : 0;
   };
 
-  const submitFailedAttempt = async (delivery, { reasonCode = '', reason = '' } = {}) => {
+  const clearFailReasonForm = () => {
+    setFailReasonOpen(null);
+    setFailReasonCode('');
+    setFailReasonOther('');
+    setFailReasonPhoto('');
+  };
+
+  const submitFailedAttempt = async (delivery, { reasonCode = '', reason = '', photo = '' } = {}) => {
     const order = findOrderLoose(allOrders, delivery.orderId);
     if (!order) {
       setOtpErrors((p) => ({ ...p, [delivery._id]: '⏳ Order data is still loading. Please wait a moment and try again.' }));
@@ -1514,23 +1525,30 @@ const RiderDashboard = () => {
         riderName: riderInfo.fullName || user?.name || 'Rider',
         ...(address ? { address } : {}),
         ...(deviceLabel ? { deviceLabel } : {}),
+        ...(photo ? { photo } : {}),
       });
       if (!result?.success) {
         if (result?.requiresReason) {
           setFailReasonOpen(delivery);
-          setFailReasonCode('');
-          showNotification('Select a reason for this failed attempt.', 'warning');
+          showNotification(result?.message || 'Select a reason for this failed attempt.', 'warning');
         } else {
           showNotification(result?.message || 'Could not report failed attempt.', 'error');
         }
         return;
       }
-      setFailReasonOpen(null);
-      setFailReasonCode('');
-      showNotification(
-        `Failed attempt ${nextAttempt}/${FAILED_ATTEMPT_MAX} reported with reason. Admin & customer notified.`,
-        'success'
-      );
+      clearFailReasonForm();
+      if (result?.finalizedFailed) {
+        await stopTrackingOnDelivery(delivery.orderId).catch(() => {});
+        showNotification(
+          `Failed Delivery · 3/3 attempts. Order moved to Completed as Failed Delivery.`,
+          'warning'
+        );
+      } else {
+        showNotification(
+          `Failed attempt ${nextAttempt}/${FAILED_ATTEMPT_MAX} reported. Admin & customer notified.`,
+          'success'
+        );
+      }
     } catch (err) {
       console.error(err);
       showNotification('Failed to report attempt. Please try again.', 'error');
@@ -1542,12 +1560,25 @@ const RiderDashboard = () => {
   const handleFailedAttemptClick = (delivery) => {
     const order = findOrderLoose(allOrders, delivery.orderId);
     const used = getFailedAttemptCount(order);
-    if (used >= FAILED_ATTEMPT_MAX) {
+    if (used >= FAILED_ATTEMPT_MAX || order?.deliveryFailedFinal) {
       showNotification('Maximum of 3 failed attempts already reached for this order.', 'warning');
       return;
     }
     setFailReasonOpen(delivery);
     setFailReasonCode('');
+    setFailReasonOther('');
+    setFailReasonPhoto('');
+  };
+
+  const handleFailPhotoSelect = (file) => {
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      showNotification('Photo must be under 5MB.', 'warning');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => setFailReasonPhoto(String(e.target?.result || ''));
+    reader.readAsDataURL(file);
   };
 
   const confirmFailedAttemptWithReason = async () => {
@@ -1556,17 +1587,26 @@ const RiderDashboard = () => {
       showNotification('Select a reason for this failed attempt.', 'warning');
       return;
     }
+    const otherText = String(failReasonOther || '').trim();
+    if (failReasonCode === 'other' && !otherText) {
+      showNotification('Type the other reason.', 'warning');
+      return;
+    }
     const order = findOrderLoose(allOrders, failReasonOpen.orderId);
     const nextAttempt = getFailedAttemptCount(order) + 1;
     const opt = FAILED_REASON_OPTIONS.find((o) => o.code === failReasonCode);
+    const reasonLabel = failReasonCode === 'other' ? otherText : (opt?.label || failReasonCode);
     const shortId = String(failReasonOpen.orderId || '').slice(-8).toUpperCase();
+    const finalNote = nextAttempt >= FAILED_ATTEMPT_MAX
+      ? '\n\nThis is attempt 3/3 — order will move to Completed as Failed Delivery.'
+      : '';
     const ok = await confirm({
       title: `Failed attempt ${nextAttempt}/${FAILED_ATTEMPT_MAX}?`,
       message:
-        `Order #${shortId}\n\nReason: ${opt?.label || failReasonCode}\n\n` +
+        `Order #${shortId}\n\nReason: ${reasonLabel}\n\n` +
         `Customer timeline will show:\n` +
-        `"Delivery attempt was unsuccessful : Recipient Request Reschedule Delivery — Reason: ${opt?.label || failReasonCode}"\n\n` +
-        `Your GPS pin goes to admin as proof.`,
+        `"Delivery attempt was unsuccessful : Recipient Request Reschedule Delivery — Reason: ${reasonLabel}"\n\n` +
+        `Your GPS pin${failReasonPhoto ? ' + photo' : ''} goes to admin as proof.${finalNote}`,
       confirmLabel: 'Submit Failed Attempt',
       cancelLabel: 'Back',
       variant: 'danger',
@@ -1575,7 +1615,8 @@ const RiderDashboard = () => {
     if (!ok) return;
     await submitFailedAttempt(failReasonOpen, {
       reasonCode: failReasonCode,
-      reason: opt?.label || '',
+      reason: reasonLabel,
+      photo: failReasonPhoto || '',
     });
   };
 
@@ -2230,19 +2271,19 @@ const RiderDashboard = () => {
       )}
 
       {failReasonOpen && createPortal(
-        <div className="rider-fail-reason-overlay" onClick={() => !failingId && setFailReasonOpen(null)}>
+        <div className="rider-fail-reason-overlay" onClick={() => !failingId && clearFailReasonForm()}>
           <div className="rider-fail-reason-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="fail-reason-title">
             <div className="rider-fail-reason-header">
               <h3 id="fail-reason-title">
                 <i className="fas fa-exclamation-triangle"></i>{' '}
                 Failed Attempt {(getFailedAttemptCount(findOrderLoose(allOrders, failReasonOpen.orderId)) + 1)}/{FAILED_ATTEMPT_MAX}
               </h3>
-              <button type="button" className="rider-fail-reason-close" onClick={() => !failingId && setFailReasonOpen(null)} aria-label="Close">
+              <button type="button" className="rider-fail-reason-close" onClick={() => !failingId && clearFailReasonForm()} aria-label="Close">
                 <i className="fas fa-times"></i>
               </button>
             </div>
             <p className="rider-fail-reason-desc">
-              Order #{String(failReasonOpen.orderId || '').slice(-8).toUpperCase()} — select why delivery failed. Reason + reschedule note will appear on the customer timeline. Your GPS pin is sent to admin as proof.
+              Order #{String(failReasonOpen.orderId || '').slice(-8).toUpperCase()} — select why delivery failed. Reason{failReasonPhoto ? ', photo,' : ''} and reschedule note appear on the customer timeline. GPS pin goes to admin as proof.
             </p>
             <div className="rider-fail-reason-options">
               {FAILED_REASON_OPTIONS.map((opt) => (
@@ -2253,21 +2294,80 @@ const RiderDashboard = () => {
                   onClick={() => setFailReasonCode(opt.code)}
                   disabled={!!failingId}
                 >
-                  <i className={`fas ${opt.code === 'cannot_be_reached' ? 'fa-phone-slash' : 'fa-user-slash'}`}></i>
+                  <i className={`fas ${opt.icon}`}></i>
                   <span>{opt.label}</span>
                   {failReasonCode === opt.code && <i className="fas fa-check-circle"></i>}
                 </button>
               ))}
             </div>
+            {failReasonCode === 'other' && (
+              <div className="rider-fail-other-wrap">
+                <label htmlFor="fail-other-reason">Other reason</label>
+                <textarea
+                  id="fail-other-reason"
+                  className="rider-fail-other-input"
+                  rows={3}
+                  maxLength={280}
+                  placeholder="Type the reason here…"
+                  value={failReasonOther}
+                  onChange={(e) => setFailReasonOther(e.target.value)}
+                  disabled={!!failingId}
+                />
+                <span className="rider-fail-other-count">{String(failReasonOther || '').length}/280</span>
+              </div>
+            )}
+            <div className="rider-fail-photo-wrap">
+              <label className="rider-fail-photo-label"><i className="fas fa-camera"></i> Photo proof <em>(optional)</em></label>
+              <button
+                type="button"
+                className={`rider-fail-photo-drop ${failReasonPhoto ? 'has-photo' : ''}`}
+                onClick={() => failPhotoInputRef.current?.click()}
+                disabled={!!failingId}
+              >
+                {failReasonPhoto ? (
+                  <span className="rider-fail-photo-preview-wrap">
+                    <img src={failReasonPhoto} alt="Failed attempt proof" className="rider-fail-photo-preview" />
+                    <span className="rider-fail-photo-change">Change photo</span>
+                  </span>
+                ) : (
+                  <span className="rider-fail-photo-placeholder">
+                    <i className="fas fa-cloud-upload-alt"></i>
+                    Tap to upload image
+                  </span>
+                )}
+              </button>
+              <input
+                ref={failPhotoInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                style={{ display: 'none' }}
+                onChange={(e) => handleFailPhotoSelect(e.target.files?.[0])}
+              />
+              {failReasonPhoto && (
+                <button
+                  type="button"
+                  className="rider-fail-photo-remove"
+                  onClick={() => setFailReasonPhoto('')}
+                  disabled={!!failingId}
+                >
+                  Remove photo
+                </button>
+              )}
+            </div>
             <div className="rider-fail-reason-actions">
-              <button type="button" className="rider-fail-reason-cancel" onClick={() => setFailReasonOpen(null)} disabled={!!failingId}>
+              <button type="button" className="rider-fail-reason-cancel" onClick={clearFailReasonForm} disabled={!!failingId}>
                 Cancel
               </button>
               <button
                 type="button"
                 className="rider-fail-reason-submit"
                 onClick={confirmFailedAttemptWithReason}
-                disabled={!failReasonCode || !!failingId}
+                disabled={
+                  !failReasonCode
+                  || (failReasonCode === 'other' && !String(failReasonOther || '').trim())
+                  || !!failingId
+                }
               >
                 {failingId
                   ? <><i className="fas fa-spinner fa-spin"></i> Submitting...</>

@@ -35,12 +35,16 @@ const MyOrders = () => {
   };
 
   const getDisplayStatus = (order) => {
+    if (order?.deliveryFailedFinal || String(order?.status || '').toLowerCase() === 'failed delivery') {
+      return 'Failed Delivery';
+    }
     const s = order.orderStatus || order.status || 'pending';
     const labels = {
       pending: 'Processing', confirmed: 'Confirmed', shipped: 'Shipped',
       out_for_delivery: 'Out for Delivery', completed: 'Delivered',
       cancelled: 'Cancelled', Processing: 'Processing', Confirmed: 'Confirmed',
       Shipped: 'Shipped', Delivered: 'Delivered', Cancelled: 'Cancelled',
+      'Failed Delivery': 'Failed Delivery',
     };
     return labels[s] || s;
   };

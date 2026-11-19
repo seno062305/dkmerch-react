@@ -311,7 +311,25 @@ const RejectApplicationModal = ({ app, onConfirm, onClose }) => {
 // ─────────────────────────────────────────────────────────────
 // Status + Live badges
 // ─────────────────────────────────────────────────────────────
+const getFailAttemptCount = (order) => {
+  if (!order) return 0;
+  if (typeof order.deliveryFailedAttemptCount === 'number') return order.deliveryFailedAttemptCount;
+  return Array.isArray(order.deliveryFailedAttempts) ? order.deliveryFailedAttempts.length : 0;
+};
+
+const isFailedDeliveryOrder = (order) =>
+  !!order?.deliveryFailedFinal
+  || String(order?.status || '').toLowerCase() === 'failed delivery';
+
 const StatusBadge = ({ order }) => {
+  if (isFailedDeliveryOrder(order)) {
+    return (
+      <span className="ar-status-badge" style={{ background: '#dc2626' }}>
+        <i className="fas fa-times-circle" style={{ marginRight: 4 }} />
+        Failed Delivery
+      </span>
+    );
+  }
   const s = (order.orderStatus || order.status || '').toLowerCase();
   const map = {
     confirmed:        { label: 'Confirmed', icon: DK_ICONS.completed, bg: '#059669' },
@@ -330,6 +348,21 @@ const StatusBadge = ({ order }) => {
       </span>
     )
     : <span className="ar-status-badge" style={{ background: '#6b7280' }}>{s}</span>;
+};
+
+const AttemptBadge = ({ order }) => {
+  const n = getFailAttemptCount(order);
+  if (n <= 0) return null;
+  const maxed = n >= 3 || isFailedDeliveryOrder(order);
+  return (
+    <span
+      className={`ar-attempt-badge ${maxed ? 'ar-attempt-badge--max' : ''}`}
+      title={`Failed attempts ${n}/3`}
+    >
+      <i className="fas fa-redo-alt" />
+      {n}/3
+    </span>
+  );
 };
 
 const LiveBadge = ({ orderId }) => {
@@ -1098,6 +1131,33 @@ const ActiveDeliveryDetailModal = ({ order, onClose, onOpenMap }) => {
               )}
           </div>
 
+          {Array.isArray(order.deliveryFailedAttempts) && order.deliveryFailedAttempts.length > 0 && (
+            <div className="ar-section ar-section-full">
+              <div className="ar-section-title">
+                <i className="fas fa-exclamation-triangle" /> Failed Attempts
+                <AttemptBadge order={order} />
+              </div>
+              <div className="ar-fail-list">
+                {order.deliveryFailedAttempts.map((a, idx) => (
+                  <div key={idx} className="ar-fail-card">
+                    <div className="ar-fail-card-top">
+                      <strong>Attempt {a?.attempt || idx + 1}/3</strong>
+                      <span>{a?.at ? new Date(a.at).toLocaleString('en-PH') : '—'}</span>
+                    </div>
+                    <p>{a?.reason
+                      ? `Reason: ${a.reason}`
+                      : 'Delivery attempt unsuccessful — reschedule requested.'}</p>
+                    {a?.photo && (
+                      <a href={a.photo} target="_blank" rel="noopener noreferrer" className="ar-fail-photo-link">
+                        <img src={a.photo} alt={`Attempt ${a?.attempt || idx + 1} proof`} className="ar-fail-photo" />
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="ar-section ar-section-full ar-gps-compact">
             <div className="ar-section-title">📍 GPS Tracking</div>
             <div className="ar-map-btn-row">
@@ -1115,6 +1175,7 @@ const ActiveDeliveryDetailModal = ({ order, onClose, onOpenMap }) => {
 
 const CompletedDeliveryDetailModal = ({ order, onClose, onRemove }) => {
   const riderInfo = order.riderInfo || {};
+  const failed = isFailedDeliveryOrder(order);
   const deliveredAt = order.deliveryConfirmedAt
     ? new Date(order.deliveryConfirmedAt).toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
     : null;
@@ -1141,8 +1202,26 @@ const CompletedDeliveryDetailModal = ({ order, onClose, onRemove }) => {
           )}
           {deliveredAt && (
             <div className="ar-completed-row">
-              <span className="ar-info-label">Delivered</span>
-              <span className="ar-info-value ar-delivered-time">✅ {deliveredAt}</span>
+              <span className="ar-info-label">{failed ? 'Closed' : 'Delivered'}</span>
+              <span className="ar-info-value ar-delivered-time">{failed ? '⚠️' : '✅'} {deliveredAt}</span>
+            </div>
+          )}
+          {Array.isArray(order.deliveryFailedAttempts) && order.deliveryFailedAttempts.length > 0 && (
+            <div className="ar-fail-list" style={{ marginTop: 12 }}>
+              {order.deliveryFailedAttempts.map((a, idx) => (
+                <div key={idx} className="ar-fail-card">
+                  <div className="ar-fail-card-top">
+                    <strong>Attempt {a?.attempt || idx + 1}/3</strong>
+                    <span>{a?.at ? new Date(a.at).toLocaleString('en-PH') : '—'}</span>
+                  </div>
+                  <p>{a?.reason ? `Reason: ${a.reason}` : 'Unsuccessful delivery attempt'}</p>
+                  {a?.photo && (
+                    <a href={a.photo} target="_blank" rel="noopener noreferrer" className="ar-fail-photo-link">
+                      <img src={a.photo} alt={`Attempt ${a?.attempt || idx + 1} proof`} className="ar-fail-photo" />
+                    </a>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -1166,6 +1245,7 @@ const ActiveOrderRow = ({ order, onViewDetails }) => {
         <div className="ar-list-id-line">
           <span className="ar-order-id">#{order.orderId?.slice(-8).toUpperCase()}</span>
           <StatusBadge order={order} />
+          <AttemptBadge order={order} />
           <LiveBadge orderId={order.orderId} />
         </div>
         <div className="ar-list-meta">
@@ -1183,15 +1263,17 @@ const ActiveOrderRow = ({ order, onViewDetails }) => {
 
 const CompletedOrderRow = ({ order, onViewDetails }) => {
   const riderInfo = order.riderInfo || {};
+  const failed = isFailedDeliveryOrder(order);
   const deliveredAt = order.deliveryConfirmedAt
     ? new Date(order.deliveryConfirmedAt).toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
     : null;
   return (
-    <button type="button" className="ar-list-row ar-list-row--completed" onClick={() => onViewDetails(order)}>
+    <button type="button" className={`ar-list-row ar-list-row--completed ${failed ? 'ar-list-row--failed' : ''}`} onClick={() => onViewDetails(order)}>
       <div className="ar-list-main">
         <div className="ar-list-id-line">
           <span className="ar-order-id">#{order.orderId?.slice(-8).toUpperCase()}</span>
           <StatusBadge order={order} />
+          {failed && <AttemptBadge order={order} />}
         </div>
         <div className="ar-list-meta">
           <span>{order.customerName || '—'}</span>
@@ -1206,7 +1288,7 @@ const CompletedOrderRow = ({ order, onViewDetails }) => {
           {deliveredAt && (
             <>
               <span className="ar-list-dot">·</span>
-              <span className="ar-delivered-time">{deliveredAt}</span>
+              <span className="ar-delivered-time">{failed ? `Closed ${deliveredAt}` : deliveredAt}</span>
             </>
           )}
         </div>
@@ -1240,8 +1322,6 @@ const AdminRiders = () => {
   const allPickupRequests = useQuery(api.pickupRequests.getAllPickupRequests) ?? [];
   const allOrders         = useQuery(api.orders.getAllOrders)                 ?? [];
 
-  const completedStatuses = ['completed', 'delivered'];
-
   const matchesDateFilter = (order) => {
     if (!startDate && !endDate) return true;
     const ts = order._creationTime || order.createdAt || 0;
@@ -1251,12 +1331,20 @@ const AdminRiders = () => {
     return true;
   };
 
+  const isCompletedDelivery = (order) => {
+    if (isFailedDeliveryOrder(order)) return true;
+    const s = String(order.orderStatus || order.status || '').toLowerCase();
+    return s === 'completed' || s === 'delivered' || s === 'failed delivery';
+  };
+
   const activeDeliveryItems = useMemo(() => (
     allPickupRequests
       .filter(req => req.status === 'approved' || req.status === 'out_for_delivery')
       .map(req => {
         const order = allOrders.find(o => o.orderId === req.orderId);
         if (!order) return null;
+        // Hide from Active once finalized as Failed Delivery
+        if (isFailedDeliveryOrder(order) || isCompletedDelivery(order)) return null;
         return { ...order, riderInfo: { name: req.riderName || '', phone: req.riderPhone || '', plate: req.riderPlate || '', email: req.riderEmail || '' }, _pickupReq: req };
       })
       .filter(Boolean)
@@ -1266,7 +1354,7 @@ const AdminRiders = () => {
 
   const completedOrders = useMemo(() => (
     allOrders
-      .filter(o => completedStatuses.includes((o.orderStatus || o.status || '').toLowerCase()))
+      .filter(o => isCompletedDelivery(o))
       .filter(o => !hiddenCompleted.includes(o._id))
       .filter(o => matchesDateFilter(o))
       .sort((a, b) => {

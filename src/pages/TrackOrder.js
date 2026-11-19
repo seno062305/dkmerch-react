@@ -837,18 +837,23 @@ const TrackOrder = ({ onProductClick }) => {
       'Out for Delivery': 'status-delivery', 'out_for_delivery': 'status-delivery', 'Delivered': 'status-delivered',
       'Cancelled': 'status-cancelled', 'pending': 'status-processing', 'confirmed': 'status-confirmed',
       'shipped': 'status-shipped', 'completed': 'status-delivered', 'cancelled': 'status-cancelled',
+      'Failed Delivery': 'status-cancelled', 'failed delivery': 'status-cancelled',
       'Pending Payment': 'status-pending-payment',
     };
     return map[status] || 'status-processing';
   };
 
   const getDisplayStatus = (order) => {
+    if (order?.deliveryFailedFinal || String(order?.status || '').toLowerCase() === 'failed delivery') {
+      return 'Failed Delivery';
+    }
     const s = order.orderStatus || order.status || 'pending';
     const labels = {
       pending: 'Processing', confirmed: 'Confirmed', shipped: 'Shipped',
       out_for_delivery: 'Out for Delivery', completed: 'Delivered', cancelled: 'Cancelled',
       Processing: 'Processing', Confirmed: 'Confirmed', Shipped: 'Shipped',
       'Out for Delivery': 'Out for Delivery', Delivered: 'Delivered', Cancelled: 'Cancelled',
+      'Failed Delivery': 'Failed Delivery',
       'Pending Payment': 'Pending Payment',
     };
     return labels[s] || s;
@@ -889,6 +894,8 @@ const TrackOrder = ({ onProductClick }) => {
     ];
 
     const fails = Array.isArray(order.deliveryFailedAttempts) ? order.deliveryFailedAttempts : [];
+    const failedFinal = !!order.deliveryFailedFinal
+      || String(order.status || '').toLowerCase() === 'failed delivery';
     fails.forEach((attempt) => {
       const n = Number(attempt?.attempt) || 0;
       const reason = String(attempt?.reason || '').trim();
@@ -903,20 +910,24 @@ const TrackOrder = ({ onProductClick }) => {
         time: fmt(attempt?.at),
         desc,
         actor: 'rider',
+        photo: attempt?.photo || '',
       });
     });
 
     steps.push({
-      label: 'Delivered',
-      icon: 'fa-check-double',
-      completed: ['delivered', 'completed'].includes(status),
+      label: failedFinal ? 'Failed Delivery' : 'Delivered',
+      icon: failedFinal ? 'fa-times-circle' : 'fa-check-double',
+      completed: ['delivered', 'completed'].includes(status) || failedFinal,
       time: fmt(order.deliveryConfirmedAt),
-      desc: ['delivered', 'completed'].includes(status)
-        ? 'Rider · Delivered successfully!'
-        : fails.length
-          ? 'Rider · Waiting for next delivery attempt / reschedule.'
-          : 'Rider · Waiting for delivery.',
+      desc: failedFinal
+        ? 'Rider · Closed after 3 unsuccessful delivery attempts.'
+        : ['delivered', 'completed'].includes(status)
+          ? 'Rider · Delivered successfully!'
+          : fails.length
+            ? 'Rider · Waiting for next delivery attempt / reschedule.'
+            : 'Rider · Waiting for delivery.',
       actor: 'rider',
+      isFailedFinal: failedFinal,
     });
     return steps;
   };
@@ -1511,6 +1522,16 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
               </div>
               {step.time && step.completed && <span className="timeline-timestamp"><i className="fas fa-clock"></i> {step.time}</span>}
               <p className={step.completed ? 'timeline-desc-done' : 'timeline-desc-pending'}>{step.desc || (step.completed ? 'Completed' : 'Pending')}</p>
+              {step.isFailedAttempt && step.photo && (
+                <button
+                  type="button"
+                  className="timeline-fail-photo-btn"
+                  onClick={() => onOpenLightbox?.(step.photo)}
+                >
+                  <img src={step.photo} alt="Failed attempt proof" className="timeline-fail-photo" />
+                  <span>View photo proof</span>
+                </button>
+              )}
               {step.isCancelled && step.cancelReason && <div className="timeline-cancel-reason"><div className="timeline-cancel-reason-label"><i className="fas fa-comment-alt"></i> Reason:</div><div className="timeline-cancel-reason-text">{step.cancelReason}</div></div>}
             </div>
           </div>
