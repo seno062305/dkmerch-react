@@ -61,6 +61,9 @@ export async function resetOrderCounter(db: any): Promise<{ nextSeq: number }> {
  * Allocate the next store-wide order number.
  * Relies on Convex OCC: concurrent patches to the same counter doc retry automatically.
  * Bootstrap insert is only safe once — call ensureOrderCounterSeeded before traffic if needed.
+ *
+ * If the orders table is empty, always restart at #1 even when the counter doc is stale
+ * (e.g. orders wiped from the Convex dashboard without resetOrderCounter).
  */
 export async function allocateOrderSeq(db: any): Promise<number> {
   const floor = await maxExistingOrderSeq(db);
@@ -71,7 +74,7 @@ export async function allocateOrderSeq(db: any): Promise<number> {
     .collect();
 
   if (counters.length === 0) {
-    await db.insert("orderCounters", { name: "orders", nextSeq: floor + 1 });
+    await db.insert("orderCounters", { name: "orders", nextSeq: floor === 0 ? 1 : floor + 1 });
     counters = await db
       .query("orderCounters")
       .withIndex("by_name", (q: any) => q.eq("name", "orders"))
@@ -82,7 +85,10 @@ export async function allocateOrderSeq(db: any): Promise<number> {
   counters.sort((a: any, b: any) => a._creationTime - b._creationTime);
   const primary = counters[0];
 
-  const seq = Math.max(Number(primary.nextSeq) || 1, floor + 1);
+  // Empty orders table → ignore stale nextSeq and restart at 1
+  const seq = floor === 0
+    ? 1
+    : Math.max(Number(primary.nextSeq) || 1, floor + 1);
   await db.patch(primary._id, { nextSeq: seq + 1 });
 
   for (let i = 1; i < counters.length; i++) {
@@ -103,7 +109,7 @@ export async function ensureOrderCounterSeeded(db: any): Promise<{ nextSeq: numb
     existing.sort((a: any, b: any) => a._creationTime - b._creationTime);
     const primary = existing[0];
     const floor = await maxExistingOrderSeq(db);
-    const nextSeq = Math.max(Number(primary.nextSeq) || 1, floor + 1);
+    const nextSeq = floor === 0 ? 1 : Math.max(Number(primary.nextSeq) || 1, floor + 1);
     if (nextSeq !== Number(primary.nextSeq)) {
       await db.patch(primary._id, { nextSeq });
     }
@@ -114,7 +120,7 @@ export async function ensureOrderCounterSeeded(db: any): Promise<{ nextSeq: numb
   }
 
   const floor = await maxExistingOrderSeq(db);
-  const nextSeq = floor + 1;
+  const nextSeq = floor === 0 ? 1 : floor + 1;
   await db.insert("orderCounters", { name: "orders", nextSeq });
   return { nextSeq, created: true };
 }
