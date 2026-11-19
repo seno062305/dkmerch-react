@@ -7,6 +7,7 @@ import {
   buildOrderId,
   ensureOrderCounterSeeded,
   repairDuplicateOrderSeqs,
+  resetOrderCounter,
 } from "./lib/orderSeq";
 import { insertCustomerNotification } from "./customerNotifications";
 
@@ -131,13 +132,14 @@ export const createOrder = mutation({
   },
 });
 
-/** One-shot: seed counter + renumber duplicate orderSeq (display #) without breaking orderId links. */
+/** One-shot: renumber display # by creation time + align counter (after clear / duplicates). */
 export const repairOrderNumbers = mutation({
   args: {},
   handler: async ({ db }) => {
     const repaired = await repairDuplicateOrderSeqs(db);
-    const seeded = await ensureOrderCounterSeeded(db);
-    return { ...repaired, seeded };
+    // Align counter from orderSeq only (not old DK-00xx strings that kept next # at 34+).
+    const counter = await resetOrderCounter(db);
+    return { ...repaired, nextSeq: counter.nextSeq };
   },
 });
 
