@@ -607,7 +607,8 @@ const AdminOrders = () => {
     return matchesSearch && matchesDate;
   };
 
-  /** FIFO: earliest order first. On Pending, paid float to top (who paid first first). */
+  /** Newest first (desc). On Pending, paid still float to top, then newest within each group. */
+  const cmpNewest = (a, b) => cmpFifo(b, a);
   const sortOrdersForTab = (list, tab) => {
     const rows = [...list];
     if (tab === 'pending') {
@@ -615,27 +616,27 @@ const AdminOrders = () => {
         const aPaid = a.paymentStatus === 'paid' ? 0 : 1;
         const bPaid = b.paymentStatus === 'paid' ? 0 : 1;
         if (aPaid !== bPaid) return aPaid - bPaid;
-        if (aPaid === 0) return paidTimeMs(a) - paidTimeMs(b);
-        return cmpFifo(a, b);
+        if (aPaid === 0) return paidTimeMs(b) - paidTimeMs(a);
+        return cmpNewest(a, b);
       });
     }
     if (tab === 'refunds') {
       return rows.sort((a, b) => {
         const aTime = a.refundRequestedAt ? new Date(a.refundRequestedAt).getTime() : 0;
         const bTime = b.refundRequestedAt ? new Date(b.refundRequestedAt).getTime() : 0;
-        if (aTime && bTime) return aTime - bTime;
-        return cmpFifo(a, b);
+        if (aTime && bTime) return bTime - aTime;
+        return cmpNewest(a, b);
       });
     }
     if (tab === 'cancelled') {
       return rows.sort((a, b) => {
         const aTime = a.cancelRequestedAt ? new Date(a.cancelRequestedAt).getTime() : 0;
         const bTime = b.cancelRequestedAt ? new Date(b.cancelRequestedAt).getTime() : 0;
-        if (aTime && bTime) return aTime - bTime;
-        return cmpFifo(a, b);
+        if (aTime && bTime) return bTime - aTime;
+        return cmpNewest(a, b);
       });
     }
-    return rows.sort(cmpFifo);
+    return rows.sort(cmpNewest);
   };
 
   const tabCounts = {

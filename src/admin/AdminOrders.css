@@ -939,6 +939,14 @@
 }
 .orders-table tbody tr { transition: background 0.15s ease; }
 .orders-table tbody tr:hover { background: #f8fafc; }
+.orders-table tbody tr:hover td,
+.orders-table tbody tr:hover .customer-info strong,
+.orders-table tbody tr:hover .customer-info small {
+  color: inherit;
+}
+.orders-table tbody tr:hover .customer-info strong { color: #1a1f36; }
+.orders-table tbody tr:hover .customer-info small { color: #64748b; }
+.orders-table tbody tr:hover td { color: #111827; }
 .orders-table tbody tr:last-child td { border-bottom: none; }
 
 .customer-info { display: flex; flex-direction: column; gap: 4px; }
@@ -1613,7 +1621,7 @@
 .cancel-reason-prompt { font-size: 13px; color: #64748b; margin: 0 0 18px 0; line-height: 1.6; }
 .cancel-presets { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
 .cancel-preset-chip { background: #f8f9fa; border: 2px solid #e2e8f0; border-radius: 20px; padding: 8px 16px; font-size: 13px; font-weight: 600; color: #1a1f36; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 6px; }
-.cancel-preset-chip:hover { border-color: #e5e7eb; background: #fff5f5; color: #e5e7eb; }
+.cancel-preset-chip:hover { border-color: #f87171; background: #fff5f5; color: #991b1b; }
 .cancel-preset-chip.active { background: #dc3545; border-color: #dc3545; color: white; }
 .cancel-preset-chip i { font-size: 11px; }
 .cancel-custom-wrap { margin-top: 4px; }
@@ -1640,7 +1648,7 @@
 }
 .cancel-custom-input:focus { outline: none; border-color: #dc3545; box-shadow: 0 0 0 3px rgba(220,53,69,0.1); }
 .char-count { text-align: right; font-size: 11px; color: #94a3b8; margin-top: 4px; font-weight: 600; }
-.cancel-error { display: flex; align-items: center; gap: 8px; background: #fff5f5; border: 1.5px solid #e5e7eb; border-radius: 8px; padding: 10px 14px; font-size: 13px; font-weight: 600; color: #e5e7eb; margin-top: 12px; }
+.cancel-error { display: flex; align-items: center; gap: 8px; background: #fff5f5; border: 1.5px solid #fecaca; border-radius: 8px; padding: 10px 14px; font-size: 13px; font-weight: 600; color: #b91c1c; margin-top: 12px; }
 .cancel-reason-footer { display: flex; justify-content: flex-end; align-items: center; gap: 12px; padding: 16px 24px; border-top: 2px solid #f0f0f0; background: #fafafa; }
 .cancel-go-back-btn { padding: 11px 20px; background: white; color: #64748b; border: 2px solid #e2e8f0; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 8px; }
 .cancel-go-back-btn:hover { background: #f8f9fa; border-color: #94a3b8; color: #1a1f36; }
@@ -1665,7 +1673,7 @@
 .method-display i { font-size: 15px; }
 
 /* Promo pills */
-.promo-admin-pill { display: inline-flex; align-items: center; gap: 5px; background: linear-gradient(135deg, #fdf2f8, #e5e7eb); border: 1.5px solid #e5e7eb; color: #e5e7eb; font-size: 12px; font-weight: 800; padding: 4px 12px; border-radius: 20px; font-family: 'Courier New', monospace; letter-spacing: 0.5px; }
+.promo-admin-pill { display: inline-flex; align-items: center; gap: 5px; background: linear-gradient(135deg, #fdf2f8, #fce7f3); border: 1.5px solid #f9a8d4; color: #9d174d; font-size: 12px; font-weight: 800; padding: 4px 12px; border-radius: 20px; font-family: 'Courier New', monospace; letter-spacing: 0.5px; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .promo-admin-pill i { font-size: 11px; }
 .promo-admin-card { background: linear-gradient(135deg, #fdf2f8, #e5e7eb); border: 1.5px solid #e5e7eb; border-radius: 12px; overflow: hidden; }
 .promo-admin-top { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid #e5e7eb; background: rgba(255,255,255,0.5); }
@@ -1847,7 +1855,7 @@
 /* Totals */
 .wb-totals     { flex-shrink: 0; border-top: 1px solid #e5e7eb; padding-top: 4px; }
 .wb-totals-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 12px; }
-.wb-grand      { font-size: 14px; font-weight: 800; color: #e5e7eb; border-top: 1px solid #e5e7eb; margin-top: 2px; padding-top: 6px; }
+.wb-grand      { font-size: 14px; font-weight: 800; color: #111827; border-top: 1px solid #e5e7eb; margin-top: 2px; padding-top: 6px; }
 .wb-promo-row  { color: #16a34a; font-weight: 600; }
 
 /* Footer */
@@ -1867,13 +1875,13 @@
 .refund-table-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 12px; white-space: nowrap; }
 .refund-table-pending  { background: #fef3c7; color: #92400e; border: 1px solid #e5e7eb; }
 .refund-table-approved { background: #d1fae5; color: #065f46; border: 1px solid #e5e7eb; }
-.refund-table-rejected { background: #fee2e2; color: #e5e7eb; border: 1px solid #e5e7eb; }
+.refund-table-rejected { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
 .row-refund-pending { background: #fffbeb !important; }
 .row-refund-pending:hover { background: #fef3c7 !important; }
 .refund-header-pill { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; padding: 4px 12px; border-radius: 20px; }
 .refund-header-requested { background: #fef3c7; color: #92400e; border: 1.5px solid #e5e7eb; }
 .refund-header-approved  { background: #d1fae5; color: #065f46; border: 1.5px solid #e5e7eb; }
-.refund-header-rejected  { background: #fee2e2; color: #e5e7eb; border: 1.5px solid #e5e7eb; }
+.refund-header-rejected  { background: #fee2e2; color: #991b1b; border: 1.5px solid #fecaca; }
 .admin-refund-card { border-radius: 12px; overflow: hidden; border: 1.5px solid #e2e8f0; }
 .admin-refund-requested { border-color: #e5e7eb; }
 .admin-refund-approved  { border-color: #e5e7eb; }
