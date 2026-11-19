@@ -629,27 +629,28 @@ const AddressMapPicker = ({
         <div className={`address-map-preview-wrap${mapFullscreen ? ' is-fullscreen' : ''}`}>
           <div className="address-map-preview-header">
             {mapFullscreen ? (
-              <button
-                type="button"
-                className="address-fullmap-back"
-                onClick={toggleMapFullscreen}
-                aria-label="Back from full map"
-              >
-                <i className="fas fa-arrow-left"></i> Back
-              </button>
+              <>
+                <div className="address-fullmap-header-left">
+                  <i className="fas fa-map-marked-alt"></i>
+                  <div>
+                    <strong>Delivery pin</strong>
+                    <span>{geocoding ? 'Locating your address…' : (buildFullAddress({ address, barangay, city, province, zipCode }) || statusText)}</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="address-fullmap-close"
+                  onClick={toggleMapFullscreen}
+                  aria-label="Close full map"
+                >
+                  <i className="fas fa-times"></i>
+                </button>
+              </>
             ) : (
-              <i className={geocoding ? 'fas fa-spinner fa-spin' : 'fas fa-map-marked-alt'}></i>
-            )}
-            <span>{geocoding ? 'Locating your address…' : (mapFullscreen ? 'Full Map' : statusText)}</span>
-            {!mapFullscreen && (
-              <button
-                type="button"
-                className="address-fullmap-btn"
-                onClick={toggleMapFullscreen}
-                title="View full map"
-              >
-                <i className="fas fa-expand"></i> View Full Map
-              </button>
+              <>
+                <i className={geocoding ? 'fas fa-spinner fa-spin' : 'fas fa-map-marked-alt'}></i>
+                <span>{geocoding ? 'Locating your address…' : statusText}</span>
+              </>
             )}
           </div>
 
@@ -683,18 +684,35 @@ const AddressMapPicker = ({
             )}
           </div>
 
-          <div ref={mapRef} className="address-map-preview-container" />
+          <div className="address-map-inner-wrap">
+            <div ref={mapRef} className="address-map-preview-container" />
+            {!mapFullscreen && (
+              <button
+                type="button"
+                className="address-map-fullscreen-btn"
+                onClick={toggleMapFullscreen}
+                title="View full map"
+              >
+                <i className="fas fa-expand-alt"></i>
+                <span>Full Map</span>
+              </button>
+            )}
+          </div>
           <div className="address-map-preview-hint">
-            <i className="fas fa-hand-pointer"></i> Tap map or drag 📍 pin — address fields auto-fill
-            <button
-              type="button"
-              className={`address-fullmap-btn address-fullmap-btn--hint${mapFullscreen ? ' address-fullmap-btn--back' : ''}`}
-              onClick={toggleMapFullscreen}
-            >
-              {mapFullscreen
-                ? <><i className="fas fa-arrow-left"></i> Back</>
-                : <><i className="fas fa-expand"></i> Full Map</>}
-            </button>
+            {mapFullscreen ? (
+              <>
+                <i className="fas fa-hand-pointer"></i>
+                <span>Pinch to zoom · Drag to pan · Tap or drag pin to set</span>
+                <span className="address-map-preview-hint-right">
+                  <i className="fas fa-search-plus"></i> Use +/− to zoom
+                </span>
+              </>
+            ) : (
+              <>
+                <i className="fas fa-hand-pointer"></i>
+                <span>Tap map or drag 📍 pin — address fields auto-fill</span>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -784,12 +802,9 @@ const CheckoutSavedFullMap = ({ coords, addressLabel, onClose }) => {
 
   if (typeof document === 'undefined') return null;
   return createPortal(
-    <div className="checkout-fullmap-overlay" role="dialog" aria-modal="true" aria-label="Full map" onClick={onClose}>
+    <div className="checkout-fullmap-overlay" role="dialog" aria-modal="true" aria-label="Full map">
       <div className="checkout-fullmap-shell" onClick={(e) => e.stopPropagation()}>
         <div className="checkout-fullmap-header">
-          <button type="button" className="checkout-fullmap-back" onClick={onClose} aria-label="Back from full map">
-            <i className="fas fa-arrow-left"></i> Back
-          </button>
           <div className="checkout-fullmap-header-left">
             <i className="fas fa-map-marked-alt"></i>
             <div>
@@ -797,14 +812,16 @@ const CheckoutSavedFullMap = ({ coords, addressLabel, onClose }) => {
               <span>{addressLabel || 'Saved map location'}</span>
             </div>
           </div>
+          <button type="button" className="checkout-fullmap-close" onClick={onClose} aria-label="Close map">
+            <i className="fas fa-times"></i>
+          </button>
         </div>
         <div ref={mapRef} className="checkout-fullmap-canvas" />
         <div className="checkout-fullmap-footer">
-          <i className="fas fa-info-circle"></i>
-          Pinch or use + / − to zoom · Back or Esc to return
-          <button type="button" className="checkout-fullmap-back checkout-fullmap-back--footer" onClick={onClose}>
-            <i className="fas fa-arrow-left"></i> Back
-          </button>
+          <span><i className="fas fa-hand-pointer"></i> Pinch to zoom · Drag to pan</span>
+          <span className="checkout-fullmap-footer-right">
+            <i className="fas fa-search-plus"></i> Use +/− to zoom
+          </span>
         </div>
       </div>
     </div>,
