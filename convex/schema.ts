@@ -303,6 +303,8 @@ export default defineSchema({
     refundReason:          v.optional(v.string()),
     refundComment:         v.optional(v.string()),
     refundPhotoId:         v.optional(v.string()),
+    /** Admin screenshot proof that refund money was sent (GCash/Maya/PayMongo) */
+    refundAdminProofId:    v.optional(v.string()),
     refundMethod:          v.optional(v.string()),
     refundAccountName:     v.optional(v.string()),
     refundAccountNumber:   v.optional(v.string()),
@@ -310,6 +312,11 @@ export default defineSchema({
     refundRequestedAt:     v.optional(v.string()),
     refundResolvedAt:      v.optional(v.string()),
     refundPaidAt:          v.optional(v.string()),
+    /** Set when admin started PayMongo / manual return (before proof + approve) */
+    refundPayStartedAt:    v.optional(v.string()),
+    /** Separate PayMongo checkout for admin "Return Payment" (does not replace original paymentLinkId) */
+    returnPaymentLinkId:   v.optional(v.string()),
+    returnPaymentLinkUrl:  v.optional(v.string()),
     refundAdminNote:       v.optional(v.string()),
     refundHistory:         v.optional(v.any()),
     pointsAwarded:         v.optional(v.boolean()),

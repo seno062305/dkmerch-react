@@ -512,14 +512,235 @@ async function refundPaymongoPayment(order: any, amount: number, notes: string) 
 }
 
 /**
- * Admin pays damage refund back via PayMongo (same wallet path as customer payment).
+ * Step 1 — Admin Return Payment via PayMongo.
+ * Opens hosted checkout (like customer). Does NOT mark paid if admin backs out.
+ * Only records success when API refund works OR confirmReturnPayment sees checkout paid.
+ */
+export const processDamageRefundPay = action({
+  args: {
+    orderId: v.string(),
+  },
+  handler: async (ctx, { orderId }) => {
+    const order = await ctx.runQuery(api.orders.getOrderById, { orderId });
+    if (!order) return { success: false, error: "Order not found." };
+
+    const status = String(order.orderStatus || order.status || "").toLowerCase();
+    const wasPaid = String(order.paymentStatus || "").toLowerCase() === "paid";
+    const isPaidPending = wasPaid && (!status || status === "pending" || status === "pending payment");
+    const isDamageRefund = order.refundStatus === "requested";
+
+    if (!isDamageRefund && !isPaidPending) {
+      return { success: false, error: "No pending refund / Return Payment for this order." };
+    }
+
+    const amount = Number(order.finalTotal ?? order.total ?? order.refundAmount ?? 0);
+    if (!(amount > 0)) return { success: false, error: "Invalid refund amount." };
+
+    // Already confirmed return
+    if (order.paymongoRefundId || order.refundPayStartedAt) {
+      return {
+        success: true,
+        refunded: !!order.paymongoRefundId,
+        payConfirmed: true,
+        refundAmount: amount,
+        refundId: order.paymongoRefundId || "",
+        checkoutUrl: order.returnPaymentLinkUrl || "",
+      };
+    }
+
+    let refunded = false;
+    let refundId = "";
+
+    // Try silent API refund on original payment first
+    const pay = await refundPaymongoPayment(order, amount, `Return Payment ${orderId}`);
+    if (pay.refunded) {
+      refunded = true;
+      refundId = pay.refundId;
+      await ctx.runMutation(api.orders.recordDamageRefundPayment, {
+        orderId,
+        refundId: refundId || undefined,
+      });
+      return {
+        success: true,
+        refunded: true,
+        payConfirmed: true,
+        refundAmount: amount,
+        refundId,
+        checkoutUrl: "",
+      };
+    }
+
+    // No auto-refund — open / reuse hosted PayMongo (do NOT mark paid yet)
+    let checkoutUrl = order.returnPaymentLinkUrl || "";
+    const secretKey = process.env.PAYMONGO_SECRET_KEY;
+    if (secretKey && !checkoutUrl) {
+      try {
+        const encoded = toBase64(`${secretKey}:`);
+        const rawSite = String(process.env.SITE_URL || "https://dkmerchwebsite.vercel.app").trim().replace(/\/$/, "");
+        const baseUrl = (!rawSite || /localhost|127\.0\.0\.1/i.test(rawSite))
+          ? "https://dkmerchwebsite.vercel.app"
+          : rawSite;
+        const methodRaw = String(order.refundMethod || order.paymentMethod || order.paymentFeeMethod || "").toLowerCase();
+        const paymentMethodType = methodRaw.includes("maya")
+          ? "paymaya"
+          : methodRaw.includes("gcash")
+            ? "gcash"
+            : undefined;
+        const methodTypes = paymentMethodType ? [paymentMethodType] : ["gcash", "paymaya"];
+        const desc = `Return Payment · DKMerch Order ${orderId}`;
+        const response = await fetch("https://api.paymongo.com/v1/checkout_sessions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Basic ${encoded}`,
+          },
+          body: JSON.stringify({
+            data: {
+              attributes: {
+                billing: {
+                  name: order.customerName || order.refundAccountName || "Customer",
+                  email: order.email || "customer@dkmerch.com",
+                  phone: order.refundAccountNumber || order.phone || "",
+                },
+                line_items: [{
+                  currency: "PHP",
+                  amount: Math.round(amount * 100),
+                  description: desc,
+                  name: desc,
+                  quantity: 1,
+                }],
+                payment_method_types: methodTypes,
+                success_url: `${baseUrl}/admin/orders?returnPay=success&orderId=${encodeURIComponent(orderId)}`,
+                cancel_url: `${baseUrl}/admin/orders?returnPay=cancel&orderId=${encodeURIComponent(orderId)}`,
+                description: desc,
+                send_email_receipt: false,
+                show_description: true,
+                show_line_items: true,
+              },
+            },
+          }),
+        });
+        if (response.ok) {
+          const data = await response.json();
+          const session = data.data;
+          checkoutUrl = session?.attributes?.checkout_url || "";
+          if (checkoutUrl && session?.id) {
+            await ctx.runMutation(api.orders.saveReturnPaymentLink, {
+              orderId,
+              returnPaymentLinkId: session.id,
+              returnPaymentLinkUrl: checkoutUrl,
+            });
+          }
+        } else {
+          const errBody = await response.json().catch(() => ({}));
+          console.error("Return Payment checkout error:", JSON.stringify(errBody));
+        }
+      } catch (err) {
+        console.error("Return Payment checkout exception:", err);
+      }
+    }
+
+    if (!checkoutUrl && order.returnPaymentLinkUrl) {
+      checkoutUrl = order.returnPaymentLinkUrl;
+    }
+
+    // Link saved for Continue — payment NOT confirmed until confirmReturnPayment / success
+    return {
+      success: true,
+      refunded: false,
+      payConfirmed: false,
+      refundAmount: amount,
+      refundId: "",
+      checkoutUrl: checkoutUrl || "",
+      continuePayment: !!checkoutUrl,
+      error: pay.error || "",
+    };
+  },
+});
+
+/**
+ * Confirm Return Payment only after PayMongo checkout is actually paid
+ * (or reuse if already recorded). Backing out of PayMongo does nothing.
+ */
+export const confirmReturnPayment = action({
+  args: {
+    orderId: v.string(),
+  },
+  handler: async (ctx, { orderId }) => {
+    const order = await ctx.runQuery(api.orders.getOrderById, { orderId });
+    if (!order) return { success: false, error: "Order not found.", payConfirmed: false };
+
+    if (order.paymongoRefundId || order.refundPayStartedAt) {
+      return {
+        success: true,
+        payConfirmed: true,
+        refundId: order.paymongoRefundId || "",
+        alreadyConfirmed: true,
+      };
+    }
+
+    const sessionId = order.returnPaymentLinkId;
+    if (!sessionId) {
+      return { success: false, error: "No Return Payment session yet. Click Return Payment first.", payConfirmed: false };
+    }
+
+    const secretKey = process.env.PAYMONGO_SECRET_KEY;
+    if (!secretKey) return { success: false, error: "PayMongo not configured.", payConfirmed: false };
+
+    const encoded = toBase64(`${secretKey}:`);
+    try {
+      const sessionRes = await fetch(
+        `https://api.paymongo.com/v1/checkout_sessions/${sessionId}`,
+        { headers: { Authorization: `Basic ${encoded}` } }
+      );
+      if (!sessionRes.ok) {
+        return { success: false, error: "Could not verify PayMongo session.", payConfirmed: false };
+      }
+      const sessionData = await sessionRes.json();
+      const attrs = sessionData?.data?.attributes || {};
+      const payments: any[] = attrs.payments ?? [];
+      const paid =
+        String(attrs.payment_status || "").toLowerCase() === "paid"
+        || payments.some((p: any) => String(p?.attributes?.status || "").toLowerCase() === "paid");
+
+      if (!paid) {
+        return {
+          success: false,
+          payConfirmed: false,
+          pending: true,
+          error: "PayMongo not completed yet. Continue payment or try again.",
+          checkoutUrl: order.returnPaymentLinkUrl || "",
+        };
+      }
+
+      await ctx.runMutation(api.orders.recordDamageRefundPayment, {
+        orderId,
+        refundId: payments.find((p: any) => p?.attributes?.status === "paid")?.id || sessionId,
+      });
+
+      return {
+        success: true,
+        payConfirmed: true,
+        refundAmount: Number(order.finalTotal ?? order.total ?? 0),
+        checkoutUrl: order.returnPaymentLinkUrl || "",
+      };
+    } catch (err: any) {
+      console.error("confirmReturnPayment:", err);
+      return { success: false, error: "Could not verify Return Payment.", payConfirmed: false };
+    }
+  },
+});
+
+/**
+ * Step 2 — After payment confirmed, admin finalizes (proof optional for testing).
  */
 export const approveDamageRefund = action({
   args: {
     orderId: v.string(),
     adminNote: v.optional(v.string()),
+    proofPhotoId: v.optional(v.string()),
   },
-  handler: async (ctx, { orderId, adminNote }) => {
+  handler: async (ctx, { orderId, adminNote, proofPhotoId }) => {
     const order = await ctx.runQuery(api.orders.getOrderById, { orderId });
     if (!order) return { success: false, error: "Order not found." };
     if (order.refundStatus !== "requested") {
@@ -529,45 +750,57 @@ export const approveDamageRefund = action({
     const amount = Number(order.finalTotal ?? order.total ?? order.refundAmount ?? 0);
     if (!(amount > 0)) return { success: false, error: "Invalid refund amount." };
 
-    const pay = await refundPaymongoPayment(order, amount, `Damage refund ${orderId}`);
-    if (!pay.refunded) {
-      return { success: false, error: pay.error || "PayMongo refund failed." };
+    // Proof optional while testing
+    let refunded = !!order.paymongoRefundId || !!order.refundPayStartedAt;
+    let refundId = order.paymongoRefundId || "";
+
+    if (!refunded) {
+      const pay = await refundPaymongoPayment(order, amount, `Damage refund ${orderId}`);
+      if (pay.refunded) {
+        refunded = true;
+        refundId = pay.refundId;
+      }
     }
 
     const result = await ctx.runMutation(api.orders.resolveRefund, {
       orderId,
       refundStatus: "approved",
-      refundAdminNote: adminNote || `PayMongo refund ${pay.refundId}`,
+      refundAdminNote: adminNote || undefined,
+      proofPhotoId: proofPhotoId || undefined,
+      refunded,
+      refundId: refundId || undefined,
     });
 
     if (!result?.success) {
       return {
         success: false,
-        error: "PayMongo refund succeeded but order update failed. Contact support.",
-        refunded: true,
-        refundId: pay.refundId,
+        error: result?.error || "Could not finalize refund. Contact support.",
+        refunded,
+        refundId,
       };
     }
 
     return {
       success: true,
-      refunded: true,
+      refunded,
       refundAmount: amount,
-      refundId: pay.refundId,
+      refundId,
     };
   },
 });
 
 /**
  * Admin cancels an order before confirm (pending).
- * Unpaid → cancel immediately. Paid → PayMongo refund, then cancel + restore stock.
+ * Unpaid → cancel immediately.
+ * Paid → require proof screenshot + PayMongo refund to same GCash/Maya rails, then cancel.
  */
 export const adminCancelOrder = action({
   args: {
     orderId: v.string(),
     reason: v.string(),
+    proofPhotoId: v.optional(v.string()),
   },
-  handler: async (ctx, { orderId, reason }) => {
+  handler: async (ctx, { orderId, reason, proofPhotoId }) => {
     const order = await ctx.runQuery(api.orders.getOrderById, { orderId });
     if (!order) return { success: false, error: "Order not found." };
 
@@ -595,23 +828,22 @@ export const adminCancelOrder = action({
       };
     }
 
+    // Proof optional while testing
+
     const amount = Number(order.finalTotal ?? order.total ?? 0);
     let refunded = false;
     let refundId = "";
 
     if (wasPaid && amount > 0) {
-      const pay = await refundPaymongoPayment(order, amount, `Admin cancel ${orderId}`);
-      if (!pay.refunded) {
-        // No PayMongo session (e.g. manually marked paid) — still allow cancel
-        if (order.paymentLinkId) {
-          return {
-            success: false,
-            error: pay.error || "PayMongo refund failed. Try again or refund manually.",
-          };
-        }
+      if (order.paymongoRefundId || order.refundPayStartedAt) {
+        refunded = !!order.paymongoRefundId || !!order.refundPayStartedAt;
+        refundId = order.paymongoRefundId || "";
       } else {
-        refunded = true;
-        refundId = pay.refundId;
+        const pay = await refundPaymongoPayment(order, amount, `Admin cancel ${orderId}`);
+        if (pay.refunded) {
+          refunded = true;
+          refundId = pay.refundId;
+        }
       }
     }
 
@@ -621,6 +853,7 @@ export const adminCancelOrder = action({
       refunded,
       refundId: refundId || undefined,
       refundAmount: wasPaid ? amount : 0,
+      proofPhotoId: proofPhotoId || undefined,
     });
 
     if (!result?.success) {

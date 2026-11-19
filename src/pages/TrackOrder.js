@@ -1486,6 +1486,10 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
     api.orders.getRefundPhotoUrl,
     order.cancelRefundProofId ? { storageId: order.cancelRefundProofId } : 'skip'
   );
+  const refundAdminProofUrl = useQuery(
+    api.orders.getRefundPhotoUrl,
+    order.refundAdminProofId ? { storageId: order.refundAdminProofId } : 'skip'
+  );
 
   const riderEmail = String(order.riderInfo?.email || '').trim().toLowerCase();
   // Always load live rider app so admin photo updates show even if order snapshot is stale/empty
@@ -1802,6 +1806,40 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
                 <strong>{order.refundStatus === 'requested' && 'Refund Pending'}{order.refundStatus === 'approved' && `Refund Approved — ₱${refundAmount}`}{order.refundStatus === 'rejected' && 'Refund Rejected'}</strong>
                 <p>{order.refundStatus === 'requested' && 'Under review.'}{order.refundStatus === 'approved' && (order.refundAdminNote || 'Refund approved.')}{order.refundStatus === 'rejected' && (order.refundAdminNote || 'Not approved.')}</p>
               </div>
+            </div>
+          )}
+
+          {delivered && order.refundStatus === 'approved' && order.refundAdminProofId && (
+            <div className="customer-pod-section customer-refund-proof-section">
+              <button
+                type="button"
+                className="customer-pod-header"
+                onClick={() => setRefundProofExpanded((v) => !v)}
+              >
+                <span className="customer-pod-label">
+                  <i className="fas fa-receipt"></i>
+                  <strong>Admin Refund Proof</strong>
+                </span>
+                <i className={`fas fa-chevron-${refundProofExpanded ? 'up' : 'down'}`}></i>
+              </button>
+              {refundProofExpanded && (
+                <div className="customer-pod-body">
+                  <p className="customer-pod-note">
+                    Screenshot from admin confirming your refund was sent (GCash / Maya / PayMongo).
+                  </p>
+                  {refundAdminProofUrl ? (
+                    <a href={refundAdminProofUrl} target="_blank" rel="noreferrer" className="customer-refund-proof-link">
+                      <img
+                        src={refundAdminProofUrl}
+                        alt="Admin refund proof"
+                        className="customer-pod-photo customer-refund-proof-photo"
+                      />
+                    </a>
+                  ) : (
+                    <div className="customer-pod-note"><i className="fas fa-spinner fa-spin"></i> Loading proof…</div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

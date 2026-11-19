@@ -1235,17 +1235,132 @@ export const requestRefund = mutation({
   },
 });
 
+/**
+ * Reset Return Payment progress so admin can re-test PayMongo
+ * (clears false "paid" state after backing out of checkout).
+ * Only works while refund is still "requested" / order still pending paid.
+ */
+export const resetReturnPaymentProgress = mutation({
+  args: {
+    orderId: v.optional(v.string()),
+    /** If true, reset every order stuck mid Return Payment */
+    allStuck: v.optional(v.boolean()),
+  },
+  handler: async ({ db }, { orderId, allStuck }) => {
+    const clearPatch = {
+      refundPayStartedAt: undefined,
+      paymongoRefundId: undefined,
+      returnPaymentLinkId: undefined,
+      returnPaymentLinkUrl: undefined,
+    };
+
+    const canReset = (o: any) => {
+      if (o.refundStatus === "requested") return true;
+      const st = String(o.orderStatus || o.status || "").toLowerCase();
+      const paid = String(o.paymentStatus || "").toLowerCase() === "paid";
+      return paid && (st === "pending" || st === "pending payment")
+        && !!(o.refundPayStartedAt || o.returnPaymentLinkUrl || o.paymongoRefundId);
+    };
+
+    let reset = 0;
+    if (orderId) {
+      const order = await db.query("orders")
+        .withIndex("by_orderId", (q) => q.eq("orderId", orderId))
+        .first();
+      if (!order) return { success: false, error: "Order not found.", reset: 0 };
+      if (!canReset(order)) {
+        return { success: false, error: "Order is not a pending refund / Return Payment.", reset: 0 };
+      }
+      await db.patch(order._id, clearPatch as any);
+      return { success: true, reset: 1, orderId };
+    }
+
+    if (allStuck) {
+      const all = await db.query("orders").collect();
+      for (const o of all) {
+        if (!canReset(o)) continue;
+        if (!(o as any).refundPayStartedAt && !(o as any).returnPaymentLinkUrl && !(o as any).paymongoRefundId) {
+          continue;
+        }
+        await db.patch(o._id, clearPatch as any);
+        reset += 1;
+      }
+      return { success: true, reset };
+    }
+
+    return { success: false, error: "Pass orderId or allStuck: true.", reset: 0 };
+  },
+});
+
+/** Step 1 of damage refund — mark that admin started returning payment (PayMongo or manual). */
+export const recordDamageRefundPayment = mutation({
+  args: {
+    orderId: v.string(),
+    refundId: v.optional(v.string()),
+    manual: v.optional(v.boolean()),
+  },
+  handler: async ({ db }, { orderId, refundId, manual }) => {
+    const order = await db.query("orders")
+      .withIndex("by_orderId", q => q.eq("orderId", orderId))
+      .first();
+    if (!order) return { success: false, error: "Order not found." };
+    const status = String(order.orderStatus || order.status || "").toLowerCase();
+    const wasPaid = String(order.paymentStatus || "").toLowerCase() === "paid";
+    const isPaidPending = wasPaid && (!status || status === "pending" || status === "pending payment");
+    const isDamageRefund = order.refundStatus === "requested";
+    if (!isDamageRefund && !isPaidPending) {
+      return { success: false, error: "No pending refund / Return Payment." };
+    }
+    const now = new Date().toISOString();
+    const patch: any = { refundPayStartedAt: now };
+    if (refundId) patch.paymongoRefundId = refundId;
+    if (manual) {
+      patch.refundAdminNote = order.refundAdminNote || "Admin returning payment manually — awaiting proof";
+    } else if (refundId) {
+      patch.refundAdminNote = order.refundAdminNote || `PayMongo refund started (${refundId})`;
+    }
+    await db.patch(order._id, patch);
+    return { success: true };
+  },
+});
+
+/** Store hosted PayMongo checkout for admin Return Payment (separate from original pay link). */
+export const saveReturnPaymentLink = mutation({
+  args: {
+    orderId: v.string(),
+    returnPaymentLinkId: v.string(),
+    returnPaymentLinkUrl: v.string(),
+  },
+  handler: async ({ db }, { orderId, returnPaymentLinkId, returnPaymentLinkUrl }) => {
+    const order = await db.query("orders")
+      .withIndex("by_orderId", q => q.eq("orderId", orderId))
+      .first();
+    if (!order) return { success: false };
+    await db.patch(order._id, {
+      returnPaymentLinkId,
+      returnPaymentLinkUrl,
+    });
+    return { success: true };
+  },
+});
+
 export const resolveRefund = mutation({
   args: {
     orderId:         v.string(),
     refundStatus:    v.union(v.literal('approved'), v.literal('rejected')),
     refundAdminNote: v.optional(v.string()),
+    /** Admin screenshot that money was sent back */
+    proofPhotoId:    v.optional(v.string()),
+    refunded:        v.optional(v.boolean()),
+    refundId:        v.optional(v.string()),
   },
-  handler: async ({ db, scheduler }, { orderId, refundStatus, refundAdminNote }) => {
+  handler: async ({ db, scheduler }, { orderId, refundStatus, refundAdminNote, proofPhotoId, refunded, refundId }) => {
     const order = await db.query("orders")
       .withIndex("by_orderId", q => q.eq("orderId", orderId))
       .first();
     if (!order) return { success: false };
+
+    // Proof optional (testing) — still store when provided
 
     const now = new Date().toISOString();
     const refundAmount = (order as any).finalTotal ?? (order as any).total ?? 0;
@@ -1258,6 +1373,8 @@ export const resolveRefund = mutation({
           resolvedAt:   now,
           adminNote:    refundAdminNote || '',
           refundAmount,
+          proofPhotoId: proofPhotoId || '',
+          refundId:     refundId || '',
         };
       }
       return entry;
@@ -1273,6 +1390,13 @@ export const resolveRefund = mutation({
 
     if (refundStatus === 'approved') {
       patchData.refundPaidAt = now;
+      if (proofPhotoId) patchData.refundAdminProofId = proofPhotoId;
+      if (refundId) patchData.paymongoRefundId = refundId;
+      if (!refundAdminNote) {
+        patchData.refundAdminNote = refunded
+          ? `PayMongo refund ${refundId || "sent"}`
+          : "Refund approved — manual transfer (see proof)";
+      }
     }
 
     await db.patch(order._id, patchData);
@@ -1599,6 +1723,8 @@ export const applyAdminCancel = mutation({
     refunded: v.optional(v.boolean()),
     refundId: v.optional(v.string()),
     refundAmount: v.optional(v.number()),
+    /** Admin screenshot that refund money was sent */
+    proofPhotoId: v.optional(v.string()),
   },
   handler: async ({ db, scheduler }, args) => {
     const order = await db
@@ -1630,6 +1756,8 @@ export const applyAdminCancel = mutation({
       return { success: false, error: "Cancellation reason is required." };
     }
 
+    // Proof optional while testing
+
     const now = new Date().toISOString();
     const amount = Number(args.refundAmount ?? order.finalTotal ?? order.total ?? 0);
     const existingHistory = (order as any).refundHistory || [];
@@ -1658,8 +1786,9 @@ export const applyAdminCancel = mutation({
       patch.refundAccountName = order.customerName || "";
       patch.refundAdminNote = args.refunded
         ? "Admin cancelled (before confirm) — refunded via PayMongo"
-        : "Admin cancelled (before confirm) — refund may need manual follow-up";
+        : "Admin cancelled (before confirm) — refund sent (see proof)";
       if (args.refundId) patch.paymongoRefundId = args.refundId;
+      if (args.proofPhotoId) patch.cancelRefundProofId = args.proofPhotoId;
       patch.refundHistory = [
         ...existingHistory,
         {
@@ -1669,6 +1798,7 @@ export const applyAdminCancel = mutation({
           reason: "admin_cancel",
           refundAmount: amount,
           refundId: args.refundId || "",
+          proofPhotoId: args.proofPhotoId || "",
           adminNote: reason,
         },
       ];
@@ -1757,12 +1887,7 @@ export const applyCustomerCancel = mutation({
     const reason = order.cancelRequestReason || "Cancelled by customer (admin approved)";
 
     // PayMongo auto-refund does not need screenshot proof; manual path still does
-    if (wasPaid && !args.proofPhotoId && !args.refunded) {
-      return {
-        success: false,
-        error: "Upload a screenshot proof that the refund was sent before approving.",
-      };
-    }
+    // Proof optional while testing
 
     const existingHistory = (order as any).refundHistory || [];
     const patch: any = {

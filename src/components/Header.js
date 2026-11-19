@@ -49,6 +49,25 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
   }, [isAuthenticated, user, getParkedRider]);
 
   // Badge from existing order queries (avoids missing-function crash on stale Convex deploys)
+  const customerOrders = useQuery(
+    api.orders.getOrdersByEmail,
+    isAuthenticated && user?.email && role !== 'admin' && role !== 'rider'
+      ? { email: user.email }
+      : 'skip'
+  );
+  const trackOrderCount = React.useMemo(() => {
+    if (!Array.isArray(customerOrders)) return 0;
+    return customerOrders.filter((o) => {
+      const st = String(o.orderStatus || o.status || '').toLowerCase();
+      if (st === 'cancelled') return false;
+      if (st !== 'delivered' && st !== 'completed') return true;
+      // Completed but refund / cancel still ongoing
+      if (o.refundStatus === 'requested') return true;
+      if (o.cancelRequestStatus === 'requested') return true;
+      return false;
+    }).length;
+  }, [customerOrders]);
+
   const parkedOrders = useQuery(
     api.orders.getAllOrders,
     parkedRider?.email ? {} : 'skip'
@@ -378,10 +397,15 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
                 <li>
                   <Link
                     to="/track-order"
-                    className={location.pathname.startsWith('/track-order') ? 'is-active' : undefined}
+                    className={`nav-track-link${location.pathname.startsWith('/track-order') ? ' is-active' : ''}${trackOrderCount > 0 ? ' has-indicator' : ''}`}
                     onClick={closeMobileMenu}
                   >
                     Track Order
+                    {trackOrderCount > 0 && (
+                      <em className="nav-track-badge" aria-label={`${trackOrderCount} ongoing orders`}>
+                        {trackOrderCount > 9 ? '9+' : trackOrderCount}
+                      </em>
+                    )}
                   </Link>
                 </li>
                 {showRiderEntry && (

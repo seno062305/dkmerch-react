@@ -104,6 +104,40 @@ header {
   font-weight: 700;
 }
 
+.main-nav a.nav-track-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.main-nav a.nav-track-link .nav-track-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #fc1268;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  font-style: normal;
+  line-height: 1;
+  box-shadow: 0 0 0 2px #fff;
+}
+.main-nav a.nav-track-link.has-indicator::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fc1268;
+  box-shadow: 0 0 0 2px #fff;
+  display: none; /* badge count is primary indicator */
+}
+
 .main-nav a::after { display: none; }
 
 /* Mobile nav header — hidden on desktop */

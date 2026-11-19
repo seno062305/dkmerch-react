@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { QRCodeSVG } from 'qrcode.react';
@@ -487,6 +488,7 @@ const SIDE_CARD_PAGE_SIZE = 5;
 const AdminOrders = () => {
   const { confirm } = useConfirm();
   const { showNotification } = useNotification();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab,     setActiveTab]     = useState('all');
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [searchTerm,    setSearchTerm]    = useState('');
@@ -499,6 +501,53 @@ const AdminOrders = () => {
   const orders = useQuery(api.orders.getAllOrders) || [];
   const storeSettings = useQuery(api.settings.getSettings);
   const storePin = { storeLat: storeSettings?.storeLat, storeLng: storeSettings?.storeLng };
+
+  const confirmReturnPaymentAction = useAction(api.payments.confirmReturnPayment);
+
+  // Return from PayMongo Return Payment checkout — only mark paid if PayMongo really paid
+  useEffect(() => {
+    const returnPay = searchParams.get('returnPay');
+    const orderId = searchParams.get('orderId');
+    if (!returnPay || !orderId) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete('returnPay');
+    next.delete('orderId');
+    setSearchParams(next, { replace: true });
+
+    const openOrder = () => {
+      const match = (orders || []).find((o) => o.orderId === orderId);
+      if (match) {
+        setSelectedOrder(match);
+        setActiveTab(match.refundStatus === 'requested' ? 'refunds' : 'pending');
+      }
+    };
+
+    (async () => {
+      if (returnPay === 'cancel') {
+        openOrder();
+        showNotification('PayMongo Return Payment not completed. Use Continue Return Payment to try again.', 'error');
+        return;
+      }
+      if (returnPay !== 'success') return;
+      try {
+        const result = await confirmReturnPaymentAction({ orderId });
+        openOrder();
+        if (result?.payConfirmed) {
+          setSelectedOrder((prev) =>
+            prev?.orderId === orderId
+              ? { ...prev, refundPayStartedAt: new Date().toISOString(), paymongoRefundId: result.refundId || prev.paymongoRefundId }
+              : prev
+          );
+          showNotification('Return Payment confirmed on PayMongo.', 'success');
+        } else {
+          showNotification(result?.error || 'PayMongo not completed yet. Continue Return Payment.', 'error');
+        }
+      } catch (err) {
+        openOrder();
+        showNotification(err?.message || 'Could not verify Return Payment.', 'error');
+      }
+    })();
+  }, [searchParams, orders, setSearchParams, showNotification, confirmReturnPaymentAction]);
   const updateOrderStatusMutation = useMutation(api.orders.updateOrderStatus);
   const updateOrderFieldsMutation = useMutation(api.orders.updateOrderFields);
   const approveLbcDeliveryMutation = useMutation(api.orders.approveLbcDelivery);
@@ -509,6 +558,7 @@ const AdminOrders = () => {
   const approveCustomerCancelAction  = useAction(api.payments.approveCustomerCancel);
   const adminCancelOrderAction       = useAction(api.payments.adminCancelOrder);
   const approveDamageRefundAction    = useAction(api.payments.approveDamageRefund);
+  const processDamageRefundPayAction = useAction(api.payments.processDamageRefundPay);
   const [acceptingLbcId, setAcceptingLbcId] = useState(null);
   const [lbcApproveOrder, setLbcApproveOrder] = useState(null);
   const [lbcApprovePhoto, setLbcApprovePhoto] = useState('');
@@ -961,18 +1011,36 @@ const AdminOrders = () => {
     }
   };
 
-  const handleCancelWithReason = async (orderId, reason) => {
+  const handleCancelWithReason = async (orderId, reason, proofPhotoId) => {
     const target = orders?.find((o) => o.orderId === orderId) || selectedOrder;
     const wasPaid = String(target?.paymentStatus || '').toLowerCase() === 'paid';
     const status = String(target?.orderStatus || '').toLowerCase();
-    const isUnconfirmed = !status || status === 'pending';
+    const isUnconfirmed = !status || status === 'pending' || status === 'pending payment';
     // After admin confirm — cancel is locked for everyone
     if (!isUnconfirmed) {
       showNotification('This order is already confirmed — cancel is no longer allowed.', 'error');
       return;
     }
+    // Proof optional while testing
+    const amount = target?.finalTotal ?? target?.total ?? 0;
+    const shortId = formatOrderShortId(target || orderId);
+    if (wasPaid) {
+      const ok = await confirm({
+        title: 'Pay refund via PayMongo?',
+        message: `Cancel order #${shortId} and return ₱${Number(amount).toLocaleString('en-PH')} to the customer’s original GCash/Maya via PayMongo?\n\nSame rails as checkout. Your proof screenshot will be saved.`,
+        confirmLabel: 'Continue to PayMongo',
+        cancelLabel: 'Go Back',
+        variant: 'primary',
+        icon: 'fa-credit-card',
+      });
+      if (!ok) return;
+    }
     try {
-      const result = await adminCancelOrderAction({ orderId, reason });
+      const result = await adminCancelOrderAction({
+        orderId,
+        reason,
+        proofPhotoId: proofPhotoId || undefined,
+      });
       if (result?.success === false) {
         showNotification(result?.error || result?.message || 'Failed to cancel order.', 'error');
         return;
@@ -984,13 +1052,16 @@ const AdminOrders = () => {
           status: 'Cancelled',
           cancelReason: reason,
           cancelledBy: 'admin',
+          cancelRefundProofId: proofPhotoId || prev.cancelRefundProofId,
+          refundStatus: wasPaid ? 'approved' : prev.refundStatus,
+          refundAmount: wasPaid ? (result?.refundAmount || amount) : prev.refundAmount,
         }));
       }
       showNotification(
         wasPaid && result?.refunded
           ? 'Order cancelled. PayMongo refund sent to customer.'
           : wasPaid
-            ? 'Order cancelled. Check refund if payment was manual.'
+            ? 'Order cancelled. Refund recorded with your proof.'
             : 'Order cancelled.',
         'success'
       );
@@ -1000,30 +1071,103 @@ const AdminOrders = () => {
     }
   };
 
-  const handleResolveRefund = async (orderId, refundStatus, adminNote) => {
+  const handleProcessRefundPay = async (orderId) => {
     const shortId = formatOrderShortId(orderId);
+    const amount = selectedOrder?.finalTotal ?? selectedOrder?.total ?? 0;
+    const hasContinueLink = !!(selectedOrder?.returnPaymentLinkUrl && !selectedOrder?.refundPayStartedAt && !selectedOrder?.paymongoRefundId);
+    const ok = await confirm({
+      title: hasContinueLink ? 'Continue Return Payment?' : 'Return Payment via PayMongo?',
+      message: hasContinueLink
+        ? `Continue PayMongo for order #${shortId}? If you backed out earlier, finish payment there — it is not marked paid until completed.`
+        : `Return ₱${Number(amount).toLocaleString('en-PH')} for order #${shortId} to the customer’s original GCash/Maya?\n\nPayMongo will open. Backing out does NOT mark it paid — use Continue Return Payment to resume.`,
+      confirmLabel: 'Pay',
+      cancelLabel: 'Back',
+      variant: 'primary',
+      icon: 'fa-credit-card',
+    });
+    if (!ok) return { success: false };
+    try {
+      const result = await processDamageRefundPayAction({ orderId });
+      if (!result?.success) {
+        showNotification(result?.error || 'PayMongo refund failed.', 'error');
+        return { success: false };
+      }
+      if (selectedOrder?.orderId === orderId) {
+        setSelectedOrder((prev) => ({
+          ...prev,
+          // Only mark started when PayMongo actually confirmed
+          ...(result.payConfirmed
+            ? {
+                refundPayStartedAt: new Date().toISOString(),
+                paymongoRefundId: result.refundId || prev.paymongoRefundId,
+              }
+            : {}),
+          returnPaymentLinkUrl: result.checkoutUrl || prev.returnPaymentLinkUrl,
+        }));
+      }
+      if (result?.payConfirmed) {
+        showNotification(
+          `₱${Number(result.refundAmount || amount).toLocaleString('en-PH')} returned. You can finish with optional proof.`,
+          'success'
+        );
+      } else if (result?.checkoutUrl) {
+        window.open(result.checkoutUrl, '_blank', 'noopener,noreferrer');
+        showNotification('PayMongo opened. Complete Pay there. If you go Back, use Continue Return Payment.', 'success');
+      } else {
+        showNotification(result?.error || 'Could not open PayMongo. Try again.', 'error');
+        return { success: false, ...result };
+      }
+      return { success: true, ...result };
+    } catch (err) {
+      console.error('Failed to process refund pay:', err);
+      showNotification(err?.data || err?.message || 'PayMongo refund failed.', 'error');
+      return { success: false };
+    }
+  };
+
+  const handleConfirmReturnPayment = async (orderId) => {
+    try {
+      const result = await confirmReturnPaymentAction({ orderId });
+      if (result?.payConfirmed) {
+        if (selectedOrder?.orderId === orderId) {
+          setSelectedOrder((prev) => ({
+            ...prev,
+            refundPayStartedAt: new Date().toISOString(),
+            paymongoRefundId: result.refundId || prev.paymongoRefundId,
+          }));
+        }
+        showNotification('Return Payment confirmed.', 'success');
+        return { success: true, ...result };
+      }
+      if (result?.checkoutUrl) {
+        window.open(result.checkoutUrl, '_blank', 'noopener,noreferrer');
+      }
+      showNotification(result?.error || 'PayMongo not completed yet.', 'error');
+      return { success: false, ...result };
+    } catch (err) {
+      showNotification(err?.message || 'Could not verify Return Payment.', 'error');
+      return { success: false };
+    }
+  };
+
+  const handleResolveRefund = async (orderId, refundStatus, adminNote, proofPhotoId) => {
     if (refundStatus === 'approved') {
+      // Proof optional while testing
       const amount = selectedOrder?.finalTotal ?? selectedOrder?.total ?? 0;
-      const ok = await confirm({
-        title: 'Pay refund via PayMongo?',
-        message: `Refund ₱${Number(amount).toLocaleString('en-PH')} for order #${shortId}?\n\nPayMongo will return the payment to the customer’s GCash/Maya — same flow as their checkout payment.`,
-        confirmLabel: 'Continue to PayMongo',
-        cancelLabel: 'Cancel',
-        variant: 'primary',
-        icon: 'fa-credit-card',
-      });
-      if (!ok) return;
       try {
         const result = await approveDamageRefundAction({
           orderId,
           adminNote: adminNote || undefined,
+          proofPhotoId,
         });
         if (!result?.success) {
-          showNotification(result?.error || 'PayMongo refund failed.', 'error');
+          showNotification(result?.error || 'Could not finalize refund.', 'error');
           return;
         }
         showNotification(
-          `Refund ₱${Number(result.refundAmount || amount).toLocaleString('en-PH')} sent via PayMongo.`,
+          result?.refunded
+            ? `Refund ₱${Number(result.refundAmount || amount).toLocaleString('en-PH')} complete.`
+            : `Refund recorded with proof. ₱${Number(result.refundAmount || amount).toLocaleString('en-PH')}.`,
           'success'
         );
         if (selectedOrder?.orderId === orderId) {
@@ -1034,11 +1178,12 @@ const AdminOrders = () => {
             refundResolvedAt: new Date().toISOString(),
             refundAmount: result.refundAmount || amount,
             refundPaidAt: new Date().toISOString(),
+            refundAdminProofId: proofPhotoId,
           }));
         }
       } catch (err) {
         console.error('Failed to approve refund via PayMongo:', err);
-        showNotification(err?.data || err?.message || 'PayMongo refund failed.', 'error');
+        showNotification(err?.data || err?.message || 'Could not finalize refund.', 'error');
       }
       return;
     }
@@ -1051,6 +1196,7 @@ const AdminOrders = () => {
           refundResolvedAt: new Date().toISOString(), refundAmount,
         }));
       }
+      showNotification('Refund request rejected. Customer will be notified.', 'success');
     } catch (err) {
       console.error('Failed to resolve refund:', err);
       showNotification('Failed to resolve refund. Please try again.', 'error');
@@ -1687,6 +1833,8 @@ const AdminOrders = () => {
           onUpdateStatus={handleUpdateStatus}
           onCancelWithReason={handleCancelWithReason}
           onResolveRefund={handleResolveRefund}
+          onProcessRefundPay={handleProcessRefundPay}
+          onConfirmReturnPayment={handleConfirmReturnPayment}
           onResolveCancelRequest={handleResolveCancelRequest}
           onMarkLbcShipped={async (orderId, { photo, imageStorageId }) => {
             const result = await markLbcShippedMutation({
@@ -1728,23 +1876,83 @@ const AdminOrders = () => {
 /* ══════════════════════════════════════
    REJECT CONFIRMATION DIALOG
 ══════════════════════════════════════ */
-const RejectConfirmDialog = ({ order, adminNote, onConfirm, onCancel }) => {
+const REFUND_REJECT_PRESETS = [
+  'Damage photo unclear / not enough proof',
+  'Item does not appear damaged',
+  'Outside refund policy window',
+  'Wrong item / customer error',
+  'Already refunded or replaced',
+  'Other reason',
+];
+
+const RejectConfirmDialog = ({ order, onConfirm, onCancel }) => {
   const refundAmount = order.refundAmount ?? order.finalTotal ?? order.total ?? 0;
+  const [selectedPreset, setSelectedPreset] = useState('');
+  const [otherNote, setOtherNote] = useState('');
+  const [error, setError] = useState('');
+  const isOther = selectedPreset === 'Other reason';
+  const finalNote = isOther ? otherNote.trim() : selectedPreset;
+
+  const handleReject = () => {
+    if (!selectedPreset) {
+      setError('Please select a reject reason.');
+      return;
+    }
+    if (isOther && !otherNote.trim()) {
+      setError('Please enter a note for Other reason.');
+      return;
+    }
+    onConfirm(finalNote);
+  };
+
   return (
     <div className="reject-confirm-overlay" onClick={onCancel}>
       <div className="reject-confirm-dialog" onClick={e => e.stopPropagation()}>
         <div className="reject-confirm-icon"><i className="fas fa-exclamation-triangle"></i></div>
         <h3>Reject Refund Request?</h3>
-        <p>Are you sure you want to <strong>reject</strong> the refund for Order <strong>#{formatOrderShortId(order)}</strong>?</p>
+        <p>Select a reason for rejecting Order <strong>#{formatOrderShortId(order)}</strong>.</p>
         <div className="reject-confirm-details">
           <div className="reject-confirm-row"><span>Customer</span><strong>{order.customerName || 'N/A'}</strong></div>
           <div className="reject-confirm-row"><span>Refund Amount</span><strong>₱{refundAmount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</strong></div>
-          {adminNote && <div className="reject-confirm-row"><span>Your Note</span><strong style={{ fontStyle: 'italic' }}>"{adminNote}"</strong></div>}
         </div>
+        <div className="cancel-presets" style={{ marginTop: 12 }}>
+          {REFUND_REJECT_PRESETS.map((preset) => (
+            <button
+              key={preset}
+              type="button"
+              className={`cancel-preset-chip ${selectedPreset === preset ? 'active' : ''}`}
+              onClick={() => {
+                setSelectedPreset(preset);
+                setError('');
+                if (preset !== 'Other reason') setOtherNote('');
+              }}
+            >
+              {selectedPreset === preset && <i className="fas fa-check"></i>} {preset}
+            </button>
+          ))}
+        </div>
+        {isOther && (
+          <div className="cancel-custom-wrap" style={{ marginTop: 10 }}>
+            <label>Note <span className="required">*</span></label>
+            <textarea
+              className="cancel-custom-input"
+              placeholder="Type reject reason…"
+              value={otherNote}
+              onChange={(e) => { setOtherNote(e.target.value); setError(''); }}
+              rows={3}
+              maxLength={300}
+              autoFocus
+            />
+            <div className="char-count">{otherNote.length}/300</div>
+          </div>
+        )}
+        {error && <div className="cancel-error" style={{ marginTop: 8 }}><i className="fas fa-exclamation-circle"></i> {error}</div>}
         <p className="reject-confirm-warning"><i className="fas fa-info-circle"></i> The customer will be notified via email.</p>
         <div className="reject-confirm-actions">
-          <button className="reject-confirm-cancel-btn" onClick={onCancel}><i className="fas fa-arrow-left"></i> Go Back</button>
-          <button className="reject-confirm-proceed-btn" onClick={onConfirm}><i className="fas fa-times-circle"></i> Yes, Reject</button>
+          <button type="button" className="reject-confirm-cancel-btn" onClick={onCancel}><i className="fas fa-arrow-left"></i> Go Back</button>
+          <button type="button" className="reject-confirm-proceed-btn" onClick={handleReject} disabled={!finalNote}>
+            <i className="fas fa-times-circle"></i> Yes, Reject
+          </button>
         </div>
       </div>
     </div>
@@ -1754,7 +1962,7 @@ const RejectConfirmDialog = ({ order, adminNote, onConfirm, onCancel }) => {
 /* ══════════════════════════════════════
    ORDER MODAL
 ══════════════════════════════════════ */
-const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onResolveRefund, onResolveCancelRequest, onMarkLbcShipped, generateChatUploadUrl, getStatusColor, getStatusLabel, storePin = null }) => {
+const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onResolveRefund, onProcessRefundPay, onConfirmReturnPayment, onResolveCancelRequest, onMarkLbcShipped, generateChatUploadUrl, getStatusColor, getStatusLabel, storePin = null }) => {
   useBodyScrollLock(true);
   const [showCancelModal,   setShowCancelModal]   = useState(false);
   const [lbcShipPhoto, setLbcShipPhoto] = useState('');
@@ -1765,14 +1973,21 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
   const [refundAdminNote,   setRefundAdminNote]   = useState('');
   const [cancelAdminNote,   setCancelAdminNote]   = useState('');
   const [resolvingRefund,   setResolvingRefund]   = useState(false);
+  const [processingRefundPay, setProcessingRefundPay] = useState(false);
   const [resolvingCancel,   setResolvingCancel]   = useState(false);
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
+  const [refundPayDone,     setRefundPayDone]     = useState(!!(order.refundPayStartedAt || order.paymongoRefundId));
+  const hasReturnPayContinue = !!(order.returnPaymentLinkUrl && !order.refundPayStartedAt && !order.paymongoRefundId);
   const [showWaybill,       setShowWaybill]       = useState(false);
   const [showItemsModal,    setShowItemsModal]    = useState(false);
   const [cancelProofFile,   setCancelProofFile]   = useState(null);
   const [cancelProofPreview, setCancelProofPreview] = useState(null);
   const [cancelProofError,  setCancelProofError]  = useState('');
   const cancelProofInputRef = useRef(null);
+  const [refundProofFile,   setRefundProofFile]   = useState(null);
+  const [refundProofPreview, setRefundProofPreview] = useState(null);
+  const [refundProofError,  setRefundProofError]  = useState('');
+  const refundProofInputRef = useRef(null);
   const generateRefundUploadUrl = useMutation(api.orders.generateRefundUploadUrl);
 
   const refundPhotoUrl = useQuery(
@@ -1782,6 +1997,10 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
   const cancelProofUrl = useQuery(
     api.orders.getRefundPhotoUrl,
     order.cancelRefundProofId ? { storageId: order.cancelRefundProofId } : 'skip'
+  );
+  const refundAdminProofUrl = useQuery(
+    api.orders.getRefundPhotoUrl,
+    order.refundAdminProofId ? { storageId: order.refundAdminProofId } : 'skip'
   );
 
   const subtotal      = order.subtotal   || 0;
@@ -1825,10 +2044,57 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
     && !isLbc
     && currentStatus === 'confirmed';
 
-  const handleRefundResolve = async (status) => {
+  const handleRefundProofChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const check = validateImageFile(file);
+    if (!check.ok) {
+      setRefundProofError(check.error);
+      e.target.value = '';
+      return;
+    }
+    setRefundProofError('');
+    setRefundProofFile(file);
+    setRefundProofPreview(URL.createObjectURL(file));
+  };
+
+  const clearRefundProof = () => {
+    setRefundProofFile(null);
+    if (refundProofPreview) URL.revokeObjectURL(refundProofPreview);
+    setRefundProofPreview(null);
+    if (refundProofInputRef.current) refundProofInputRef.current.value = '';
+  };
+
+  // Sync pay-done when order updates from parent (e.g. after PayMongo success verify)
+  useEffect(() => {
+    setRefundPayDone(!!(order.refundPayStartedAt || order.paymongoRefundId));
+  }, [order.refundPayStartedAt, order.paymongoRefundId, order.orderId]);
+
+  const handleRefundResolve = async (status, noteOverride) => {
+    setRefundProofError('');
     setResolvingRefund(true);
-    try { await onResolveRefund(order.orderId, status, refundAdminNote.trim()); }
-    finally { setResolvingRefund(false); setShowRejectConfirm(false); }
+    try {
+      let proofPhotoId;
+      if (status === 'approved' && refundProofFile) {
+        const uploadUrl = await generateRefundUploadUrl();
+        const uploadRes = await fetch(uploadUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': refundProofFile.type },
+          body: refundProofFile,
+        });
+        if (!uploadRes.ok) throw new Error('Failed to upload refund proof');
+        const { storageId } = await uploadRes.json();
+        proofPhotoId = storageId;
+      }
+      const note = String(noteOverride ?? refundAdminNote).trim();
+      await onResolveRefund(order.orderId, status, note, proofPhotoId);
+      clearRefundProof();
+    } catch (err) {
+      setRefundProofError(err?.message || 'Could not process refund.');
+    } finally {
+      setResolvingRefund(false);
+      setShowRejectConfirm(false);
+    }
   };
 
   const handleCancelProofChange = (e) => {
@@ -2160,7 +2426,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
                     {isPaid && (
                       <div className="admin-cancel-proof-upload">
                         <label className="admin-refund-note-label">
-                          <i className="fas fa-camera"></i> Refund proof screenshot <span className="refund-required">*</span>
+                          <i className="fas fa-camera"></i> Refund proof screenshot <span style={{ color: '#9ca3af', fontWeight: 400 }}>(optional)</span>
                         </label>
                         <input
                           ref={cancelProofInputRef}
@@ -2284,7 +2550,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
                     <div className="admin-cancel-paymongo-card admin-refund-paymongo-card">
                       <div className="admin-cancel-paymongo-head">
                         <i className="fas fa-credit-card"></i>
-                        <strong>PayMongo refund · pay customer back</strong>
+                        <strong>1 · Return Payment (PayMongo)</strong>
                       </div>
                       <div className="admin-cancel-paymongo-row">
                         <span>Amount to return</span>
@@ -2315,41 +2581,153 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
                         <span>Secured by PayMongo</span>
                       </div>
                       <p className="admin-cancel-paymongo-hint">
-                        Same as customer checkout: PayMongo returns the paid amount to their original GCash/Maya wallet.
+                        Same as customer checkout. Backing out of PayMongo does NOT mark it paid —
+                        use Continue Return Payment to resume. Proof upload is optional for now.
                       </p>
-                      <button
-                        type="button"
-                        className="admin-paymongo-pay-btn"
-                        onClick={() => handleRefundResolve('approved')}
-                        disabled={resolvingRefund}
-                      >
-                        {resolvingRefund
-                          ? <><i className="fas fa-spinner fa-spin"></i> Processing PayMongo…</>
-                          : <><i className="fas fa-lock"></i> Continue to PayMongo Refund</>}
-                      </button>
+                      {!refundPayDone ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          <button
+                            type="button"
+                            className="admin-paymongo-pay-btn"
+                            onClick={async () => {
+                              if (!onProcessRefundPay) return;
+                              setProcessingRefundPay(true);
+                              try {
+                                const result = await onProcessRefundPay(order.orderId);
+                                if (result?.payConfirmed) setRefundPayDone(true);
+                              } finally {
+                                setProcessingRefundPay(false);
+                              }
+                            }}
+                            disabled={processingRefundPay || resolvingRefund}
+                          >
+                            {processingRefundPay
+                              ? <><i className="fas fa-spinner fa-spin"></i> Opening PayMongo…</>
+                              : hasReturnPayContinue
+                                ? <><i className="fas fa-redo"></i> Continue Return Payment</>
+                                : <><i className="fas fa-hand-holding-usd"></i> Return Payment</>}
+                          </button>
+                          {hasReturnPayContinue && onConfirmReturnPayment && (
+                            <button
+                              type="button"
+                              className="admin-cancel-proof-btn"
+                              onClick={async () => {
+                                setProcessingRefundPay(true);
+                                try {
+                                  const result = await onConfirmReturnPayment(order.orderId);
+                                  if (result?.payConfirmed) setRefundPayDone(true);
+                                } finally {
+                                  setProcessingRefundPay(false);
+                                }
+                              }}
+                              disabled={processingRefundPay || resolvingRefund}
+                            >
+                              <i className="fas fa-sync"></i> I finished PayMongo — check status
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="admin-refund-resolved approved" style={{ marginTop: 8 }}>
+                          <i className="fas fa-check-circle"></i>
+                          <span>Return Payment confirmed. Finish below (proof optional).</span>
+                        </div>
+                      )}
                     </div>
-                    <label className="admin-refund-note-label"><i className="fas fa-comment-alt"></i> Response note <span style={{ color: '#9ca3af', fontWeight: 400 }}>(optional)</span></label>
-                    <textarea
-                      className="admin-refund-note-input"
-                      placeholder="e.g. We've processed your refund…"
-                      value={refundAdminNote}
-                      rows={2}
-                      maxLength={300}
-                      onChange={(e) => {
-                        setRefundAdminNote(e.target.value);
-                        const el = e.target;
-                        el.style.height = '64px';
-                        if (el.scrollHeight > 64) {
-                          el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
-                        }
-                      }}
-                    />
-                    <div className="admin-refund-action-btns">
-                      <button className="admin-refund-reject-btn" onClick={() => setShowRejectConfirm(true)} disabled={resolvingRefund}>{resolvingRefund ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-times-circle"></i>} Reject</button>
+
+                    {refundPayDone && (
+                      <div className="admin-cancel-paymongo-card" style={{ marginTop: 12 }}>
+                        <div className="admin-cancel-paymongo-head">
+                          <i className="fas fa-camera"></i>
+                          <strong>2 · Upload proof <span style={{ fontWeight: 500, opacity: 0.8 }}>(optional)</span></strong>
+                        </div>
+                        <div className="admin-cancel-proof-upload">
+                          <label className="admin-refund-note-label">
+                            <i className="fas fa-camera"></i> Proof screenshot <span style={{ color: '#9ca3af', fontWeight: 400 }}>(optional)</span>
+                          </label>
+                          <input
+                            ref={refundProofInputRef}
+                            type="file"
+                            accept={IMAGE_ACCEPT_NO_GIF}
+                            onChange={handleRefundProofChange}
+                            style={{ display: 'none' }}
+                          />
+                          {!refundProofPreview ? (
+                            <button
+                              type="button"
+                              className="admin-cancel-proof-btn"
+                              onClick={() => refundProofInputRef.current?.click()}
+                              disabled={resolvingRefund}
+                            >
+                              <i className="fas fa-cloud-upload-alt"></i> Upload screenshot (optional)
+                            </button>
+                          ) : (
+                            <div className="admin-cancel-proof-preview">
+                              <img src={refundProofPreview} alt="Refund proof" />
+                              <button type="button" className="admin-cancel-proof-remove" onClick={clearRefundProof} disabled={resolvingRefund}>
+                                <i className="fas fa-trash"></i> Remove
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        {refundProofError && (
+                          <div className="admin-cancel-proof-error">
+                            <i className="fas fa-exclamation-circle"></i> {refundProofError}
+                          </div>
+                        )}
+                        <label className="admin-refund-note-label" style={{ marginTop: 10 }}>
+                          <i className="fas fa-comment-alt"></i> Response note <span style={{ color: '#9ca3af', fontWeight: 400 }}>(optional)</span>
+                        </label>
+                        <textarea
+                          className="admin-refund-note-input"
+                          placeholder="e.g. We've processed your refund…"
+                          value={refundAdminNote}
+                          rows={2}
+                          maxLength={300}
+                          onChange={(e) => {
+                            setRefundAdminNote(e.target.value);
+                            const el = e.target;
+                            el.style.height = '64px';
+                            if (el.scrollHeight > 64) {
+                              el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="admin-paymongo-pay-btn"
+                          style={{ marginTop: 10 }}
+                          onClick={() => handleRefundResolve('approved')}
+                          disabled={resolvingRefund}
+                        >
+                          {resolvingRefund
+                            ? <><i className="fas fa-spinner fa-spin"></i> Finalizing…</>
+                            : <><i className="fas fa-check-circle"></i> Confirm Refund Complete</>}
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="admin-refund-action-btns" style={{ marginTop: 12 }}>
+                      <button
+                        className="admin-refund-reject-btn"
+                        onClick={() => setShowRejectConfirm(true)}
+                        disabled={resolvingRefund || processingRefundPay}
+                      >
+                        {resolvingRefund ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-times-circle"></i>} Reject
+                      </button>
                     </div>
                   </div>
                 )}
-                {order.refundStatus === 'approved' && <div className="admin-refund-resolved approved"><i className="fas fa-check-circle"></i><span>Refund of <strong>₱{refundAmount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</strong> approved and paid.</span></div>}
+                {order.refundStatus === 'approved' && (
+                  <div className="admin-refund-resolved approved">
+                    <i className="fas fa-check-circle"></i>
+                    <span>Refund of <strong>₱{refundAmount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</strong> approved and paid.</span>
+                    {refundAdminProofUrl && (
+                      <a href={refundAdminProofUrl} target="_blank" rel="noreferrer" className="admin-cancel-proof-link">
+                        <i className="fas fa-image"></i> View refund proof
+                      </a>
+                    )}
+                  </div>
+                )}
                 {order.refundStatus === 'rejected' && <div className="admin-refund-resolved rejected"><i className="fas fa-times-circle"></i><span>Refund request rejected.</span></div>}
               </div>
             </div>
@@ -2427,15 +2805,43 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
             {!isDone && !isRiderManaged && (
               <div className="status-buttons">
                 {currentStatus === 'pending' && (
-                  <div className="status-btn-wrapper">
-                    <button
-                      className={`status-btn confirmed ${!canConfirm ? 'is-blocked' : ''}`}
-                      onClick={() => canConfirm && onUpdateStatus(order.orderId, 'confirmed')}
-                      disabled={!canConfirm}
-                    >
-                      <i className="fas fa-check-circle"></i><span>Confirm Order</span>
-                    </button>
-                    {!isPaid && <div className="block-reason"><i className="fas fa-lock"></i> Awaiting payment</div>}
+                  <div className="status-btn-pending-group">
+                    <div className="status-btn-row">
+                      <button
+                        className={`status-btn confirmed ${!canConfirm ? 'is-blocked' : ''}`}
+                        onClick={() => canConfirm && onUpdateStatus(order.orderId, 'confirmed')}
+                        disabled={!canConfirm}
+                      >
+                        <i className="fas fa-check-circle"></i><span>Confirm Order</span>
+                      </button>
+                      <button
+                        className={`status-btn cancelled ${!canCancel ? 'is-blocked' : ''}`}
+                        onClick={() => canCancel && setShowCancelModal(true)}
+                        disabled={!canCancel}
+                        title={canCancel ? 'Cancel Order' : 'Already confirmed — cancel is locked'}
+                      >
+                        <i className="fas fa-times-circle"></i><span>Cancel Order</span>
+                      </button>
+                    </div>
+                    {!isPaid && (
+                      <div className="block-reason"><i className="fas fa-lock"></i> Awaiting payment — cancel anytime before confirm</div>
+                    )}
+                    {isPaid && (
+                      <>
+                        <button
+                          type="button"
+                          className="status-btn return-payment"
+                          onClick={() => setShowCancelModal(true)}
+                          disabled={!canCancel}
+                          title="Return Payment via PayMongo"
+                        >
+                          <i className="fas fa-hand-holding-usd"></i><span>Return Payment</span>
+                        </button>
+                        <div className="block-reason" style={{ color: '#0ea5e9' }}>
+                          <i className="fas fa-info-circle"></i> Paid — Return Payment opens PayMongo (same as refund), then proof upload
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
                 {isLbc && isPaid && currentStatus === 'confirmed' && (
@@ -2542,30 +2948,19 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
                     </div>
                   </div>
                 )}
-                {!isDone && (
+                {currentStatus !== 'pending' && !isDone && (
                   <div className="status-btn-wrapper">
                     <button
                       className={`status-btn cancelled ${!canCancel ? 'is-blocked' : ''}`}
                       onClick={() => canCancel && setShowCancelModal(true)}
                       disabled={!canCancel}
-                      title={
-                        canCancel
-                          ? (isPaid ? 'Cancel & refund via PayMongo' : 'Cancel Order')
-                          : 'Already confirmed — cancel is locked'
-                      }
+                      title={canCancel ? 'Cancel Order' : 'Already confirmed — cancel is locked'}
                     >
                       <i className="fas fa-times-circle"></i><span>Cancel Order</span>
                     </button>
-                    {isPaid && currentStatus === 'pending' && (
-                      <div className="block-reason" style={{ color: '#0ea5e9' }}>
-                        <i className="fas fa-info-circle"></i> Paid + pending — cancel will auto-refund
-                      </div>
-                    )}
-                    {currentStatus !== 'pending' && (
-                      <div className="block-reason">
-                        <i className="fas fa-lock"></i> Confirmed — cancel is no longer available
-                      </div>
-                    )}
+                    <div className="block-reason">
+                      <i className="fas fa-lock"></i> Confirmed — cancel is no longer available
+                    </div>
                   </div>
                 )}
               </div>
@@ -2576,6 +2971,11 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
             <div className="modal-section">
               <h3><i className="fas fa-ban"></i> Cancellation Reason</h3>
               <div className="cancel-reason-display"><i className="fas fa-quote-left"></i><p>{order.cancelReason}</p></div>
+              {cancelProofUrl && (
+                <a href={cancelProofUrl} target="_blank" rel="noreferrer" className="admin-cancel-proof-link" style={{ marginTop: 10, display: 'inline-flex' }}>
+                  <i className="fas fa-image"></i> View refund proof
+                </a>
+              )}
             </div>
           )}
 
@@ -2596,8 +2996,26 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
         </div>
       </div>
 
-      {showCancelModal && <CancelReasonModal order={order} onConfirm={reason => { onCancelWithReason(order.orderId, reason); setShowCancelModal(false); }} onClose={() => setShowCancelModal(false)} />}
-      {showRejectConfirm && <RejectConfirmDialog order={order} adminNote={refundAdminNote} onConfirm={() => handleRefundResolve('rejected')} onCancel={() => setShowRejectConfirm(false)} />}
+      {showCancelModal && (
+        <CancelReasonModal
+          order={order}
+          generateUploadUrl={generateRefundUploadUrl}
+          onProcessReturnPay={onProcessRefundPay}
+          onConfirmReturnPayment={onConfirmReturnPayment}
+          onConfirm={async (reason, proofPhotoId) => {
+            await onCancelWithReason(order.orderId, reason, proofPhotoId);
+            setShowCancelModal(false);
+          }}
+          onClose={() => setShowCancelModal(false)}
+        />
+      )}
+      {showRejectConfirm && (
+        <RejectConfirmDialog
+          order={order}
+          onConfirm={(note) => handleRefundResolve('rejected', note)}
+          onCancel={() => setShowRejectConfirm(false)}
+        />
+      )}
       {showWaybill && <WaybillModal order={order} onClose={() => setShowWaybill(false)} />}
       {showItemsModal && (
         <OrderItemsListModal
@@ -2722,53 +3140,288 @@ const CANCEL_PRESETS = [
   'Incorrect order details', 'Fraudulent order detected', 'Other reason',
 ];
 
-const CancelReasonModal = ({ order, onConfirm, onClose }) => {
+const CancelReasonModal = ({ order, onConfirm, onClose, generateUploadUrl, onProcessReturnPay, onConfirmReturnPayment }) => {
   useBodyScrollLock(true);
   const [selectedPreset, setSelectedPreset] = useState('');
   const [customReason,   setCustomReason]   = useState('');
   const [error,          setError]          = useState('');
+  const [submitting,     setSubmitting]     = useState(false);
+  const [processingPay,  setProcessingPay]  = useState(false);
+  const [payDone,        setPayDone]        = useState(!!(order.refundPayStartedAt || order.paymongoRefundId));
+  const [hasContinue,    setHasContinue]    = useState(!!(order.returnPaymentLinkUrl && !order.refundPayStartedAt && !order.paymongoRefundId));
+  const [proofFile,      setProofFile]      = useState(null);
+  const [proofPreview,   setProofPreview]   = useState(null);
+  const proofInputRef = useRef(null);
   const isOther     = selectedPreset === 'Other reason';
   const finalReason = isOther ? customReason.trim() : selectedPreset;
+  const isPaid =
+    String(order?.paymentStatus || '').toLowerCase() === 'paid';
   const isPaidPending =
-    String(order?.paymentStatus || '').toLowerCase() === 'paid'
-    && String(order?.orderStatus || '').toLowerCase() === 'pending';
+    isPaid && String(order?.orderStatus || '').toLowerCase() === 'pending';
+  const pm = getPaymentMethodLabel(order);
+  const refundAmount = Number(order?.finalTotal ?? order?.total ?? 0);
+
+  const handleProofChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const check = validateImageFile(file);
+    if (!check.ok) {
+      setError(check.error);
+      e.target.value = '';
+      return;
+    }
+    setError('');
+    setProofFile(file);
+    setProofPreview(URL.createObjectURL(file));
+  };
+
+  const clearProof = () => {
+    setProofFile(null);
+    if (proofPreview) URL.revokeObjectURL(proofPreview);
+    setProofPreview(null);
+    if (proofInputRef.current) proofInputRef.current.value = '';
+  };
+
+  const handleReturnPay = async () => {
+    if (!onProcessReturnPay) return;
+    setProcessingPay(true);
+    setError('');
+    try {
+      const result = await onProcessReturnPay(order.orderId);
+      if (result?.payConfirmed) {
+        setPayDone(true);
+        setHasContinue(false);
+      } else if (result?.checkoutUrl) {
+        setHasContinue(true);
+      } else if (result?.error) {
+        setError(result.error);
+      }
+    } catch (err) {
+      setError(err?.message || 'Return Payment failed.');
+    } finally {
+      setProcessingPay(false);
+    }
+  };
+
+  const handleCheckPayStatus = async () => {
+    if (!onConfirmReturnPayment) return;
+    setProcessingPay(true);
+    setError('');
+    try {
+      const result = await onConfirmReturnPayment(order.orderId);
+      if (result?.payConfirmed) {
+        setPayDone(true);
+        setHasContinue(false);
+      } else {
+        setError(result?.error || 'PayMongo not completed yet.');
+      }
+    } catch (err) {
+      setError(err?.message || 'Could not verify Return Payment.');
+    } finally {
+      setProcessingPay(false);
+    }
+  };
+
+  const handleConfirm = async () => {
+    if (!finalReason) {
+      setError('Please select or enter a reason.');
+      return;
+    }
+    if (isPaid && !payDone) {
+      setError('Complete Return Payment first (or Continue if you backed out).');
+      return;
+    }
+    // Proof optional while testing
+    setSubmitting(true);
+    setError('');
+    try {
+      let proofPhotoId;
+      if (isPaid && proofFile && generateUploadUrl) {
+        const uploadUrl = await generateUploadUrl();
+        const uploadRes = await fetch(uploadUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': proofFile.type },
+          body: proofFile,
+        });
+        if (!uploadRes.ok) throw new Error('Failed to upload refund proof');
+        const { storageId } = await uploadRes.json();
+        proofPhotoId = storageId;
+      }
+      await onConfirm(finalReason, proofPhotoId);
+      clearProof();
+    } catch (err) {
+      setError(err?.message || 'Could not cancel order.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div className="cancel-reason-overlay" onClick={onClose}>
       <div className="cancel-reason-modal" onClick={e => e.stopPropagation()}>
         <div className="cancel-reason-header">
           <div className="cancel-reason-icon"><i className="fas fa-ban"></i></div>
-          <div><h3>Cancel Order</h3><p>Order #{formatOrderShortId(order)}</p></div>
-          <button className="close-btn" onClick={onClose}><i className="fas fa-times"></i></button>
+          <div>
+            <h3>{isPaidPending ? 'Return Payment & Cancel' : 'Cancel Order'}</h3>
+            <p>Order #{formatOrderShortId(order)}</p>
+          </div>
+          <button className="close-btn" onClick={onClose} disabled={submitting || processingPay}><i className="fas fa-times"></i></button>
         </div>
         <div className="cancel-reason-body">
-          <p className="cancel-reason-prompt">Select or enter a cancellation reason.</p>
-          {isPaidPending && (
-            <p className="cancel-reason-prompt" style={{ color: '#0ea5e9', marginTop: 0 }}>
-              This order is paid but not confirmed yet — cancelling will refund the customer via PayMongo.
+          {!isPaid && (
+            <p className="cancel-reason-prompt">
+              Select or enter a cancellation reason. Order is not paid — no PayMongo return needed.
             </p>
           )}
-          <div className="cancel-presets">
-            {CANCEL_PRESETS.map(preset => (
-              <button key={preset} className={`cancel-preset-chip ${selectedPreset === preset ? 'active' : ''}`} onClick={() => { setSelectedPreset(preset); setError(''); if (preset !== 'Other reason') setCustomReason(''); }}>
-                {selectedPreset === preset && <i className="fas fa-check"></i>} {preset}
-              </button>
-            ))}
-          </div>
-          {isOther && (
-            <div className="cancel-custom-wrap">
-              <label>Specify reason <span className="required">*</span></label>
-              <textarea className="cancel-custom-input" placeholder="Type cancellation reason…" value={customReason} onChange={e => { setCustomReason(e.target.value); setError(''); }} rows={3} maxLength={300} autoFocus />
-              <div className="char-count">{customReason.length}/300</div>
-            </div>
+          {isPaidPending && (
+            <>
+              <div className="admin-cancel-paymongo-card" style={{ marginBottom: 14 }}>
+                <div className="admin-cancel-paymongo-head">
+                  <i className="fas fa-credit-card"></i>
+                  <strong>1 · Return Payment (PayMongo)</strong>
+                </div>
+                <div className="admin-cancel-paymongo-row">
+                  <span>Amount to return</span>
+                  <strong>₱{refundAmount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</strong>
+                </div>
+                <div className="admin-cancel-paymongo-row">
+                  <span>Return via</span>
+                  <strong className="admin-refund-method-cell">
+                    <PaymentMethodMark pm={pm} size={18} />
+                    <span style={{ color: pm.color }}>{pm.label}</span>
+                  </strong>
+                </div>
+                <div className="admin-cancel-paymongo-row">
+                  <span>Customer</span>
+                  <strong>{order.customerName || '—'}{order.phone ? ` · ${order.phone}` : ''}</strong>
+                </div>
+                <div className="admin-paymongo-brands">
+                  {(pm.brand === 'maya' || String(pm.label).toLowerCase().includes('maya')) ? (
+                    <img src="/images/payments/maya.svg" alt="Maya" />
+                  ) : (pm.brand === 'gcash' || String(pm.label).toLowerCase().includes('gcash')) ? (
+                    <img src="/images/payments/gcash.svg" alt="GCash" />
+                  ) : (
+                    <>
+                      <img src="/images/payments/gcash.svg" alt="GCash" />
+                      <img src="/images/payments/maya.svg" alt="Maya" />
+                    </>
+                  )}
+                  <span>Secured by PayMongo</span>
+                </div>
+                <p className="admin-cancel-paymongo-hint">
+                  Same as refund. Backing out of PayMongo does NOT mark paid — use Continue Return Payment.
+                  Proof is optional for testing.
+                </p>
+                {!payDone ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <button
+                      type="button"
+                      className="admin-paymongo-pay-btn"
+                      onClick={handleReturnPay}
+                      disabled={processingPay || submitting}
+                    >
+                      {processingPay
+                        ? <><i className="fas fa-spinner fa-spin"></i> Opening PayMongo…</>
+                        : hasContinue
+                          ? <><i className="fas fa-redo"></i> Continue Return Payment</>
+                          : <><i className="fas fa-hand-holding-usd"></i> Return Payment</>}
+                    </button>
+                    {hasContinue && (
+                      <button
+                        type="button"
+                        className="admin-cancel-proof-btn"
+                        onClick={handleCheckPayStatus}
+                        disabled={processingPay || submitting}
+                      >
+                        <i className="fas fa-sync"></i> I finished PayMongo — check status
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="admin-refund-resolved approved" style={{ marginTop: 8 }}>
+                    <i className="fas fa-check-circle"></i>
+                    <span>Return Payment confirmed. Reason + optional proof below.</span>
+                  </div>
+                )}
+              </div>
+
+              {payDone && (
+                <div className="admin-cancel-paymongo-card" style={{ marginBottom: 14 }}>
+                  <div className="admin-cancel-paymongo-head">
+                    <i className="fas fa-camera"></i>
+                    <strong>2 · Upload proof <span style={{ fontWeight: 500, opacity: 0.8 }}>(optional)</span></strong>
+                  </div>
+                  <div className="admin-cancel-proof-upload">
+                    <label className="admin-refund-note-label">
+                      <i className="fas fa-camera"></i> Proof screenshot <span style={{ color: '#9ca3af', fontWeight: 400 }}>(optional)</span>
+                    </label>
+                    <input
+                      ref={proofInputRef}
+                      type="file"
+                      accept={IMAGE_ACCEPT_NO_GIF}
+                      onChange={handleProofChange}
+                      style={{ display: 'none' }}
+                    />
+                    {!proofPreview ? (
+                      <button
+                        type="button"
+                        className="admin-cancel-proof-btn"
+                        onClick={() => proofInputRef.current?.click()}
+                        disabled={submitting}
+                      >
+                        <i className="fas fa-cloud-upload-alt"></i> Upload screenshot (optional)
+                      </button>
+                    ) : (
+                      <div className="admin-cancel-proof-preview">
+                        <img src={proofPreview} alt="Refund proof" />
+                        <button type="button" className="admin-cancel-proof-remove" onClick={clearProof} disabled={submitting}>
+                          <i className="fas fa-trash"></i> Remove
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {(!isPaid || payDone) && (
+            <>
+              <p className="cancel-reason-prompt">Select or enter a cancellation reason.</p>
+              <div className="cancel-presets">
+                {CANCEL_PRESETS.map(preset => (
+                  <button key={preset} type="button" className={`cancel-preset-chip ${selectedPreset === preset ? 'active' : ''}`} onClick={() => { setSelectedPreset(preset); setError(''); if (preset !== 'Other reason') setCustomReason(''); }} disabled={submitting || processingPay}>
+                    {selectedPreset === preset && <i className="fas fa-check"></i>} {preset}
+                  </button>
+                ))}
+              </div>
+              {isOther && (
+                <div className="cancel-custom-wrap">
+                  <label>Specify reason <span className="required">*</span></label>
+                  <textarea className="cancel-custom-input" placeholder="Type cancellation reason…" value={customReason} onChange={e => { setCustomReason(e.target.value); setError(''); }} rows={3} maxLength={300} autoFocus disabled={submitting} />
+                  <div className="char-count">{customReason.length}/300</div>
+                </div>
+              )}
+            </>
           )}
           {error && <div className="cancel-error"><i className="fas fa-exclamation-circle"></i> {error}</div>}
         </div>
         <div className="cancel-reason-footer">
-          <button className="cancel-go-back-btn" onClick={onClose}><i className="fas fa-arrow-left"></i> Go Back</button>
-          <button className="cancel-confirm-btn" onClick={() => { if (!finalReason) { setError('Please select or enter a reason.'); return; } onConfirm(finalReason); }} disabled={!finalReason}>
-            <i className="fas fa-ban"></i> Confirm Cancellation
-          </button>
+          <button type="button" className="cancel-go-back-btn" onClick={onClose} disabled={submitting || processingPay}><i className="fas fa-arrow-left"></i> Back</button>
+          {(!isPaid || payDone) && (
+            <button
+              type="button"
+              className="cancel-confirm-btn"
+              onClick={handleConfirm}
+              disabled={!finalReason || submitting}
+            >
+              {submitting
+                ? <><i className="fas fa-spinner fa-spin"></i> Cancelling…</>
+                : isPaid
+                  ? <><i className="fas fa-check-circle"></i> Confirm Cancel</>
+                  : <><i className="fas fa-ban"></i> Confirm Cancellation</>}
+            </button>
+          )}
         </div>
       </div>
     </div>

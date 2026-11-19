@@ -15,6 +15,21 @@ const CustomerBottomNav = () => {
     api.supportChat.getCustomerUnreadCount,
     isAuthenticated && user?.email ? { customerEmail: user.email } : 'skip'
   ) || 0;
+  const customerOrders = useQuery(
+    api.orders.getOrdersByEmail,
+    isAuthenticated && user?.email ? { email: user.email } : 'skip'
+  );
+  const trackOrderCount = React.useMemo(() => {
+    if (!Array.isArray(customerOrders)) return 0;
+    return customerOrders.filter((o) => {
+      const st = String(o.orderStatus || o.status || '').toLowerCase();
+      if (st === 'cancelled') return false;
+      if (st !== 'delivered' && st !== 'completed') return true;
+      if (o.refundStatus === 'requested') return true;
+      if (o.cancelRequestStatus === 'requested') return true;
+      return false;
+    }).length;
+  }, [customerOrders]);
 
   const isActive = (to) => {
     if (to === '/') return path === '/';
@@ -56,7 +71,10 @@ const CustomerBottomNav = () => {
         <span>Preorder</span>
       </a>
       <a href="/track-order" className={`cbn-item ${isActive('/track-order') ? 'active' : ''}`} onClick={(e) => goTo(e, '/track-order')}>
-        <i className="fas fa-map-marker-alt"></i>
+        <span className="cbn-icon-wrap">
+          <i className="fas fa-map-marker-alt"></i>
+          {trackOrderCount > 0 && <em className="cbn-badge">{trackOrderCount > 9 ? '9+' : trackOrderCount}</em>}
+        </span>
         <span>Track</span>
       </a>
       <a href="/chat" className={`cbn-item ${isActive('/chat') ? 'active' : ''}`} onClick={goToChat}>

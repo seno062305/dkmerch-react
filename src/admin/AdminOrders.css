@@ -1564,6 +1564,34 @@
 /* ── Status Buttons ── */
 .status-buttons { display: flex; gap: 10px; flex-wrap: wrap; }
 .status-btn-wrapper { display: flex; flex-direction: column; gap: 5px; }
+.status-btn-pending-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+.status-btn-row {
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+  width: 100%;
+  align-items: stretch;
+}
+.status-btn-row .status-btn {
+  flex: 1;
+  justify-content: center;
+  min-width: 0;
+}
+.status-btn.return-payment {
+  width: 100%;
+  justify-content: center;
+  background: linear-gradient(135deg, #0ea5e9, #2563eb);
+  border-color: #2563eb;
+  color: #fff;
+}
+.status-btn.return-payment:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
 .block-reason { text-align: center; font-size: 11px; font-weight: 600; color: #94a3b8; display: flex; align-items: center; justify-content: center; gap: 4px; }
 .block-reason i { font-size: 10px; }
 
