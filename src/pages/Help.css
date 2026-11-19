@@ -265,7 +265,7 @@
   /* Keep Customer Service quick links visible while scrolling Help sections */
   .help-customer-service {
     position: sticky;
-    top: 0;
+    top: calc(74px + env(safe-area-inset-top, 0px));
     z-index: 40;
     background: #fff;
     padding-top: 6px !important;
