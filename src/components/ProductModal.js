@@ -8,7 +8,7 @@ import { useConfirm, shopActionConfirmRememberKey, preOrderConfirmRememberKey } 
 import { useIsInWishlist } from '../context/wishlistUtils';
 import { useNavigate } from 'react-router-dom';
 import PromoCodeInput from './PromoCodeInput';
-import { formatSaleEndLabel, formatSaleEndShort, formatSaleRange, shouldShowSaleBadge, shouldShowPreOrderBadge, hasDiscountedPrice } from '../utils/saleUtils';
+import { formatSaleEndLabel, shouldShowSaleBadge, shouldShowPreOrderBadge, hasDiscountedPrice, formatPeso } from '../utils/saleUtils';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
 import { getOverlayRoot } from '../utils/scrollLock';
 import './ProductModal.css';
@@ -521,11 +521,6 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
                   {showSaleBadge && (
                     <div className="sale-badge">
                       <span>SALE</span>
-                      {(formatSaleEndShort(product) || formatSaleEndLabel(product)) && (
-                        <span className="sale-badge-end">
-                          {formatSaleEndShort(product) || formatSaleEndLabel(product)}
-                        </span>
-                      )}
                     </div>
                   )}
                   {showPreOrderBadge && <div className="pre-order-badge">PRE-ORDER</div>}
@@ -598,18 +593,18 @@ const ProductModal = ({ product, onClose, onAddToCart, onAddToWishlist, onRequir
                     </>
                   ) : (
                     <>
-                      <div className={`current-price${showSaleBadge ? ' sale' : ''}`}>₱{product.price.toLocaleString()}</div>
-                      {showSaleBadge && hasDiscountedPrice(product) && (
-                        <div className="original-price">₱{product.originalPrice.toLocaleString()}</div>
+                      <div className={`current-price${showSaleBadge ? ' sale' : ''}`}>{formatPeso(product.price) || '₱0'}</div>
+                      {showSaleBadge && hasDiscountedPrice(product) && formatPeso(product.originalPrice) && (
+                        <div className="original-price">{formatPeso(product.originalPrice)}</div>
                       )}
                     </>
                   )}
                 </div>
 
-                {showSaleBadge && (formatSaleEndLabel(product) || formatSaleRange(product)) && (
+                {showSaleBadge && formatSaleEndLabel(product) && (
                   <div className="modal-sale-period">
                     <i className="fas fa-clock"></i>
-                    <span>{formatSaleEndLabel(product) || `Sale period: ${formatSaleRange(product)}`}</span>
+                    <span>{formatSaleEndLabel(product)}</span>
                   </div>
                 )}
 

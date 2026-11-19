@@ -31,16 +31,40 @@ const emptyForm = {
   saleEndDate: '', saleEndTime: '',
 };
 
+const MAX_PRODUCT_PRICE = 1_000_000_000;
+
 const validateForm = (form) => {
   const err = {};
   if (!form.name.trim()) err.name = 'Product name is required.';
   else if (form.name.trim().length < 3) err.name = 'Name must be at least 3 characters.';
+  else if (form.name.trim().length > 120) err.name = 'Name must be 120 characters or less.';
+
+  if (!String(form.category || '').trim()) err.category = 'Category is required.';
+  if (!String(form.kpopGroup || '').trim()) err.kpopGroup = 'K-Pop group is required.';
+
+  const priceNum = Number(form.price);
   if (form.price === '' || form.price === null) err.price = 'Price is required.';
-  else if (isNaN(Number(form.price)) || Number(form.price) <= 0) err.price = 'Price must be a positive number.';
+  else if (!Number.isFinite(priceNum) || priceNum <= 0) err.price = 'Price must be a positive number.';
+  else if (priceNum > MAX_PRODUCT_PRICE) err.price = 'Price looks invalid (too large). Check for typos.';
+  else if (!/^\d+(\.\d{1,2})?$/.test(String(form.price).trim())) {
+    err.price = 'Price can have at most 2 decimal places.';
+  }
+
   if (form.isSale) {
-    if (form.originalPrice === '' || form.originalPrice === null) err.originalPrice = 'Original price is required when item is on sale.';
-    else if (isNaN(Number(form.originalPrice)) || Number(form.originalPrice) <= 0) err.originalPrice = 'Original price must be a positive number.';
-    else if (Number(form.originalPrice) < Number(form.price)) err.originalPrice = 'Original price should be >= selling price.';
+    const origNum = Number(form.originalPrice);
+    if (form.originalPrice === '' || form.originalPrice === null) {
+      err.originalPrice = 'Original price is required when item is on sale.';
+    } else if (!Number.isFinite(origNum) || origNum <= 0) {
+      err.originalPrice = 'Original price must be a positive number.';
+    } else if (origNum > MAX_PRODUCT_PRICE) {
+      err.originalPrice = 'Original price looks invalid (too large).';
+    } else if (!/^\d+(\.\d{1,2})?$/.test(String(form.originalPrice).trim())) {
+      err.originalPrice = 'Original price can have at most 2 decimal places.';
+    } else if (Number.isFinite(priceNum) && origNum <= priceNum) {
+      err.originalPrice = 'Original price must be higher than the sale price.';
+    } else if (Number.isFinite(priceNum) && priceNum > 0 && origNum > priceNum * 50) {
+      err.originalPrice = 'Original price is unrealistically high vs sale price. Check for typos.';
+    }
     if (!form.saleStartDate) err.saleStartDate = 'Sale start date is required.';
     if (!form.saleStartTime) err.saleStartTime = 'Sale start time is required.';
     if (!form.saleEndDate) err.saleEndDate = 'Sale end date is required.';
@@ -51,15 +75,24 @@ const validateForm = (form) => {
       err.saleEndDate = 'Sale end must be after the start date/time.';
     }
   }
+
   if (form.stock === '' || form.stock === null) err.stock = 'Stock quantity is required.';
   else if (isNaN(Number(form.stock)) || Number(form.stock) < 0) err.stock = 'Stock must be 0 or more.';
   else if (!Number.isInteger(Number(form.stock))) err.stock = 'Stock must be a whole number.';
   else if (Number(form.stock) > 999) err.stock = 'Stock cannot exceed 999.';
+
   if (!form.image.trim()) err.image = 'Product image is required.';
-  else if (!ALLOWED_IMAGE_EXT.test(form.image.trim())) err.image = 'Only image files are allowed (JPG, PNG, GIF, WEBP, SVG, BMP).';
+  else if (!ALLOWED_IMAGE_EXT.test(form.image.trim()) && !/^https?:\/\//i.test(form.image.trim())) {
+    err.image = 'Only image files are allowed (JPG, PNG, GIF, WEBP, SVG, BMP).';
+  }
+
   if (form.isPreOrder) {
     if (!form.releaseDate) err.releaseDate = 'Release date is required for pre-order items.';
     if (!form.releaseTime) err.releaseTime = 'Release time is required for pre-order items.';
+    const releaseMs = toPhtMs(form.releaseDate, form.releaseTime);
+    if (releaseMs != null && !Number.isFinite(releaseMs)) {
+      err.releaseDate = 'Release date/time is invalid.';
+    }
   }
   return err;
 };
@@ -170,7 +203,7 @@ const ProductModal = ({
                     <input name="name" placeholder="Enter product name" value={form.name} onChange={handleChange} maxLength={120} />
                     {errors.name && <span className="field-error"><i className="fas fa-exclamation-circle"></i> {errors.name}</span>}
                   </div>
-                  <div className="form-group">
+                  <div className={`form-group${errors.category ? ' has-error' : ''}`}>
                     <label><i className="fas fa-folder"></i> Category <span className="req">*</span></label>
                     <select name="category" value={form.category} onChange={handleChange}>
                       {!categories.some((c) => c.value === form.category) && form.category && (
@@ -180,9 +213,11 @@ const ProductModal = ({
                         <option key={c.value} value={c.value}>{c.label}</option>
                       ))}
                     </select>
-                    <small className="helper-text">Manage categories in the Categories &amp; Groups tab.</small>
+                    {errors.category
+                      ? <span className="field-error"><i className="fas fa-exclamation-circle"></i> {errors.category}</span>
+                      : <small className="helper-text">Manage categories in the Categories &amp; Groups tab.</small>}
                   </div>
-                  <div className="form-group">
+                  <div className={`form-group${errors.kpopGroup ? ' has-error' : ''}`}>
                     <label><i className="fas fa-users"></i> K-Pop Group <span className="req">*</span></label>
                     <select name="kpopGroup" value={form.kpopGroup} onChange={handleChange}>
                       {!groups.some((g) => g.value === form.kpopGroup) && form.kpopGroup && (
@@ -192,7 +227,9 @@ const ProductModal = ({
                         <option key={g.value} value={g.value}>{g.label}</option>
                       ))}
                     </select>
-                    <small className="helper-text">Manage groups &amp; marquee logos in the Categories &amp; Groups tab.</small>
+                    {errors.kpopGroup
+                      ? <span className="field-error"><i className="fas fa-exclamation-circle"></i> {errors.kpopGroup}</span>
+                      : <small className="helper-text">Manage groups &amp; marquee logos in the Categories &amp; Groups tab.</small>}
                   </div>
                   <div className={`form-group full-width${errors.image ? ' has-error' : ''}`}>
                     <label><i className="fas fa-image"></i> Product Image <span className="req">*</span></label>
@@ -842,6 +879,7 @@ const StockManagement = ({
   const [searchTerm, setSearchTerm]         = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterGroup, setFilterGroup]       = useState('all');
+  const [filterType, setFilterType]         = useState('all');
   const [editingStock, setEditingStock]     = useState(null);
   const [stockValue, setStockValue]         = useState('');
   const [stockError, setStockError]         = useState('');
@@ -858,7 +896,13 @@ const StockManagement = ({
     const matchGroup =
       filterGroup === 'all'
       || String(p.kpopGroup || '').trim().toLowerCase() === String(filterGroup).trim().toLowerCase();
-    return matchSearch && matchCat && matchGroup;
+    const isPre = !!(p.isPreOrder || p.status === 'preorder');
+    const isSale = !!p.isSale;
+    let matchType = true;
+    if (filterType === 'sale') matchType = isSale;
+    else if (filterType === 'preorder') matchType = isPre;
+    else if (filterType === 'regular') matchType = !isSale && !isPre;
+    return matchSearch && matchCat && matchGroup && matchType;
   });
 
   const sortedFiltered   = [...filteredProducts].sort((a, b) => (a.stock ?? 0) - (b.stock ?? 0));
@@ -867,8 +911,8 @@ const StockManagement = ({
   const totalStock       = products.reduce((s, p) => s + (p.stock || 0), 0);
   const outOfStockCount  = products.filter(p => p.stock === 0).length;
 
-  useEffect(() => { setAllPage(0); }, [searchTerm, filterCategory, filterGroup, allPageSize, products.length]);
-  useEffect(() => { setLowPage(0); }, [searchTerm, filterCategory, filterGroup, lowPageSize, products.length]);
+  useEffect(() => { setAllPage(0); }, [searchTerm, filterCategory, filterGroup, filterType, allPageSize, products.length]);
+  useEffect(() => { setLowPage(0); }, [searchTerm, filterCategory, filterGroup, filterType, lowPageSize, products.length]);
 
   const startEdit  = (productId, currentStock) => { setEditingStock(productId); setStockValue(String(currentStock)); setStockError(''); };
   const cancelEdit = () => { setEditingStock(null); setStockValue(''); setStockError(''); };
@@ -940,6 +984,12 @@ const StockManagement = ({
           {groups.map((g) => (
             <option key={g.value} value={g.value}>{g.label}</option>
           ))}
+        </select>
+        <select value={filterType} onChange={e => setFilterType(e.target.value)} className="filter-select">
+          <option value="all">All Types</option>
+          <option value="sale">On Sale</option>
+          <option value="preorder">Pre-Order</option>
+          <option value="regular">Regular</option>
         </select>
       </div>
 
@@ -1110,6 +1160,7 @@ const AdminProducts = () => {
   const [activeView,     setActiveView]     = useState('products');
   const [searchTerm,     setSearchTerm]     = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
+  const [filterType,     setFilterType]     = useState('all'); // all | sale | preorder | regular
   const [successMsg,     setSuccessMsg]     = useState('');
 
   const showSuccess = (msg) => { setSuccessMsg(msg); setTimeout(() => setSuccessMsg(''), 3200); };
@@ -1132,10 +1183,13 @@ const AdminProducts = () => {
   const closeModal = () => { setShowModal(false); setEditingId(null); };
 
   const handleModalSubmit = async (form) => {
+    const price = Math.round(Number(form.price) * 100) / 100;
+    const originalRaw = form.isSale && form.originalPrice ? Number(form.originalPrice) : price;
+    const originalPrice = Math.round(Number(originalRaw) * 100) / 100;
     const productData = {
       name: form.name.trim(), category: form.category, kpopGroup: form.kpopGroup,
-      price: Number(form.price),
-      originalPrice: form.isSale && form.originalPrice ? Number(form.originalPrice) : Number(form.price),
+      price,
+      originalPrice,
       stock: Number(form.stock || 0), image: form.image.trim(),
       description: form.description.trim() || '',
       isSale: Boolean(form.isSale), isPreOrder: Boolean(form.isPreOrder),
@@ -1187,9 +1241,18 @@ const AdminProducts = () => {
         p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.kpopGroup?.toLowerCase().includes(searchTerm.toLowerCase());
       const matchCat = filterCategory === 'all' || p.category === filterCategory;
-      return matchSearch && matchCat;
+      const isPre = !!(p.isPreOrder || p.status === 'preorder');
+      const isSale = !!p.isSale;
+      let matchType = true;
+      if (filterType === 'sale') matchType = isSale;
+      else if (filterType === 'preorder') matchType = isPre && !isReleased(p);
+      else if (filterType === 'regular') matchType = !isSale && !isPre;
+      return matchSearch && matchCat && matchType;
     })
     .sort((a, b) => (b._creationTime || 0) - (a._creationTime || 0));
+
+  const saleCount = products.filter((p) => !!p.isSale).length;
+  const preOrderCount = products.filter((p) => !!(p.isPreOrder || p.status === 'preorder') && !isReleased(p)).length;
 
   const lowStockCount = products.filter(p => p.stock <= 10).length;
 
@@ -1236,6 +1299,12 @@ const AdminProducts = () => {
                   <option key={c.value} value={c.value}>{c.label}</option>
                 ))}
               </select>
+              <select value={filterType} onChange={e => setFilterType(e.target.value)} className="filter-select">
+                <option value="all">All Types</option>
+                <option value="sale">On Sale ({saleCount})</option>
+                <option value="preorder">Pre-Order ({preOrderCount})</option>
+                <option value="regular">Regular</option>
+              </select>
             </div>
           </div>
 
@@ -1257,7 +1326,7 @@ const AdminProducts = () => {
                       <div className="product-badges">
                         {product.isPreOrder && showBadge  && <span className="badge released"><i className="fas fa-check-circle"></i> Released</span>}
                         {product.isPreOrder && !released  && <span className="badge pre-order"><i className="fas fa-clock"></i> Pre-Order</span>}
-                        {product.isSale && !product.isPreOrder && <span className="badge sale"><i className="fas fa-tag"></i> Sale</span>}
+                        {product.isSale && <span className="badge sale"><i className="fas fa-tag"></i> Sale</span>}
                       </div>
                     </div>
                     <div className="product-details">
@@ -1283,9 +1352,12 @@ const AdminProducts = () => {
                         </div>
                       )}
                       <div className="product-pricing">
-                        <div className="price">₱{product.price.toLocaleString()}</div>
-                        {product.originalPrice > product.price && (
-                          <div className="original-price">₱{product.originalPrice.toLocaleString()}</div>
+                        <div className="price">₱{Number(product.price || 0).toLocaleString('en-PH')}</div>
+                        {Number.isFinite(Number(product.originalPrice))
+                          && Number(product.originalPrice) > Number(product.price)
+                          && Number(product.originalPrice) <= 1_000_000_000
+                          && Number(product.originalPrice) <= Number(product.price) * 50 && (
+                          <div className="original-price">₱{Number(product.originalPrice).toLocaleString('en-PH')}</div>
                         )}
                       </div>
                       <div className="product-actions">

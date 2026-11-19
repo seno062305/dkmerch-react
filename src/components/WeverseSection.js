@@ -10,7 +10,8 @@ import { useConfirm, shopActionConfirmRememberKey } from '../context/ConfirmCont
 import { PointsBadge } from '../utils/pointsUtils';
 import {
   formatSaleEndLabel,
-  formatSaleEndShort,
+  getDiscountPercent,
+  formatPeso,
   shouldShowSaleBadge,
   shouldShowPreOrderBadge,
   hasDiscountedPrice,
@@ -142,19 +143,15 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
     // Never show NEW on out-of-stock items
     const showNewBadgeResolved = !isOutOfStock && (showNewBadge || isNewArrival(product));
 
-    const discountPct =
-      product.originalPrice && Number(product.originalPrice) > Number(product.price)
-        ? Math.round(
-            ((Number(product.originalPrice) - Number(product.price)) /
-              Number(product.originalPrice)) *
-              100
-          )
-        : null;
+    const discountPct = getDiscountPercent(product);
     const isLowStock = !isOutOfStock && stockQty > 0 && stockQty <= 5;
     const isOnSale = shouldShowSaleBadge(product);
     const showPreOrder =
       shouldShowPreOrderBadge(product) &&
       !(releaseMs !== null && Date.now() >= releaseMs);
+    const salePriceLabel = formatPeso(product.price) || '₱0';
+    const originalPriceLabel =
+      isOnSale && hasDiscountedPrice(product) ? formatPeso(product.originalPrice) : null;
 
     return (
       <div
@@ -168,11 +165,6 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
             {isOnSale && (
               <div className="wv-sale-badge">
                 <span>{discountPct ? `-${discountPct}%` : 'SALE'}</span>
-                {(formatSaleEndShort(product) || formatSaleEndLabel(product)) && (
-                  <span className="wv-sale-badge-end">
-                    {formatSaleEndShort(product) || formatSaleEndLabel(product)}
-                  </span>
-                )}
               </div>
             )}
             {showPreOrder && <div className="wv-preorder-badge">PRE-ORDER</div>}
@@ -203,19 +195,17 @@ const WeverseSection = ({ onProductClick, activePromo, highlightPromo }) => {
           <div className="wv-card-name">{product.name}</div>
           <div className="wv-card-price-row">
             <span className={`wv-card-price-current${isOnSale ? ' sale' : ''}`}>
-              ₱{Number(product.price)?.toLocaleString()}
+              {salePriceLabel}
             </span>
-            {isOnSale && hasDiscountedPrice(product) && (
-              <span className="wv-card-price-original">
-                ₱{Number(product.originalPrice)?.toLocaleString()}
-              </span>
+            {originalPriceLabel && (
+              <span className="wv-card-price-original">{originalPriceLabel}</span>
             )}
             <PointsBadge price={product.price} />
           </div>
-          {isOnSale && (formatSaleEndLabel(product) || formatSaleEndShort(product)) && (
+          {isOnSale && formatSaleEndLabel(product) && (
             <div className="wv-sale-period">
               <i className="fas fa-clock"></i>
-              <span>{formatSaleEndLabel(product) || formatSaleEndShort(product)}</span>
+              <span>{formatSaleEndLabel(product)}</span>
             </div>
           )}
           <div

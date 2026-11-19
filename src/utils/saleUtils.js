@@ -1,5 +1,21 @@
 /** Product sale schedule helpers (Philippine Time) */
 
+/** Reject NaN / absurd values (concatenated digits, float corruption, etc.). */
+export const MAX_SANE_PRICE = 1_000_000_000; // ₱1B
+
+export const saneMoney = (n) => {
+  const x = Number(n);
+  if (!Number.isFinite(x) || x < 0 || x > MAX_SANE_PRICE) return null;
+  return x;
+};
+
+/** Format peso for UI; returns null if value is unusable. */
+export const formatPeso = (n) => {
+  const x = saneMoney(n);
+  if (x == null) return null;
+  return `₱${x.toLocaleString('en-PH')}`;
+};
+
 export const toPhtMs = (dateStr, timeStr = '00:00') => {
   if (!dateStr) return null;
   const t = timeStr || '00:00';
@@ -57,9 +73,33 @@ export const isSaleActive = (product, now = Date.now()) => {
   return true;
 };
 
-/** True when listed price is lower than original (discounted display). */
-export const hasDiscountedPrice = (product) =>
-  Number(product?.originalPrice) > Number(product?.price);
+/**
+ * True when listed price is lower than a sane original (discounted display).
+ * Rejects corrupt / concatenated originals that would render as absurd ₱ amounts.
+ */
+export const hasDiscountedPrice = (product) => {
+  const price = saneMoney(product?.price);
+  const orig = saneMoney(product?.originalPrice);
+  if (price == null || orig == null || orig <= price) return false;
+  // Cap relative discount — e.g. reject ₱1 vs ₱1e15 style corruption
+  if (orig > price * 50) return false;
+  return true;
+};
+
+/**
+ * Discount % for badges. Uses floor so we never overstate
+ * (e.g. ₱1,329 of ₱1,350 → 1%, not rounded 2%).
+ * Returns null when there is no usable discount.
+ */
+export const getDiscountPercent = (product) => {
+  if (!hasDiscountedPrice(product)) return null;
+  const price = saneMoney(product.price);
+  const orig = saneMoney(product.originalPrice);
+  if (price == null || orig == null || orig <= 0) return null;
+  const exact = ((orig - price) / orig) * 100;
+  if (!Number.isFinite(exact) || exact <= 0) return null;
+  return Math.max(1, Math.min(99, Math.floor(exact + 1e-9)));
+};
 
 /**
  * Show a SALE badge when admin marked sale (active window) OR price is discounted.
@@ -114,10 +154,11 @@ export const isNewArrival = (product, now = Date.now(), days = NEW_ARRIVAL_DAYS)
 
 export const getDisplaySalePrice = (product) => {
   if (!product) return { price: 0, originalPrice: null, onSale: false };
+  const price = saneMoney(product.price) ?? 0;
   const onSale = shouldShowSaleBadge(product) && hasDiscountedPrice(product);
   return {
-    price: Number(product.price) || 0,
-    originalPrice: onSale ? Number(product.originalPrice) : null,
+    price,
+    originalPrice: onSale ? saneMoney(product.originalPrice) : null,
     onSale,
   };
 };

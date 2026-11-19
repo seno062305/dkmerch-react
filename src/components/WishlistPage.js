@@ -6,7 +6,7 @@ import { useAddToCart } from '../context/cartUtils';
 import { useNotification } from '../context/NotificationContext';
 import { useConfirm, shopActionConfirmRememberKey } from '../context/ConfirmContext';
 import { useProducts, usePreOrderProducts } from '../utils/productStorage';
-import { formatSaleEndLabel, formatSaleEndShort, shouldShowSaleBadge, shouldShowPreOrderBadge, hasDiscountedPrice } from '../utils/saleUtils';
+import { shouldShowSaleBadge, shouldShowPreOrderBadge, hasDiscountedPrice, formatPeso } from '../utils/saleUtils';
 import { useCloseOnHistoryBack } from '../hooks/useCloseOnHistoryBack';
 
 const WishlistPage = ({ onProductClick }) => {
@@ -204,11 +204,6 @@ const WishlistPage = ({ onProductClick }) => {
                           {showSale && (
                             <span className="wishlist-sale-badge">
                               <span>SALE</span>
-                              {(formatSaleEndShort(item) || formatSaleEndLabel(item)) && (
-                                <span className="wishlist-sale-badge-end">
-                                  {formatSaleEndShort(item) || formatSaleEndLabel(item)}
-                                </span>
-                              )}
                             </span>
                           )}
                           {showPreOrder && <span className="wishlist-preorder-badge">PRE-ORDER</span>}
@@ -236,11 +231,11 @@ const WishlistPage = ({ onProductClick }) => {
                       <p className="wishlist-card-name">{item.name}</p>
                       <div className="wishlist-card-price-row">
                         <span className={`wishlist-card-price${showSale ? ' sale' : ''}`}>
-                          ₱{item.price?.toLocaleString()}
+                          {formatPeso(item.price) || '₱0'}
                         </span>
-                        {showSale && hasDiscountedPrice(item) && (
+                        {showSale && hasDiscountedPrice(item) && formatPeso(item.originalPrice) && (
                           <span className="wishlist-card-price-original">
-                            ₱{Number(item.originalPrice).toLocaleString()}
+                            {formatPeso(item.originalPrice)}
                           </span>
                         )}
                       </div>

@@ -8,7 +8,7 @@ import { useConfirm, preOrderConfirmRememberKey } from '../context/ConfirmContex
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import LoginModal from '../components/LoginModal';
-import { formatSaleEndLabel, formatSaleEndShort, shouldShowSaleBadge, hasDiscountedPrice } from '../utils/saleUtils';
+import { formatSaleEndLabel, shouldShowSaleBadge, hasDiscountedPrice, getDiscountPercent, formatPeso } from '../utils/saleUtils';
 import { useCloseOnHistoryBack } from '../hooks/useCloseOnHistoryBack';
 import { useCatalogOptions } from '../hooks/useCatalogOptions';
 
@@ -256,11 +256,6 @@ const PreOrderCard = ({
         {shouldShowSaleBadge(product) && (
           <div className="preorder-sale-badge">
             <span>SALE</span>
-            {(formatSaleEndShort(product) || formatSaleEndLabel(product)) && (
-              <span className="preorder-sale-badge-end">
-                {formatSaleEndShort(product) || formatSaleEndLabel(product)}
-              </span>
-            )}
           </div>
         )}
         <div className="preorder-badge">PRE-ORDER</div>
@@ -282,13 +277,13 @@ const PreOrderCard = ({
         )}
 
         <div className="product-price">
-          <span className={`current-price${shouldShowSaleBadge(product) ? ' sale' : ''}`}>₱{product.price?.toLocaleString()}</span>
-          {shouldShowSaleBadge(product) && hasDiscountedPrice(product) && (
+          <span className={`current-price${shouldShowSaleBadge(product) ? ' sale' : ''}`}>{formatPeso(product.price) || '₱0'}</span>
+          {shouldShowSaleBadge(product) && hasDiscountedPrice(product) && formatPeso(product.originalPrice) && (
             <>
-              <span className="original-price">₱{product.originalPrice?.toLocaleString()}</span>
-              <span className="discount">
-                {Math.round((1 - product.price / product.originalPrice) * 100)}% OFF
-              </span>
+              <span className="original-price">{formatPeso(product.originalPrice)}</span>
+              {getDiscountPercent(product) != null && (
+                <span className="discount">{getDiscountPercent(product)}% OFF</span>
+              )}
             </>
           )}
         </div>

@@ -12,7 +12,7 @@ import ProductModal from '../components/ProductModal';
 import { PointsBadge } from '../utils/pointsUtils';
 import {
   formatSaleEndLabel,
-  formatSaleEndShort,
+  formatPeso,
   shouldShowSaleBadge,
   shouldShowPreOrderBadge,
   hasDiscountedPrice,
@@ -58,16 +58,20 @@ const Collections = () => {
 
   const [selectedCategory, setSelectedCategory]         = useState('all');
   const [selectedGroup, setSelectedGroup]               = useState('all');
+  const [selectedType, setSelectedType]                 = useState('all'); // all | sale | preorder
   const [page, setPage]                                 = useState(0);
   const [highlightedProductId, setHighlightedProductId] = useState(null);
   const [selectedProduct, setSelectedProduct]           = useState(null);
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
   const [groupDropdownOpen, setGroupDropdownOpen]       = useState(false);
+  const [typeDropdownOpen, setTypeDropdownOpen]         = useState(false);
 
   const categoryRef = useRef(null);
   const groupRef    = useRef(null);
+  const typeRef     = useRef(null);
 
   const products               = useQuery(api.products.getCollectionProducts) || [];
+  const preOrderProducts       = useQuery(api.products.getPreOrderProducts) || [];
   const { items: catalogCategories } = useCatalogOptions('category');
   const { items: catalogGroups } = useCatalogOptions('kpopGroup');
   const wishlistItems          = useWishlist();
@@ -75,6 +79,12 @@ const Collections = () => {
   const toggleWishlistMutation = useToggleWishlist();
   const activePromos           = useQuery(api.promos.getActivePromos) || [];
   const activePromo            = activePromos[0] || null;
+
+  const saleCount = useMemo(
+    () => (products || []).filter((p) => shouldShowSaleBadge(p)).length,
+    [products]
+  );
+  const preOrderCount = (preOrderProducts || []).length;
 
   const isWishlisted = (productOrId) => wishlistHasProduct(wishlistItems, productOrId);
 
@@ -88,6 +98,7 @@ const Collections = () => {
     const handleClickOutside = (e) => {
       if (categoryRef.current && !categoryRef.current.contains(e.target)) setCategoryDropdownOpen(false);
       if (groupRef.current    && !groupRef.current.contains(e.target))    setGroupDropdownOpen(false);
+      if (typeRef.current     && !typeRef.current.contains(e.target))     setTypeDropdownOpen(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -143,11 +154,17 @@ const Collections = () => {
     return () => clearTimeout(t);
   }, [searchParams, products]);
 
-  const filteredProducts = (products || [])
+  const sourceProducts = selectedType === 'preorder' ? (preOrderProducts || []) : (products || []);
+
+  const filteredProducts = sourceProducts
     .filter(product => {
       const categoryMatch = selectedCategory === 'all' || product.category === selectedCategory;
       const groupMatch    = selectedGroup    === 'all' || product.kpopGroup === selectedGroup;
-      return categoryMatch && groupMatch;
+      const typeMatch =
+        selectedType === 'all'
+        || (selectedType === 'sale' && shouldShowSaleBadge(product))
+        || (selectedType === 'preorder');
+      return categoryMatch && groupMatch && typeMatch;
     })
     .sort((a, b) => {
       const aReleased  = isReleased(a);
@@ -159,6 +176,8 @@ const Collections = () => {
       if (aReleased  && bReleased)  return bReleaseMs - aReleaseMs;
       return (b._creationTime || 0) - (a._creationTime || 0);
     });
+
+  useEffect(() => { setPage(0); }, [selectedCategory, selectedGroup, selectedType]);
 
   const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE) || 1);
   const safePage = Math.min(Math.max(0, page), totalPages - 1);
@@ -272,7 +291,7 @@ const Collections = () => {
                 className="filter-dropdown-toggle"
                 aria-haspopup="listbox"
                 aria-expanded={categoryDropdownOpen}
-                onClick={() => { setCategoryDropdownOpen(o => !o); setGroupDropdownOpen(false); }}
+                onClick={() => { setCategoryDropdownOpen(o => !o); setGroupDropdownOpen(false); setTypeDropdownOpen(false); }}
               >
                 <span>{selectedCategory === 'all' ? 'All Categories' : selectedCategory}</span>
                 <i className={`fas fa-chevron-down ${categoryDropdownOpen ? 'open' : ''}`}></i>
@@ -307,7 +326,7 @@ const Collections = () => {
                 className="filter-dropdown-toggle"
                 aria-haspopup="listbox"
                 aria-expanded={groupDropdownOpen}
-                onClick={() => { setGroupDropdownOpen(o => !o); setCategoryDropdownOpen(false); }}
+                onClick={() => { setGroupDropdownOpen(o => !o); setCategoryDropdownOpen(false); setTypeDropdownOpen(false); }}
               >
                 <span>
                   {selectedGroup === 'all' ? 'All Groups' : selectedGroup}
@@ -342,11 +361,56 @@ const Collections = () => {
             </div>
           </div>
 
+          <div className="filter-divider" />
+
+          <div className="filter-group">
+            <label>TYPE:</label>
+            <div className="filter-dropdown" ref={typeRef}>
+              <button
+                type="button"
+                className="filter-dropdown-toggle"
+                aria-haspopup="listbox"
+                aria-expanded={typeDropdownOpen}
+                onClick={() => { setTypeDropdownOpen(o => !o); setCategoryDropdownOpen(false); setGroupDropdownOpen(false); }}
+              >
+                <span>
+                  {selectedType === 'all' && 'All Products'}
+                  {selectedType === 'sale' && `On Sale (${saleCount})`}
+                  {selectedType === 'preorder' && `Pre-Order (${preOrderCount})`}
+                </span>
+                <i className={`fas fa-chevron-down ${typeDropdownOpen ? 'open' : ''}`}></i>
+              </button>
+              {typeDropdownOpen && (
+                <div className="filter-dropdown-menu" role="listbox">
+                  {[
+                    { key: 'all', label: 'All Products' },
+                    { key: 'sale', label: `On Sale (${saleCount})` },
+                    { key: 'preorder', label: `Pre-Order (${preOrderCount})` },
+                  ].map((opt) => (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      role="option"
+                      aria-selected={selectedType === opt.key}
+                      className={`filter-dropdown-item ${selectedType === opt.key ? 'active' : ''}`}
+                      onClick={() => { setSelectedType(opt.key); setTypeDropdownOpen(false); }}
+                    >
+                      {opt.label}
+                      {selectedType === opt.key && <i className="fas fa-check"></i>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="results-count results-count--inline">
             <p>
               {filteredProducts.length === 0
                 ? 'No products'
                 : `Showing ${showingFrom}–${showingTo} of ${filteredProducts.length} product${filteredProducts.length !== 1 ? 's' : ''}`}
+              {selectedType === 'sale' && ' on sale'}
+              {selectedType === 'preorder' && ' pre-order'}
               {selectedGroup !== 'all' && ` for ${selectedGroup}`}
               {selectedCategory !== 'all' && ` in ${selectedCategory}`}
               {filteredProducts.length > PRODUCTS_PER_PAGE && ` · ${PRODUCTS_PER_PAGE} per page`}
@@ -394,11 +458,6 @@ const Collections = () => {
                     {showSale && (
                       <div className="collection-sale-badge">
                         <span>SALE</span>
-                        {(formatSaleEndShort(product) || formatSaleEndLabel(product)) && (
-                          <span className="collection-sale-badge-end">
-                            {formatSaleEndShort(product) || formatSaleEndLabel(product)}
-                          </span>
-                        )}
                       </div>
                     )}
                     {showPreOrder && <div className="collection-preorder-badge">PRE-ORDER</div>}
@@ -431,10 +490,10 @@ const Collections = () => {
                   <div className="collection-card-name">{product.name}</div>
                   <div className="collection-card-price-row">
                     <span className={`collection-card-price ${showSale ? 'sale' : ''}`}>
-                      ₱{product.price?.toLocaleString()}
+                      {formatPeso(product.price) || '₱0'}
                     </span>
-                    {showSale && hasDiscountedPrice(product) && (
-                      <span className="collection-card-price-original">₱{product.originalPrice?.toLocaleString()}</span>
+                    {showSale && hasDiscountedPrice(product) && formatPeso(product.originalPrice) && (
+                      <span className="collection-card-price-original">{formatPeso(product.originalPrice)}</span>
                     )}
                     {/* ✅ Points badge */}
                     <PointsBadge price={product.price} />

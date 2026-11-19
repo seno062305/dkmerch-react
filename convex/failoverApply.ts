@@ -228,7 +228,12 @@ export const applyFailoverWrite = internalMutation({
         releaseDate: payload.releaseDate ?? args.releaseDate,
         releaseTime: payload.releaseTime ?? args.releaseTime,
         kpopGroup: payload.kpopGroup ?? args.kpopGroup,
-        originalPrice: payload.originalPrice ?? args.originalPrice,
+        originalPrice: (() => {
+          const raw = payload.originalPrice ?? args.originalPrice;
+          if (raw == null || raw === "") return undefined;
+          const n = asNum(raw, NaN);
+          return Number.isFinite(n) && n >= 0 && n <= 1_000_000_000 ? n : undefined;
+        })(),
         isSale: payload.isSale ?? args.isSale,
         saleStartDate: payload.saleStartDate ?? args.saleStartDate,
         saleStartTime: payload.saleStartTime ?? args.saleStartTime,

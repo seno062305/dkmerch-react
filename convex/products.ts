@@ -96,7 +96,18 @@ export const addProduct = mutation({
     isPreOrder: v.optional(v.boolean()),
   },
   handler: async ({ db }, args) => {
-    const id = await db.insert("products", args);
+    const price = Number(args.price);
+    if (!Number.isFinite(price) || price <= 0 || price > 1_000_000_000) {
+      throw new Error("Invalid product price.");
+    }
+    let originalPrice = args.originalPrice != null ? Number(args.originalPrice) : price;
+    if (!Number.isFinite(originalPrice) || originalPrice < 0 || originalPrice > 1_000_000_000) {
+      originalPrice = price;
+    }
+    if (args.isSale && originalPrice <= price) {
+      throw new Error("Original price must be higher than the sale price.");
+    }
+    const id = await db.insert("products", { ...args, price, originalPrice });
     return { success: true, id };
   },
 });
@@ -123,9 +134,30 @@ export const updateProduct = mutation({
     isPreOrder: v.optional(v.boolean()),
   },
   handler: async ({ db }, { id, ...updates }) => {
-    const filtered = Object.fromEntries(
+    const filtered: Record<string, any> = Object.fromEntries(
       Object.entries(updates).filter(([, v]) => v !== undefined)
     );
+    if (filtered.price != null) {
+      const price = Number(filtered.price);
+      if (!Number.isFinite(price) || price <= 0 || price > 1_000_000_000) {
+        throw new Error("Invalid product price.");
+      }
+      filtered.price = price;
+    }
+    if (filtered.originalPrice != null) {
+      const orig = Number(filtered.originalPrice);
+      if (!Number.isFinite(orig) || orig < 0 || orig > 1_000_000_000) {
+        throw new Error("Invalid original price.");
+      }
+      filtered.originalPrice = orig;
+    }
+    const existing = await db.get(id);
+    const nextPrice = filtered.price ?? existing?.price;
+    const nextOrig = filtered.originalPrice ?? existing?.originalPrice;
+    const nextSale = filtered.isSale ?? existing?.isSale;
+    if (nextSale && nextOrig != null && nextPrice != null && Number(nextOrig) <= Number(nextPrice)) {
+      throw new Error("Original price must be higher than the sale price.");
+    }
     await db.patch(id, filtered);
     return { success: true };
   },
