@@ -1327,8 +1327,8 @@ const AdminOrders = () => {
                   </>
                 ) : activeTab === 'lbc' ? (
                   <>
-                    <h2><i className="fas fa-truck"></i> Approved LBC</h2>
-                    <p>Delivered via LBC with admin proof</p>
+                    <h2><i className="fas fa-truck"></i> LBC Incoming</h2>
+                    <p>Awaiting admin approval with delivery proof</p>
                   </>
                 ) : (
                   <>
@@ -1342,29 +1342,30 @@ const AdminOrders = () => {
                   activeTab === 'refunds'
                     ? refundRequestOrders
                     : activeTab === 'lbc'
-                      ? filteredOrders
+                      ? lbcAwaitingOrders
                       : cancelRequestOrders
                 ).length}
               </span>
             </div>
 
             {activeTab === 'lbc' ? (
-              filteredOrders.length === 0 ? (
+              lbcAwaitingOrders.length === 0 ? (
                 <div className="orders-priority-empty">
-                  <i className="fas fa-truck"></i>
-                  <p>No approved LBC deliveries yet</p>
+                  <i className="fas fa-inbox"></i>
+                  <p>No incoming LBC orders to approve</p>
                 </div>
               ) : (
                 <div className="orders-priority-list">
-                  {filteredOrders.map((order) => {
+                  {lbcAwaitingOrders.map((order) => {
                     const pm = getPaymentMethodLabel(order);
+                    const busy = acceptingLbcId === order.orderId;
                     return (
-                      <div key={order.orderId} className="orders-priority-card is-awaiting is-lbc-accepted">
+                      <div key={order.orderId} className="orders-priority-card is-awaiting">
                         <div className="orders-priority-main">
                           <div className="orders-priority-card-top">
                             <strong>#{formatOrderShortId(order)}</strong>
                             <span className="orders-refund-flag orders-refund-flag--lbc">
-                              <i className="fas fa-check"></i> Approved
+                              <i className="fas fa-truck"></i> LBC
                             </span>
                           </div>
                           <div className="orders-priority-customer">
@@ -1382,6 +1383,16 @@ const AdminOrders = () => {
                         <div className="orders-priority-actions">
                           <button type="button" className="view-btn" onClick={() => setSelectedOrder(order)}>
                             <i className="fas fa-eye"></i> View
+                          </button>
+                          <button
+                            type="button"
+                            className="orders-priority-confirm"
+                            onClick={() => openLbcApprove(order)}
+                            disabled={busy}
+                          >
+                            {busy
+                              ? <><i className="fas fa-spinner fa-spin"></i> Approving…</>
+                              : <><i className="fas fa-check"></i> Approve</>}
                           </button>
                         </div>
                       </div>
@@ -1452,9 +1463,9 @@ const AdminOrders = () => {
                 ) : activeTab === 'lbc' ? (
                   <>
                     <i className="fas fa-truck"></i>
-                    LBC Incoming
-                    {lbcAwaitingOrders.length > 0 && (
-                      <span className="orders-list-caption-count">{lbcAwaitingOrders.length}</span>
+                    Approved LBC
+                    {filteredOrders.length > 0 && (
+                      <span className="orders-list-caption-count">{filteredOrders.length}</span>
                     )}
                   </>
                 ) : (
@@ -1465,14 +1476,14 @@ const AdminOrders = () => {
                 )}
               </div>
               {activeTab === 'lbc' ? (
-                lbcAwaitingOrders.length === 0 ? (
+                filteredOrders.length === 0 ? (
                   <div className="empty-orders">
-                    <i className="fas fa-inbox"></i>
-                    <p>No incoming LBC orders to accept</p>
+                    <i className="fas fa-truck"></i>
+                    <p>No approved LBC deliveries yet</p>
                   </div>
                 ) : (
                   <div className="orders-table-container">
-                    <div className="dk-fixed-page dk-fixed-page--table" style={fixedPageStyle(Math.max(pageSize, lbcAwaitingOrders.length))}>
+                    <div className="dk-fixed-page dk-fixed-page--table" style={fixedPageStyle(Math.max(pageSize, filteredOrders.length))}>
                       <table className="orders-table">
                         <thead>
                           <tr>
@@ -1487,14 +1498,13 @@ const AdminOrders = () => {
                           </tr>
                         </thead>
                         <tbody>
-                          {lbcAwaitingOrders.map((order) => {
+                          {filteredOrders.map((order) => {
                             const pm = getPaymentMethodLabel(order);
-                            const busy = acceptingLbcId === order.orderId;
                             return (
                               <tr key={order.orderId}>
                                 <td data-label="Order ID">
                                   <strong>#{formatOrderShortId(order)}</strong>
-                                  <span className="orders-lbc-chip"><i className="fas fa-truck"></i> LBC</span>
+                                  <span className="orders-lbc-chip"><i className="fas fa-check"></i> Approved</span>
                                 </td>
                                 <td data-label="Customer">
                                   <div className="customer-info">
@@ -1523,16 +1533,6 @@ const AdminOrders = () => {
                                   <div className="orders-row-actions">
                                     <button type="button" className="view-btn" onClick={() => setSelectedOrder(order)}>
                                       <i className="fas fa-eye"></i> View
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="accept-btn"
-                                      onClick={() => openLbcApprove(order)}
-                                      disabled={busy}
-                                    >
-                                      {busy
-                                        ? <><i className="fas fa-spinner fa-spin"></i> Approving…</>
-                                        : <><i className="fas fa-check"></i> Approve</>}
                                     </button>
                                   </div>
                                 </td>
