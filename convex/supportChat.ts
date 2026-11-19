@@ -11,8 +11,8 @@ function shortOrderId(orderId: string) {
   return String(orderId || "").slice(-8).toUpperCase();
 }
 
-/** Build the LBC order-details chat body (mirrors admin Order Details). */
-function buildLbcOrderDetailsMessage(order: any) {
+/** Build order-details chat body (mirrors admin Order Summary). */
+function buildOrderConfirmedChatMessage(order: any, opts: { isLbc: boolean }) {
   const shortId = shortOrderId(order.orderId);
   const name = String(order.customerName || "Customer").trim() || "Customer";
   const items = Array.isArray(order.items) ? order.items : [];
@@ -48,11 +48,22 @@ function buildLbcOrderDetailsMessage(order: any) {
     : "• (no items listed)";
 
   const address = String(order.shippingAddress || "N/A").trim() || "N/A";
+  const intro = opts.isLbc
+    ? "Your LBC order has been confirmed by DKMerch. Here's your order summary:"
+    : "Your order has been confirmed by DKMerch. Here's your order summary:";
+  const shippingLine = opts.isLbc
+    ? (shipping > 0
+      ? `Shipping: ${peso(shipping)} · LBC`
+      : "Shipping: LBC — arrange with admin")
+    : (shipping > 0 ? `Shipping: ${peso(shipping)}` : "Shipping: FREE");
+  const closing = opts.isLbc
+    ? "We'll ship via LBC Express. Reply here if you have questions!"
+    : "A rider will claim your order next. Reply here if you have questions!";
 
   return [
     `Hi ${name}!`,
     ``,
-    `Your LBC order has been confirmed by DKMerch. Here's your order summary:`,
+    intro,
     ``,
     `📦 Order #${shortId}`,
     `📅 Date: ${dateLabel}`,
@@ -62,15 +73,13 @@ function buildLbcOrderDetailsMessage(order: any) {
     itemLines,
     ``,
     `Subtotal: ${peso(subtotal)}`,
-    shipping > 0
-      ? `Shipping: ${peso(shipping)}`
-      : `Shipping: LBC — arrange with admin`,
+    shippingLine,
     `Total: ${peso(total)}`,
     ``,
     `📍 Delivery Address:`,
     address,
     ``,
-    `We'll ship via LBC Express. Reply here if you have questions!`,
+    closing,
   ].join("\n");
 }
 
@@ -309,12 +318,15 @@ export const sendAdminMessage = mutation({
 });
 
 /**
- * After admin confirms a paid LBC order: auto-open/create support chat
- * and send the order-details summary to the customer.
+ * After admin confirms any paid order: auto-open/create support chat
+ * and send the order-details summary to the customer (LBC + rider).
  */
-export const sendLbcOrderConfirmedChat = internalMutation({
-  args: { orderId: v.string() },
-  handler: async ({ db }, { orderId }) => {
+export const sendOrderConfirmedChat = internalMutation({
+  args: {
+    orderId: v.string(),
+    isLbc: v.optional(v.boolean()),
+  },
+  handler: async ({ db }, { orderId, isLbc }) => {
     const order = await db
       .query("orders")
       .withIndex("by_orderId", (q: any) => q.eq("orderId", orderId))
@@ -324,8 +336,9 @@ export const sendLbcOrderConfirmedChat = internalMutation({
     const email = normalizeEmail(order.email);
     if (!email) return { success: false, reason: "no_email" };
 
-    const body = buildLbcOrderDetailsMessage(order);
-    const preview = `LBC order #${shortOrderId(orderId)} confirmed`;
+    const lbc = !!isLbc || String(order.deliveryMethod || "").toLowerCase() === "lbc";
+    const body = buildOrderConfirmedChatMessage(order, { isLbc: lbc });
+    const preview = `Order #${shortOrderId(orderId)} confirmed`;
     const now = Date.now();
     let thread = await findThreadByEmail(db, email);
 
@@ -374,6 +387,7 @@ export const sendLbcOrderConfirmedChat = internalMutation({
     return { success: true, threadId: thread._id };
   },
 });
+
 
 export const listThreadsForAdmin = query({
   args: {},

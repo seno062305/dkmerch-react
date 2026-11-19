@@ -290,13 +290,14 @@ async function onOrderConfirmed(
     });
   }
 
-  // Outside NCR → LBC Express only — chat order details to customer; skip riders
-  if (isLbc) {
-    await scheduler.runAfter(0, internal.supportChat.sendLbcOrderConfirmedChat, {
-      orderId,
-    });
-    return;
-  }
+  // Always send order-details summary to customer chat on confirm
+  await scheduler.runAfter(0, internal.supportChat.sendOrderConfirmedChat, {
+    orderId,
+    isLbc,
+  });
+
+  // Outside NCR → LBC Express only — do not notify motorcycle riders
+  if (isLbc) return;
 
   await scheduler.runAfter(0, internal.sendEmail.sendRiderNewOrderEmail, {
     orderId,
