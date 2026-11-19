@@ -337,12 +337,24 @@ const DeleteModal = ({
 //  MAIN SETTINGS COMPONENT
 // ─────────────────────────────────────────────────────────────────────────────
 const Settings = () => {
-  const { user, isAuthenticated, updateUser, logout } = useAuth();
+  const { user, isAuthenticated, isReady, updateUser, logout } = useAuth();
   const { showNotification } = useNotification();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [activeTab,            setActiveTab]            = useState('details');
+  const devicesDeepLinkPending = () => {
+    try {
+      if (sessionStorage.getItem('dkmerch_open_devices') === '1') return true;
+    } catch { /* ignore */ }
+    try {
+      const q = new URLSearchParams(window.location.search || '');
+      return q.get('open') === 'devices' || q.get('tab') === 'manage';
+    } catch {
+      return false;
+    }
+  };
+
+  const [activeTab,            setActiveTab]            = useState(() => (devicesDeepLinkPending() ? 'manage' : 'details'));
   const [isForgotPasswordFlow, setIsForgotPasswordFlow] = useState(false);
   const [saving,               setSaving]               = useState(false);
   const [sendingCode,          setSendingCode]          = useState(false);
@@ -353,7 +365,17 @@ const Settings = () => {
   const [showDeactModal,  setShowDeactModal]  = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showQuickSignIn, setShowQuickSignIn] = useState(false);
-  const [showDevicesModal, setShowDevicesModal] = useState(false);
+  // Open immediately on mount when notif deep-link set the flag / query
+  const [showDevicesModal, setShowDevicesModal] = useState(() => {
+    try {
+      if (sessionStorage.getItem('dkmerch_open_devices') === '1') return true;
+    } catch { /* ignore */ }
+    try {
+      return new URLSearchParams(window.location.search || '').get('open') === 'devices';
+    } catch {
+      return false;
+    }
+  });
 
   // ── Deactivation state ──
   const [deactStep,     setDeactStep]     = useState(1);
@@ -454,23 +476,21 @@ const Settings = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
 
-  // Sign-in notifications deep-link → Account Management + Where you're logged in
+  // Sign-in notifications → Account Management + Where you're logged in
   useEffect(() => {
     if (isForgotPasswordFlow || !isAuthenticated) return;
 
-    let manage = false;
     let openDevices = false;
-
+    let manage = false;
     try {
       if (sessionStorage.getItem('dkmerch_open_devices') === '1') {
-        manage = true;
         openDevices = true;
-        sessionStorage.removeItem('dkmerch_open_devices');
+        manage = true;
       }
     } catch { /* ignore */ }
 
-    if (location.state?.activeTab === 'manage') manage = true;
     if (location.state?.openDevices) openDevices = true;
+    if (location.state?.activeTab === 'manage') manage = true;
 
     let params;
     try {
@@ -478,26 +498,26 @@ const Settings = () => {
     } catch {
       params = new URLSearchParams();
     }
-    const tab = String(params.get('tab') || '').toLowerCase();
-    const open = String(params.get('open') || '').toLowerCase();
-    if (tab === 'manage') manage = true;
-    if (open === 'devices') openDevices = true;
+    if (params.get('tab') === 'manage') manage = true;
+    if (params.get('open') === 'devices') openDevices = true;
 
     if (!manage && !openDevices) return;
 
-    if (manage || openDevices) setActiveTab('manage');
-    if (openDevices) {
-      // Defer so Settings finish mounting before modal portal
-      requestAnimationFrame(() => setShowDevicesModal(true));
-    }
+    setActiveTab('manage');
+    if (openDevices) setShowDevicesModal(true);
 
-    // Clear query/state so Back doesn't re-open the modal
+    // Keep sessionStorage until modal close (survives Strict Mode remount).
+    // Clean the URL after paint so Back won't loop.
     if (location.search || location.state?.openDevices || location.state?.activeTab === 'manage') {
-      navigate('/settings', { replace: true, state: {} });
+      const t = window.setTimeout(() => {
+        navigate('/settings', { replace: true, state: {} });
+      }, 50);
+      return () => window.clearTimeout(t);
     }
+    return undefined;
   }, [location.search, location.state, isAuthenticated, isForgotPasswordFlow, navigate]);
 
-  // Same deep-link when already on Settings (notif click dispatches this)
+  // Notif click while already on Settings
   useEffect(() => {
     const onOpenDevices = () => {
       setActiveTab('manage');
@@ -509,9 +529,24 @@ const Settings = () => {
 
   useEffect(() => {
     if (isForgotPasswordFlow) return;
+    // Wait for auth hydrate — early !isAuthenticated was kicking /settings deep-links back to Home
+    if (!isReady) return;
     if (!isAuthenticated) { navigate('/'); return; }
     if (user) setAccountForm({ name: user.name || '', username: user.username || '', email: user.email || '', phone: user.phone || '' });
-  }, [user, isAuthenticated, navigate, isForgotPasswordFlow]);
+  }, [user, isAuthenticated, isReady, navigate, isForgotPasswordFlow]);
+
+  // Re-apply devices deep-link after auth is ready (flag survives the brief hydrate gap)
+  useEffect(() => {
+    if (!isReady || !isAuthenticated || isForgotPasswordFlow) return;
+    let open = false;
+    try { open = sessionStorage.getItem('dkmerch_open_devices') === '1'; } catch { /* ignore */ }
+    if (!open) {
+      try { open = new URLSearchParams(location.search || '').get('open') === 'devices'; } catch { /* ignore */ }
+    }
+    if (!open) return;
+    setActiveTab('manage');
+    setShowDevicesModal(true);
+  }, [isReady, isAuthenticated, isForgotPasswordFlow, location.search]);
 
   useEffect(() => {
     if (passwordCooldown <= 0) return;
@@ -1054,8 +1089,13 @@ const Settings = () => {
         <LoggedInDevicesModal
           userId={user?._id || user?.id}
           currentSessionId={user?.sessionId}
-          onClose={() => setShowDevicesModal(false)}
+          onClose={() => {
+            try { sessionStorage.removeItem('dkmerch_open_devices'); } catch { /* ignore */ }
+            setShowDevicesModal(false);
+            if (location.search) navigate('/settings', { replace: true, state: {} });
+          }}
           onLogoutCurrent={() => {
+            try { sessionStorage.removeItem('dkmerch_open_devices'); } catch { /* ignore */ }
             try { logout?.(); } catch { /* ignore */ }
             navigate('/');
           }}

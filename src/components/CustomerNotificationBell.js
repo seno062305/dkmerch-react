@@ -154,27 +154,38 @@ export function CustomerNotificationPanel({ email, variant = 'dropdown', onNavig
   const allSelected = allIds.length > 0 && allIds.every((id) => selected.has(id));
   const selectedIds = [...selected];
 
-  const openItem = async (n) => {
-    if (!n.read) {
-      await markMany({ email: emailKey, ids: [n._id], read: true }).catch(() => {});
-    }
+  const openItem = (n) => {
+    // Navigate first — don't wait on mark-read (that delayed/broke deep-links)
     onNavigate?.();
     const target = resolveNotificationTarget(n);
-    if (!target) return;
+
+    if (isDevicesNotification(n) || /open=devices/i.test(String(target || ''))) {
+      try { sessionStorage.setItem('dkmerch_open_devices', '1'); } catch { /* ignore */ }
+      // Query string survives Strict Mode remounts better than location.state alone
+      navigate('/settings?tab=manage&open=devices');
+      window.setTimeout(() => {
+        window.dispatchEvent(new Event('dkOpenDevices'));
+      }, 0);
+      if (!n.read && emailKey) {
+        markMany({ email: emailKey, ids: [n._id], read: true }).catch(() => {});
+      }
+      return;
+    }
+
+    if (!target) {
+      if (!n.read && emailKey) {
+        markMany({ email: emailKey, ids: [n._id], read: true }).catch(() => {});
+      }
+      return;
+    }
     if (String(n?.type || '') === 'shipping_fee' || target === '/collections') {
       goToCustomerTab(navigate, location.pathname, '/collections');
-      return;
+    } else {
+      navigate(target);
     }
-    // Account opened / sign-in notices → Profile Account Management + devices modal
-    if (isDevicesNotification(n) || /open=devices/i.test(target)) {
-      try { sessionStorage.setItem('dkmerch_open_devices', '1'); } catch { /* ignore */ }
-      window.dispatchEvent(new Event('dkOpenDevices'));
-      navigate('/settings', {
-        state: { activeTab: 'manage', openDevices: true },
-      });
-      return;
+    if (!n.read && emailKey) {
+      markMany({ email: emailKey, ids: [n._id], read: true }).catch(() => {});
     }
-    navigate(target);
   };
 
   const toggleOne = (id) => {
