@@ -341,18 +341,18 @@ const Collections = () => {
               )}
             </div>
           </div>
-        </div>
-      </div>
 
-      <div className="results-count">
-        <p>
-          {filteredProducts.length === 0
-            ? 'No products'
-            : `Showing ${showingFrom}–${showingTo} of ${filteredProducts.length} product${filteredProducts.length !== 1 ? 's' : ''}`}
-          {selectedGroup !== 'all' && ` for ${selectedGroup}`}
-          {selectedCategory !== 'all' && ` in ${selectedCategory}`}
-          {filteredProducts.length > PRODUCTS_PER_PAGE && ` · ${PRODUCTS_PER_PAGE} per page`}
-        </p>
+          <div className="results-count results-count--inline">
+            <p>
+              {filteredProducts.length === 0
+                ? 'No products'
+                : `Showing ${showingFrom}–${showingTo} of ${filteredProducts.length} product${filteredProducts.length !== 1 ? 's' : ''}`}
+              {selectedGroup !== 'all' && ` for ${selectedGroup}`}
+              {selectedCategory !== 'all' && ` in ${selectedCategory}`}
+              {filteredProducts.length > PRODUCTS_PER_PAGE && ` · ${PRODUCTS_PER_PAGE} per page`}
+            </p>
+          </div>
+        </div>
       </div>
 
       {filteredProducts.length === 0 ? (

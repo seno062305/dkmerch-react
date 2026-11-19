@@ -29,7 +29,7 @@
 /* Filters */
 .collections-filters {
   background: #f8f9fa;
-  padding: 22px 40px;
+  padding: 14px 40px;
   border-bottom: 2px solid #eee;
   overflow: visible;
   position: relative;
@@ -39,8 +39,9 @@
 .filters-single-line {
   display: flex;
   align-items: flex-end;
-  gap: 20px 28px;
-  flex-wrap: wrap;
+  gap: 14px 18px;
+  flex-wrap: nowrap;
+  width: 100%;
 }
 
 .filter-group {
@@ -48,8 +49,10 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 8px;
-  min-width: 200px;
-  flex: 0 1 260px;
+  min-width: 180px;
+  flex: 0 0 auto;
+  width: 220px;
+  max-width: 240px;
 }
 
 .filter-group label {
@@ -192,9 +195,24 @@
   color: var(--primary-color, #fc1268);
 }
 
-/* Results Count */
-.results-count { padding: 20px 40px; border-bottom: 1px solid #eee; }
-.results-count p { font-size: 14px; font-weight: 600; color: #666; }
+/* Results Count — sits on the right of Category/Group filters */
+.results-count {
+  margin-left: auto;
+  padding: 0 0 2px;
+  border: none;
+  text-align: right;
+  max-width: min(420px, 48%);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.results-count--inline { align-self: flex-end; }
+.results-count p {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #666;
+  line-height: 1.35;
+}
 
 /* Grid — 4 columns default */
 .collections-grid {
@@ -629,7 +647,8 @@
     line-height: 1.35;
   }
   .collections-filters { padding: 12px; }
-  .results-count { padding: 10px 12px; }
+  /* Mobile: filters only — hide Showing count */
+  .results-count { display: none !important; }
   .collections-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     padding-bottom: 88px;
@@ -658,7 +677,7 @@
     flex: 1 1 0 !important;
     width: auto !important;
     min-width: 0 !important;
-    max-width: calc(50% - 4px) !important;
+    max-width: none !important;
     box-sizing: border-box;
   }
 
