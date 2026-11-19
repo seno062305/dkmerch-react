@@ -2043,8 +2043,13 @@ const Checkout = () => {
           <p className="item-name">
             {product.name}
             {product.isPreOrder && <span className="item-preorder-badge">PRE-ORDER</span>}
-            {hasPromo && <span className="item-promo-tag"><i className="fas fa-tag"></i> {item.promoDiscount}% OFF</span>}
           </p>
+          {hasPromo && (
+            <span className="item-promo-tag">
+              <i className="fas fa-tag" aria-hidden="true"></i>
+              {item.promoDiscount}% OFF
+            </span>
+          )}
           <p className="item-meta">{product.kpopGroup}</p>
           {product.isPreOrder && product.releaseDate && (
             <p className="item-release-date">
