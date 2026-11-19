@@ -450,13 +450,6 @@ const AdminChat = () => {
         <aside className={`admin-chat-list ${isMobile ? 'mobile-pane' : 'desktop-only'} ${showMobileList || !isMobile ? 'is-visible' : ''}`}>
           <div className="admin-chat-list-head">
             <span>Chats{unreadTotal > 0 ? ` · ${unreadTotal} new` : ''}</span>
-            <button
-              type="button"
-              className="admin-chat-list-archive-link"
-              onClick={() => setArchiveOpen(true)}
-            >
-              <i className="fas fa-archive"></i> Archive
-            </button>
           </div>
           {threads.length === 0 ? (
             <div className="admin-chat-list-empty">No customer chats yet.</div>
