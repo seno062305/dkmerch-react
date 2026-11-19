@@ -537,11 +537,22 @@ const AdminOrders = () => {
 
   const isShippedStatus = (o) => {
     const st = String(o.orderStatus || '').toLowerCase();
-    return st === 'shipped' || st === 'out_for_delivery' || st === 'completed';
+    return st === 'shipped' || st === 'out_for_delivery';
   };
 
   const isCancelledStatus = (o) =>
     String(o.orderStatus || '').toLowerCase() === 'cancelled';
+
+  const isFailedDelivery = (o) =>
+    String(o.status || '').toLowerCase().includes('failed');
+
+  /** Rider + LBC successful deliveries (orderStatus completed / Delivered). */
+  const isCompletedStatus = (o) => {
+    if (isCancelledStatus(o) || isFailedDelivery(o)) return false;
+    const os = String(o.orderStatus || '').toLowerCase();
+    const st = String(o.status || '').toLowerCase();
+    return os === 'completed' || st === 'delivered' || st === 'completed';
+  };
 
   const hasRefundRequest = (o) => o.refundStatus === 'requested';
   const isRefundResolved = (o) =>
@@ -565,12 +576,6 @@ const AdminOrders = () => {
     // Only after Confirm Order — unpaid/pending paid orders stay out of LBC tab
     return st === 'confirmed' || st === 'shipped' || st === 'out_for_delivery';
   };
-  /** Approved LBC (delivered with proof). */
-  const isLbcAcceptedQueue = (o) => {
-    if (!isLbcDeliveryOrder(o) || isCancelledStatus(o)) return false;
-    return isLbcApproved(o);
-  };
-
   const matchesSearchDate = (order) => {
     const matchesSearch = !searchTerm || [order.orderId, order.customerName, order.email].some((f) =>
       f?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -629,7 +634,9 @@ const AdminOrders = () => {
     pending:    validOrders.filter((o) => isPendingStatus(o) && !hasCancelRequest(o)).length,
     confirmed:  validOrders.filter((o) => isProcessingStatus(o) && !hasCancelRequest(o)).length,
     shipped:    validOrders.filter((o) => isShippedStatus(o) && !hasCancelRequest(o) && !isLbcDeliveryOrder(o)).length,
-    lbc:        validOrders.filter((o) => isLbcAwaitingAccept(o) || isLbcAcceptedQueue(o)).length,
+    // LBC tab = pipeline only; finished LBC deliveries live under Completed
+    lbc:        validOrders.filter((o) => isLbcAwaitingAccept(o)).length,
+    completed:  validOrders.filter((o) => isCompletedStatus(o)).length,
     refunds:    validOrders.filter(hasAnyRefund).length,
     cancelled:  validOrders.filter((o) => isCancelledStatus(o) || hasAnyCancelRequest(o)).length,
   };
@@ -683,7 +690,6 @@ const AdminOrders = () => {
         { value: 'all', label: 'All Statuses' },
         { value: 'shipped', label: 'Shipped' },
         { value: 'out_for_delivery', label: 'Out for Delivery' },
-        { value: 'completed', label: 'Completed' },
       ];
     }
     return [
@@ -702,7 +708,6 @@ const AdminOrders = () => {
   // Migrate removed tabs to closest match
   useEffect(() => {
     if (activeTab === 'paid') setActiveTab('pending');
-    if (activeTab === 'completed') setActiveTab('shipped');
     if (activeTab === 'refund') setActiveTab('refunds');
   }, [activeTab]);
 
@@ -729,11 +734,14 @@ const AdminOrders = () => {
       } else if (activeTab === 'confirmed') {
         matchesTab = isProcessingStatus(order) && !hasCancelRequest(order);
       } else if (activeTab === 'shipped') {
-        // Rider deliveries only — LBC orders live under the LBC tab
+        // In-transit rider deliveries only — completed go to Completed; LBC under LBC/Completed
         matchesTab = isShippedStatus(order) && !hasCancelRequest(order) && !isLbcDeliveryOrder(order);
+      } else if (activeTab === 'completed') {
+        // Rider + LBC successful deliveries
+        matchesTab = isCompletedStatus(order);
       } else if (activeTab === 'lbc') {
-        // Right panel = accepted LBC orders (left panel holds awaiting accept)
-        matchesTab = isLbcAcceptedQueue(order);
+        // Left panel = awaiting accept; completed LBC orders are under Completed
+        matchesTab = false;
       } else if (activeTab === 'refunds') {
         // Right list = resolved refunds (approved / rejected)
         matchesTab = isRefundResolved(order);
@@ -1098,6 +1106,7 @@ const AdminOrders = () => {
     { key: 'confirmed', icon: 'fa-spinner',       label: 'Processing' },
     { key: 'shipped',   icon: 'fa-shipping-fast', label: 'Shipped' },
     { key: 'lbc',       icon: 'fa-truck',         label: 'LBC' },
+    { key: 'completed', icon: 'fa-check-circle',  label: 'Completed' },
     { key: 'refunds',   dkIcon: DK_ICONS.ordersRefunds, label: 'Refunds' },
     { key: 'cancelled', icon: 'fa-ban',           label: 'Canceled' },
   ];
@@ -1107,7 +1116,8 @@ const AdminOrders = () => {
     pending: 'No pending orders',
     confirmed: 'No processing orders',
     shipped: 'No shipped orders',
-    lbc: 'No approved LBC deliveries yet',
+    lbc: 'Finished LBC deliveries are under Completed',
+    completed: 'No completed orders yet',
     refunds: 'No refunded orders yet',
     cancelled: 'No canceled orders',
   };
@@ -1487,8 +1497,8 @@ const AdminOrders = () => {
                   </>
                 ) : activeTab === 'lbc' ? (
                   <>
-                    <h2><i className="fas fa-truck"></i> Delivered</h2>
-                    <p>Delivered via LBC with proof</p>
+                    <h2><i className="fas fa-check-circle"></i> Completed</h2>
+                    <p>LBC deliveries with proof are listed under the Completed tab</p>
                   </>
                 ) : (
                   <>

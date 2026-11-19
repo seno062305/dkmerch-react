@@ -18,24 +18,29 @@ const formatDashDate = (ms) => {
   }
 };
 
-const isSaleOrder = (o) => {
-  const status = (o.status || '').toLowerCase();
-  const orderStatus = (o.orderStatus || '').toLowerCase();
-  const paymentStatus = (o.paymentStatus || '').toLowerCase();
-  return (
-    paymentStatus === 'paid' ||
-    status === 'paid' ||
-    status === 'delivered' ||
-    status === 'completed' ||
-    orderStatus === 'completed' ||
-    orderStatus === 'confirmed' ||
-    orderStatus === 'processing' ||
-    orderStatus === 'out_for_delivery'
-  );
+const orderStatusOf = (o) => String(o.orderStatus || 'pending').toLowerCase();
+
+const isFailedDelivery = (o) =>
+  String(o.status || '').toLowerCase().includes('failed');
+
+/** Successful delivery — rider or LBC (orderStatus completed / Delivered). */
+const isCompleted = (o) => {
+  if (isFailedDelivery(o) || orderStatusOf(o) === 'cancelled') return false;
+  const os = orderStatusOf(o);
+  const st = String(o.status || '').toLowerCase();
+  return os === 'completed' || st === 'delivered' || st === 'completed';
 };
 
-const isCompleted = (o) =>
-  ['completed', 'delivered'].includes((o.status || o.orderStatus || '').toLowerCase());
+const isPendingConfirm = (o) => orderStatusOf(o) === 'pending';
+
+const isProcessing = (o) => orderStatusOf(o) === 'confirmed';
+
+const isInTransit = (o) => {
+  const os = orderStatusOf(o);
+  return os === 'shipped' || os === 'out_for_delivery';
+};
+
+const isCancelled = (o) => orderStatusOf(o) === 'cancelled';
 
 const StatModal = ({ data, onClose }) => {
   useBodyScrollLock(!!data);
@@ -187,15 +192,23 @@ const AdminDashboard = () => {
   );
 
   const stats = useMemo(() => {
-    const saleOrders = validOrders.filter(isSaleOrder);
+    // Mutually exclusive status buckets — must sum to totalOrders
+    const pendingConfirm = validOrders.filter(isPendingConfirm);
+    const processingOrders = validOrders.filter(isProcessing);
+    const inTransitOrders = validOrders.filter(isInTransit);
     const completedOrders = validOrders.filter(isCompleted);
-    const outForDeliveryOrders = validOrders.filter(o =>
-      (o.orderStatus || o.status || '').toLowerCase() === 'out_for_delivery'
+    const cancelledOrders = validOrders.filter(isCancelled);
+    const outForDeliveryOrders = validOrders.filter(
+      (o) => orderStatusOf(o) === 'out_for_delivery'
     );
-    const pendingConfirm = validOrders.filter(o =>
-      (o.orderStatus || '').toLowerCase() === 'pending' ||
-      ((o.paymentStatus || '').toLowerCase() === 'paid' && (o.orderStatus || '').toLowerCase() === 'pending')
-    );
+    const accounted =
+      pendingConfirm.length
+      + processingOrders.length
+      + inTransitOrders.length
+      + completedOrders.length
+      + cancelledOrders.length;
+    const otherOrders = Math.max(0, validOrders.length - accounted);
+
     const inventoryCosting = allProducts.reduce((sum, p) =>
       sum + ((p.stock ?? 0) * (p.price ?? 0)), 0
     );
@@ -204,15 +217,18 @@ const AdminDashboard = () => {
 
     return {
       inventoryCosting,
-      totalOrders:    validOrders.length,
-      outForDelivery: outForDeliveryOrders.length,
-      pendingConfirm: pendingConfirm.length,
-      saleOrders:     saleOrders.length,
+      totalOrders:     validOrders.length,
+      pendingConfirm:  pendingConfirm.length,
+      processing:      processingOrders.length,
+      inTransit:       inTransitOrders.length,
+      outForDelivery:  outForDeliveryOrders.length,
       completedOrders: completedOrders.length,
-      totalUsers:     regularUsers.length,
-      totalProducts:  allProducts.length,
+      cancelledOrders: cancelledOrders.length,
+      otherOrders,
+      totalUsers:      regularUsers.length,
+      totalProducts:   allProducts.length,
       lowStockProducts: lowStockProducts.length,
-      outOfStock:     allProducts.filter(p => (p.stock ?? 0) === 0).length,
+      outOfStock:      allProducts.filter(p => (p.stock ?? 0) === 0).length,
     };
   }, [validOrders, allUsers, allProducts]);
 
@@ -239,13 +255,17 @@ const AdminDashboard = () => {
         dkIcon: DK_ICONS.totalOrders,
         iconBg: '#eff6ff',
         iconColor: '#3b82f6',
-        explanation: 'All orders in the system, regardless of status.',
+        explanation: 'All orders in the system. Breakdown below adds up to the total (each order counted once).',
         breakdown: [
           { label: 'All Orders', value: stats.totalOrders },
-          { label: 'Needs Confirm / Pending', value: stats.pendingConfirm, color: '#d97706' },
-          { label: 'Out for Delivery', value: stats.outForDelivery, color: '#f97316' },
-          { label: 'Paid / Active Sales', value: stats.saleOrders, color: '#2563eb' },
-          { label: 'Completed Orders', value: stats.completedOrders, color: '#16a34a' },
+          { label: 'Pending', value: stats.pendingConfirm, color: '#d97706' },
+          { label: 'Processing', value: stats.processing, color: '#2563eb' },
+          { label: 'In Transit (Shipped / Out for Delivery)', value: stats.inTransit, color: '#f97316' },
+          { label: 'Completed (incl. LBC)', value: stats.completedOrders, color: '#16a34a' },
+          { label: 'Canceled', value: stats.cancelledOrders, color: '#64748b' },
+          ...(stats.otherOrders > 0
+            ? [{ label: 'Other / Legacy', value: stats.otherOrders, color: '#94a3b8' }]
+            : []),
         ],
       });
     } else if (type === 'users') {
@@ -291,10 +311,13 @@ const AdminDashboard = () => {
     const summary = [
       { metric: 'Inventory Costing', value: `PHP ${stats.inventoryCosting.toLocaleString()}` },
       { metric: 'Total Orders', value: stats.totalOrders },
+      { metric: 'Pending', value: stats.pendingConfirm },
+      { metric: 'Processing', value: stats.processing },
+      { metric: 'In Transit', value: stats.inTransit },
       { metric: 'Out for Delivery', value: stats.outForDelivery },
-      { metric: 'Pending Confirm', value: stats.pendingConfirm },
-      { metric: 'Paid / Active Sales', value: stats.saleOrders },
-      { metric: 'Completed Orders', value: stats.completedOrders },
+      { metric: 'Completed Orders (incl. LBC)', value: stats.completedOrders },
+      { metric: 'Canceled', value: stats.cancelledOrders },
+      ...(stats.otherOrders > 0 ? [{ metric: 'Other / Legacy', value: stats.otherOrders }] : []),
       { metric: 'Registered Users', value: stats.totalUsers },
       { metric: 'Total Products', value: stats.totalProducts },
       { metric: 'Low Stock Items', value: stats.lowStockProducts },
@@ -391,9 +414,9 @@ const AdminDashboard = () => {
       label: 'Total Orders',
       value: ordersReady ? String(stats.totalOrders) : null,
       hint: ordersReady
-        ? `${stats.outForDelivery} out for delivery · ${stats.pendingConfirm} pending confirm`
+        ? `${stats.completedOrders} completed · ${stats.pendingConfirm} pending`
         : 'Loading…',
-      tooltip: 'All orders in the system, regardless of status.',
+      tooltip: 'All orders in the system. Status breakdown is mutually exclusive.',
       color: '#14b8a6',
       tone: 'orders',
       icon: DK_ICONS.totalOrders,
