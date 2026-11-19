@@ -1,10 +1,22 @@
-import React, { useState, useMemo } from 'react';
-import { useQuery } from 'convex/react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import DkIcon, { DK_ICONS } from '../components/DkIcon';
 import { SalesAnalyticsPanel } from './AdminSalesReports';
+import { formatOrderShortId } from '../utils/orderId';
+import { useAuth } from '../context/AuthContext';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
+import { downloadEncryptedBackupExcel } from './lib/backupExcel';
 import './AdminDashboard.css';
+
+const formatDashDate = (ms) => {
+  if (!ms) return '';
+  try {
+    return new Date(ms).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' });
+  } catch {
+    return '';
+  }
+};
 
 const isSaleOrder = (o) => {
   const status = (o.status || '').toLowerCase();
@@ -63,8 +75,102 @@ const StatModal = ({ data, onClose }) => {
   );
 };
 
+/** Same flow as Backup: verify live admin password, then lock Excel with that password. */
+const DashboardPasswordModal = ({ onVerified, onClose, busyExport }) => {
+  const { user } = useAuth();
+  const verifyUserPassword = useMutation(api.users.verifyUserPassword);
+  const [password, setPassword] = useState('');
+  const [showPw, setShowPw] = useState(false);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const inputRef = useRef(null);
+  const locked = busy || busyExport;
+
+  useBodyScrollLock(true);
+
+  useEffect(() => {
+    const t = setTimeout(() => inputRef.current?.focus(), 80);
+    return () => clearTimeout(t);
+  }, []);
+
+  const submit = async (e) => {
+    e?.preventDefault?.();
+    setError('');
+    const pw = password.trim();
+    if (!pw) { setError('Password is required.'); return; }
+    if (!user?._id && !user?.id) { setError('Admin session missing. Please log in again.'); return; }
+    setBusy(true);
+    try {
+      const result = await verifyUserPassword({ id: user._id || user.id, password: pw });
+      if (!result?.success) {
+        setError(result?.message || 'Incorrect password.');
+        return;
+      }
+      await onVerified(pw);
+    } catch (err) {
+      setError(err?.message || 'Verification failed.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="dash-pw-overlay" onClick={locked ? undefined : onClose}>
+      <div className="dash-pw-modal" onClick={(e) => e.stopPropagation()}>
+        <h3>Download dashboard data</h3>
+        <p>
+          Enter your current admin password. The Excel file will use this same password when opened
+          (same as Backup exports).
+        </p>
+        <form onSubmit={submit} className="dash-pw-form">
+          <label htmlFor="dash-admin-pw">Admin password</label>
+          <div className="dash-pw-field">
+            <input
+              id="dash-admin-pw"
+              ref={inputRef}
+              type={showPw ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => { setPassword(e.target.value); setError(''); }}
+              placeholder="Enter current admin password"
+              autoComplete="current-password"
+              disabled={locked}
+            />
+            <button
+              type="button"
+              className="dash-pw-toggle"
+              onClick={() => setShowPw((s) => !s)}
+              tabIndex={-1}
+              aria-label={showPw ? 'Hide password' : 'Show password'}
+            >
+              <i className={`fas ${showPw ? 'fa-eye-slash' : 'fa-eye'}`}></i>
+            </button>
+          </div>
+          {error && (
+            <p className="dash-pw-error">
+              <i className="fas fa-exclamation-circle"></i> {error}
+            </p>
+          )}
+          <div className="dash-pw-actions">
+            <button type="button" className="dash-pw-cancel" onClick={onClose} disabled={locked}>
+              Cancel
+            </button>
+            <button type="submit" className="dash-pw-submit" disabled={locked}>
+              {locked
+                ? <><i className="fas fa-spinner fa-spin"></i> {busyExport ? 'Encrypting…' : 'Verifying…'}</>
+                : <><i className="fas fa-download"></i> Download Excel</>}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 const AdminDashboard = () => {
   const [statModal, setStatModal] = useState(null);
+  const [pwOpen, setPwOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
 
   const allOrdersRaw   = useQuery(api.orders.getAllOrders);
   const allUsersRaw    = useQuery(api.users.getAllUsers);
@@ -179,6 +285,93 @@ const AdminDashboard = () => {
     [validOrders]
   );
 
+  const dataReady = ordersReady && usersReady && productsReady;
+
+  const buildExportTables = useCallback(() => {
+    const summary = [
+      { metric: 'Inventory Costing', value: `PHP ${stats.inventoryCosting.toLocaleString()}` },
+      { metric: 'Total Orders', value: stats.totalOrders },
+      { metric: 'Out for Delivery', value: stats.outForDelivery },
+      { metric: 'Pending Confirm', value: stats.pendingConfirm },
+      { metric: 'Paid / Active Sales', value: stats.saleOrders },
+      { metric: 'Completed Orders', value: stats.completedOrders },
+      { metric: 'Registered Users', value: stats.totalUsers },
+      { metric: 'Total Products', value: stats.totalProducts },
+      { metric: 'Low Stock Items', value: stats.lowStockProducts },
+      { metric: 'Out of Stock', value: stats.outOfStock },
+      { metric: 'Generated At', value: new Date().toLocaleString('en-PH') },
+    ];
+
+    const products = [...allProducts]
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
+      .map((p) => {
+        const stock = p.stock ?? 0;
+        const price = p.price ?? 0;
+        return {
+          name: p.name || '',
+          category: p.category || '',
+          stock,
+          price,
+          inventoryValue: stock * price,
+          status: stock <= 0 ? 'Out of Stock' : stock < 10 ? 'Low Stock' : 'Healthy',
+        };
+      });
+
+    const orders = [...validOrders]
+      .sort((a, b) => (b._creationTime || 0) - (a._creationTime || 0))
+      .map((o) => ({
+        orderId: formatOrderShortId(o) || o.orderId || '',
+        customerName: o.customerName || '',
+        email: o.email || '',
+        phone: o.phone || '',
+        status: o.orderStatus || o.status || '',
+        paymentStatus: o.paymentStatus || '',
+        total: o.finalTotal ?? o.total ?? 0,
+        itemCount: (o.items || []).length,
+        createdAt: formatDashDate(o._creationTime || o.createdAt),
+      }));
+
+    const users = allUsers
+      .filter((u) => u.role !== 'admin')
+      .map((u) => ({
+        name: u.name || u.fullName || '',
+        email: u.email || '',
+        phone: u.phone || '',
+        createdAt: formatDashDate(u._creationTime || u.createdAt),
+      }));
+
+    return {
+      summary,
+      products,
+      orders,
+      users,
+    };
+  }, [stats, allProducts, validOrders, allUsers]);
+
+  const handleDownloadClick = () => {
+    if (!dataReady || exporting) return;
+    setExportError('');
+    setPwOpen(true);
+  };
+
+  const handlePasswordVerified = async (password) => {
+    setExporting(true);
+    setExportError('');
+    try {
+      const stamp = new Date().toISOString().slice(0, 10);
+      await downloadEncryptedBackupExcel(
+        buildExportTables(),
+        password,
+        `dkmerch-dashboard-${stamp}.xlsx`
+      );
+      setPwOpen(false);
+    } catch (err) {
+      setExportError(err?.message || 'Download failed.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const kpiCards = [
     {
       key: 'inventory',
@@ -239,7 +432,24 @@ const AdminDashboard = () => {
     <div className="admin-dashboard">
       <div className="dash-page-intro">
         <h2>Dashboard</h2>
+        <div className="dash-page-actions">
+          <button
+            type="button"
+            className="dash-action-btn"
+            onClick={handleDownloadClick}
+            disabled={!dataReady || exporting}
+            title="Download password-protected Excel of dashboard data"
+          >
+            <i className="fas fa-download" aria-hidden="true"></i>
+            Download
+          </button>
+        </div>
       </div>
+      {exportError && (
+        <div className="dash-export-error" role="alert">
+          <i className="fas fa-exclamation-circle"></i> {exportError}
+        </div>
+      )}
 
       <div className="stats-grid">
         {kpiCards.map((card) => (
@@ -271,6 +481,13 @@ const AdminDashboard = () => {
       <SalesAnalyticsPanel recentOrders={recentOrders} />
 
       <StatModal data={statModal} onClose={() => setStatModal(null)} />
+      {pwOpen && (
+        <DashboardPasswordModal
+          busyExport={exporting}
+          onClose={() => { if (!exporting) setPwOpen(false); }}
+          onVerified={handlePasswordVerified}
+        />
+      )}
     </div>
   );
 };

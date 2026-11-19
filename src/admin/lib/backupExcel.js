@@ -7,6 +7,7 @@ const TABLE_LABELS = {
   users: 'Users',
   orders: 'Orders',
   products: 'Products',
+  summary: 'Summary KPI',
   promos: 'Promos',
   preOrderRequests: 'Pre-Orders',
   pickupRequests: 'Pickup Requests',

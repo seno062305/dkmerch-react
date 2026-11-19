@@ -27,6 +27,162 @@
   color: #64748b;
   max-width: 560px;
 }
+.dash-page-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+.dash-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 0;
+  background: #fff;
+  color: #1a1f36;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.dash-action-btn i {
+  font-size: 12px;
+  color: #64748b;
+}
+.dash-action-btn:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #d1d5db;
+}
+.dash-action-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.dash-export-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dash-pw-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.dash-pw-modal {
+  width: min(420px, 100%);
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 0;
+  padding: 22px 20px;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.2);
+}
+.dash-pw-modal h3 {
+  margin: 0 0 8px;
+  font-size: 17px;
+  color: #1a1f36;
+}
+.dash-pw-modal > p {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.45;
+}
+.dash-pw-form label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: #374151;
+  margin-bottom: 6px;
+}
+.dash-pw-field {
+  display: flex;
+  align-items: center;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+}
+.dash-pw-field input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  padding: 10px 12px;
+  font-size: 14px;
+  background: transparent;
+}
+.dash-pw-toggle {
+  border: none;
+  background: transparent;
+  color: #64748b;
+  padding: 0 12px;
+  cursor: pointer;
+  height: 40px;
+}
+.dash-pw-error {
+  margin: 10px 0 0;
+  color: #b91c1c;
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.dash-pw-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+.dash-pw-cancel,
+.dash-pw-submit {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 0;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.dash-pw-cancel {
+  background: #fff;
+  color: #374151;
+}
+.dash-pw-submit {
+  background: #1a1f36;
+  border-color: #1a1f36;
+  color: #fff;
+}
+.dash-pw-cancel:disabled,
+.dash-pw-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .dash-page-actions {
+    width: 100%;
+    margin-left: 0;
+  }
+  .dash-action-btn {
+    flex: 1;
+    justify-content: center;
+  }
+}
 .dash-sales-link {
   display: inline-flex;
   align-items: center;

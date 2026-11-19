@@ -204,7 +204,6 @@ const AdminRewards = () => {
                     <tr>
                       <th>Customer</th>
                       <th>Available</th>
-                      <th>Lifetime</th>
                       <th>Orders</th>
                     </tr>
                   </thead>
@@ -218,7 +217,6 @@ const AdminRewards = () => {
                           </div>
                         </td>
                         <td><span className="ar-pts-available">⭐ {p.totalPoints}</span></td>
-                        <td><span className="ar-pts-lifetime">{p.lifetimePoints}</span></td>
                         <td><span className="ar-pts-orders">{p.history?.length ?? 0}</span></td>
                       </tr>
                     ))}
