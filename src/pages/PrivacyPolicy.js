@@ -6,18 +6,12 @@ const PrivacyPolicy = () => {
     <div className="legal-page">
       <div className="legal-container">
         <div className="legal-header">
-          <div className="legal-icon">
-            <i className="fas fa-shield-alt"></i>
-          </div>
           <h1>Privacy Policy</h1>
           <p className="legal-updated">Last updated: November 2026</p>
         </div>
 
         <div className="legal-content">
           <div className="legal-privacy-banner">
-            <div className="legal-privacy-banner-icon">
-              <i className="fas fa-balance-scale"></i>
-            </div>
             <div>
               <strong>RA 10173 — Data Privacy Act of 2012</strong>
               <p>
@@ -29,7 +23,7 @@ const PrivacyPolicy = () => {
           </div>
 
           <section className="legal-section">
-            <h2><i className="fas fa-info-circle"></i> 1. Introduction</h2>
+            <h2>1. Introduction</h2>
             <p>
               DKMerch (&quot;we&quot;, &quot;our&quot;, &quot;us&quot;) operates an online K-Pop merchandise store with
               in-house rider delivery, order tracking, rewards, pre-orders, and related admin tools.
@@ -44,7 +38,7 @@ const PrivacyPolicy = () => {
           </section>
 
           <section className="legal-section">
-            <h2><i className="fas fa-database"></i> 2. Information We Collect</h2>
+            <h2>2. Information We Collect</h2>
             <p>Depending on how you use the system, we may collect:</p>
             <ul>
               <li>
@@ -101,7 +95,7 @@ const PrivacyPolicy = () => {
           </section>
 
           <section className="legal-section">
-            <h2><i className="fas fa-check-circle"></i> 3. Legal Basis for Processing</h2>
+            <h2>3. Legal Basis for Processing</h2>
             <ul>
               <li><strong>Consent</strong> — Explicit privacy consent checkbox during customer registration.</li>
               <li><strong>Contractual necessity</strong> — To create accounts, process PayMongo payments, fulfill orders, and complete rider delivery with OTP confirmation.</li>
@@ -111,7 +105,7 @@ const PrivacyPolicy = () => {
           </section>
 
           <section className="legal-section">
-            <h2><i className="fas fa-cogs"></i> 4. How We Use Your Information</h2>
+            <h2>4. How We Use Your Information</h2>
             <ul>
               <li>Create and manage customer and rider accounts.</li>
               <li>Send transactional emails (OTP, order updates, refund decisions, rider-related notices) through our email providers.</li>
@@ -134,7 +128,7 @@ const PrivacyPolicy = () => {
           </section>
 
           <section className="legal-section">
-            <h2><i className="fas fa-share-alt"></i> 5. Sharing Your Information</h2>
+            <h2>5. Sharing Your Information</h2>
             <p>We do <strong>not sell, trade, or rent</strong> personal information. Data may be shared only with:</p>
             <ul>
               <li>
@@ -160,7 +154,7 @@ const PrivacyPolicy = () => {
           </section>
 
           <section className="legal-section">
-            <h2><i className="fas fa-lock"></i> 6. Data Security</h2>
+            <h2>6. Data Security</h2>
             <ul>
               <li>HTTPS / encrypted transport for the website.</li>
               <li>Application data stored in Convex with role-based access (customer, rider, admin).</li>
@@ -175,7 +169,7 @@ const PrivacyPolicy = () => {
           </section>
 
           <section className="legal-section">
-            <h2><i className="fas fa-cookie-bite"></i> 7. Cookies, Local Storage &amp; PWA</h2>
+            <h2>7. Cookies, Local Storage &amp; PWA</h2>
             <p>
               DKMerch primarily uses browser <strong>local storage</strong> for session and preferences.
               The site can be installed as a phone app (PWA) via the Download button. Installation may
@@ -185,7 +179,7 @@ const PrivacyPolicy = () => {
           </section>
 
           <section className="legal-section">
-            <h2><i className="fas fa-clock"></i> 8. Data Retention</h2>
+            <h2>8. Data Retention</h2>
             <ul>
               <li><strong>Active accounts:</strong> Kept while the account remains active.</li>
               <li><strong>Self-deactivated accounts:</strong> Retained until you reactivate via email OTP or request deletion.</li>
@@ -197,46 +191,40 @@ const PrivacyPolicy = () => {
           </section>
 
           <section className="legal-section">
-            <h2><i className="fas fa-user-check"></i> 9. Your Rights as a Data Subject</h2>
+            <h2>9. Your Rights as a Data Subject</h2>
             <p>Under the Data Privacy Act of 2012, you may:</p>
             <div className="legal-rights-grid">
               <div className="legal-right-card">
-                <div className="legal-right-icon"><i className="fas fa-eye"></i></div>
                 <div>
                   <strong>Right to Access</strong>
                   <p>Request a copy of personal data we hold about you.</p>
                 </div>
               </div>
               <div className="legal-right-card">
-                <div className="legal-right-icon"><i className="fas fa-edit"></i></div>
                 <div>
                   <strong>Right to Rectification</strong>
                   <p>Update profile details in Account Settings.</p>
                 </div>
               </div>
               <div className="legal-right-card">
-                <div className="legal-right-icon"><i className="fas fa-trash-alt"></i></div>
                 <div>
                   <strong>Right to Erasure</strong>
                   <p>Use Settings → Account Management → Delete Account (soft-delete in the system).</p>
                 </div>
               </div>
               <div className="legal-right-card">
-                <div className="legal-right-icon"><i className="fas fa-pause-circle"></i></div>
                 <div>
                   <strong>Right to Restrict / Deactivate</strong>
                   <p>Temporarily deactivate your account and later reactivate with an email OTP.</p>
                 </div>
               </div>
               <div className="legal-right-card">
-                <div className="legal-right-icon"><i className="fas fa-file-export"></i></div>
                 <div>
                   <strong>Right to Data Portability</strong>
                   <p>Request your data in a structured, commonly used format.</p>
                 </div>
               </div>
               <div className="legal-right-card">
-                <div className="legal-right-icon"><i className="fas fa-undo"></i></div>
                 <div>
                   <strong>Right to Withdraw Consent</strong>
                   <p>Withdraw consent by deactivating or deleting your account, subject to data we must keep for orders/legal compliance.</p>
@@ -249,7 +237,7 @@ const PrivacyPolicy = () => {
           </section>
 
           <section className="legal-section">
-            <h2><i className="fas fa-child"></i> 10. Children&apos;s Privacy</h2>
+            <h2>10. Children&apos;s Privacy</h2>
             <p>
               DKMerch is not intended for users under 18. We do not knowingly collect personal information
               from children under 18. Contact us to request removal if you believe this has occurred.
@@ -257,7 +245,7 @@ const PrivacyPolicy = () => {
           </section>
 
           <section className="legal-section">
-            <h2><i className="fas fa-external-link-alt"></i> 11. Third-Party Services</h2>
+            <h2>11. Third-Party Services</h2>
             <p>
               Checkout redirects to PayMongo. Maps / geocoding and email delivery rely on third-party providers.
               Their sites and policies apply when you leave DKMerch or when they process data on our behalf.
@@ -265,7 +253,7 @@ const PrivacyPolicy = () => {
           </section>
 
           <section className="legal-section">
-            <h2><i className="fas fa-sync-alt"></i> 12. Changes to This Policy</h2>
+            <h2>12. Changes to This Policy</h2>
             <p>
               Updates will be posted on this page with a revised date. Continued use of DKMerch after changes
               means you accept the updated policy.
@@ -273,7 +261,7 @@ const PrivacyPolicy = () => {
           </section>
 
           <section className="legal-section">
-            <h2><i className="fas fa-balance-scale"></i> 13. National Privacy Commission</h2>
+            <h2>13. National Privacy Commission</h2>
             <p>You may lodge a complaint with the National Privacy Commission (NPC):</p>
             <ul>
               <li><strong>Website:</strong> <a href="https://www.privacy.gov.ph">www.privacy.gov.ph</a></li>
@@ -283,7 +271,7 @@ const PrivacyPolicy = () => {
           </section>
 
           <section className="legal-section legal-contact-section">
-            <h2><i className="fas fa-envelope"></i> Contact</h2>
+            <h2>Contact</h2>
             <p>
               Privacy requests: <a href="mailto:dkmerchtest@gmail.com">dkmerchtest@gmail.com</a>.
               We aim to respond within 15 business days.

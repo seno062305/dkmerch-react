@@ -406,13 +406,31 @@
 }
 .orders-tabs::-webkit-scrollbar { display: none; }
 
+.orders-page-intro {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 14px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.orders-page-intro h2 {
+  margin: 0;
+  font-size: 20px;
+  color: #1a1f36;
+  flex-shrink: 0;
+}
+.orders-page-intro .order-status-legend {
+  flex: 0 1 auto;
+}
+
 .tab-btn {
   background: transparent;
   border: none;
   padding: 12px 16px;
   font-size: 14px;
   font-weight: 600;
-  color: #64748b;
+  color: #111;
   cursor: pointer;
   transition: all 0.2s ease;
   border-bottom: 3px solid transparent;
@@ -577,7 +595,7 @@
 .customer-info strong { color: #1a1f36; font-size: 14px; font-weight: 600; }
 .customer-info small { color: #94a3b8; font-size: 12px; }
 
-.status-badge { padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; color: white; text-transform: uppercase; display: inline-block; letter-spacing: 0.3px; }
+.status-badge { padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; color: #111 !important; text-transform: uppercase; display: inline-block; letter-spacing: 0.3px; }
 
 .proof-badge { display: inline-flex; align-items: center; gap: 5px; background: #d1fae5; color: #065f46; border-radius: 12px; padding: 4px 10px; font-size: 12px; font-weight: 700; }
 .proof-badge i { font-size: 11px; }

@@ -20,6 +20,7 @@
   margin: 0;
   font-size: 20px;
   color: #1a1f36;
+  flex-shrink: 0;
 }
 .dash-page-intro p {
   margin: 0;

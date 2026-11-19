@@ -279,17 +279,67 @@
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
   gap: 14px;
-  align-items: start;
+  align-items: stretch;
 }
 .ab-maint-col {
   display: flex;
   flex-direction: column;
   gap: 14px;
   min-width: 0;
+  min-height: 100%;
 }
 .ab-maint-grid .ab-card {
   min-width: 0;
   overflow: hidden;
+}
+.ab-card--side-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 520px;
+}
+.ab-card--side-panel .ab-hist-tabs {
+  flex-shrink: 0;
+}
+.ab-card--side-panel .ab-hist-empty,
+.ab-card--side-panel .ab-hist-list {
+  flex: 1;
+  min-height: 0;
+}
+.ab-card--side-panel .ab-pager {
+  margin-top: auto;
+}
+.ab-card--logs {
+  display: flex;
+  flex-direction: column;
+}
+.ab-card--logs .ab-logs-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ab-card-title--logs {
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+.ab-logs-clear-btn {
+  margin-left: auto;
+  padding: 6px 10px !important;
+  font-size: 12px !important;
+}
+.ab-card--logs .ab-hist-empty {
+  flex: 1;
+}
+.ab-card--logs .ab-logs-list {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.ab-card--logs .dk-pager {
+  margin-top: auto;
+  padding-top: 8px;
+  flex-shrink: 0;
 }
 .ab-store-shipping-row {
   display: grid;
@@ -444,6 +494,9 @@
   text-align: center;
   color: #64748b;
   font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .ab-pager {

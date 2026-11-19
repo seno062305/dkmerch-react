@@ -8,6 +8,7 @@ import { useConfirm } from '../context/ConfirmContext';
 import { useNotification } from '../context/NotificationContext';
 import DkIcon, { DK_ICONS } from '../components/DkIcon';
 import AdminPager, { fixedPageStyle } from './AdminPager';
+import OrderStatusLegend from './OrderStatusLegend';
 import { isLbcOrder } from '../utils/deliveryUtils';
 import { formatOrderShortId } from '../utils/orderId';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
@@ -1201,6 +1202,10 @@ const AdminOrders = () => {
 
   return (
     <div className="admin-orders-page">
+      <div className="orders-page-intro">
+        <h2>Orders</h2>
+        <OrderStatusLegend />
+      </div>
       <div className="orders-tabs">
         {tabs.map((t) => {
           const count = tabCounts[t.key] ?? 0;

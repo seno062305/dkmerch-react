@@ -233,15 +233,19 @@ export const recordFirebaseSyncResult = internalMutation({
     message: v.string(),
     synced: v.optional(v.number()),
     failed: v.optional(v.number()),
+    /** Skip activityLogs for quiet empty polls (e.g. failover every 5 min with nothing to import). */
+    quiet: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db.query('settings').first();
+    const synced = args.synced ?? 0;
+    const failed = args.failed ?? 0;
     const payload = {
       lastFirebaseSyncAt: Date.now(),
       lastFirebaseSyncOk: args.ok,
       lastFirebaseSyncMessage: args.message.slice(0, 500),
-      lastFirebaseSyncCount: args.synced ?? 0,
-      lastFirebaseSyncFailed: args.failed ?? 0,
+      lastFirebaseSyncCount: synced,
+      lastFirebaseSyncFailed: failed,
     } as any;
     if (existing) {
       await ctx.db.patch(existing._id, payload);
@@ -251,6 +255,13 @@ export const recordFirebaseSyncResult = internalMutation({
         ...payload,
       });
     }
+
+    // Do not spam Activity Logs on empty routine checks.
+    const quietEmpty =
+      args.quiet === true ||
+      (args.ok && synced === 0 && failed === 0);
+    if (quietEmpty) return;
+
     await ctx.db.insert('activityLogs', {
       action: 'firebase_sync',
       actorRole: 'system',

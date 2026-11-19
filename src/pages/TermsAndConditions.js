@@ -6,16 +6,13 @@ const TermsAndConditions = () => {
     <div className="legal-page">
       <div className="legal-container">
         <div className="legal-header">
-          <div className="legal-icon">
-            <i className="fas fa-file-contract"></i>
-          </div>
           <h1>Terms and Conditions</h1>
           <p className="legal-updated">Last updated: November 2026</p>
         </div>
 
         <div className="legal-content">
           <section className="legal-section">
-            <h2><i className="fas fa-handshake"></i> 1. Acceptance of Terms</h2>
+            <h2>1. Acceptance of Terms</h2>
             <p>
               By accessing or using the DKMerch website, Progressive Web App (PWA), customer account,
               rider dashboard, or related services, you agree to these Terms and Conditions and our
@@ -24,7 +21,7 @@ const TermsAndConditions = () => {
           </section>
 
           <section className="legal-section">
-            <h2><i className="fas fa-store"></i> 2. The DKMerch Platform</h2>
+            <h2>2. The DKMerch Platform</h2>
             <p>DKMerch is an online K-Pop merchandise store with the following system features:</p>
             <ul>
               <li>Product browsing, wishlist, cart, checkout, promos, rewards points, and pre-orders.</li>
@@ -37,7 +34,7 @@ const TermsAndConditions = () => {
           </section>
 
           <section className="legal-section">
-            <h2><i className="fas fa-user"></i> 3. Customer Accounts</h2>
+            <h2>3. Customer Accounts</h2>
             <ul>
               <li>You must provide accurate registration details and consent to the Privacy Policy to create an account.</li>
               <li>Email OTP / verification flows may be required for registration, password reset, or reactivation.</li>
@@ -49,7 +46,7 @@ const TermsAndConditions = () => {
           </section>
 
           <section className="legal-section">
-            <h2><i className="fas fa-shopping-bag"></i> 4. Products, Pre-Orders, Promos &amp; Rewards</h2>
+            <h2>4. Products, Pre-Orders, Promos &amp; Rewards</h2>
             <ul>
               <li>Products are subject to stock availability. Prices are in Philippine Peso (PHP) and may change.</li>
               <li>Product images are illustrative and may differ slightly from the physical item.</li>
@@ -60,7 +57,7 @@ const TermsAndConditions = () => {
           </section>
 
           <section className="legal-section">
-            <h2><i className="fas fa-credit-card"></i> 5. Payment</h2>
+            <h2>5. Payment</h2>
             <p>
               Checkout uses <strong>PayMongo</strong>. You are redirected to PayMongo’s secure page to pay with
               <strong> GCash</strong> or <strong>Maya</strong>. DKMerch does not store your e-wallet login credentials.
@@ -73,7 +70,7 @@ const TermsAndConditions = () => {
           </section>
 
           <section className="legal-section">
-            <h2><i className="fas fa-truck"></i> 6. Shipping, Tracking &amp; Delivery OTP</h2>
+            <h2>6. Shipping, Tracking &amp; Delivery OTP</h2>
             <ul>
               <li>Shipping fees are calculated from the distance between the store location and your delivery address (geocoded coordinates).</li>
               <li>You must provide a complete and accurate delivery address and reachable phone number.</li>
@@ -86,7 +83,7 @@ const TermsAndConditions = () => {
           </section>
 
           <section className="legal-section">
-            <h2><i className="fas fa-motorcycle"></i> 7. Rider Terms</h2>
+            <h2>7. Rider Terms</h2>
             <p>
               Rider accounts are created and managed by DKMerch administrators. Riders must use the rider dashboard
               only for authorized deliveries and must follow these rules:
@@ -102,7 +99,7 @@ const TermsAndConditions = () => {
           </section>
 
           <section className="legal-section">
-            <h2><i className="fas fa-undo"></i> 8. Refunds</h2>
+            <h2>8. Refunds</h2>
             <p>
               DKMerch accepts <strong>damaged-item refund requests only</strong> after delivery is confirmed
               in the system. Change-of-mind returns for unused / unopened goods are not a general feature of
@@ -128,7 +125,7 @@ const TermsAndConditions = () => {
           </section>
 
           <section className="legal-section">
-            <h2><i className="fas fa-mobile-alt"></i> 9. Mobile App (PWA)</h2>
+            <h2>9. Mobile App (PWA)</h2>
             <p>
               The Download button installs DKMerch as a Progressive Web App on supported phones/browsers
               (or via Add to Home Screen on iOS). The PWA provides access to the same store and, for authorized
@@ -138,7 +135,7 @@ const TermsAndConditions = () => {
           </section>
 
           <section className="legal-section">
-            <h2><i className="fas fa-comments"></i> 10. Support Chatbot</h2>
+            <h2>10. Support Chatbot</h2>
             <p>
               The floating chatbot provides automated FAQ answers about orders, payments, delivery, promos,
               pre-orders, and refunds. It does not replace human support. For account-specific issues, email{' '}
@@ -147,7 +144,7 @@ const TermsAndConditions = () => {
           </section>
 
           <section className="legal-section">
-            <h2><i className="fas fa-ban"></i> 11. Prohibited Activities</h2>
+            <h2>11. Prohibited Activities</h2>
             <ul>
               <li>Using the platform for unlawful purposes.</li>
               <li>Attempting unauthorized access to customer, rider, or admin features.</li>
@@ -158,7 +155,7 @@ const TermsAndConditions = () => {
           </section>
 
           <section className="legal-section">
-            <h2><i className="fas fa-copyright"></i> 12. Intellectual Property</h2>
+            <h2>12. Intellectual Property</h2>
             <p>
               DKMerch logos, site design, text, and original content belong to DKMerch or its licensors.
               Product brands and artist-related marks belong to their respective owners. Unauthorized copying
@@ -167,7 +164,7 @@ const TermsAndConditions = () => {
           </section>
 
           <section className="legal-section">
-            <h2><i className="fas fa-gavel"></i> 13. Limitation of Liability</h2>
+            <h2>13. Limitation of Liability</h2>
             <p>
               To the fullest extent allowed by law, DKMerch is not liable for indirect, incidental, or
               consequential damages arising from use of the service, including courier delays, third-party
@@ -177,7 +174,7 @@ const TermsAndConditions = () => {
           </section>
 
           <section className="legal-section">
-            <h2><i className="fas fa-edit"></i> 14. Changes to Terms</h2>
+            <h2>14. Changes to Terms</h2>
             <p>
               We may update these Terms at any time by posting a revised version on this page.
               Continued use after changes constitutes acceptance.
@@ -185,7 +182,7 @@ const TermsAndConditions = () => {
           </section>
 
           <section className="legal-section">
-            <h2><i className="fas fa-lightbulb"></i> 15. Payo (Advice)</h2>
+            <h2>15. Payo (Advice)</h2>
             <p>
               These tips help you avoid common issues. They do not replace the rules above.
             </p>
@@ -227,7 +224,7 @@ const TermsAndConditions = () => {
           </section>
 
           <section className="legal-section legal-contact-section">
-            <h2><i className="fas fa-envelope"></i> Contact Us</h2>
+            <h2>Contact Us</h2>
             <p>
               Questions about these Terms: <a href="mailto:dkmerchtest@gmail.com">dkmerchtest@gmail.com</a>.
               Privacy details are in the <a href="/privacy-policy">Privacy Policy</a>.

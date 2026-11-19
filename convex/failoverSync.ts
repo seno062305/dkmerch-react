@@ -268,6 +268,8 @@ export const syncFailoverOrdersToConvex = internalAction({
         message,
         synced: imported,
         failed,
+        // Empty 5-min polls should update settings only — not spam activityLogs.
+        quiet: imported === 0 && failed === 0,
       });
     } catch {}
 

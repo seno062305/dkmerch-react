@@ -1098,12 +1098,13 @@ const AutoBackupPanel = () => {
   );
 };
 
+const LOGS_PAGE_SIZE = 9;
+
 const LogsTab = () => {
   const [logs, setLogs] = useState(() => readActivityLogs());
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [typeOpen, setTypeOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [pageSize, setPageSize] = useState(5);
   const [page, setPage] = useState(0);
 
   useEffect(() => {
@@ -1117,16 +1118,11 @@ const LogsTab = () => {
   }, []);
 
   useEffect(() => {
-    setPage(0);
-  }, [pageSize]);
-
-  useEffect(() => {
-    const totalPages = Math.max(1, Math.ceil(logs.length / pageSize));
+    const totalPages = Math.max(1, Math.ceil(logs.length / LOGS_PAGE_SIZE));
     if (page > totalPages - 1) setPage(Math.max(0, totalPages - 1));
-  }, [logs.length, pageSize, page]);
+  }, [logs.length, page]);
 
-  const totalPages = Math.max(1, Math.ceil(logs.length / pageSize) || 1);
-  const pageLogs = logs.slice(page * pageSize, page * pageSize + pageSize);
+  const pageLogs = logs.slice(page * LOGS_PAGE_SIZE, page * LOGS_PAGE_SIZE + LOGS_PAGE_SIZE);
 
   const onVerified = async () => {
     setPasswordOpen(false);
@@ -1173,23 +1169,27 @@ const LogsTab = () => {
           onClose={() => setTypeOpen(false)}
         />
       )}
-      <div className="ab-controls">
-        <button className="ab-clear-cache-btn" onClick={() => setPasswordOpen(true)}>
+      <div className="ab-card-title ab-card-title--logs">
+        <i className="fas fa-clipboard-list"></i>
+        <h3>Activity logs</h3>
+        <button
+          type="button"
+          className="ab-clear-cache-btn ab-logs-clear-btn"
+          onClick={() => setPasswordOpen(true)}
+        >
           <i className="fas fa-trash-alt"></i> Clear Logs
         </button>
       </div>
       {logs.length === 0 && (
-        <div className="ab-empty-state">
-          <div className="ab-empty-icon"><i className="fas fa-clipboard-list"></i></div>
-          <p>No activity logs yet.</p>
-          <p className="ab-empty-sub">Logins, registrations, logouts, backups, and schedule changes will show here.</p>
+        <div className="ab-hist-empty">
+          No activity logs yet. Logins, backups, and system activity will show here.
         </div>
       )}
       {logs.length > 0 && (
         <>
           <div
             className="ab-logs-list dk-fixed-page dk-fixed-page--stack"
-            style={fixedPageStyle(pageSize, { '--dk-row-h': '88px', '--dk-gap': '10px' })}
+            style={fixedPageStyle(LOGS_PAGE_SIZE, { '--dk-row-h': '52px', '--dk-gap': '6px' })}
           >
             {pageLogs.map((row) => (
               <div key={row._id} className="ab-log-row">
@@ -1198,10 +1198,9 @@ const LogsTab = () => {
                   <span>{row.actorName || 'System'}{row.actorRole ? ` · ${row.actorRole}` : ''}</span>
                 </div>
                 <div className="ab-log-meta">
-                  <span>{row.actorEmail || '—'}</span>
+                  <span>{row.details || row.actorEmail || '—'}</span>
                   <span>{new Date(row.createdAt).toLocaleString('en-PH')}</span>
                 </div>
-                {row.details && <p className="ab-log-details">{row.details}</p>}
               </div>
             ))}
           </div>
@@ -1209,9 +1208,9 @@ const LogsTab = () => {
           <AdminPager
             total={logs.length}
             page={page}
-            pageSize={pageSize}
+            pageSize={LOGS_PAGE_SIZE}
             onPageChange={setPage}
-            onPageSizeChange={setPageSize}
+            hidePageSize
           />
         </>
       )}
@@ -1272,7 +1271,6 @@ const AdminBackup = () => {
   const [scheduleDraft, setScheduleDraft] = useState(prefs.schedule || 'off');
   const [historyFilter, setHistoryFilter] = useState('all');
   const [historyPage, setHistoryPage] = useState(1);
-  const [showLogs, setShowLogs] = useState(false);
   const [dangerTableKey, setDangerTableKey] = useState(TABLES[0]?.key || 'products');
   const [localHistory, setLocalHistory] = useState(() => readLocalBackupHistory());
   const [updateForm, setUpdateForm] = useState({
@@ -2082,7 +2080,7 @@ const AdminBackup = () => {
             {updateMsg && <p className="ab-card-hint" style={{ marginTop: 10 }}>{updateMsg}</p>}
           </div>
 
-          <div className="ab-card" style={{ display: 'flex', flexDirection: 'column', minHeight: 420 }}>
+          <div className="ab-card ab-card--side-panel">
             <div className="ab-card-title">
               <i className="fas fa-history"></i>
               <h3>Download history</h3>
@@ -2236,19 +2234,12 @@ const AdminBackup = () => {
             </div>
           </div>
 
-          </div>
-        </div>
-      </section>
-
-      <section className="ab-section">
-        <button type="button" className="ab-super-refresh" onClick={() => setShowLogs((v) => !v)}>
-          <i className="fas fa-clipboard-list"></i> {showLogs ? 'Hide activity logs' : 'Show activity logs'}
-        </button>
-        {showLogs && (
-          <div style={{ marginTop: 12 }}>
+          <div className="ab-card ab-card--side-panel ab-card--logs">
             <LogsTab />
           </div>
-        )}
+
+          </div>
+        </div>
       </section>
     </div>
   );

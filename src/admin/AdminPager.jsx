@@ -53,6 +53,7 @@ const AdminPager = ({
   onPageSizeChange,
   pageSizeOptions = PAGE_SIZES,
   alwaysShow = false,
+  hidePageSize = false,
 }) => {
   const totalPages = Math.max(1, Math.ceil((total || 0) / pageSize) || 1);
   const safePage = Math.min(Math.max(0, page), totalPages - 1);
@@ -63,17 +64,21 @@ const AdminPager = ({
   return (
     <div className="dk-pager">
       <div className="dk-pager-left">
-        <span>Rows per page</span>
-        <select
-          className="dk-pager-size"
-          value={pageSize}
-          onChange={(e) => onPageSizeChange(Number(e.target.value))}
-          aria-label="Rows per page"
-        >
-          {pageSizeOptions.map((n) => (
-            <option key={n} value={n}>{n}</option>
-          ))}
-        </select>
+        {!hidePageSize && (
+          <>
+            <span>Rows per page</span>
+            <select
+              className="dk-pager-size"
+              value={pageSize}
+              onChange={(e) => onPageSizeChange(Number(e.target.value))}
+              aria-label="Rows per page"
+            >
+              {pageSizeOptions.map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+          </>
+        )}
         <span className="dk-pager-count">{total.toLocaleString()} total</span>
       </div>
 
