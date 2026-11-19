@@ -224,12 +224,27 @@ const AddressMapPicker = ({
   const applyPinOnMap = useCallback((lat, lng, fields, { fly = true } = {}) => {
     const withinNCR = checkAndNotifyNCR(lat, lng);
     const label = buildFullAddress(fields);
-    if (markerRef.current && mapInstanceRef.current && window.L) {
-      markerRef.current.setIcon(makeIcon(withinNCR));
-      markerRef.current.setLatLng([lat, lng]);
-      markerRef.current.getPopup()?.setContent(
-        `<div style="font-size:12px;max-width:220px"><strong>${withinNCR ? '📍 Delivery pin' : '⚠️ Outside rider area · LBC'}</strong><br><small>${label || 'Pinned location'}</small></div>`
-      );
+    const popupHtml =
+      `<div style="font-size:12px;max-width:220px"><strong>${withinNCR ? '📍 Delivery pin' : '⚠️ Outside rider area · LBC'}</strong><br><small>${label || 'Pinned location'}</small></div>`;
+    const L = window.L;
+    if (mapInstanceRef.current && L) {
+      if (!markerRef.current) {
+        const marker = L.marker([lat, lng], {
+          icon: makeIcon(withinNCR),
+          draggable: true,
+        })
+          .addTo(mapInstanceRef.current)
+          .bindPopup(popupHtml);
+        marker.on('dragend', () => {
+          const p = marker.getLatLng();
+          placePinAndAutofillRef.current?.(p.lat, p.lng, { fly: false });
+        });
+        markerRef.current = marker;
+      } else {
+        markerRef.current.setIcon(makeIcon(withinNCR));
+        markerRef.current.setLatLng([lat, lng]);
+        markerRef.current.getPopup()?.setContent(popupHtml);
+      }
       markerRef.current.openPopup();
       if (fly) {
         mapInstanceRef.current.flyTo([lat, lng], withinNCR ? 17 : 14, { animate: true, duration: 0.6 });
@@ -240,6 +255,17 @@ const AddressMapPicker = ({
     setPinSet(true);
     return withinNCR;
   }, [checkAndNotifyNCR, makeIcon]);
+
+  const placePinAndAutofillRef = useRef(null);
+
+  const clearMapPin = useCallback(() => {
+    if (markerRef.current && mapInstanceRef.current) {
+      try { mapInstanceRef.current.removeLayer(markerRef.current); } catch { /* ignore */ }
+      markerRef.current = null;
+    }
+    setPinSet(false);
+    onPinValidated?.(false);
+  }, [onPinValidated]);
 
   const commitPin = useCallback((lat, lng, { fly = true } = {}) => {
     const fields = fieldsRef.current;
@@ -255,7 +281,7 @@ const AddressMapPicker = ({
   const placePinAndAutofill = useCallback(async (lat, lng, { fly = false } = {}) => {
     if (!isInPhilippinesBounds(lat, lng)) {
       setStatusText('⚠️ Pin must be inside the Philippines');
-      onPinValidated?.(false);
+      clearMapPin();
       return;
     }
 
@@ -267,7 +293,6 @@ const AddressMapPicker = ({
 
     pinDrivenRef.current = true;
     suppressForwardGeocodeRef.current = true;
-    applyPinOnMap(lat, lng, fieldsRef.current, { fly });
     setGeocoding(true);
     setStatusText('Looking up address for this pin…');
 
@@ -287,9 +312,8 @@ const AddressMapPicker = ({
       if (controller.signal.aborted) return;
 
       if (!isPhilippinesLandResult(data)) {
-        setStatusText('⚠️ Invalid pin — use land location inside the Philippines (not sea / other country)');
-        onPinValidated?.(false);
-        setPinSet(false);
+        setStatusText('⚠️ Cannot pin on sea / water — move the pin onto land (street or barangay)');
+        clearMapPin();
         return;
       }
 
@@ -302,10 +326,10 @@ const AddressMapPicker = ({
         province: parsed.province || '',
         zipCode: parsed.zipCode || '',
       };
-      if (!merged.address && !merged.city && !merged.barangay) {
-        setStatusText('⚠️ Could not resolve a deliverable address here — move the pin to a street or barangay');
-        onPinValidated?.(false);
-        setPinSet(false);
+      // City-only (no street/barangay) = typical offshore snap — reject
+      if (!merged.address && !merged.barangay) {
+        setStatusText('⚠️ Could not resolve a street/barangay here — move the pin onto land');
+        clearMapPin();
         return;
       }
 
@@ -314,7 +338,7 @@ const AddressMapPicker = ({
       pinDrivenRef.current = true;
       onFieldsChange(merged);
       onSelectSuggestion({ ...merged, lat, lng });
-      applyPinOnMap(lat, lng, merged, { fly: false });
+      applyPinOnMap(lat, lng, merged, { fly });
       onPinValidated?.(true);
 
       const withinNCR = isWithinRiderRange(lat, lng, storeLat, storeLng);
@@ -327,7 +351,7 @@ const AddressMapPicker = ({
     } catch (err) {
       if (err?.name === 'AbortError') return;
       setStatusText('Could not verify this pin. Try again or search a PH address.');
-      onPinValidated?.(false);
+      clearMapPin();
     } finally {
       if (reverseAbortRef.current === controller) {
         setGeocoding(false);
@@ -335,7 +359,9 @@ const AddressMapPicker = ({
       }
       setTimeout(() => { suppressForwardGeocodeRef.current = false; }, 2500);
     }
-  }, [applyPinOnMap, onFieldsChange, onSelectSuggestion, onPinValidated, storeLat, storeLng]);
+  }, [applyPinOnMap, clearMapPin, onFieldsChange, onSelectSuggestion, onPinValidated, storeLat, storeLng]);
+
+  placePinAndAutofillRef.current = placePinAndAutofill;
 
   const geocodeFilledAddress = useCallback(async () => {
     if (suppressForwardGeocodeRef.current || pinDrivenRef.current) return false;
@@ -580,12 +606,12 @@ const AddressMapPicker = ({
         </div>
 
         <div className="address-field">
-          <label>Barangay <span className="opt">(optional)</span></label>
+          <label>Barangay <span className="req">*</span></label>
           <input
             type="text"
             value={barangay || ''}
             onChange={(e) => handleField('barangay', e.target.value)}
-            placeholder="Barangay (if available)"
+            placeholder="Barangay"
             autoComplete="address-level3"
           />
         </div>
@@ -613,13 +639,13 @@ const AddressMapPicker = ({
         </div>
 
         <div className="address-field">
-          <label>ZIP Code <span className="opt">(optional)</span></label>
+          <label>ZIP Code <span className="req">*</span></label>
           <input
             type="text"
             inputMode="numeric"
             value={zipCode || ''}
             onChange={(e) => handleField('zipCode', e.target.value.replace(/[^\d]/g, '').slice(0, 4))}
-            placeholder="ZIP (if available)"
+            placeholder="e.g. 1000"
             autoComplete="postal-code"
           />
         </div>
@@ -1250,7 +1276,7 @@ const Checkout = () => {
     setSavedContact({ fullName: init.fullName, email: init.email, phone: init.phone });
     setSavedAddress({ address: init.address, barangay: init.barangay, city: init.city, province: init.province, zipCode: init.zipCode });
     setIsEditingContact(!init.fullName || !init.email || !init.phone);
-    setIsEditingAddress(!init.address || !init.city || !init.province);
+    setIsEditingAddress(!init.address || !init.barangay || !init.city || !init.province || !init.zipCode);
     if (profile?.addressLat && profile?.addressLng) {
       const coords = { lat: profile.addressLat, lng: profile.addressLng };
       if (isInPhilippinesBounds(coords.lat, coords.lng)) {
@@ -1416,11 +1442,12 @@ const Checkout = () => {
     savedContact.fullName.trim() && savedContact.email.trim() &&
     savedContact.phone.trim() && !validatePhone(savedContact.phone);
 
-  // Barangay + ZIP optional — some PH places lack them; GPS pin (lat/lng) is what riders track.
   const isAddressComplete = () =>
     savedAddress.address.trim() &&
+    savedAddress.barangay.trim() &&
     savedAddress.city.trim() &&
     savedAddress.province.trim() &&
+    savedAddress.zipCode.trim() &&
     addressVerified &&
     addressCoords &&
     isInPhilippinesBounds(addressCoords.lat, addressCoords.lng);
@@ -1451,8 +1478,10 @@ const Checkout = () => {
 
   const handleSaveAddress = async () => {
     if (!formData.address.trim()) { showNotification('Please enter your street address', 'error'); return; }
+    if (!formData.barangay.trim()) { showNotification('Please enter your barangay', 'error'); return; }
     if (!formData.city.trim()) { showNotification('Please enter your city', 'error'); return; }
     if (!formData.province.trim()) { showNotification('Please enter your province', 'error'); return; }
+    if (!formData.zipCode.trim()) { showNotification('Please enter your ZIP code', 'error'); return; }
 
     setVerifyingAddress(true);
     let coords = addressCoords;
@@ -2025,7 +2054,13 @@ const Checkout = () => {
                         onSelectSuggestion={handleAddressSelect}
                         savedCoords={savedCoords}
                         onNCRViolation={setIsOutsideNCR}
-                        onPinValidated={setAddressVerified}
+                        onPinValidated={(ok) => {
+                          setAddressVerified(!!ok);
+                          if (!ok) {
+                            setAddressCoords(null);
+                            setSavedCoords(null);
+                          }
+                        }}
                         storeLat={STORE_LAT}
                         storeLng={STORE_LNG}
                       />

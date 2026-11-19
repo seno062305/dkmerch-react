@@ -29,36 +29,53 @@ export const isInPhilippinesBounds = (lat, lng) => {
 /**
  * Nominatim reverse/search result must be land in the Philippines
  * (blocks other countries, ocean/sea, and empty water pins).
+ * Offshore taps near coast often reverse to a city-only admin — those are rejected.
  */
 export const isPhilippinesLandResult = (data) => {
   if (!data || typeof data !== 'object') return false;
+  if (data.error) return false;
   const a = data.address || {};
   const cc = String(a.country_code || '').toLowerCase();
-  const display = String(data.display_name || '');
+  const display = String(data.display_name || data.name || '');
   if (cc && cc !== 'ph') return false;
   if (!cc && !/philippines/i.test(display)) return false;
 
-  const cls = String(data.class || '').toLowerCase();
-  const typ = String(data.type || '').toLowerCase();
-  const waterTypes = new Set([
-    'water', 'bay', 'ocean', 'sea', 'strait', 'channel', 'coastline',
-    'river', 'wetland', 'reef', 'lagoon', 'reservoir',
-  ]);
-  if (cls === 'waterway') return false;
-  if (cls === 'natural' && waterTypes.has(typ)) return false;
-  if (cls === 'place' && (typ === 'ocean' || typ === 'sea')) return false;
-  if (/^(philippine sea|south china sea|celebes sea|sulu sea|pacific ocean)\b/i.test(display.trim())) {
+  // Explicit water tags from reverse geocode
+  if (a.ocean || a.sea || a.bay || a.water || a.strait || a.channel || a.fjord) {
     return false;
   }
 
-  const hasLocality = !!(
-    a.city || a.town || a.municipality || a.village || a.suburb
-    || a.county || a.state || a.province || a.region || a.city_district
-    || a.barangay || a.neighbourhood || a.hamlet || a.quarter
-    || a.road || a.pedestrian || a.residential
+  const cls = String(data.class || data.category || '').toLowerCase();
+  const typ = String(data.type || data.addresstype || '').toLowerCase();
+  const waterTypes = new Set([
+    'water', 'bay', 'ocean', 'sea', 'strait', 'channel', 'coastline',
+    'river', 'wetland', 'reef', 'lagoon', 'reservoir', 'harbour', 'harbor',
+    'ferry_terminal',
+  ]);
+  if (cls === 'waterway' || cls === 'water') return false;
+  if (cls === 'natural' && waterTypes.has(typ)) return false;
+  if (cls === 'place' && (typ === 'ocean' || typ === 'sea' || typ === 'bay')) return false;
+  if (waterTypes.has(typ)) return false;
+  if (/^(philippine sea|south china sea|celebes sea|sulu sea|pacific ocean|manila bay)\b/i.test(display.trim())) {
+    return false;
+  }
+  // Water feature named in the label without a street (typical offshore snap)
+  if (
+    /\b(sea|ocean|bay|strait|channel|gulf|reef|lagoon|harbour|harbor)\b/i.test(display)
+    && !a.road && !a.pedestrian && !a.house_number
+  ) {
+    return false;
+  }
+
+  // Must resolve to a deliverable place — city/municipality alone is not enough
+  // (blocks sea pins that snap to "Limay, Bataan" with no street/barangay).
+  const hasDeliverablePlace = !!(
+    a.road || a.pedestrian || a.residential || a.house_number || a.building
+    || a.amenity || a.shop || a.tourism || a.office || a.industrial
+    || a.suburb || a.neighbourhood || a.barangay || a.village
+    || a.hamlet || a.quarter || a.city_district
   );
-  // PH country_code + in-bounds is enough even if locality tags are sparse
-  if (!hasLocality && cc !== 'ph') return false;
+  if (!hasDeliverablePlace) return false;
 
   const lat = parseFloat(data.lat);
   const lon = parseFloat(data.lon);
