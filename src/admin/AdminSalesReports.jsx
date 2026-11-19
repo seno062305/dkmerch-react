@@ -141,7 +141,6 @@ const SummaryModal = ({ data, onClose }) => {
           <button className="smodal-close" onClick={onClose}><i className="fas fa-times"></i></button>
         </div>
         <div className="smodal-body">
-          <p className="smodal-explanation">{data.explanation}</p>
           {data.breakdown && (
             <div className="smodal-breakdown">
               {data.breakdown.map((row, i) => (
@@ -359,7 +358,6 @@ export const SalesAnalyticsPanel = ({ recentOrders = [] }) => {
       setSummaryModal({
         title: 'Total Sales', value: fmt(summary.totalSales),
         icon: <DkIcon name={DK_ICONS.totalSales} size={28} />,
-        explanation: 'Net revenue from all paid orders within the selected date range, after deducting the total value of approved refunds. Formula: Gross Sales − Total Refund Value.',
         breakdown: [
           { label: 'Gross Sales (paid orders)',  value: fmt(summary.grossSales) },
           { label: 'Total Refund Deductions',    value: `− ${fmt(summary.totalRefundValue)}`, color: '#dc2626' },
@@ -370,7 +368,6 @@ export const SalesAnalyticsPanel = ({ recentOrders = [] }) => {
       setSummaryModal({
         title: 'Refund Items', value: fmtNum(summary.refundCount),
         icon: <DkIcon name={DK_ICONS.refundItems} size={28} />,
-        explanation: 'Total number of orders within the selected date range that have been approved for a refund.',
         breakdown: [
           { label: 'Refunded Orders',        value: fmtNum(summary.refundCount),       color: '#dc2626' },
           { label: 'Total Value of Refunds', value: fmt(summary.totalRefundValue),      color: '#dc2626' },
@@ -385,7 +382,6 @@ export const SalesAnalyticsPanel = ({ recentOrders = [] }) => {
       setSummaryModal({
         title: 'Total Value of Refund Items', value: fmt(summary.totalRefundValue),
         icon: <DkIcon name={DK_ICONS.totalRefundValue} size={28} />,
-        explanation: 'Sum of the refund amounts for all approved refund orders in the selected date range.',
         breakdown: [
           { label: 'Refunded Orders',         value: fmtNum(summary.refundCount) },
           { label: 'Total Refund Value',       value: fmt(summary.totalRefundValue),  color: '#dc2626' },
@@ -396,7 +392,6 @@ export const SalesAnalyticsPanel = ({ recentOrders = [] }) => {
       setSummaryModal({
         title: 'Average Order Value', value: fmt(summary.avgOrderValue),
         icon: <DkIcon name={DK_ICONS.avgOrderValue} size={28} />,
-        explanation: 'Average revenue per completed/delivered order in the selected date range.',
         breakdown: [
           { label: 'Completed Orders', value: fmtNum(summary.completedOrders) },
           { label: 'Average Order Value', value: fmt(summary.avgOrderValue), color: '#7c3aed' },
@@ -501,7 +496,6 @@ export const SalesAnalyticsPanel = ({ recentOrders = [] }) => {
       icon: DK_ICONS.totalSales,
       color: '#16a34a',
       trend: kpiTrend,
-      tooltip: 'Net revenue from all paid orders within the selected date range, after deducting the total value of approved refunds. Formula: Gross Sales − Total Refund Value.',
     },
     {
       key: 'avgOrderValue',
@@ -510,7 +504,6 @@ export const SalesAnalyticsPanel = ({ recentOrders = [] }) => {
       icon: DK_ICONS.avgOrderValue,
       color: '#14b8a6',
       trend: kpiTrend,
-      tooltip: 'Average revenue per completed/delivered order in the selected date range.',
     },
     {
       key: 'refundItems',
@@ -520,7 +513,6 @@ export const SalesAnalyticsPanel = ({ recentOrders = [] }) => {
       color: '#3b82f6',
       trend: volumeTrend,
       hint: `Rate ${refundRate}`,
-      tooltip: 'Total number of orders within the selected date range that have been approved for a refund.',
     },
     {
       key: 'totalRefundValue',
@@ -529,7 +521,6 @@ export const SalesAnalyticsPanel = ({ recentOrders = [] }) => {
       icon: DK_ICONS.totalRefundValue,
       color: '#f97316',
       trend: kpiTrend,
-      tooltip: 'Sum of the refund amounts for all approved refund orders in the selected date range.',
     },
   ];
 
@@ -556,7 +547,6 @@ export const SalesAnalyticsPanel = ({ recentOrders = [] }) => {
             key={m.key}
             type="button"
             className="bento-kpi-card"
-            title={m.tooltip}
             onClick={() => openSummaryModal(m.key)}
           >
             <div className="bento-kpi-top">

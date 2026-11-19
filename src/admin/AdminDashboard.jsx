@@ -63,7 +63,6 @@ const StatModal = ({ data, onClose }) => {
           </button>
         </div>
         <div className="stat-modal-body">
-          <p className="stat-modal-explanation">{data.explanation}</p>
           {data.breakdown && (
             <div className="stat-modal-breakdown">
               {data.breakdown.map((item, i) => (
@@ -123,10 +122,6 @@ const DashboardPasswordModal = ({ onVerified, onClose, busyExport }) => {
     <div className="dash-pw-overlay" onClick={locked ? undefined : onClose}>
       <div className="dash-pw-modal" onClick={(e) => e.stopPropagation()}>
         <h3>Download dashboard data</h3>
-        <p>
-          Enter your current admin password. The Excel file will use this same password when opened
-          (same as Backup exports).
-        </p>
         <form onSubmit={submit} className="dash-pw-form">
           <label htmlFor="dash-admin-pw">Admin password</label>
           <div className="dash-pw-field">
@@ -240,7 +235,6 @@ const AdminDashboard = () => {
         dkIcon: DK_ICONS.inventoryCosting,
         iconBg: '#fff0eb',
         iconColor: '#ee4d2d',
-        explanation: 'Total estimated value of all current stock (stock × price).',
         breakdown: [
           { label: 'Total Products', value: stats.totalProducts },
           { label: 'Low Stock Items', value: stats.lowStockProducts, color: '#d97706' },
@@ -255,7 +249,6 @@ const AdminDashboard = () => {
         dkIcon: DK_ICONS.totalOrders,
         iconBg: '#eff6ff',
         iconColor: '#3b82f6',
-        explanation: 'All orders in the system. Breakdown below adds up to the total (each order counted once).',
         breakdown: [
           { label: 'All Orders', value: stats.totalOrders },
           { label: 'Pending', value: stats.pendingConfirm, color: '#d97706' },
@@ -275,7 +268,6 @@ const AdminDashboard = () => {
         dkIcon: DK_ICONS.registeredUsers,
         iconBg: '#f5f3ff',
         iconColor: '#7c3aed',
-        explanation: 'Non-admin customer accounts registered in the store.',
         breakdown: [
           { label: 'Registered Users', value: stats.totalUsers, color: '#7c3aed' },
         ],
@@ -287,7 +279,6 @@ const AdminDashboard = () => {
         dkIcon: DK_ICONS.totalProducts,
         iconBg: '#fdf4ff',
         iconColor: '#a855f7',
-        explanation: 'Active catalog products. Low stock = fewer than 10 units.',
         breakdown: [
           { label: 'Total Products', value: stats.totalProducts },
           { label: 'Low Stock (< 10)', value: stats.lowStockProducts, color: '#d97706' },
@@ -402,7 +393,6 @@ const AdminDashboard = () => {
       label: 'Inventory Costing',
       value: productsReady ? `₱${stats.inventoryCosting.toLocaleString()}` : null,
       hint: productsReady ? `${stats.totalProducts} products tracked` : 'Loading…',
-      tooltip: 'Total estimated value of all current stock (stock × price).',
       color: '#22c55e',
       tone: 'sales',
       icon: DK_ICONS.inventoryCosting,
@@ -416,7 +406,6 @@ const AdminDashboard = () => {
       hint: ordersReady
         ? `${stats.completedOrders} completed · ${stats.pendingConfirm} pending`
         : 'Loading…',
-      tooltip: 'All orders in the system. Status breakdown is mutually exclusive.',
       color: '#14b8a6',
       tone: 'orders',
       icon: DK_ICONS.totalOrders,
@@ -430,7 +419,6 @@ const AdminDashboard = () => {
       hint: usersReady
         ? `${stats.totalUsers} customer account${stats.totalUsers === 1 ? '' : 's'}`
         : 'Loading users…',
-      tooltip: 'Non-admin customer accounts registered in the store.',
       color: '#3b82f6',
       tone: 'users',
       icon: DK_ICONS.registeredUsers,
@@ -442,7 +430,6 @@ const AdminDashboard = () => {
       label: 'Total Products',
       value: productsReady ? String(stats.totalProducts) : null,
       hint: productsReady ? `${stats.lowStockProducts} low stock items` : 'Loading…',
-      tooltip: 'Active catalog products. Low stock = fewer than 10 units.',
       color: '#f59e0b',
       tone: 'products',
       icon: DK_ICONS.totalProducts,
@@ -479,7 +466,6 @@ const AdminDashboard = () => {
           <div
             key={card.key}
             className={`stat-card wave-card ${card.tone} clickable-card`}
-            title={card.tooltip}
             onClick={() => {
               if (card.loading) return;
               openStatModal(card.type);
