@@ -99,16 +99,23 @@ header {
 
 .main-nav a:hover { color: #9c27b0; }
 
+.main-nav a.is-active {
+  color: #9c27b0;
+  font-weight: 700;
+}
+
 .main-nav a::after {
   content: '';
   position: absolute;
   bottom: 0; left: 0;
   width: 0;
   height: 2px;
+  background: #9c27b0;
   transition: width 0.3s ease;
 }
 
-.main-nav a:hover::after { width: 100%; }
+.main-nav a:hover::after,
+.main-nav a.is-active::after { width: 100%; }
 
 /* Mobile nav header — hidden on desktop */
 .mobile-nav-header { display: none; }

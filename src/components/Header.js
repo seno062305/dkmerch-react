@@ -344,10 +344,46 @@ const Header = ({ cartCount, wishlistCount, onCartClick }) => {
                 </button>
               </div>
               <ul>
-                <li><a href="/" onClick={handleHomeClick}>Home</a></li>
-                <li><Link to="/collections" onClick={closeMobileMenu}>Collections</Link></li>
-                <li><Link to="/preorder" onClick={closeMobileMenu}>Pre-Order</Link></li>
-                <li><Link to="/track-order" onClick={closeMobileMenu}>Track Order</Link></li>
+                <li>
+                  <a
+                    href="/"
+                    className={location.pathname === '/' ? 'is-active' : undefined}
+                    onClick={handleHomeClick}
+                  >
+                    Home
+                  </a>
+                </li>
+                <li>
+                  <Link
+                    to="/collections"
+                    className={location.pathname.startsWith('/collections') ? 'is-active' : undefined}
+                    onClick={closeMobileMenu}
+                  >
+                    Collections
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    to="/preorder"
+                    className={
+                      location.pathname.startsWith('/preorder') || location.pathname.startsWith('/my-preorders')
+                        ? 'is-active'
+                        : undefined
+                    }
+                    onClick={closeMobileMenu}
+                  >
+                    Pre-Order
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    to="/track-order"
+                    className={location.pathname.startsWith('/track-order') ? 'is-active' : undefined}
+                    onClick={closeMobileMenu}
+                  >
+                    Track Order
+                  </Link>
+                </li>
                 {showRiderEntry && (
                   <li className="mobile-nav-rider-item">
                     <button
