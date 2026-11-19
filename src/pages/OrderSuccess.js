@@ -17,7 +17,6 @@ const OrderSuccess = () => {
   const orderId = searchParams.get('orderId');
   const { role, isReady } = useAuth();
   const checkPaymentStatus = useAction(api.payments.checkPaymentStatus);
-  const sendOrderConfirmation = useAction(api.sendEmail.sendOrderConfirmation);
 
   const [status, setStatus] = useState('checking');
 
@@ -77,27 +76,8 @@ const OrderSuccess = () => {
           const result = await checkPaymentStatus({ orderId });
 
           if (result?.status === 'paid') {
-            if (order?.email && order?.paymentStatus !== 'paid') {
-              try {
-                await sendOrderConfirmation({
-                  to:          order.email,
-                  name:        order.customerName || order.email,
-                  orderId:     orderId,
-                  items:       (order.items || []).map((i) => ({
-                    name:     i.name,
-                    price:    i.price,
-                    quantity: i.quantity,
-                  })),
-                  total:          order.total,
-                  promoCode:      order.promoCode,
-                  discountAmount: order.discountAmount,
-                  finalTotal:     order.finalTotal ?? order.total,
-                  shippingFee:    order.shippingFee ?? 0,
-                });
-              } catch (emailErr) {
-                console.warn('Email send failed after payment:', emailErr);
-              }
-            }
+            // Payment Received email is sent server-side in markOrderPaid
+            // only after PayMongo confirms the payment is fully paid.
 
             if (isReady && (role === 'admin' || role === 'rider')) {
               goPayerHome();
@@ -125,7 +105,7 @@ const OrderSuccess = () => {
 
     verifyWithRetry();
     return () => { cancelled = true; };
-  }, [order, orderId, role, isReady, checkPaymentStatus, sendOrderConfirmation, goPayerHome]);
+  }, [order, orderId, role, isReady, checkPaymentStatus, goPayerHome]);
 
   // If staff lands here before order query resolves, still bounce off customer UI
   useEffect(() => {

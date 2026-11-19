@@ -734,7 +734,6 @@ const Checkout = () => {
     user?._id || user?.id ? { userId: user?._id || user?.id } : 'skip'
   );
   const saveProfileMut           = useMutation(api.users.saveProfile);
-  const sendPaymentReceivedEmail = useAction(api.sendEmail.sendPaymentReceivedEmail);
   const createPaymentLink        = useAction(api.payments.createPaymentLink);
   const markOrderPaid            = useMutation(api.payments.markOrderPaid);
   const latestAppUpdate          = useQuery(api.appUpdates.getLatestUpdate);
@@ -1309,23 +1308,8 @@ const Checkout = () => {
         } catch { /* non-critical */ }
       }
 
-      // ── Send email (skip if failover FN already emailed pay-now link) ──
-      if (!usedFailover) {
-        try {
-          await sendPaymentReceivedEmail({
-            to:   savedContact.email,
-            name: savedContact.fullName,
-            orderId,
-            items: orderItems.map(i => ({ name: i.name, price: i.price, quantity: i.quantity })),
-            total:              originalSubtotal + shipping,
-            promoCode:          promoItem?.promoCode,
-            discountAmount:     totalDiscount > 0 ? totalDiscount : undefined,
-            finalTotal,
-            shippingFee:        shipping,
-            shippingDistanceKm: shippingInfo?.km,
-          });
-        } catch (emailErr) { console.warn('Email failed:', emailErr); }
-      }
+      // Payment Received email is sent only after PayMongo confirms paid
+      // (see payments.markOrderPaid) — never here on payment-link create/cancel.
 
       // ── Remove checked-out cart items only (Buy Now never touches cart) ─
       if (!rewardOrder && !isBuyNowCheckout) {

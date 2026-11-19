@@ -378,7 +378,7 @@ export const markOrderPaid = mutation({
     orderId:       v.string(),
     paymentMethod: v.optional(v.string()),
   },
-  handler: async ({ db }, { orderId, paymentMethod }) => {
+  handler: async ({ db, scheduler }, { orderId, paymentMethod }) => {
     const order = await db
       .query("orders")
       .withIndex("by_orderId", (q) => q.eq("orderId", orderId))
@@ -402,8 +402,44 @@ export const markOrderPaid = mutation({
     const refreshed = await db.get(order._id);
     await deductStockForPaidOrder(db, refreshed);
 
+    // Payment Received email ONLY after fully paid (never on payment-link create / cancel)
+    const paidOrder = refreshed || (await db.get(order._id));
+    if (
+      paidOrder
+      && String(paidOrder.paymentStatus || "").toLowerCase() === "paid"
+      && paidOrder.email
+      && !(paidOrder as any).paymentReceivedEmailSent
+    ) {
+      await db.patch(paidOrder._id, { paymentReceivedEmailSent: true } as any);
+      const items = (paidOrder.items || []).map((i: any) => ({
+        name: String(i.name || "Item"),
+        price: Number(i.price || 0),
+        quantity: Number(i.quantity || i.qty || 1),
+      }));
+      await scheduler.runAfter(0, api.sendEmail.sendPaymentReceivedEmail, {
+        to: String(paidOrder.email),
+        name: String(paidOrder.customerName || paidOrder.email || "Customer"),
+        orderId: String(paidOrder.orderId || orderId),
+        items,
+        total: Number(paidOrder.total || paidOrder.finalTotal || 0),
+        promoCode: paidOrder.promoCode || undefined,
+        discountAmount:
+          paidOrder.discountAmount != null
+            ? Number(paidOrder.discountAmount)
+            : undefined,
+        finalTotal:
+          paidOrder.finalTotal != null
+            ? Number(paidOrder.finalTotal)
+            : undefined,
+        shippingFee:
+          paidOrder.shippingFee != null
+            ? Number(paidOrder.shippingFee)
+            : undefined,
+      });
+    }
+
     // Points are claimable only after delivery is verified (see rewards.claimOrderPoints)
-    return { success: true };
+    return { success: true, newlyPaid: !alreadyPaid };
   },
 });
 

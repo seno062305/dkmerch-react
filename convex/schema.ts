@@ -274,6 +274,8 @@ export default defineSchema({
     paymentLinkUrl: v.optional(v.string()),
     paymongoRefundId: v.optional(v.string()),
     paidAt: v.optional(v.string()),
+    /** Set after Payment Received email was sent (only on fully paid). */
+    paymentReceivedEmailSent: v.optional(v.boolean()),
     /** True after stock was deducted on successful payment (restore only if set). */
     stockDeducted: v.optional(v.boolean()),
     stockIssue: v.optional(v.boolean()),
