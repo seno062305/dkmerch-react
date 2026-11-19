@@ -580,12 +580,12 @@ const AddressMapPicker = ({
         </div>
 
         <div className="address-field">
-          <label>Barangay <span className="req">*</span></label>
+          <label>Barangay <span className="opt">(optional)</span></label>
           <input
             type="text"
             value={barangay || ''}
             onChange={(e) => handleField('barangay', e.target.value)}
-            placeholder="Barangay"
+            placeholder="Barangay (if available)"
             autoComplete="address-level3"
           />
         </div>
@@ -613,13 +613,13 @@ const AddressMapPicker = ({
         </div>
 
         <div className="address-field">
-          <label>ZIP Code <span className="req">*</span></label>
+          <label>ZIP Code <span className="opt">(optional)</span></label>
           <input
             type="text"
             inputMode="numeric"
             value={zipCode || ''}
             onChange={(e) => handleField('zipCode', e.target.value.replace(/[^\d]/g, '').slice(0, 4))}
-            placeholder="e.g. 1000"
+            placeholder="ZIP (if available)"
             autoComplete="postal-code"
           />
         </div>
@@ -1250,7 +1250,7 @@ const Checkout = () => {
     setSavedContact({ fullName: init.fullName, email: init.email, phone: init.phone });
     setSavedAddress({ address: init.address, barangay: init.barangay, city: init.city, province: init.province, zipCode: init.zipCode });
     setIsEditingContact(!init.fullName || !init.email || !init.phone);
-    setIsEditingAddress(!init.address || !init.barangay || !init.city || !init.province || !init.zipCode);
+    setIsEditingAddress(!init.address || !init.city || !init.province);
     if (profile?.addressLat && profile?.addressLng) {
       const coords = { lat: profile.addressLat, lng: profile.addressLng };
       if (isInPhilippinesBounds(coords.lat, coords.lng)) {
@@ -1416,12 +1416,11 @@ const Checkout = () => {
     savedContact.fullName.trim() && savedContact.email.trim() &&
     savedContact.phone.trim() && !validatePhone(savedContact.phone);
 
+  // Barangay + ZIP optional — some PH places lack them; GPS pin (lat/lng) is what riders track.
   const isAddressComplete = () =>
     savedAddress.address.trim() &&
-    savedAddress.barangay.trim() &&
     savedAddress.city.trim() &&
     savedAddress.province.trim() &&
-    savedAddress.zipCode.trim() &&
     addressVerified &&
     addressCoords &&
     isInPhilippinesBounds(addressCoords.lat, addressCoords.lng);
@@ -1452,10 +1451,8 @@ const Checkout = () => {
 
   const handleSaveAddress = async () => {
     if (!formData.address.trim()) { showNotification('Please enter your street address', 'error'); return; }
-    if (!formData.barangay.trim()) { showNotification('Please enter your barangay', 'error'); return; }
     if (!formData.city.trim()) { showNotification('Please enter your city', 'error'); return; }
     if (!formData.province.trim()) { showNotification('Please enter your province', 'error'); return; }
-    if (!formData.zipCode.trim()) { showNotification('Please enter your ZIP code', 'error'); return; }
 
     setVerifyingAddress(true);
     let coords = addressCoords;
