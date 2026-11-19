@@ -1,5 +1,6 @@
 // src/components/Checkout.js
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from '../context/ConfirmContext';
@@ -168,6 +169,7 @@ const AddressMapPicker = ({
   const [leafletReady,    setLeafletReady]    = useState(!!window.L);
   // Never auto-open on load/refresh — only when user taps Add/Edit pin
   const [mapVisible,      setMapVisible]      = useState(false);
+  const [mapFullscreen,  setMapFullscreen]  = useState(false);
   const [statusText,      setStatusText]      = useState('Tap the map or drag the pin to set your location');
   const [pinSet,          setPinSet]          = useState(!!savedCoords);
   const [geocoding,       setGeocoding]       = useState(false);
@@ -509,11 +511,43 @@ const AddressMapPicker = ({
   };
 
   const handleHidePin = () => {
+    setMapFullscreen(false);
     setMapVisible(false);
     setPinQuery('');
     setSuggestions([]);
     setShowSuggestions(false);
   };
+
+  const toggleMapFullscreen = useCallback(() => {
+    setMapFullscreen((v) => !v);
+  }, []);
+
+  // Keep Leaflet sized correctly when entering/leaving full map
+  useEffect(() => {
+    if (!mapVisible || !mapInstanceRef.current) return;
+    const map = mapInstanceRef.current;
+    const t = setTimeout(() => {
+      try {
+        map.invalidateSize();
+        const center = markerRef.current?.getLatLng() || map.getCenter();
+        if (center) map.setView(center, map.getZoom(), { animate: false });
+      } catch { /* ignore */ }
+    }, 80);
+    return () => clearTimeout(t);
+  }, [mapFullscreen, mapVisible]);
+
+  useEffect(() => {
+    if (!mapFullscreen) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') setMapFullscreen(false);
+    };
+    document.body.classList.add('checkout-fullmap-open');
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.classList.remove('checkout-fullmap-open');
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [mapFullscreen]);
 
   return (
     <div className="address-map-picker">
@@ -592,10 +626,19 @@ const AddressMapPicker = ({
       </div>
 
       {mapVisible && (
-        <div className="address-map-preview-wrap">
+        <div className={`address-map-preview-wrap${mapFullscreen ? ' is-fullscreen' : ''}`}>
           <div className="address-map-preview-header">
             <i className={geocoding ? 'fas fa-spinner fa-spin' : 'fas fa-map-marked-alt'}></i>
             <span>{geocoding ? 'Locating your address…' : statusText}</span>
+            <button
+              type="button"
+              className="address-fullmap-btn"
+              onClick={toggleMapFullscreen}
+              title={mapFullscreen ? 'Exit full map' : 'View full map'}
+            >
+              <i className={`fas fa-${mapFullscreen ? 'compress' : 'expand'}`}></i>
+              {mapFullscreen ? 'Exit Full Map' : 'View Full Map'}
+            </button>
           </div>
 
           <div className="address-pin-search" style={{ position: 'relative' }}>
@@ -631,11 +674,125 @@ const AddressMapPicker = ({
           <div ref={mapRef} className="address-map-preview-container" />
           <div className="address-map-preview-hint">
             <i className="fas fa-hand-pointer"></i> Tap map or drag 📍 pin — address fields auto-fill
-            <span style={{ marginLeft: 'auto', fontSize: 10, color: '#64748b', fontWeight: 600 }}>Optional</span>
+            <button
+              type="button"
+              className="address-fullmap-btn address-fullmap-btn--hint"
+              onClick={toggleMapFullscreen}
+            >
+              <i className={`fas fa-${mapFullscreen ? 'compress' : 'expand'}`}></i>
+              {mapFullscreen ? 'Exit' : 'Full Map'}
+            </button>
           </div>
         </div>
       )}
     </div>
+  );
+};
+
+/** Read-only full-screen map for saved checkout pin. */
+const CheckoutSavedFullMap = ({ coords, addressLabel, onClose }) => {
+  const mapRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+
+  useEffect(() => {
+    document.body.classList.add('checkout-fullmap-open');
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.classList.remove('checkout-fullmap-open');
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [onClose]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const ensureLeaflet = () =>
+      new Promise((resolve, reject) => {
+        if (window.L) { resolve(window.L); return; }
+        if (!document.getElementById('leaflet-css')) {
+          const link = document.createElement('link');
+          link.id = 'leaflet-css';
+          link.rel = 'stylesheet';
+          link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+          document.head.appendChild(link);
+        }
+        const existing = document.getElementById('leaflet-js');
+        if (existing) {
+          existing.addEventListener('load', () => resolve(window.L));
+          existing.addEventListener('error', reject);
+          if (window.L) resolve(window.L);
+          return;
+        }
+        const script = document.createElement('script');
+        script.id = 'leaflet-js';
+        script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+        script.onload = () => resolve(window.L);
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
+
+    (async () => {
+      try {
+        const L = await ensureLeaflet();
+        if (cancelled || !mapRef.current || !coords) return;
+        const map = L.map(mapRef.current, {
+          zoomControl: true,
+          scrollWheelZoom: true,
+        }).setView([coords.lat, coords.lng], 17);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '© OpenStreetMap',
+          maxZoom: 19,
+        }).addTo(map);
+        const icon = L.divIcon({
+          className: '',
+          html: `<div style="width:36px;height:36px;background:#111827;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;box-shadow:0 3px 10px rgba(0,0,0,0.35);border:3px solid white;"><span style="transform:rotate(45deg);font-size:16px">📍</span></div>`,
+          iconSize: [36, 36],
+          iconAnchor: [18, 36],
+        });
+        L.marker([coords.lat, coords.lng], { icon })
+          .addTo(map)
+          .bindPopup(`<strong>Delivery pin</strong><br><small>${addressLabel || 'Saved location'}</small>`)
+          .openPopup();
+        mapInstanceRef.current = map;
+        setTimeout(() => { try { map.invalidateSize(); } catch { /* ignore */ } }, 100);
+      } catch (err) {
+        console.error('Full map failed:', err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (mapInstanceRef.current) {
+        try { mapInstanceRef.current.remove(); } catch { /* ignore */ }
+        mapInstanceRef.current = null;
+      }
+    };
+  }, [coords, addressLabel]);
+
+  if (typeof document === 'undefined') return null;
+  return createPortal(
+    <div className="checkout-fullmap-overlay" role="dialog" aria-modal="true" aria-label="Full map" onClick={onClose}>
+      <div className="checkout-fullmap-shell" onClick={(e) => e.stopPropagation()}>
+        <div className="checkout-fullmap-header">
+          <div className="checkout-fullmap-header-left">
+            <i className="fas fa-map-marked-alt"></i>
+            <div>
+              <strong>Delivery pin</strong>
+              <span>{addressLabel || 'Saved map location'}</span>
+            </div>
+          </div>
+          <button type="button" className="checkout-fullmap-close" onClick={onClose} aria-label="Close full map">
+            <i className="fas fa-times"></i> Exit
+          </button>
+        </div>
+        <div ref={mapRef} className="checkout-fullmap-canvas" />
+        <div className="checkout-fullmap-footer">
+          <i className="fas fa-info-circle"></i>
+          Pinch or use + / − to zoom · Esc to close
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 };
 
@@ -849,6 +1006,7 @@ const Checkout = () => {
   const [addressCoords, setAddressCoords] = useState(null);
   const [savedCoords,   setSavedCoords]   = useState(null);
   const [isOutsideNCR,  setIsOutsideNCR]  = useState(false);
+  const [showSavedFullMap, setShowSavedFullMap] = useState(false);
 
   // ── For reward orders, use 1 qty item for shipping calc ──────────────────
   const shippingCartItems = rewardOrder
@@ -1520,16 +1678,30 @@ const Checkout = () => {
                     {addressCoords && !isOutsideNCR && (
                       <div className="info-display-item info-display-full info-display-pin info-display-pin--ok">
                         <span className="info-label"><i className="fas fa-map-marker-alt"></i> Map Pin</span>
-                        <span className="info-value">
-                          Exact location saved — rider will navigate to your pin
+                        <span className="info-value info-value--with-action">
+                          <span>Exact location saved — rider will navigate to your pin</span>
+                          <button
+                            type="button"
+                            className="address-fullmap-btn"
+                            onClick={() => setShowSavedFullMap(true)}
+                          >
+                            <i className="fas fa-expand"></i> View Full Map
+                          </button>
                         </span>
                       </div>
                     )}
                     {addressCoords && isOutsideNCR && (
                       <div className="info-display-item info-display-full info-display-pin info-display-pin--lbc">
                         <span className="info-label"><i className="fas fa-map-marker-alt"></i> Map Pin</span>
-                        <span className="info-value">
-                          Location saved — package will ship via LBC Express
+                        <span className="info-value info-value--with-action">
+                          <span>Location saved — package will ship via LBC Express</span>
+                          <button
+                            type="button"
+                            className="address-fullmap-btn"
+                            onClick={() => setShowSavedFullMap(true)}
+                          >
+                            <i className="fas fa-expand"></i> View Full Map
+                          </button>
                         </span>
                       </div>
                     )}
@@ -1834,6 +2006,14 @@ const Checkout = () => {
           </div>
         </form>
       </div>
+
+      {showSavedFullMap && addressCoords && (
+        <CheckoutSavedFullMap
+          coords={addressCoords}
+          addressLabel={buildFullAddress(savedAddress)}
+          onClose={() => setShowSavedFullMap(false)}
+        />
+      )}
     </div>
   );
 };
