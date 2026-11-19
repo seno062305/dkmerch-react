@@ -309,7 +309,8 @@ const LOGIN_BROADCAST_TTL_MS = 10 * 60 * 1000;
  * Mobile browsers pause timers in background — 90s was too short and caused
  * silent takeovers (auto-logout with no Yes/No notice).
  */
-const USER_SESSION_ACTIVE_MS = 15 * 60 * 1000;
+/** Recent heartbeat only — stale/parked leftovers must not look like another live device. */
+const USER_SESSION_ACTIVE_MS = 3 * 60 * 1000;
 
 function isLoginAlertExpired(alert: any, now = Date.now()) {
   if (!alert) return true;
@@ -452,16 +453,27 @@ export const startUserSession = mutation({
     const previousSessionId = existingIds[0];
     const currentSessionId = String(args.currentSessionId || "").trim();
 
-    // Same session already active (e.g. PIN unlock on this device) → refresh only
+    const at = Number(user.activeDeviceAt) || 0;
+    // Only a recent heartbeat counts as "another device is open"
+    const otherDeviceLive =
+      existingIds.length > 0
+      && at > 0
+      && (now - at) < USER_SESSION_ACTIVE_MS;
+
+    // Same session already active (PIN unlock / rider↔shop park resume) → refresh only
     if (currentSessionId && existingIds.includes(currentSessionId)) {
-      const patch = activateSessionPatch(
-        currentSessionId,
-        now,
-        deviceName,
-        location,
-        platform,
-        existingIds,
-      ) as any;
+      const patch = {
+        ...activateSessionPatch(
+          currentSessionId,
+          now,
+          deviceName,
+          location,
+          platform,
+          existingIds,
+        ),
+        loginBroadcast: undefined,
+        kickedAt: undefined,
+      } as any;
       // Keep pending Yes/No so after PIN (from push tap) the old device still sees the modal
       const pending = user.loginAlert;
       if (
@@ -484,17 +496,6 @@ export const startUserSession = mutation({
       return { success: true, sessionId: currentSessionId, pendingApproval: false };
     }
 
-    const sessionId = genSessionId();
-    const at = Number(user.activeDeviceAt) || 0;
-    // Session IDs present + recent heartbeat OR any existing session within window
-    const otherDeviceLive =
-      existingIds.length > 0
-      && (
-        (at > 0 && (now - at) < USER_SESSION_ACTIVE_MS)
-        // Soft fallback: if sessions exist but heartbeat missing, still gate for a while
-        // after last known activity / creation — avoid silent takeovers on mobile.
-        || (at <= 0 && existingIds.length > 0)
-      );
     const STUCK_PENDING_MS = 3 * 60 * 1000;
     const pendingAlert = user.loginAlert;
     const pendingAge = pendingAlert?.at ? now - Number(pendingAlert.at) : 0;
@@ -505,28 +506,20 @@ export const startUserSession = mutation({
       && !isLoginAlertExpired(pendingAlert, now);
     const stuckPending = pendingOpen && pendingAge > STUCK_PENDING_MS;
 
-    // First login / no live other device / stuck Yes/No (no response) → take over.
-    // IMPORTANT: owner tapping "No" (denied) must NOT take over — that was kicking
-    // the owner and letting the denied device in on retry.
+    // First login / no live other device / stuck Yes/No → silent activate.
+    // Prefer resuming the caller's sessionId (parked shop) instead of minting a new one.
+    // Never broadcast "opened"/kickedAt for stale leftovers (false mass-logout).
     if (!otherDeviceLive || stuckPending) {
-      const hadOtherSessions = existingIds.length > 0;
+      const sid = currentSessionId || genSessionId();
       const patch = {
-        ...activateSessionPatch(sessionId, now, deviceName, location, platform),
-        ...(hadOtherSessions
-          ? {
-              loginBroadcast: makeLoginBroadcast(
-                "opened",
-                { sessionId, deviceName, location },
-                now,
-              ),
-              kickedAt: now,
-            }
-          : {}),
+        ...activateSessionPatch(sid, now, deviceName, location, platform),
+        loginBroadcast: undefined,
+        kickedAt: undefined,
       } as any;
       await db.patch(args.userId, patch);
       await upsertUserSession(db, {
         userId: String(args.userId),
-        sessionId,
+        sessionId: sid,
         deviceName,
         location,
         platform,
@@ -534,11 +527,13 @@ export const startUserSession = mutation({
       });
       return {
         success: true,
-        sessionId,
+        sessionId: sid,
         pendingApproval: false,
-        tookOver: hadOtherSessions,
+        tookOver: false,
       };
     }
+
+    const sessionId = genSessionId();
 
     // Active pending request → keep waiting; refresh countdown, keep same sessionId
     if (pendingOpen) {

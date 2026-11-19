@@ -1054,16 +1054,44 @@ export const AuthProvider = ({ children }) => {
    */
   const completeLogin = async (pendingUser, details = "Account login success") => {
     if (!pendingUser?._id) return { success: false };
-    // PIN unlock profile may omit sessionId — reuse active auth session on this device
+    // PIN unlock / parked shop session may omit sessionId — reuse same-device session
     const storedAuth = readAuthUser();
     const unlockSnap = (() => {
       try { return getDeviceUnlock(); } catch { return null; }
     })();
+    const parkedCust = (() => {
+      try { return getParkedCustomer(); } catch { return null; }
+    })();
+    const sameId = (a, b) => String(a || "") === String(b || "");
+    const reuseFromParked =
+      parkedCust?._id
+      && sameId(parkedCust._id, pendingUser._id)
+      && parkedCust.sessionId
+        ? String(parkedCust.sessionId).trim()
+        : "";
+    const reuseFromUnlock =
+      unlockSnap?._id
+      && sameId(unlockSnap._id, pendingUser._id)
+      && unlockSnap.sessionId
+        ? String(unlockSnap.sessionId).trim()
+        : "";
+    const reuseFromStored =
+      storedAuth?._id
+      && sameId(storedAuth._id, pendingUser._id)
+      && (storedAuth.role === "user" || storedAuth.role === "admin")
+      && storedAuth.sessionId
+        ? String(storedAuth.sessionId).trim()
+        : "";
     const reuseSessionId = String(
       pendingUser.sessionId
-      || storedAuth?.sessionId
-      || unlockSnap?.sessionId
-      || userRef.current?.sessionId
+      || reuseFromParked
+      || reuseFromStored
+      || reuseFromUnlock
+      || (
+        userRef.current?._id
+        && sameId(userRef.current._id, pendingUser._id)
+        && userRef.current.sessionId
+      )
       || ""
     ).trim();
     let sessionId = reuseSessionId || pendingUser.sessionId;
@@ -1077,7 +1105,7 @@ export const AuthProvider = ({ children }) => {
         deviceName: device.deviceName,
         location: device.location,
         platform: device.platform,
-        // PIN unlock / returning visit: reuse local session so we don't ask Yes/No of nobody
+        // Same-device park / PIN unlock — never treat as another live device
         currentSessionId: reuseSessionId || undefined,
       });
       if (started?.sessionId) sessionId = started.sessionId;
@@ -1275,7 +1303,11 @@ export const AuthProvider = ({ children }) => {
       // Stay signed in as customer — do NOT end rider/customer server sessions
       clearParkedCustomer();
       clearExplicitLogoutFlag();
+      clearPendingLogin();
       try { clearAuthGate(); } catch { /* ignore */ }
+      setSecurityAlert(null);
+      holdLogoutConfirmRef.current = false;
+      kickedRef.current = false;
       writeAuthUser(customerSession);
       markSessionAlive();
       saveDeviceUnlock(customerSession);
@@ -1284,11 +1316,34 @@ export const AuthProvider = ({ children }) => {
       setRole(customerSession.role);
       setIsAuthenticated(true);
       setNeedsDeviceUnlock(false);
+      // Resume the SAME parked session on the server (never new-login / Yes-No)
       if (customerSession._id) {
-        touchUserSession({
-          userId: String(customerSession._id),
-          sessionId: customerSession.sessionId ? String(customerSession.sessionId) : undefined,
-        }).catch(() => {});
+        const resumeSid = customerSession.sessionId ? String(customerSession.sessionId) : undefined;
+        startUserSession({
+          userId: customerSession._id,
+          currentSessionId: resumeSid,
+          deviceName: "This device",
+          location: "Same device",
+          platform: typeof navigator !== "undefined" ? navigator.platform : undefined,
+        })
+          .then((res) => {
+            if (!res?.success || !res.sessionId) return;
+            if (res.pendingApproval) return; // should not happen when resuming
+            const u = userRef.current;
+            if (!u || String(u._id) !== String(customerSession._id)) return;
+            if (String(u.sessionId || "") === String(res.sessionId)) return;
+            const next = { ...u, sessionId: String(res.sessionId) };
+            userRef.current = next;
+            writeAuthUser(next);
+            setUser(next);
+            saveDeviceUnlock(next);
+          })
+          .catch(() => {
+            touchUserSession({
+              userId: String(customerSession._id),
+              sessionId: resumeSid,
+            }).catch(() => {});
+          });
       }
       return {
         success: true,
