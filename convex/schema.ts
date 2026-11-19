@@ -408,7 +408,9 @@ export default defineSchema({
     rejectedAt: v.optional(v.string()),
     fromScan: v.optional(v.boolean()),
     scannedAt: v.optional(v.string()),
-  }).index("by_rider", ["riderId"]),
+  })
+    .index("by_rider", ["riderId"])
+    .index("by_riderEmail", ["riderEmail"]),
 
   preOrderRequests: defineTable({
     userId: v.string(),

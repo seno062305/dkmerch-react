@@ -1597,7 +1597,7 @@ const AdminUsers = () => {
                         <span className="au-pending-name-cell">
                           {rider.riderPhoto
                             ? <img src={rider.riderPhoto} alt="" className="au-pending-thumb" />
-                            : <span className="au-pending-thumb-fallback"><i className="fas fa-motorcycle"></i></span>}
+                            : <span className="au-pending-thumb-fallback"><i className="fas fa-user"></i></span>}
                           {rider.fullName}
                         </span>
                       </td>

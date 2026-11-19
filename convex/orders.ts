@@ -917,16 +917,25 @@ export const notifyCustomerOutForDelivery = mutation({
         : Math.floor(1000 + Math.random() * 9000).toString();
     const now = new Date().toISOString();
 
+    const riderEmailNorm = String(
+      args.riderEmail || (order as any).riderInfo?.email || ""
+    )
+      .trim()
+      .toLowerCase();
     let resolvedPhoto =
       args.riderPhoto || (order as any).riderInfo?.photo || "";
-    if (!resolvedPhoto && (args.riderEmail || (order as any).riderInfo?.email)) {
-      const email = String(args.riderEmail || (order as any).riderInfo?.email || "").trim();
-      if (email) {
-        const app = await db
-          .query("riderApplications")
-          .withIndex("by_email", (q: any) => q.eq("email", email))
-          .first();
-        if (app?.riderPhoto) resolvedPhoto = app.riderPhoto;
+    if (!resolvedPhoto && riderEmailNorm) {
+      const app = await db
+        .query("riderApplications")
+        .withIndex("by_email", (q: any) => q.eq("email", riderEmailNorm))
+        .first();
+      if (app?.riderPhoto) resolvedPhoto = app.riderPhoto;
+      if (!resolvedPhoto) {
+        const allApps = await db.query("riderApplications").collect();
+        const loose = allApps.find(
+          (r: any) => String(r.email || "").trim().toLowerCase() === riderEmailNorm
+        );
+        if (loose?.riderPhoto) resolvedPhoto = loose.riderPhoto;
       }
     }
     const riderInfo = {
@@ -934,7 +943,7 @@ export const notifyCustomerOutForDelivery = mutation({
       phone: args.riderPhone || "",
       vehicle: args.riderVehicle || "motorcycle",
       plate: args.riderPlate || "",
-      email: args.riderEmail || "",
+      email: riderEmailNorm,
       photo: resolvedPhoto || "",
     };
 

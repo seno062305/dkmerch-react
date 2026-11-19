@@ -984,7 +984,18 @@ const RiderDashboard = () => {
 
   const riderInfo    = useQuery(api.riders.getRiderByEmail, user?.email ? { email: user.email } : 'skip');
   const allOrders    = useQuery(api.orders.getAllOrders)  || [];
+  // Claimed check for Available tab (any rider) — keep global list
   const allPickups   = useQuery(api.pickupRequests.getAllPickupRequests) || [];
+  // Deliver / My Orders — only THIS rider's pickups
+  const myPickups = useQuery(
+    api.pickupRequests.getMyPickupRequests,
+    riderInfo?._id || user?.email
+      ? {
+          riderId: riderInfo?._id ? String(riderInfo._id) : undefined,
+          riderEmail: String(riderInfo?.email || user?.email || '').trim().toLowerCase() || undefined,
+        }
+      : 'skip'
+  ) || [];
   const storeSettings = useQuery(api.settings.getSettings);
   const storePin = {
     storeLat: storeSettings?.storeLat,
@@ -1057,10 +1068,19 @@ const RiderDashboard = () => {
       return bTime - aTime;
     });
 
-  // One Deliver card per pickup/order — same customer + same rider still = separate list items
-  const myDeliveries = allPickups
+  const riderKeyEmail = String(riderInfo?.email || user?.email || '').trim().toLowerCase();
+  const riderKeyId = riderInfo?._id ? String(riderInfo._id) : '';
+  const isMinePickup = (p) => {
+    if (!p) return false;
+    if (riderKeyId && String(p.riderId || '') === riderKeyId) return true;
+    if (riderKeyEmail && String(p.riderEmail || '').trim().toLowerCase() === riderKeyEmail) return true;
+    return false;
+  };
+
+  // One Deliver card per pickup/order — only orders THIS rider accepted
+  const myDeliveries = myPickups
     .filter(p =>
-      p.riderEmail === user?.email &&
+      isMinePickup(p) &&
       (p.status === 'approved' || p.status === 'out_for_delivery')
     )
     // Dedupe only identical pickup rows / same orderId — never merge different orders by customer
@@ -1076,9 +1096,9 @@ const RiderDashboard = () => {
       return tb - ta;
     });
 
-  const myPickupHistory = allPickups
+  const myPickupHistory = myPickups
     .filter(p =>
-      p.riderEmail === user?.email &&
+      isMinePickup(p) &&
       (p.status === 'out_for_delivery' || p.status === 'completed')
     )
     .filter(p => {
@@ -1272,7 +1292,7 @@ const RiderDashboard = () => {
         orderId: scanTargetOrderId,
         riderId: riderInfo._id,
         riderName: riderInfo.fullName,
-        riderEmail: user.email,
+        riderEmail: String(riderInfo.email || user.email || '').trim().toLowerCase(),
         riderPhone: riderInfo.phone || '',
         riderVehicle: riderInfo.vehicleType || 'motorcycle',
         riderPlate: riderInfo.plateNumber || '',
@@ -1382,7 +1402,7 @@ const RiderDashboard = () => {
         riderPhone: riderInfo.phone || '',
         riderPlate: riderInfo.plateNumber || '',
         riderVehicle: riderInfo.vehicleType || 'motorcycle',
-        riderEmail: user.email,
+        riderEmail: String(riderInfo.email || user.email || '').trim().toLowerCase(),
         riderPhoto: riderInfo.riderPhoto || null,
         customerEmail: ord?.email || delivery.customerEmail || '',
         customerPhone: ord?.phone || '',
@@ -1616,7 +1636,17 @@ const RiderDashboard = () => {
     <div className="rider-dashboard rider-dashboard--bottom-nav">
       <header className="rider-topbar">
         <div className="rider-topbar-brand">
-          <i className="fas fa-motorcycle"></i>
+          {riderInfo?.riderPhoto ? (
+            <img
+              src={riderInfo.riderPhoto}
+              alt={riderInfo.fullName || 'Rider'}
+              className="rider-topbar-photo"
+            />
+          ) : (
+            <span className="rider-topbar-avatar" aria-hidden="true">
+              <i className="fas fa-user"></i>
+            </span>
+          )}
           <div>
             <strong>DKMerch</strong>
             <span>{tabTitle}</span>
@@ -1891,10 +1921,19 @@ const RiderDashboard = () => {
                           </div>
                           <div className="rider-expanded-section rider-info-preview">
                             <div className="rider-expanded-section-title"><i className="fas fa-id-badge"></i> Your Info (visible to customer)</div>
-                            <div className="rider-info-row"><i className="fas fa-user"></i><span><strong>Name:</strong> {riderInfo.fullName}</span></div>
-                            <div className="rider-info-row"><i className="fas fa-phone"></i><span><strong>Phone:</strong> {riderInfo.phone}</span></div>
-                            <div className="rider-info-row"><i className="fas fa-motorcycle"></i><span><strong>Vehicle:</strong> Motorcycle</span></div>
-                            <div className="rider-info-row"><i className="fas fa-id-card"></i><span><strong>Plate Number:</strong> {riderInfo.plateNumber || '—'}</span></div>
+                            <div className="rider-info-preview-head">
+                              {riderInfo.riderPhoto ? (
+                                <img src={riderInfo.riderPhoto} alt={riderInfo.fullName} className="rider-info-preview-photo" />
+                              ) : (
+                                <span className="rider-info-preview-avatar"><i className="fas fa-user"></i></span>
+                              )}
+                              <div>
+                                <div className="rider-info-row"><i className="fas fa-user"></i><span><strong>Name:</strong> {riderInfo.fullName}</span></div>
+                                <div className="rider-info-row"><i className="fas fa-phone"></i><span><strong>Phone:</strong> {riderInfo.phone}</span></div>
+                                <div className="rider-info-row"><i className="fas fa-motorcycle"></i><span><strong>Vehicle:</strong> Motorcycle</span></div>
+                                <div className="rider-info-row"><i className="fas fa-id-card"></i><span><strong>Plate Number:</strong> {riderInfo.plateNumber || '—'}</span></div>
+                              </div>
+                            </div>
                           </div>
                           {isOutForDelivery && (
                             <div className={`rider-gps-panel ${isThisBeingTracked ? 'gps-panel-active' : ''}`}>

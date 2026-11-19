@@ -36,6 +36,45 @@
   color: #fc1268;
   font-size: 20px;
 }
+.rider-topbar-photo,
+.rider-topbar-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  object-fit: cover;
+  border: 2px solid #fce7f3;
+}
+.rider-topbar-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #fdf2f8;
+  color: #fc1268;
+  font-size: 16px;
+}
+.rider-info-preview-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.rider-info-preview-photo,
+.rider-info-preview-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  object-fit: cover;
+  border: 2px solid #fce7f3;
+}
+.rider-info-preview-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #fdf2f8;
+  color: #fc1268;
+  font-size: 22px;
+}
 .rider-topbar-brand strong {
   display: block;
   font-size: 15px;

@@ -25,6 +25,51 @@ export const getPickupsByRider = query({
   },
 });
 
+/** Active + history pickups for the logged-in rider only (by riderId and/or email). */
+export const getMyPickupRequests = query({
+  args: {
+    riderId: v.optional(v.string()),
+    riderEmail: v.optional(v.string()),
+  },
+  handler: async ({ db }, args) => {
+    const riderId = String(args.riderId || "").trim();
+    const email = String(args.riderEmail || "").trim().toLowerCase();
+    const rawEmail = String(args.riderEmail || "").trim();
+    if (!riderId && !email) return [];
+
+    const byId = riderId
+      ? await db
+          .query("pickupRequests")
+          .withIndex("by_rider", (q) => q.eq("riderId", riderId))
+          .collect()
+      : [];
+    const byEmail = email
+      ? await db
+          .query("pickupRequests")
+          .withIndex("by_riderEmail", (q) => q.eq("riderEmail", email))
+          .collect()
+      : [];
+    // Legacy mixed-case email rows (pre-normalization)
+    const byRawEmail =
+      rawEmail && rawEmail !== email
+        ? await db
+            .query("pickupRequests")
+            .withIndex("by_riderEmail", (q) => q.eq("riderEmail", rawEmail))
+            .collect()
+        : [];
+
+    const map = new Map<string, any>();
+    for (const p of [...byId, ...byEmail, ...byRawEmail]) {
+      map.set(String(p._id), p);
+    }
+    return Array.from(map.values()).sort((a, b) => {
+      const tb = new Date(b.approvedAt || b.requestedAt || b._creationTime || 0).getTime();
+      const ta = new Date(a.approvedAt || a.requestedAt || a._creationTime || 0).getTime();
+      return tb - ta;
+    });
+  },
+});
+
 export const createPickupRequest = mutation({
   args: {
     orderId: v.string(),
@@ -119,13 +164,19 @@ export const markOrderFromScan = mutation({
       return { success: false, message: "Only confirmed (paid) orders can be scanned." };
     }
 
+    const riderEmail = String(args.riderEmail || "").trim().toLowerCase();
+    const riderId = String(args.riderId || "").trim();
+    const emailMatch = (p: any) =>
+      String(p.riderEmail || "").trim().toLowerCase() === riderEmail
+      || (riderId && String(p.riderId || "") === riderId);
+
     const existing = await db.query("pickupRequests").collect();
     const forOrder = existing.filter((p: any) => p.orderId === order.orderId);
     const claimed = forOrder.find((p: any) =>
       ["approved", "out_for_delivery", "completed"].includes(p.status)
     );
     if (claimed) {
-      if (claimed.riderEmail === args.riderEmail) {
+      if (emailMatch(claimed)) {
         return {
           success: true,
           alreadyClaimed: true,
@@ -138,7 +189,7 @@ export const markOrderFromScan = mutation({
 
     const now = new Date().toISOString();
     const mine = forOrder.find(
-      (p: any) => p.riderEmail === args.riderEmail && (p.status === "scanned" || p.status === "pending")
+      (p: any) => emailMatch(p) && (p.status === "scanned" || p.status === "pending")
     );
 
     if (mine) {
@@ -146,6 +197,8 @@ export const markOrderFromScan = mutation({
         status: "scanned",
         fromScan: true,
         scannedAt: now,
+        riderId: riderId || mine.riderId,
+        riderEmail: riderEmail || mine.riderEmail,
         customerName: order.customerName || mine.customerName,
         total: order.finalTotal ?? order.total ?? mine.total,
       });
@@ -154,9 +207,9 @@ export const markOrderFromScan = mutation({
 
     const id = await db.insert("pickupRequests", {
       orderId: order.orderId,
-      riderId: args.riderId,
+      riderId,
       riderName: args.riderName,
-      riderEmail: args.riderEmail,
+      riderEmail,
       riderPhone: args.riderPhone || "",
       riderVehicle: args.riderVehicle || "motorcycle",
       riderPlate: args.riderPlate || "",
@@ -205,6 +258,12 @@ export const acceptOrder = mutation({
       return { success: false, message: "Only confirmed orders can be accepted." };
     }
 
+    const riderEmail = String(args.riderEmail || "").trim().toLowerCase();
+    const riderId = String(args.riderId || "").trim();
+    const emailMatch = (p: any) =>
+      String(p.riderEmail || "").trim().toLowerCase() === riderEmail
+      || (riderId && String(p.riderId || "") === riderId);
+
     const existing = await db.query("pickupRequests").collect();
     const forOrder = existing.filter((p: any) => p.orderId === order.orderId);
     const claimed = forOrder.find((p: any) =>
@@ -214,24 +273,31 @@ export const acceptOrder = mutation({
     const now = new Date().toISOString();
     // Prefer live admin photo from riderApplications so customers always see the face pic
     let resolvedPhoto = args.riderPhoto || "";
-    if (!resolvedPhoto && args.riderEmail) {
+    if (!resolvedPhoto && riderEmail) {
       const app = await db
         .query("riderApplications")
-        .withIndex("by_email", (q: any) => q.eq("email", String(args.riderEmail).trim()))
+        .withIndex("by_email", (q: any) => q.eq("email", riderEmail))
         .first();
       if (app?.riderPhoto) resolvedPhoto = app.riderPhoto;
+      if (!resolvedPhoto) {
+        const allApps = await db.query("riderApplications").collect();
+        const loose = allApps.find(
+          (r: any) => String(r.email || "").trim().toLowerCase() === riderEmail
+        );
+        if (loose?.riderPhoto) resolvedPhoto = loose.riderPhoto;
+      }
     }
     const riderInfo = {
       name: args.riderName,
       phone: args.riderPhone || "",
       vehicle: args.riderVehicle || "motorcycle",
       plate: args.riderPlate || "",
-      email: args.riderEmail,
+      email: riderEmail,
       photo: resolvedPhoto || "",
     };
 
     if (claimed) {
-      if (claimed.riderEmail === args.riderEmail) {
+      if (emailMatch(claimed)) {
         return { success: true, alreadyClaimed: true, id: claimed._id, orderId: order.orderId };
       }
       return { success: false, message: "Another rider already accepted this order." };
@@ -239,13 +305,13 @@ export const acceptOrder = mutation({
 
     const mine = forOrder.find(
       (p: any) =>
-        p.riderEmail === args.riderEmail &&
+        emailMatch(p) &&
         (p.status === "scanned" || p.status === "pending")
     );
 
     for (const p of forOrder) {
       if (
-        p.riderEmail !== args.riderEmail &&
+        !emailMatch(p) &&
         (p.status === "scanned" || p.status === "pending")
       ) {
         await db.patch(p._id, { status: "rejected", rejectedAt: now });
@@ -282,11 +348,14 @@ export const acceptOrder = mutation({
       await db.patch(mine._id, {
         status: "approved",
         approvedAt: now,
+        riderId: riderId || mine.riderId,
+        riderEmail: riderEmail || mine.riderEmail,
+        riderName: args.riderName || mine.riderName,
         customerName: order.customerName || mine.customerName || "",
         total: order.finalTotal ?? order.total ?? mine.total ?? 0,
       });
       await db.patch(order._id, {
-        riderId: args.riderId,
+        riderId,
         riderInfo,
         orderStatus: status === "confirmed" ? "shipped" : order.orderStatus,
         status: status === "confirmed" ? "Shipped" : order.status,
@@ -298,9 +367,9 @@ export const acceptOrder = mutation({
 
     const id = await db.insert("pickupRequests", {
       orderId: order.orderId,
-      riderId: args.riderId,
+      riderId,
       riderName: args.riderName,
-      riderEmail: args.riderEmail,
+      riderEmail,
       riderPhone: args.riderPhone || "",
       riderVehicle: args.riderVehicle || "motorcycle",
       riderPlate: args.riderPlate || "",
@@ -314,7 +383,7 @@ export const acceptOrder = mutation({
     });
 
     await db.patch(order._id, {
-      riderId: args.riderId,
+      riderId,
       riderInfo,
       orderStatus: status === "confirmed" ? "shipped" : order.orderStatus,
       status: status === "confirmed" ? "Shipped" : order.status,

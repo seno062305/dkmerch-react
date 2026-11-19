@@ -133,10 +133,20 @@ export const getAllRiders = query(async ({ db }) => {
 export const getRiderByEmail = query({
   args: { email: v.string() },
   handler: async ({ db }, { email }) => {
-    return await db
+    const normalized = String(email || "").trim().toLowerCase();
+    if (!normalized) return null;
+    const exact = await db
       .query("riderApplications")
-      .withIndex("by_email", q => q.eq("email", email))
+      .withIndex("by_email", (q) => q.eq("email", normalized))
       .first();
+    if (exact) return exact;
+    // Legacy rows may still store mixed-case emails
+    const all = await db.query("riderApplications").collect();
+    return (
+      all.find(
+        (r: any) => String(r.email || "").trim().toLowerCase() === normalized
+      ) || null
+    );
   },
 });
 
@@ -391,7 +401,27 @@ export const updateRiderPhoto = mutation({
   handler: async ({ db }, { id, riderPhoto }) => {
     const rider = await db.get(id);
     if (!rider) return { success: false, message: "Rider not found." };
-    await db.patch(id, { riderPhoto: riderPhoto || null });
+    const nextPhoto = riderPhoto || null;
+    await db.patch(id, { riderPhoto: nextPhoto });
+
+    // Keep in-flight order banners in sync with the latest admin photo
+    const email = String(rider.email || "").trim().toLowerCase();
+    const riderId = String(id);
+    const orders = await db.query("orders").order("desc").take(400);
+    for (const order of orders) {
+      const status = String((order as any).orderStatus || (order as any).status || "").toLowerCase();
+      if (["delivered", "completed", "cancelled"].includes(status)) continue;
+      const info = (order as any).riderInfo;
+      if (!info) continue;
+      const sameId = String((order as any).riderId || "") === riderId;
+      const sameEmail =
+        email
+        && String(info.email || "").trim().toLowerCase() === email;
+      if (!sameId && !sameEmail) continue;
+      await db.patch(order._id, {
+        riderInfo: { ...info, photo: nextPhoto || "" },
+      } as any);
+    }
     return { success: true };
   },
 });

@@ -1456,12 +1456,13 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
     order.cancelRefundProofId ? { storageId: order.cancelRefundProofId } : 'skip'
   );
 
-  const riderEmail = String(order.riderInfo?.email || '').trim();
+  const riderEmail = String(order.riderInfo?.email || '').trim().toLowerCase();
+  // Always load live rider app so admin photo updates show even if order snapshot is stale/empty
   const riderApp = useQuery(
     api.riders.getRiderByEmail,
-    riderEmail && !order.riderInfo?.photo ? { email: riderEmail } : 'skip'
+    riderEmail ? { email: riderEmail } : 'skip'
   );
-  const riderPhoto = order.riderInfo?.photo || riderApp?.riderPhoto || '';
+  const riderPhoto = riderApp?.riderPhoto || order.riderInfo?.photo || '';
 
   const isCancelled      = (order.orderStatus || order.status || '').toLowerCase() === 'cancelled';
   const isOutForDelivery = isOutForDeliveryStatus(order);
@@ -1580,7 +1581,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
                   {riderPhoto ? (
                     <img src={riderPhoto} alt={order.riderInfo.name || 'Rider'} className="rider-info-photo" />
                   ) : (
-                    <div className="rider-info-icon"><i className="fas fa-motorcycle"></i></div>
+                    <div className="rider-info-icon rider-info-icon--person"><i className="fas fa-user"></i></div>
                   )}
                   <div className="rider-info-details">
                     <strong>Your Rider: {order.riderInfo.name || '—'}</strong>
