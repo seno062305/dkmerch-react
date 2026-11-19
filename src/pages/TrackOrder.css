@@ -1066,10 +1066,13 @@
 .item-details { display: flex; flex-direction: column; gap: 4px; }
 .item-details strong { font-size: 14px; color: var(--dark-color); }
 .item-details span   { font-size: 13px; color: var(--gray-color); }
-.item-price { font-weight: 700; color: #111827; white-space: nowrap; }
+.item-price { font-weight: 700; color: #fc1268; white-space: nowrap; }
 
 .order-items-total { display: flex; justify-content: space-between; padding: 14px 0 0; border-top: 2px solid #f0f0f0; margin-top: 4px; font-size: 16px; }
 
+.order-items-timeline .customer-order-summary {
+  margin-top: 14px;
+}
 .customer-order-summary {
   margin-top: 16px;
   padding: 16px;

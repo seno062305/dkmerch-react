@@ -1512,7 +1512,6 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
   const summarySubtotal = Number(order.subtotal ?? itemsSubtotal) || 0;
   const summaryShipping = Number(order.shippingFee ?? 0) || 0;
   const summaryDiscount = Number(order.discountAmount ?? 0) || 0;
-  const summaryPaymentFee = Number(order.paymentFee ?? 0) || 0;
   const summaryFeeMethod = String(order.paymentFeeMethod || order.paymentMethod || '').toLowerCase();
   const summaryFeeRate = Number(order.paymentFeeRate || 0) || 0;
   const summaryFeeLabel = summaryFeeMethod.includes('maya') ? 'Maya' : summaryFeeMethod.includes('gcash') ? 'GCash' : 'E-wallet';
@@ -1521,6 +1520,15 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
   const summaryTotal = Number(
     order.finalTotal ?? (summaryOriginal - summaryDiscount)
   ) || 0;
+  // Older orders may lack paymentFee — derive from charged total so the breakdown matches
+  const storedPaymentFee = Number(order.paymentFee ?? 0) || 0;
+  const inferredPaymentFee = Math.max(
+    0,
+    Math.round((summaryTotal - summarySubtotal - summaryShipping + summaryDiscount) * 100) / 100
+  );
+  const summaryPaymentFee = storedPaymentFee > 0
+    ? storedPaymentFee
+    : (inferredPaymentFee > 0.009 ? inferredPaymentFee : 0);
   const summaryHasPromo = !!(order.promoCode && summaryDiscount > 0);
   const summaryIsLbc = isLbcOrder(order);
 
@@ -1873,50 +1881,56 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
                 </div>
               );
             })}
-          </div>
 
-          <div className="customer-order-summary">
-            <h3><i className="fas fa-calculator"></i> Order Summary</h3>
-            <div className="customer-order-totals">
-              <div className="customer-total-row">
-                <span>Subtotal:</span>
-                <strong>₱{summarySubtotal.toLocaleString('en-PH')}</strong>
-              </div>
-              <div className="customer-total-row">
-                <span>Shipping:</span>
-                <strong>
-                  {summaryIsLbc
-                    ? (summaryShipping > 0
-                      ? `₱${summaryShipping.toLocaleString('en-PH')} · LBC`
-                      : 'LBC · arrange with admin')
-                    : summaryShipping === 0
-                      ? 'FREE'
-                      : `₱${summaryShipping.toLocaleString('en-PH')}`}
-                </strong>
-              </div>
-              {summaryHasPromo && (
-                <>
-                  <div className="customer-total-row customer-total-row--promo">
-                    <span><i className="fas fa-tag"></i> Promo ({order.promoCode}):</span>
-                    <strong>−₱{summaryDiscount.toLocaleString('en-PH')}</strong>
-                  </div>
-                  <div className="customer-total-row customer-total-row--muted">
-                    <span>Original:</span>
-                    <strong>₱{summaryOriginal.toLocaleString('en-PH')}</strong>
-                  </div>
-                </>
-              )}
-              {summaryPaymentFee > 0 && (
+            {/* Full computation under items — Subtotal / Shipping / Fee / Total */}
+            <div className="customer-order-summary">
+              <h3><i className="fas fa-calculator"></i> Order Summary</h3>
+              <div className="customer-order-totals">
+                <div className="customer-total-row">
+                  <span>Subtotal</span>
+                  <strong>₱{summarySubtotal.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                </div>
+                <div className="customer-total-row">
+                  <span>Shipping</span>
+                  <strong>
+                    {summaryIsLbc
+                      ? (summaryShipping > 0
+                        ? `₱${summaryShipping.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · LBC`
+                        : 'LBC · arrange with admin')
+                      : summaryShipping === 0
+                        ? 'FREE'
+                        : `₱${summaryShipping.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                  </strong>
+                </div>
+                {summaryHasPromo && (
+                  <>
+                    <div className="customer-total-row customer-total-row--promo">
+                      <span><i className="fas fa-tag"></i> Promo ({order.promoCode})</span>
+                      <strong>−₱{summaryDiscount.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                    </div>
+                    <div className="customer-total-row customer-total-row--muted">
+                      <span>Original</span>
+                      <strong>₱{summaryOriginal.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                    </div>
+                  </>
+                )}
                 <div className="customer-total-row">
                   <span>
-                    Handling Fee ({summaryFeeLabel}{summaryFeePct ? ` ${summaryFeePct}` : ''}):
+                    Handling Fee
+                    {summaryPaymentFee > 0
+                      ? ` (${summaryFeeLabel}${summaryFeePct ? ` ${summaryFeePct}` : ''})`
+                      : ''}
                   </span>
-                  <strong>₱{summaryPaymentFee.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                  <strong>
+                    {summaryPaymentFee > 0
+                      ? `₱${summaryPaymentFee.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      : '₱0.00'}
+                  </strong>
                 </div>
-              )}
-              <div className="customer-total-row customer-total-row--grand">
-                <span>{summaryHasPromo ? 'Final Charged:' : 'Total:'}</span>
-                <strong>₱{summaryTotal.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                <div className="customer-total-row customer-total-row--grand">
+                  <span>{summaryHasPromo ? 'Final Charged' : 'Total'}</span>
+                  <strong>₱{summaryTotal.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                </div>
               </div>
             </div>
           </div>

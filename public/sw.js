@@ -1,5 +1,5 @@
 // DKMerch Service Worker — PWA support
-const CACHE_NAME = 'dkmerch-v19-notif-splash';
+const CACHE_NAME = 'dkmerch-v20-order-summary';
 
 // Only cache essential static assets (never webpack JS bundles)
 const STATIC_ASSETS = [

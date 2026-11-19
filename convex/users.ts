@@ -934,6 +934,57 @@ export const logoutAllSessions = mutation({
 });
 
 /**
+ * One-shot: sign out EVERY customer/admin session and clear stale multi-device notices.
+ * Uses a sentinel session id so clients are not treated as "legacy" (still logged in).
+ * Run: npx convex run users:forceLogoutAllAccounts
+ */
+export const forceLogoutAllAccounts = mutation({
+  args: {},
+  handler: async ({ db }) => {
+    const SENTINEL = "__force_logout__";
+    const users = await db.query("users").collect();
+    let usersCleared = 0;
+    for (const user of users) {
+      await db.patch(user._id, {
+        activeSessionId: SENTINEL,
+        activeSessionIds: [SENTINEL],
+        activeDeviceAt: undefined,
+        activeDeviceName: undefined,
+        activeDeviceLocation: undefined,
+        activeDevicePlatform: undefined,
+        loginAlert: undefined,
+        loginBroadcast: undefined,
+        // No kickedAt — avoid "opened on another device" takeover toast
+        kickedAt: undefined,
+      } as any);
+      await removeAllUserSessions(db, String(user._id));
+      usersCleared += 1;
+    }
+
+    // Drop device session rows left behind
+    const sessions = await db.query("userSessions").collect();
+    let sessionsDeleted = 0;
+    for (const row of sessions) {
+      await db.delete(row._id);
+      sessionsDeleted += 1;
+    }
+
+    // Clear stale "Account opened / blocked" inbox notices
+    const notifs = await db.query("customerNotifications").collect();
+    let notifsDeleted = 0;
+    for (const n of notifs) {
+      const t = String((n as any).type || "");
+      if (t === "login_opened" || t === "login_blocked" || t === "login_alert") {
+        await db.delete(n._id);
+        notifsDeleted += 1;
+      }
+    }
+
+    return { success: true, usersCleared, sessionsDeleted, notifsDeleted };
+  },
+});
+
+/**
  * New device tapped Close on "Waiting for approval".
  * Drops the pending request and abandons the ghost "other" session so login can proceed.
  */

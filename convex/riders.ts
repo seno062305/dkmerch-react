@@ -1271,6 +1271,28 @@ export const setRiderKickedAt = mutation({
   },
 });
 
+/** One-shot: sign out every rider session + clear login broadcasts. */
+export const forceLogoutAllRiders = mutation({
+  args: {},
+  handler: async ({ db }) => {
+    const SENTINEL = "__force_logout__";
+    const riders = await db.query("riderApplications").collect();
+    let cleared = 0;
+    for (const rider of riders) {
+      await db.patch(rider._id, {
+        activeSessionId: SENTINEL,
+        activeSessionIds: [SENTINEL],
+        activeDeviceAt: undefined,
+        loginAlert: undefined,
+        loginBroadcast: undefined,
+        kickedAt: undefined,
+      } as any);
+      cleared += 1;
+    }
+    return { success: true, cleared };
+  },
+});
+
 // ── updateRiderLocation ──
 export const updateRiderLocation = mutation({
   args: {
