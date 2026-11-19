@@ -257,19 +257,32 @@ const AddressMapPicker = ({
   }, [checkAndNotifyNCR, makeIcon]);
 
   const placePinAndAutofillRef = useRef(null);
+  const lastValidPinRef = useRef(
+    savedCoords?.lat != null && savedCoords?.lng != null
+      ? { lat: savedCoords.lat, lng: savedCoords.lng }
+      : null
+  );
 
-  const clearMapPin = useCallback(() => {
-    if (markerRef.current && mapInstanceRef.current) {
-      try { mapInstanceRef.current.removeLayer(markerRef.current); } catch { /* ignore */ }
-      markerRef.current = null;
+  /** Keep the marker on the map — snap back to last good pin instead of removing it. */
+  const rejectPinMove = useCallback((message) => {
+    setStatusText(message);
+    const last = lastValidPinRef.current;
+    if (last && Number.isFinite(last.lat) && Number.isFinite(last.lng)) {
+      const fields = fieldsRef.current;
+      applyPinOnMap(last.lat, last.lng, fields, { fly: false });
+      onSelectSuggestion({ ...fields, lat: last.lat, lng: last.lng });
+      onPinValidated?.(true);
+      return;
     }
-    setPinSet(false);
+    // No prior valid pin — leave marker if present, but do not accept coords
+    if (markerRef.current) setPinSet(true);
     onPinValidated?.(false);
-  }, [onPinValidated]);
+  }, [applyPinOnMap, onSelectSuggestion, onPinValidated]);
 
   const commitPin = useCallback((lat, lng, { fly = true } = {}) => {
     const fields = fieldsRef.current;
     const withinNCR = applyPinOnMap(lat, lng, fields, { fly });
+    lastValidPinRef.current = { lat, lng };
     onSelectSuggestion({ ...fields, lat, lng });
     setStatusText(withinNCR
       ? 'Pin set — drag to fine-tune'
@@ -280,8 +293,7 @@ const AddressMapPicker = ({
   /** Drag / tap / search pin → reverse-geocode and autofill address fields. */
   const placePinAndAutofill = useCallback(async (lat, lng, { fly = false } = {}) => {
     if (!isInPhilippinesBounds(lat, lng)) {
-      setStatusText('⚠️ Pin must be inside the Philippines');
-      clearMapPin();
+      rejectPinMove('⚠️ Pin must be inside the Philippines');
       return;
     }
 
@@ -293,6 +305,11 @@ const AddressMapPicker = ({
 
     pinDrivenRef.current = true;
     suppressForwardGeocodeRef.current = true;
+    // Keep pin visible while looking up (do not remove marker)
+    if (markerRef.current) {
+      markerRef.current.setLatLng([lat, lng]);
+      setPinSet(true);
+    }
     setGeocoding(true);
     setStatusText('Looking up address for this pin…');
 
@@ -312,8 +329,7 @@ const AddressMapPicker = ({
       if (controller.signal.aborted) return;
 
       if (!isPhilippinesLandResult(data)) {
-        setStatusText('⚠️ Cannot pin on sea / water — move the pin onto land (street or barangay)');
-        clearMapPin();
+        rejectPinMove('⚠️ Cannot pin on sea / water — pin restored to last land location');
         return;
       }
 
@@ -326,16 +342,16 @@ const AddressMapPicker = ({
         province: parsed.province || '',
         zipCode: parsed.zipCode || '',
       };
-      // City-only (no street/barangay) = typical offshore snap — reject
-      if (!merged.address && !merged.barangay) {
-        setStatusText('⚠️ Could not resolve a street/barangay here — move the pin onto land');
-        clearMapPin();
+      // Need at least city/province after land check (street/barangay may be filled by user)
+      if (!merged.city && !merged.province && !merged.address && !merged.barangay) {
+        rejectPinMove('⚠️ Could not resolve address here — pin restored to last land location');
         return;
       }
 
       fieldsRef.current = merged;
       suppressForwardGeocodeRef.current = true;
       pinDrivenRef.current = true;
+      lastValidPinRef.current = { lat, lng };
       onFieldsChange(merged);
       onSelectSuggestion({ ...merged, lat, lng });
       applyPinOnMap(lat, lng, merged, { fly });
@@ -345,13 +361,12 @@ const AddressMapPicker = ({
       setStatusText(withinNCR
         ? (merged.address
           ? 'Address updated from pin — edit fields if needed'
-          : 'Pin set — confirm street address')
+          : 'Pin set — confirm / complete address fields')
         : '⚠️ Outside rider area — address updated · LBC Express'
       );
     } catch (err) {
       if (err?.name === 'AbortError') return;
-      setStatusText('Could not verify this pin. Try again or search a PH address.');
-      clearMapPin();
+      rejectPinMove('Could not verify this pin — restored to last land location');
     } finally {
       if (reverseAbortRef.current === controller) {
         setGeocoding(false);
@@ -359,7 +374,7 @@ const AddressMapPicker = ({
       }
       setTimeout(() => { suppressForwardGeocodeRef.current = false; }, 2500);
     }
-  }, [applyPinOnMap, clearMapPin, onFieldsChange, onSelectSuggestion, onPinValidated, storeLat, storeLng]);
+  }, [applyPinOnMap, rejectPinMove, onFieldsChange, onSelectSuggestion, onPinValidated, storeLat, storeLng]);
 
   placePinAndAutofillRef.current = placePinAndAutofill;
 
