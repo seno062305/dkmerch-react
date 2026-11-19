@@ -281,13 +281,54 @@
   padding: 18px 16px 22px;
   border: 1px solid #eef2f7;
 }
-.rider-profile-hero {
-  text-align: center;
-  margin-bottom: 16px;
+.rider-profile-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
 }
-.rider-profile-hero h2 {
-  margin: 8px 0 4px;
-  font-size: 20px;
+.rider-profile-head-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rider-profile-head-text h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+  color: #111827;
+  line-height: 1.2;
+}
+.rider-profile-head-text span {
+  font-size: 12px;
+  font-weight: 650;
+  color: #94a3b8;
+}
+.rider-avatar.sm {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  color: #fc1268;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #fdf2f8;
+  border: 2px solid #fce7f3;
+}
+.rider-avatar.sm i {
+  font-size: 18px;
+  line-height: 1;
+}
+.rider-avatar-photo.sm {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  display: block;
+  border: 2px solid #fce7f3;
 }
 .rider-avatar.large {
   width: 88px;
@@ -315,20 +356,6 @@
   display: block;
   border: 3px solid #e5e7eb;
   box-shadow: 0 4px 14px rgba(252, 18, 104, 0.2);
-}
-.rider-plate-block {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  margin-top: 10px;
-}
-.rider-plate-label {
-  font-size: 11px;
-  font-weight: 800;
-  color: #475569;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
 }
 .rider-profile-card-info,
 .rider-profile-settings {

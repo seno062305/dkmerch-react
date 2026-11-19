@@ -1622,7 +1622,11 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
   const hasCancelRequest = !!(order.cancelRequestStatus);
   const pm = getPaymentMethodLabel(order);
 
-  const canPrintWaybill = isPaid && currentStatus !== 'pending';
+  // Print Waybill only while packing (confirmed). Hide once shipped / OFD / done.
+  const canPrintWaybill =
+    isPaid
+    && currentStatus === 'confirmed'
+    && !['shipped', 'out_for_delivery', 'completed', 'cancelled'].includes(currentStatus);
 
   const handleRefundResolve = async (status) => {
     setResolvingRefund(true);
@@ -2246,16 +2250,13 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
           )}
 
           <div className="modal-actions">
-            {isPaid && (
+            {canPrintWaybill && (
               <button
                 className="print-waybill-btn-bottom"
-                onClick={() => canPrintWaybill && setShowWaybill(true)}
-                disabled={!canPrintWaybill}
-                title={!canPrintWaybill ? 'Confirm the order first before printing waybill' : 'Print Waybill'}
-                style={!canPrintWaybill ? { opacity: 0.45, cursor: 'not-allowed', filter: 'grayscale(0.5)' } : {}}
+                onClick={() => setShowWaybill(true)}
+                title="Print Waybill"
               >
                 <i className="fas fa-print"></i> Print Waybill
-                {!canPrintWaybill && <span style={{ fontSize: '11px', fontWeight: 600, opacity: 0.85, marginLeft: 4 }}>(Confirm order first)</span>}
               </button>
             )}
             <button className="delete-order-btn" onClick={() => setShowDeleteModal(true)}><i className="fas fa-trash"></i> Delete Order</button>

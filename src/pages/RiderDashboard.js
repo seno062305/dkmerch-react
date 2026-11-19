@@ -2102,16 +2102,15 @@ const RiderDashboard = () => {
           <div className="rider-content">
             {profileView === 'main' ? (
               <div className="rider-profile-panel">
-                <div className="rider-profile-hero">
+                <div className="rider-profile-head">
                   {riderInfo.riderPhoto ? (
-                    <img src={riderInfo.riderPhoto} alt={riderInfo.fullName} className="rider-avatar-photo large" />
+                    <img src={riderInfo.riderPhoto} alt={riderInfo.fullName} className="rider-avatar-photo sm" />
                   ) : (
-                    <div className="rider-avatar large"><i className="fas fa-user-circle"></i></div>
+                    <div className="rider-avatar sm"><i className="fas fa-user"></i></div>
                   )}
-                  <h2>{riderInfo.fullName}</h2>
-                  <div className="rider-plate-block">
-                    <span className="rider-plate-label">Plate Number</span>
-                    <span className="rider-plate">{riderInfo.plateNumber || 'No plate'}</span>
+                  <div className="rider-profile-head-text">
+                    <h2>{riderInfo.fullName}</h2>
+                    <span>{riderInfo.dkRiderId || 'Rider'}</span>
                   </div>
                 </div>
                 <div className="rider-profile-card-info">
