@@ -1789,6 +1789,10 @@ html { scroll-behavior: smooth; }
   word-break: break-word;
 }
 
+.address-suggestions-list--street {
+  z-index: 1200;
+}
+
 /* ── Map preview ── */
 .address-map-preview-wrap {
   margin-top: 12px;

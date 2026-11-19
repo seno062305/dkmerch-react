@@ -177,6 +177,15 @@ const AddressMapPicker = ({
   const [pinQuery,        setPinQuery]        = useState('');
   const [suggestions,     setSuggestions]     = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [streetSuggestions, setStreetSuggestions] = useState([]);
+  const [showStreetSuggestions, setShowStreetSuggestions] = useState(false);
+  const streetSuggestRef = useRef(null);
+  /** Last accepted land pin — drives fullscreen map snap-back */
+  const [acceptedPin, setAcceptedPin] = useState(
+    savedCoords?.lat != null && savedCoords?.lng != null
+      ? { lat: savedCoords.lat, lng: savedCoords.lng }
+      : null
+  );
 
   useEffect(() => {
     fieldsRef.current = { address, barangay, city, province, zipCode };
@@ -270,6 +279,7 @@ const AddressMapPicker = ({
     if (last && Number.isFinite(last.lat) && Number.isFinite(last.lng)) {
       const fields = fieldsRef.current;
       applyPinOnMap(last.lat, last.lng, fields, { fly: false });
+      setAcceptedPin({ lat: last.lat, lng: last.lng });
       onSelectSuggestion({ ...fields, lat: last.lat, lng: last.lng });
       onPinValidated?.(true);
       return;
@@ -283,6 +293,7 @@ const AddressMapPicker = ({
     const fields = fieldsRef.current;
     const withinNCR = applyPinOnMap(lat, lng, fields, { fly });
     lastValidPinRef.current = { lat, lng };
+    setAcceptedPin({ lat, lng });
     onSelectSuggestion({ ...fields, lat, lng });
     setStatusText(withinNCR
       ? 'Pin set — drag to fine-tune'
@@ -329,7 +340,7 @@ const AddressMapPicker = ({
       if (controller.signal.aborted) return;
 
       if (!isPhilippinesLandResult(data)) {
-        rejectPinMove('⚠️ Cannot pin on sea / water — pin restored to last land location');
+        rejectPinMove('⚠️ Cannot pin on sea / mountains — pin restored to last real location');
         return;
       }
 
@@ -344,7 +355,7 @@ const AddressMapPicker = ({
       };
       // Need at least city/province after land check (street/barangay may be filled by user)
       if (!merged.city && !merged.province && !merged.address && !merged.barangay) {
-        rejectPinMove('⚠️ Could not resolve address here — pin restored to last land location');
+        rejectPinMove('⚠️ Could not resolve address here — pin restored to last real location');
         return;
       }
 
@@ -352,6 +363,7 @@ const AddressMapPicker = ({
       suppressForwardGeocodeRef.current = true;
       pinDrivenRef.current = true;
       lastValidPinRef.current = { lat, lng };
+      setAcceptedPin({ lat, lng });
       onFieldsChange(merged);
       onSelectSuggestion({ ...merged, lat, lng });
       applyPinOnMap(lat, lng, merged, { fly });
@@ -520,6 +532,7 @@ const AddressMapPicker = ({
 
   useEffect(() => () => {
     clearTimeout(suggestRef.current);
+    clearTimeout(streetSuggestRef.current);
     if (reverseAbortRef.current) {
       try { reverseAbortRef.current.abort(); } catch { /* ignore */ }
     }
@@ -550,21 +563,63 @@ const AddressMapPicker = ({
         format: 'json',
         q: `${query.trim()}, Philippines`,
         countrycodes: 'ph',
-        limit: '6',
+        limit: '8',
         addressdetails: '1',
       });
       const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
         headers: { 'Accept-Language': 'en', 'User-Agent': 'DKMerchCheckout/1.0' },
       });
       const data = await res.json();
-      setSuggestions((data || []).map((d) => ({
-        label: d.display_name,
-        lat: parseFloat(d.lat),
-        lng: parseFloat(d.lon),
-      })));
+      setSuggestions(
+        (data || [])
+          .filter((d) => isPhilippinesLandResult(d))
+          .slice(0, 6)
+          .map((d) => ({
+            label: d.display_name,
+            lat: parseFloat(d.lat),
+            lng: parseFloat(d.lon),
+          }))
+      );
       setShowSuggestions(true);
     } catch {
       setSuggestions([]);
+    }
+  }, []);
+
+  /** Street-field suggestions — fill complete address details for manual entry. */
+  const fetchStreetSuggestions = useCallback(async (query) => {
+    if (!query || query.trim().length < 3) {
+      setStreetSuggestions([]);
+      return;
+    }
+    try {
+      const params = new URLSearchParams({
+        format: 'json',
+        q: `${query.trim()}, Philippines`,
+        countrycodes: 'ph',
+        limit: '8',
+        addressdetails: '1',
+      });
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
+        headers: { 'Accept-Language': 'en', 'User-Agent': 'DKMerchCheckout/1.0' },
+      });
+      const data = await res.json();
+      const mapped = (data || [])
+        .filter((d) => isPhilippinesLandResult(d))
+        .slice(0, 6)
+        .map((d) => {
+          const parsed = parseNominatimAddress(d);
+          return {
+            label: d.display_name,
+            lat: parseFloat(d.lat),
+            lng: parseFloat(d.lon),
+            ...parsed,
+          };
+        });
+      setStreetSuggestions(mapped);
+      setShowStreetSuggestions(true);
+    } catch {
+      setStreetSuggestions([]);
     }
   }, []);
 
@@ -579,6 +634,42 @@ const AddressMapPicker = ({
     setSuggestions([]);
     setShowSuggestions(false);
     placePinAndAutofill(s.lat, s.lng, { fly: true });
+  };
+
+  const handleStreetChange = (val) => {
+    pinDrivenRef.current = false;
+    onFieldsChange({ address, barangay, city, province, zipCode, address: val });
+    clearTimeout(streetSuggestRef.current);
+    streetSuggestRef.current = setTimeout(() => fetchStreetSuggestions(val), 400);
+  };
+
+  const handleSelectStreetSuggestion = (s) => {
+    pinDrivenRef.current = true;
+    suppressForwardGeocodeRef.current = true;
+    const merged = {
+      address: s.address || address || '',
+      barangay: s.barangay || '',
+      city: s.city || '',
+      province: s.province || '',
+      zipCode: s.zipCode || '',
+    };
+    fieldsRef.current = merged;
+    onFieldsChange(merged);
+    setStreetSuggestions([]);
+    setShowStreetSuggestions(false);
+    if (Number.isFinite(s.lat) && Number.isFinite(s.lng) && isInPhilippinesBounds(s.lat, s.lng)) {
+      lastValidPinRef.current = { lat: s.lat, lng: s.lng };
+      setAcceptedPin({ lat: s.lat, lng: s.lng });
+      onSelectSuggestion({ ...merged, lat: s.lat, lng: s.lng });
+      onPinValidated?.(true);
+      if (mapVisible) {
+        applyPinOnMap(s.lat, s.lng, merged, { fly: true });
+        setStatusText('Address filled from suggestion — adjust pin if needed');
+      }
+    } else {
+      onFieldsChange(merged);
+    }
+    setTimeout(() => { suppressForwardGeocodeRef.current = false; }, 2500);
   };
 
   const handleField = (field, val) => {
@@ -603,21 +694,43 @@ const AddressMapPicker = ({
   }, []);
 
   const addressLabel = buildFullAddress({ address, barangay, city, province, zipCode });
-  const pinCoords = markerRef.current?.getLatLng?.()
-    || (savedCoords?.lat != null ? { lat: savedCoords.lat, lng: savedCoords.lng } : null);
+  const pinCoords = acceptedPin
+    || (savedCoords?.lat != null ? { lat: savedCoords.lat, lng: savedCoords.lng } : null)
+    || lastValidPinRef.current;
 
   return (
     <div className="address-map-picker">
       <div className="address-fields-grid">
-        <div className="address-field address-field-full">
+        <div className="address-field address-field-full" style={{ position: 'relative' }}>
           <label>Street Address <span className="req">*</span></label>
           <input
             type="text"
             value={address || ''}
-            onChange={(e) => handleField('address', e.target.value)}
-            placeholder="House no., street name"
-            autoComplete="street-address"
+            onChange={(e) => handleStreetChange(e.target.value)}
+            onFocus={() => { if (streetSuggestions.length) setShowStreetSuggestions(true); }}
+            onBlur={() => setTimeout(() => setShowStreetSuggestions(false), 200)}
+            placeholder="House no., street name — type for suggestions"
+            autoComplete="off"
           />
+          {showStreetSuggestions && streetSuggestions.length > 0 && (
+            <ul className="address-suggestions-list address-suggestions-list--street">
+              {streetSuggestions.map((s, i) => (
+                <li key={i} onMouseDown={() => handleSelectStreetSuggestion(s)}>
+                  <i className="fas fa-map-marker-alt" />
+                  <span>
+                    {s.label}
+                    {(s.barangay || s.city) && (
+                      <span style={{ display: 'block', fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                        {[s.address, s.barangay && `Brgy. ${s.barangay}`, s.city, s.province, s.zipCode]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </span>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         <div className="address-field">
@@ -840,9 +953,15 @@ const CheckoutFullscreenMap = ({
 
         marker.on('dragend', () => {
           const { lat, lng } = marker.getLatLng();
+          // Do not keep sea/mountain drops — parent validates and snaps coords back
           onPinMoveRef.current?.(lat, lng);
         });
         map.on('click', (e) => {
+          if (!isInPhilippinesBounds(e.latlng.lat, e.latlng.lng)) {
+            const last = markerRef.current?.getLatLng?.();
+            if (last) marker.setLatLng(last);
+            return;
+          }
           marker.setLatLng(e.latlng);
           onPinMoveRef.current?.(e.latlng.lat, e.latlng.lng);
         });
@@ -887,6 +1006,21 @@ const CheckoutFullscreenMap = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Snap fullscreen pin to last accepted land coords (same as preview map)
+  useEffect(() => {
+    if (!markerRef.current || coords?.lat == null || coords?.lng == null) return;
+    if (!isInPhilippinesBounds(coords.lat, coords.lng)) return;
+    const withinNCR = isWithinRiderRange(coords.lat, coords.lng, storeLat, storeLng);
+    try {
+      markerRef.current.setIcon(makeIcon(withinNCR));
+      markerRef.current.setLatLng([coords.lat, coords.lng]);
+      markerRef.current.getPopup()?.setContent(
+        `<div style="font-size:13px;max-width:220px"><strong>${withinNCR ? '📍 Delivery pin' : '⚠️ Outside rider area · LBC'}</strong>`
+        + `<br><small>${addressLabel || 'Pinned location'}</small></div>`
+      );
+    } catch { /* ignore */ }
+  }, [coords?.lat, coords?.lng, addressLabel, makeIcon, storeLat, storeLng]);
+
   return createPortal(
     <div className="checkout-fullmap-overlay" role="dialog" aria-modal="true" aria-label="Full map">
       <div className="checkout-fullmap-shell">
@@ -904,7 +1038,7 @@ const CheckoutFullscreenMap = ({
         </div>
         <div ref={mapRef} className="checkout-fullmap-canvas" />
         <div className="checkout-fullmap-footer">
-          <span><i className="fas fa-hand-pointer"></i> Pinch to zoom · Drag to pan</span>
+          <span><i className="fas fa-hand-pointer"></i> Land pins only · Sea/mountains snap back</span>
           <span className="checkout-fullmap-footer-right">
             <i className="fas fa-search-plus"></i> Use +/− to zoom
           </span>

@@ -52,10 +52,13 @@ export const isPhilippinesLandResult = (data) => {
     'river', 'wetland', 'reef', 'lagoon', 'reservoir', 'harbour', 'harbor',
     'ferry_terminal',
   ]);
+  const mountainTypes = new Set([
+    'peak', 'volcano', 'ridge', 'cliff', 'saddle', 'mountain_range', 'rock',
+  ]);
   if (cls === 'waterway' || cls === 'water') return false;
-  if (cls === 'natural' && waterTypes.has(typ)) return false;
+  if (cls === 'natural' && (waterTypes.has(typ) || mountainTypes.has(typ))) return false;
   if (cls === 'place' && (typ === 'ocean' || typ === 'sea' || typ === 'bay')) return false;
-  if (waterTypes.has(typ)) return false;
+  if (waterTypes.has(typ) || mountainTypes.has(typ)) return false;
   if (/^(philippine sea|south china sea|celebes sea|sulu sea|pacific ocean|manila bay)\b/i.test(display.trim())) {
     return false;
   }
