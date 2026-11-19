@@ -12,15 +12,14 @@ const REWARDS = {
   accessories: { label: 'Accessories', icon: '🎀' },
 };
 
-const REWARDS_PAGE_SIZES = [5, 10, 15, 20, 25];
+const REDEMPTION_PAGE_SIZE = 5;
+const POINTS_PAGE_SIZE = 9;
 
 const AdminRewards = () => {
   const [redemptionSearch, setRedemptionSearch] = useState('');
   const [pointsSearch, setPointsSearch] = useState('');
 
-  const [redemptionPageSize, setRedemptionPageSize] = useState(5);
   const [redemptionPage, setRedemptionPage] = useState(0);
-  const [pointsPageSize, setPointsPageSize] = useState(5);
   const [pointsPage, setPointsPage] = useState(0);
 
   const redemptions = useQuery(api.rewards.getAllRedemptions);
@@ -51,21 +50,21 @@ const AdminRewards = () => {
       .sort((a, b) => b.totalPoints - a.totalPoints);
   }, [allPoints, pointsSearch]);
 
-  useEffect(() => { setRedemptionPage(0); }, [redemptionSearch, redemptionPageSize, filteredRedemptions.length]);
-  useEffect(() => { setPointsPage(0); }, [pointsSearch, pointsPageSize, filteredPoints.length]);
+  useEffect(() => { setRedemptionPage(0); }, [redemptionSearch, filteredRedemptions.length]);
+  useEffect(() => { setPointsPage(0); }, [pointsSearch, filteredPoints.length]);
 
-  const redemptionTotalPages = Math.max(1, Math.ceil(filteredRedemptions.length / redemptionPageSize) || 1);
+  const redemptionTotalPages = Math.max(1, Math.ceil(filteredRedemptions.length / REDEMPTION_PAGE_SIZE) || 1);
   const safeRedemptionPage = Math.min(redemptionPage, redemptionTotalPages - 1);
   const pagedRedemptions = filteredRedemptions.slice(
-    safeRedemptionPage * redemptionPageSize,
-    safeRedemptionPage * redemptionPageSize + redemptionPageSize
+    safeRedemptionPage * REDEMPTION_PAGE_SIZE,
+    safeRedemptionPage * REDEMPTION_PAGE_SIZE + REDEMPTION_PAGE_SIZE
   );
 
-  const pointsTotalPages = Math.max(1, Math.ceil(filteredPoints.length / pointsPageSize) || 1);
+  const pointsTotalPages = Math.max(1, Math.ceil(filteredPoints.length / POINTS_PAGE_SIZE) || 1);
   const safePointsPage = Math.min(pointsPage, pointsTotalPages - 1);
   const pagedPoints = filteredPoints.slice(
-    safePointsPage * pointsPageSize,
-    safePointsPage * pointsPageSize + pointsPageSize
+    safePointsPage * POINTS_PAGE_SIZE,
+    safePointsPage * POINTS_PAGE_SIZE + POINTS_PAGE_SIZE
   );
 
   return (
@@ -103,7 +102,7 @@ const AdminRewards = () => {
             {filteredRedemptions.length === 0 ? (
               <div
                 className="ar-empty dk-fixed-page dk-fixed-page--cards"
-                style={fixedPageStyle(redemptionPageSize, { '--dk-row-h': '110px', '--dk-gap': '8px' })}
+                style={fixedPageStyle(REDEMPTION_PAGE_SIZE, { '--dk-row-h': '110px', '--dk-gap': '8px' })}
               >
                 <i className="fas fa-history"></i>
                 <p>No redemptions found.</p>
@@ -111,7 +110,7 @@ const AdminRewards = () => {
             ) : (
               <div
                 className="ar-redemptions-list dk-fixed-page dk-fixed-page--cards"
-                style={fixedPageStyle(redemptionPageSize, { '--dk-row-h': '110px', '--dk-gap': '8px' })}
+                style={fixedPageStyle(REDEMPTION_PAGE_SIZE, { '--dk-row-h': '110px', '--dk-gap': '8px' })}
               >
                 {pagedRedemptions.map((r) => {
                   const reward = REWARDS[r.rewardType] || { label: r.rewardType, icon: '🎁' };
@@ -156,10 +155,9 @@ const AdminRewards = () => {
             <AdminPager
               total={filteredRedemptions.length}
               page={safeRedemptionPage}
-              pageSize={redemptionPageSize}
+              pageSize={REDEMPTION_PAGE_SIZE}
               onPageChange={setRedemptionPage}
-              onPageSizeChange={setRedemptionPageSize}
-              pageSizeOptions={REWARDS_PAGE_SIZES}
+              hidePageSize
               alwaysShow
             />
           </div>
@@ -189,7 +187,7 @@ const AdminRewards = () => {
             {filteredPoints.length === 0 ? (
               <div
                 className="ar-empty dk-fixed-page dk-fixed-page--table"
-                style={fixedPageStyle(pointsPageSize, { '--dk-row-h': '57px', '--dk-head-h': '44px' })}
+                style={fixedPageStyle(POINTS_PAGE_SIZE, { '--dk-row-h': '57px', '--dk-head-h': '44px' })}
               >
                 <i className="fas fa-star"></i>
                 <p>No users have earned points yet.</p>
@@ -197,7 +195,7 @@ const AdminRewards = () => {
             ) : (
               <div
                 className="ar-points-table-wrap dk-fixed-page dk-fixed-page--table"
-                style={fixedPageStyle(pointsPageSize, { '--dk-row-h': '57px', '--dk-head-h': '44px' })}
+                style={fixedPageStyle(POINTS_PAGE_SIZE, { '--dk-row-h': '57px', '--dk-head-h': '44px' })}
               >
                 <table className="ar-points-table">
                   <thead>
@@ -227,10 +225,9 @@ const AdminRewards = () => {
             <AdminPager
               total={filteredPoints.length}
               page={safePointsPage}
-              pageSize={pointsPageSize}
+              pageSize={POINTS_PAGE_SIZE}
               onPageChange={setPointsPage}
-              onPageSizeChange={setPointsPageSize}
-              pageSizeOptions={REWARDS_PAGE_SIZES}
+              hidePageSize
               alwaysShow
             />
           </div>

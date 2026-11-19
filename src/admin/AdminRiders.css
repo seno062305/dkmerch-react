@@ -793,7 +793,7 @@
 .ar-bell-wrap { position: relative; flex-shrink: 0; z-index: 50; }
 .ar-bell-btn  { position: relative; background: transparent; border: none; border-radius: 0; width: 38px; height: 38px; font-size: 17px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: color 0.2s; color: #64748b; padding: 0; line-height: 0; z-index: 1; }
 .ar-bell-btn:hover { background: transparent; color: #fc1268; }
-.ar-bell-badge { position: absolute; top: -5px; right: -5px; background: #e5e7eb; color: white; border-radius: 20px; min-width: 17px; height: 17px; padding: 0 4px; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; border: 2px solid white; animation: bellPop 0.3s ease; }
+.ar-bell-badge { position: absolute; top: -5px; right: -5px; background: #fc1268; color: #fff; border-radius: 20px; min-width: 17px; height: 17px; padding: 0 4px; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; border: 2px solid #fff; animation: bellPop 0.3s ease; }
 @keyframes bellPop { from { transform: scale(0); } to { transform: scale(1); } }
 .ar-bell-dropdown { position: absolute; top: calc(100% + 8px); right: 0; left: auto; width: min(340px, calc(100vw - 28px)); background: white; border-radius: 14px; box-shadow: 0 8px 32px rgba(0,0,0,0.14); border: 1px solid #e2e8f0; z-index: 10050; overflow: hidden; animation: bellDropIn 0.18s ease; box-sizing: border-box; }
 @keyframes bellDropIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
