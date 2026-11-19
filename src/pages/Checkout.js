@@ -22,6 +22,7 @@ import {
 import { isAppOutdated } from '../utils/appUpdate';
 import { getOverlayRoot } from '../utils/scrollLock';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
+import { computePaymentFee, formatFeeRatePercent } from '../utils/paymentFees';
 import './Checkout.css';
 
 // ─── LALAMOVE SHIPPING CONFIG ─────────────────────────────────────────────────
@@ -1380,6 +1381,8 @@ const Checkout = () => {
   /** True only when pin/geocode resolved to land inside the Philippines */
   const [addressVerified, setAddressVerified] = useState(false);
   const [verifyingAddress, setVerifyingAddress] = useState(false);
+  /** PayMongo wallet — customer picks before redirect so fee is exact */
+  const [paymentWallet, setPaymentWallet] = useState('gcash'); // 'gcash' | 'maya'
   const [showSavedFullMap, setShowSavedFullMap] = useState(false);
 
   // ── For reward orders, use 1 qty item for shipping calc ──────────────────
@@ -1495,7 +1498,11 @@ const Checkout = () => {
 
   const subtotal      = calculateSubtotal();
   const totalDiscount = calculateTotalDiscount();
-  const finalTotal    = subtotal + shippingFee;
+  const merchandiseTotal = subtotal + shippingFee;
+  const paymentFeeInfo = computePaymentFee(merchandiseTotal, paymentWallet);
+  const paymentFee = Number(merchandiseTotal) > 0 ? paymentFeeInfo.fee : 0;
+  /** Amount charged via PayMongo (merchandise + shipping + e-wallet tax/fee). */
+  const finalTotal = merchandiseTotal + paymentFee;
 
   const validatePhone = (phone) => {
     const cleaned = phone.replace(/[\s-]/g, '');
@@ -1753,7 +1760,7 @@ const Checkout = () => {
       title: isZeroPay ? 'Place free order?' : 'Proceed to payment?',
       message: isZeroPay
         ? `Place this order?\n\nTotal: ₱0\n${isOutsideNCR ? 'LBC shipping will be arranged with admin separately.' : ''}`
-        : `Place this order and continue to PayMongo (GCash / Maya)?\n\nTotal: ₱${Number(finalTotal || 0).toLocaleString('en-PH')}${isOutsideNCR ? '\n(LBC shipping not included — arrange with admin)' : ''}`,
+        : `Place this order and pay with ${paymentFeeInfo.label}?\n\nSubtotal + shipping: ₱${Number(merchandiseTotal || 0).toLocaleString('en-PH')}\nTax (${paymentFeeInfo.label} ${formatFeeRatePercent(paymentFeeInfo.rate)}): ₱${Number(paymentFee || 0).toLocaleString('en-PH')}\nTotal: ₱${Number(finalTotal || 0).toLocaleString('en-PH')}${isOutsideNCR ? '\n(LBC shipping not included — arrange with admin)' : ''}`,
       confirmLabel: isZeroPay ? 'Place Order' : 'Pay Now',
       cancelLabel: 'Cancel',
       variant: 'primary',
@@ -1819,6 +1826,11 @@ const Checkout = () => {
         subtotal:        originalSubtotal,
         shippingFee:     shipping,
         finalTotal,
+        ...(paymentFee > 0 && {
+          paymentFee,
+          paymentFeeRate: paymentFeeInfo.rate,
+          paymentFeeMethod: paymentFeeInfo.method,
+        }),
         ...(totalDiscount > 0 && promoItem && {
           promoCode:       promoItem.promoCode,
           discountAmount:  totalDiscount,
@@ -1829,7 +1841,7 @@ const Checkout = () => {
         shippingAddress: shippingAddressStr,
         ...(addressCoords ? { addressLat: addressCoords.lat, addressLng: addressCoords.lng } : {}),
         deliveryMethod,
-        paymentMethod:   'paymongo',
+        paymentMethod:   paymentFeeInfo.method === 'maya' ? 'maya' : 'gcash',
         notes:           formData.notes || '',
         paymentStatus:   'pending',
         // ── Reward order fields ──
@@ -1896,6 +1908,7 @@ const Checkout = () => {
         customerName:  savedContact.fullName,
         customerEmail: savedContact.email,
         customerPhone: savedContact.phone,
+        paymentMethodType: paymentFeeInfo.method === 'maya' ? 'paymaya' : 'gcash',
         // Always land on order-success first (to verify payment), then page routes by role
         successUrl: `${origin}/order-success?orderId=${encodeURIComponent(orderId)}`,
         cancelUrl:  role === 'admin' || role === 'rider'
@@ -2275,17 +2288,37 @@ const Checkout = () => {
                 )}
                 <div className="payment-info-notice" style={{ marginTop: rewardOrder ? '8px' : '0' }}>
                   <i className="fas fa-shield-alt"></i>
-                  <span>You will be redirected to a secure <strong>PayMongo</strong> page where you can choose to pay via <strong>GCash</strong> or <strong>Maya</strong>.</span>
+                  <span>Choose your wallet. A PayMongo processing <strong>tax</strong> is added to your total (GCash 2.23% · Maya 1.79%).</span>
                 </div>
-                <div className="payment-brands-row">
-                  <div className="payment-icon-wrap payment-icon-gcash">
-                    <img src="/images/payments/gcash.svg" alt="GCash" />
-                  </div>
-                  <span>GCash</span>
-                  <div className="payment-icon-wrap payment-icon-paymaya">
-                    <img src="/images/payments/maya.svg" alt="Maya" />
-                  </div>
-                  <span>Maya</span>
+                <div className="payment-wallet-picker" role="radiogroup" aria-label="Payment wallet">
+                  <button
+                    type="button"
+                    className={`payment-wallet-option ${paymentWallet === 'gcash' ? 'is-active' : ''}`}
+                    onClick={() => setPaymentWallet('gcash')}
+                    aria-pressed={paymentWallet === 'gcash'}
+                  >
+                    <div className="payment-icon-wrap payment-icon-gcash">
+                      <img src="/images/payments/gcash.svg" alt="" />
+                    </div>
+                    <div className="payment-wallet-meta">
+                      <strong>GCash</strong>
+                      <span>Tax 2.23%</span>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    className={`payment-wallet-option ${paymentWallet === 'maya' ? 'is-active' : ''}`}
+                    onClick={() => setPaymentWallet('maya')}
+                    aria-pressed={paymentWallet === 'maya'}
+                  >
+                    <div className="payment-icon-wrap payment-icon-paymaya">
+                      <img src="/images/payments/maya.svg" alt="" />
+                    </div>
+                    <div className="payment-wallet-meta">
+                      <strong>Maya</strong>
+                      <span>Tax 1.79%</span>
+                    </div>
+                  </button>
                 </div>
               </div>
 
@@ -2424,9 +2457,19 @@ const Checkout = () => {
                     </div>
                   )}
 
+                  {paymentFee > 0 && (
+                    <div className="summary-row summary-row-tax">
+                      <span>
+                        <i className="fas fa-receipt" style={{ marginRight: '6px', color: '#0ea5e9' }}></i>
+                        Tax ({paymentFeeInfo.label} {formatFeeRatePercent(paymentFeeInfo.rate)})
+                      </span>
+                      <span>₱{paymentFee.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
+
                   <div className="summary-row total">
                     <span>Total</span>
-                    <span>₱{finalTotal.toLocaleString()}</span>
+                    <span>₱{finalTotal.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
 
                   {rewardOrder && shippingInfo && !isOutsideNCR && (

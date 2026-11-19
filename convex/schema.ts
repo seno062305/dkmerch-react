@@ -221,6 +221,11 @@ export default defineSchema({
     discountAmount:  v.optional(v.number()),
     discountPercent: v.optional(v.number()),
     finalTotal:      v.optional(v.number()),
+    /** PayMongo e-wallet fee charged to customer (GCash/Maya %). */
+    paymentFee:      v.optional(v.number()),
+    paymentFeeRate:  v.optional(v.number()),
+    /** 'gcash' | 'maya' */
+    paymentFeeMethod: v.optional(v.string()),
     status: v.string(),
     orderStatus: v.optional(v.string()),
     shippingAddress: v.optional(v.string()),

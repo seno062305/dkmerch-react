@@ -1053,7 +1053,17 @@ const TrackOrder = ({ onProductClick }) => {
           return;
         }
         // Always mint a fresh link after stock check (don't reuse a stale PayMongo session)
-        const result = await createPaymentLink({ orderId: order.orderId, amount: order.finalTotal ?? order.total, description: `DKMerch Order ${order.orderId}`, customerName: order.customerName, customerEmail: order.email, customerPhone: order.phone });
+        const feeMethod = String(order.paymentFeeMethod || order.paymentMethod || '').toLowerCase();
+        const paymentMethodType = feeMethod.includes('maya') ? 'paymaya' : feeMethod.includes('gcash') ? 'gcash' : undefined;
+        const result = await createPaymentLink({
+          orderId: order.orderId,
+          amount: order.finalTotal ?? order.total,
+          description: `DKMerch Order ${order.orderId}`,
+          customerName: order.customerName,
+          customerEmail: order.email,
+          customerPhone: order.phone,
+          ...(paymentMethodType ? { paymentMethodType } : {}),
+        });
         window.location.href = result.paymentLinkUrl;
       } catch (err) {
         const msg = String(err?.message || err?.data || '');
@@ -1502,6 +1512,11 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
   const summarySubtotal = Number(order.subtotal ?? itemsSubtotal) || 0;
   const summaryShipping = Number(order.shippingFee ?? 0) || 0;
   const summaryDiscount = Number(order.discountAmount ?? 0) || 0;
+  const summaryPaymentFee = Number(order.paymentFee ?? 0) || 0;
+  const summaryFeeMethod = String(order.paymentFeeMethod || order.paymentMethod || '').toLowerCase();
+  const summaryFeeRate = Number(order.paymentFeeRate || 0) || 0;
+  const summaryFeeLabel = summaryFeeMethod.includes('maya') ? 'Maya' : summaryFeeMethod.includes('gcash') ? 'GCash' : 'E-wallet';
+  const summaryFeePct = summaryFeeRate > 0 ? `${Math.round(summaryFeeRate * 10000) / 100}%` : '';
   const summaryOriginal = Number(order.total ?? (summarySubtotal + summaryShipping)) || 0;
   const summaryTotal = Number(
     order.finalTotal ?? (summaryOriginal - summaryDiscount)
@@ -1574,7 +1589,17 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
         return;
       }
       // Always mint a fresh link after stock check (don't reuse a stale PayMongo session)
-      const result = await createPaymentLink({ orderId: order.orderId, amount: order.finalTotal ?? order.total, description: `DKMerch Order ${order.orderId}`, customerName: order.customerName, customerEmail: order.email, customerPhone: order.phone });
+      const feeMethod = String(order.paymentFeeMethod || order.paymentMethod || '').toLowerCase();
+      const paymentMethodType = feeMethod.includes('maya') ? 'paymaya' : feeMethod.includes('gcash') ? 'gcash' : undefined;
+      const result = await createPaymentLink({
+        orderId: order.orderId,
+        amount: order.finalTotal ?? order.total,
+        description: `DKMerch Order ${order.orderId}`,
+        customerName: order.customerName,
+        customerEmail: order.email,
+        customerPhone: order.phone,
+        ...(paymentMethodType ? { paymentMethodType } : {}),
+      });
       window.location.href = result.paymentLinkUrl;
     } catch (err) {
       const msg = String(err?.message || err?.data || '');
@@ -1881,9 +1906,17 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
                   </div>
                 </>
               )}
+              {summaryPaymentFee > 0 && (
+                <div className="customer-total-row">
+                  <span>
+                    Tax ({summaryFeeLabel}{summaryFeePct ? ` ${summaryFeePct}` : ''}):
+                  </span>
+                  <strong>₱{summaryPaymentFee.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                </div>
+              )}
               <div className="customer-total-row customer-total-row--grand">
                 <span>{summaryHasPromo ? 'Final Charged:' : 'Total:'}</span>
-                <strong>₱{summaryTotal.toLocaleString('en-PH')}</strong>
+                <strong>₱{summaryTotal.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
               </div>
             </div>
           </div>

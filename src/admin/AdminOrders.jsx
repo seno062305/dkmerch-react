@@ -1699,6 +1699,11 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
   const shippingFee   = order.shippingFee || 0;
   const originalTotal = order.total || (subtotal + shippingFee);
   const discount      = order.discountAmount || 0;
+  const paymentFee    = Number(order.paymentFee || 0) || 0;
+  const paymentFeeMethod = String(order.paymentFeeMethod || order.paymentMethod || '').toLowerCase();
+  const paymentFeeRate = Number(order.paymentFeeRate || 0) || 0;
+  const paymentFeeLabel = paymentFeeMethod.includes('maya') ? 'Maya' : paymentFeeMethod.includes('gcash') ? 'GCash' : 'E-wallet';
+  const paymentFeePct = paymentFeeRate > 0 ? `${Math.round(paymentFeeRate * 10000) / 100}%` : '';
   const finalTotal    = order.finalTotal ?? (originalTotal - discount);
   const refundAmount  = order.refundAmount ?? finalTotal;
 
@@ -2288,7 +2293,15 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
                 <div className="total-row promo-discount-admin-row"><span><i className="fas fa-tag" style={{ marginRight: '6px', color: '#ec4899' }}></i>Promo ({order.promoCode}):</span><strong>−₱{discount.toLocaleString('en-PH')}</strong></div>
                 <div className="total-row"><span style={{ color: '#6b7280' }}>Original:</span><strong style={{ color: '#6b7280', textDecoration: 'line-through' }}>₱{originalTotal.toLocaleString('en-PH')}</strong></div>
               </>}
-              <div className="total-row grand-total"><span>{hasPromo ? 'Final Charged:' : 'Total:'}</span><strong>₱{finalTotal.toLocaleString('en-PH')}</strong></div>
+              {paymentFee > 0 && (
+                <div className="total-row">
+                  <span>
+                    Tax ({paymentFeeLabel}{paymentFeePct ? ` ${paymentFeePct}` : ''}):
+                  </span>
+                  <strong>₱{paymentFee.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                </div>
+              )}
+              <div className="total-row grand-total"><span>{hasPromo ? 'Final Charged:' : 'Total:'}</span><strong>₱{Number(finalTotal).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></div>
             </div>
           </div>
 
