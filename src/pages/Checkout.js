@@ -2010,7 +2010,14 @@ const Checkout = () => {
 
     } catch (error) {
       setLoading(false);
-      showNotification('Error placing order. Please try again.', 'error');
+      const detail = String(error?.data || error?.message || error || '').trim();
+      const short = detail && detail.length < 160 ? detail : '';
+      showNotification(
+        short
+          ? `Error placing order: ${short}`
+          : 'Error placing order. Please try again.',
+        'error'
+      );
       console.error('Order error:', error);
     }
   };
