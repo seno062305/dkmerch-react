@@ -21,7 +21,7 @@ import './Checkout.css';
 // ─── LALAMOVE SHIPPING CONFIG ─────────────────────────────────────────────────
 const LALAMOVE_CONFIG = {
   baseFare:          49,
-  freeKm:            2,
+  freeKm:            1,
   ratePerKm:         10,
   maxReasonableKm:   25,
   extraItemFee:      10,

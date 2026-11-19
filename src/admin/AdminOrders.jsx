@@ -628,7 +628,7 @@ const AdminOrders = () => {
     // Cancel requests are handled under Canceled → Request Cancel (not Pending)
     pending:    validOrders.filter((o) => isPendingStatus(o) && !hasCancelRequest(o)).length,
     confirmed:  validOrders.filter((o) => isProcessingStatus(o) && !hasCancelRequest(o)).length,
-    shipped:    validOrders.filter((o) => isShippedStatus(o) && !hasCancelRequest(o)).length,
+    shipped:    validOrders.filter((o) => isShippedStatus(o) && !hasCancelRequest(o) && !isLbcDeliveryOrder(o)).length,
     lbc:        validOrders.filter((o) => isLbcAwaitingAccept(o) || isLbcAcceptedQueue(o)).length,
     refunds:    validOrders.filter(hasAnyRefund).length,
     cancelled:  validOrders.filter((o) => isCancelledStatus(o) || hasAnyCancelRequest(o)).length,
@@ -683,7 +683,7 @@ const AdminOrders = () => {
         { value: 'all', label: 'All Statuses' },
         { value: 'shipped', label: 'Shipped' },
         { value: 'out_for_delivery', label: 'Out for Delivery' },
-        { value: 'completed', label: 'Delivered' },
+        { value: 'completed', label: 'Completed' },
       ];
     }
     return [
@@ -692,7 +692,7 @@ const AdminOrders = () => {
       { value: 'confirmed', label: 'Processing' },
       { value: 'shipped', label: 'Shipped' },
       { value: 'out_for_delivery', label: 'Out for Delivery' },
-      { value: 'completed', label: 'Delivered' },
+      { value: 'completed', label: 'Completed' },
       { value: 'cancelled', label: 'Canceled' },
     ];
   }, [activeTab]);
@@ -729,7 +729,8 @@ const AdminOrders = () => {
       } else if (activeTab === 'confirmed') {
         matchesTab = isProcessingStatus(order) && !hasCancelRequest(order);
       } else if (activeTab === 'shipped') {
-        matchesTab = isShippedStatus(order) && !hasCancelRequest(order);
+        // Rider deliveries only — LBC orders live under the LBC tab
+        matchesTab = isShippedStatus(order) && !hasCancelRequest(order) && !isLbcDeliveryOrder(order);
       } else if (activeTab === 'lbc') {
         // Right panel = accepted LBC orders (left panel holds awaiting accept)
         matchesTab = isLbcAcceptedQueue(order);
@@ -767,7 +768,7 @@ const AdminOrders = () => {
       confirmed: 'Processing',
       shipped: 'Shipped',
       out_for_delivery: 'Out for Delivery',
-      completed: 'Shipped',
+      completed: 'Completed',
       cancelled: 'Canceled',
     };
     return labels[status] || status || 'Pending';
@@ -1111,22 +1112,22 @@ const AdminOrders = () => {
     cancelled: 'No canceled orders',
   };
 
-  const showSplitPager = activeTab === 'lbc' || activeTab === 'refunds' || activeTab === 'cancelled';
-
   const renderOrdersTable = () => (
     filteredOrders.length === 0 ? (
-      <div className="orders-table-container">
-        <div className="empty-orders">
-          {activeTab === 'refunds' ? (
-            <DkIcon name={DK_ICONS.ordersRefunded} className="orders-dk-icon" size={28} alt="" />
-          ) : activeTab === 'lbc' ? (
-            <i className="fas fa-truck"></i>
-          ) : (
-            <i className={`fas ${activeTab === 'cancelled' ? 'fa-ban' : 'fa-inbox'}`}></i>
-          )}
-          <p>{emptyCopy[activeTab] || 'No orders found'}</p>
+      <div className="orders-table-container orders-table-container--card">
+        <div className="orders-table-body">
+          <div className="empty-orders">
+            {activeTab === 'refunds' ? (
+              <DkIcon name={DK_ICONS.ordersRefunded} className="orders-dk-icon" size={28} alt="" />
+            ) : activeTab === 'lbc' ? (
+              <i className="fas fa-truck"></i>
+            ) : (
+              <i className={`fas ${activeTab === 'cancelled' ? 'fa-ban' : 'fa-inbox'}`}></i>
+            )}
+            <p>{emptyCopy[activeTab] || 'No orders found'}</p>
+          </div>
         </div>
-        {showSplitPager && (
+        <div className="orders-card-footer">
           <AdminPager
             total={0}
             page={0}
@@ -1135,11 +1136,11 @@ const AdminOrders = () => {
             hidePageSize
             alwaysShow
           />
-        )}
+        </div>
       </div>
     ) : (
-      <div className="orders-table-container">
-        <div className="dk-fixed-page dk-fixed-page--table" style={fixedPageStyle(ORDER_PAGE_SIZE)}>
+      <div className="orders-table-container orders-table-container--card">
+        <div className="orders-table-body">
           <table className="orders-table">
             <thead>
               <tr>
@@ -1178,7 +1179,7 @@ const AdminOrders = () => {
                           </span>
                         )}
                         {activeTab === 'lbc' && (
-                          <span className="orders-lbc-chip"><i className="fas fa-check"></i> Approved</span>
+                          <span className="orders-lbc-chip"><i className="fas fa-check"></i> Completed</span>
                         )}
                         {refundRequested && (
                           <span className="orders-refund-flag" title="Refund requested">
@@ -1200,7 +1201,14 @@ const AdminOrders = () => {
                     </td>
                     <td data-label="Payment"><span className={`payment-badge ${order.paymentStatus === 'paid' ? 'paid' : 'pending'}`}>{order.paymentStatus === 'paid' ? 'Paid' : 'Pending'}</span></td>
                     <td data-label="Method"><span className="method-badge" style={{ color: pm.color, display: 'inline-flex', alignItems: 'center', gap: 6 }}><PaymentMethodMark pm={pm} /> {pm.label}</span></td>
-                    <td data-label="Status"><span className="status-badge" style={{ backgroundColor: getStatusColor(order.orderStatus, order) }}>{getStatusLabel(order.orderStatus, order)}</span></td>
+                    <td data-label="Status">
+                      <span
+                        className="status-badge"
+                        style={{ backgroundColor: getStatusColor(order.orderStatus, order) }}
+                      >
+                        {getStatusLabel(order.orderStatus, order)}
+                      </span>
+                    </td>
                     {activeTab === 'refunds' && (
                       <td data-label="Request">
                         {order.refundStatus === 'approved'  && <span className="refund-table-badge refund-table-approved"><i className="fas fa-check-circle"></i> Refund Approved</span>}
@@ -1248,14 +1256,16 @@ const AdminOrders = () => {
             </tbody>
           </table>
         </div>
-        <AdminPager
-          total={filteredOrders.length}
-          page={page}
-          pageSize={ORDER_PAGE_SIZE}
-          onPageChange={setPage}
-          hidePageSize
-          alwaysShow={showSplitPager}
-        />
+        <div className="orders-card-footer">
+          <AdminPager
+            total={filteredOrders.length}
+            page={page}
+            pageSize={ORDER_PAGE_SIZE}
+            onPageChange={setPage}
+            hidePageSize
+            alwaysShow
+          />
+        </div>
       </div>
     )
   );
@@ -1477,7 +1487,7 @@ const AdminOrders = () => {
                   </>
                 ) : activeTab === 'lbc' ? (
                   <>
-                    <h2><i className="fas fa-truck"></i> Approved LBC</h2>
+                    <h2><i className="fas fa-truck"></i> Delivered</h2>
                     <p>Delivered via LBC with proof</p>
                   </>
                 ) : (
