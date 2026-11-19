@@ -14,6 +14,8 @@ import { runWithFailover } from '../lib/failoverWrite';
 import { failoverCheckoutAssist, isFailoverPayConfigured } from '../lib/failoverPayEmail';
 import { isWithinNCR, isWithinRiderRange } from '../utils/deliveryUtils';
 import { isAppOutdated } from '../utils/appUpdate';
+import { getOverlayRoot } from '../utils/scrollLock';
+import useBodyScrollLock from '../hooks/useBodyScrollLock';
 import './Checkout.css';
 
 // ─── LALAMOVE SHIPPING CONFIG ─────────────────────────────────────────────────
@@ -371,12 +373,13 @@ const AddressMapPicker = ({
       const startZoom = savedCoords ? 16 : 11;
 
       const map = L.map(mapRef.current, {
-        zoomControl: true,
+        zoomControl: false,
         tap: false,
         scrollWheelZoom: true,
         minZoom: 5,
         maxZoom: 19,
       }).setView([startLat, startLng], startZoom);
+      L.control.zoom({ position: 'bottomright' }).addTo(map);
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap',
@@ -522,32 +525,9 @@ const AddressMapPicker = ({
     setMapFullscreen((v) => !v);
   }, []);
 
-  // Keep Leaflet sized correctly when entering/leaving full map
-  useEffect(() => {
-    if (!mapVisible || !mapInstanceRef.current) return;
-    const map = mapInstanceRef.current;
-    const t = setTimeout(() => {
-      try {
-        map.invalidateSize();
-        const center = markerRef.current?.getLatLng() || map.getCenter();
-        if (center) map.setView(center, map.getZoom(), { animate: false });
-      } catch { /* ignore */ }
-    }, 80);
-    return () => clearTimeout(t);
-  }, [mapFullscreen, mapVisible]);
-
-  useEffect(() => {
-    if (!mapFullscreen) return undefined;
-    const onKey = (e) => {
-      if (e.key === 'Escape') setMapFullscreen(false);
-    };
-    document.body.classList.add('checkout-fullmap-open');
-    window.addEventListener('keydown', onKey);
-    return () => {
-      document.body.classList.remove('checkout-fullmap-open');
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [mapFullscreen]);
+  const addressLabel = buildFullAddress({ address, barangay, city, province, zipCode });
+  const pinCoords = markerRef.current?.getLatLng?.()
+    || (savedCoords?.lat != null ? { lat: savedCoords.lat, lng: savedCoords.lng } : null);
 
   return (
     <div className="address-map-picker">
@@ -626,32 +606,10 @@ const AddressMapPicker = ({
       </div>
 
       {mapVisible && (
-        <div className={`address-map-preview-wrap${mapFullscreen ? ' is-fullscreen' : ''}`}>
+        <div className="address-map-preview-wrap">
           <div className="address-map-preview-header">
-            {mapFullscreen ? (
-              <>
-                <div className="address-fullmap-header-left">
-                  <i className="fas fa-map-marked-alt"></i>
-                  <div>
-                    <strong>Delivery pin</strong>
-                    <span>{geocoding ? 'Locating your address…' : (buildFullAddress({ address, barangay, city, province, zipCode }) || statusText)}</span>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className="address-fullmap-close"
-                  onClick={toggleMapFullscreen}
-                  aria-label="Close full map"
-                >
-                  <i className="fas fa-times"></i>
-                </button>
-              </>
-            ) : (
-              <>
-                <i className={geocoding ? 'fas fa-spinner fa-spin' : 'fas fa-map-marked-alt'}></i>
-                <span>{geocoding ? 'Locating your address…' : statusText}</span>
-              </>
-            )}
+            <i className={geocoding ? 'fas fa-spinner fa-spin' : 'fas fa-map-marked-alt'}></i>
+            <span>{geocoding ? 'Locating your address…' : statusText}</span>
           </div>
 
           <div className="address-pin-search" style={{ position: 'relative' }}>
@@ -686,37 +644,187 @@ const AddressMapPicker = ({
 
           <div className="address-map-inner-wrap">
             <div ref={mapRef} className="address-map-preview-container" />
-            {!mapFullscreen && (
-              <button
-                type="button"
-                className="address-map-fullscreen-btn"
-                onClick={toggleMapFullscreen}
-                title="View full map"
-              >
-                <i className="fas fa-expand-alt"></i>
-                <span>Full Map</span>
-              </button>
-            )}
+            <button
+              type="button"
+              className="address-map-fullscreen-btn"
+              onClick={toggleMapFullscreen}
+              title="View full map"
+            >
+              <i className="fas fa-expand-alt"></i>
+              <span>Full Map</span>
+            </button>
           </div>
           <div className="address-map-preview-hint">
-            {mapFullscreen ? (
-              <>
-                <i className="fas fa-hand-pointer"></i>
-                <span>Pinch to zoom · Drag to pan · Tap or drag pin to set</span>
-                <span className="address-map-preview-hint-right">
-                  <i className="fas fa-search-plus"></i> Use +/− to zoom
-                </span>
-              </>
-            ) : (
-              <>
-                <i className="fas fa-hand-pointer"></i>
-                <span>Tap map or drag 📍 pin — address fields auto-fill</span>
-              </>
-            )}
+            <i className="fas fa-hand-pointer"></i>
+            <span>Tap map or drag 📍 pin — address fields auto-fill</span>
           </div>
         </div>
       )}
+
+      {mapFullscreen && (
+        <CheckoutFullscreenMap
+          coords={pinCoords}
+          addressLabel={addressLabel || statusText}
+          storeLat={storeLat}
+          storeLng={storeLng}
+          makeIcon={makeIcon}
+          onPinMove={(lat, lng) => placePinAndAutofill(lat, lng, { fly: false })}
+          onClose={() => setMapFullscreen(false)}
+        />
+      )}
     </div>
+  );
+};
+
+/** Rider-style full-screen map (portaled) — editable pin for checkout. */
+const CheckoutFullscreenMap = ({
+  coords,
+  addressLabel,
+  storeLat,
+  storeLng,
+  makeIcon,
+  onPinMove,
+  onClose,
+}) => {
+  const mapRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const markerRef = useRef(null);
+  const unmountedRef = useRef(false);
+  const onPinMoveRef = useRef(onPinMove);
+  onPinMoveRef.current = onPinMove;
+
+  useBodyScrollLock(true);
+
+  useEffect(() => {
+    document.body.classList.add('checkout-fullmap-open');
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.classList.remove('checkout-fullmap-open');
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [onClose]);
+
+  useEffect(() => {
+    unmountedRef.current = false;
+    if (!mapRef.current || mapInstanceRef.current) return undefined;
+
+    let resizeObs = null;
+    const refreshSize = (map) => {
+      try { map.invalidateSize({ animate: false }); } catch { /* ignore */ }
+    };
+
+    const initMap = () => {
+      if (!window.L || !mapRef.current || unmountedRef.current) return;
+      try {
+        const L = window.L;
+        const startLat = coords?.lat ?? 14.5995;
+        const startLng = coords?.lng ?? 120.9842;
+        const hasPin = coords?.lat != null && coords?.lng != null;
+        const map = L.map(mapRef.current, {
+          zoomControl: false,
+          tap: false,
+          scrollWheelZoom: true,
+          minZoom: 5,
+          maxZoom: 19,
+        }).setView([startLat, startLng], hasPin ? 17 : 12);
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+          maxZoom: 19,
+        }).addTo(map);
+
+        const withinNCR = hasPin
+          ? isWithinRiderRange(startLat, startLng, storeLat, storeLng)
+          : true;
+        const marker = L.marker([startLat, startLng], {
+          icon: makeIcon(withinNCR),
+          draggable: true,
+        })
+          .addTo(map)
+          .bindPopup(
+            `<div style="font-size:13px;max-width:220px"><strong>📍 Delivery pin</strong>`
+            + `<br><small>${addressLabel || 'Pinned location'}</small></div>`
+          );
+
+        if (hasPin) {
+          setTimeout(() => { try { marker.openPopup(); } catch { /* ignore */ } }, 300);
+        }
+
+        marker.on('dragend', () => {
+          const { lat, lng } = marker.getLatLng();
+          onPinMoveRef.current?.(lat, lng);
+        });
+        map.on('click', (e) => {
+          marker.setLatLng(e.latlng);
+          onPinMoveRef.current?.(e.latlng.lat, e.latlng.lng);
+        });
+
+        mapInstanceRef.current = map;
+        markerRef.current = marker;
+
+        [80, 250, 500].forEach((ms) => setTimeout(() => {
+          if (unmountedRef.current || !mapInstanceRef.current) return;
+          refreshSize(map);
+        }, ms));
+
+        if (typeof ResizeObserver !== 'undefined' && mapRef.current) {
+          resizeObs = new ResizeObserver(() => refreshSize(map));
+          resizeObs.observe(mapRef.current);
+        }
+      } catch (err) {
+        console.error('Checkout fullscreen map init error:', err);
+      }
+    };
+
+    if (window.L) initMap();
+    else {
+      const id = setInterval(() => {
+        if (window.L) { clearInterval(id); initMap(); }
+      }, 100);
+      return () => {
+        unmountedRef.current = true;
+        clearInterval(id);
+      };
+    }
+
+    return () => {
+      unmountedRef.current = true;
+      if (resizeObs) { try { resizeObs.disconnect(); } catch { /* ignore */ } }
+      if (mapInstanceRef.current) {
+        try { mapInstanceRef.current.remove(); } catch { /* ignore */ }
+        mapInstanceRef.current = null;
+        markerRef.current = null;
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return createPortal(
+    <div className="checkout-fullmap-overlay" role="dialog" aria-modal="true" aria-label="Full map">
+      <div className="checkout-fullmap-shell">
+        <div className="checkout-fullmap-header">
+          <div className="checkout-fullmap-header-left">
+            <i className="fas fa-map-marked-alt"></i>
+            <div>
+              <strong>Delivery pin</strong>
+              <span>{addressLabel || 'Set your delivery location'}</span>
+            </div>
+          </div>
+          <button type="button" className="checkout-fullmap-close" onClick={onClose} aria-label="Close map">
+            <i className="fas fa-times"></i>
+          </button>
+        </div>
+        <div ref={mapRef} className="checkout-fullmap-canvas" />
+        <div className="checkout-fullmap-footer">
+          <span><i className="fas fa-hand-pointer"></i> Pinch to zoom · Drag to pan</span>
+          <span className="checkout-fullmap-footer-right">
+            <i className="fas fa-search-plus"></i> Use +/− to zoom
+          </span>
+        </div>
+      </div>
+    </div>,
+    getOverlayRoot() || document.body
   );
 };
 
@@ -724,6 +832,8 @@ const AddressMapPicker = ({
 const CheckoutSavedFullMap = ({ coords, addressLabel, onClose }) => {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
+
+  useBodyScrollLock(true);
 
   useEffect(() => {
     document.body.classList.add('checkout-fullmap-open');
@@ -767,25 +877,32 @@ const CheckoutSavedFullMap = ({ coords, addressLabel, onClose }) => {
         const L = await ensureLeaflet();
         if (cancelled || !mapRef.current || !coords) return;
         const map = L.map(mapRef.current, {
-          zoomControl: true,
+          zoomControl: false,
           scrollWheelZoom: true,
         }).setView([coords.lat, coords.lng], 17);
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '© OpenStreetMap',
+          attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
           maxZoom: 19,
         }).addTo(map);
         const icon = L.divIcon({
           className: '',
-          html: `<div style="width:36px;height:36px;background:#111827;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;box-shadow:0 3px 10px rgba(0,0,0,0.35);border:3px solid white;"><span style="transform:rotate(45deg);font-size:16px">📍</span></div>`,
-          iconSize: [36, 36],
-          iconAnchor: [18, 36],
+          html: `<div style="background:#3b82f6;color:white;border-radius:50% 50% 50% 0;width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:20px;transform:rotate(-45deg);box-shadow:0 4px 14px rgba(59,130,246,0.55);border:3px solid white;"><span style="transform:rotate(45deg)">🏠</span></div>`,
+          iconSize: [44, 44],
+          iconAnchor: [22, 44],
+          popupAnchor: [0, -48],
         });
         L.marker([coords.lat, coords.lng], { icon })
           .addTo(map)
-          .bindPopup(`<strong>Delivery pin</strong><br><small>${addressLabel || 'Saved location'}</small>`)
+          .bindPopup(
+            `<div style="font-size:13px;max-width:220px"><strong>📍 Delivery pin</strong>`
+            + `<br><small>${addressLabel || 'Saved location'}</small></div>`
+          )
           .openPopup();
         mapInstanceRef.current = map;
-        setTimeout(() => { try { map.invalidateSize(); } catch { /* ignore */ } }, 100);
+        [80, 250, 500].forEach((ms) => setTimeout(() => {
+          try { map.invalidateSize({ animate: false }); } catch { /* ignore */ }
+        }, ms));
       } catch (err) {
         console.error('Full map failed:', err);
       }
@@ -803,7 +920,7 @@ const CheckoutSavedFullMap = ({ coords, addressLabel, onClose }) => {
   if (typeof document === 'undefined') return null;
   return createPortal(
     <div className="checkout-fullmap-overlay" role="dialog" aria-modal="true" aria-label="Full map">
-      <div className="checkout-fullmap-shell" onClick={(e) => e.stopPropagation()}>
+      <div className="checkout-fullmap-shell">
         <div className="checkout-fullmap-header">
           <div className="checkout-fullmap-header-left">
             <i className="fas fa-map-marked-alt"></i>
@@ -825,7 +942,7 @@ const CheckoutSavedFullMap = ({ coords, addressLabel, onClose }) => {
         </div>
       </div>
     </div>,
-    document.body
+    getOverlayRoot() || document.body
   );
 };
 

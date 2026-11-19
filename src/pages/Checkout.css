@@ -1914,55 +1914,6 @@ html { scroll-behavior: smooth; }
   color: #fff;
 }
 
-.address-fullmap-header-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-  flex: 1;
-}
-.address-fullmap-header-left > i {
-  color: #93c5fd;
-  font-size: 18px;
-  flex-shrink: 0;
-}
-.address-fullmap-header-left > div {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-.address-fullmap-header-left strong {
-  font-size: 13px;
-  font-weight: 700;
-  color: #fff;
-}
-.address-fullmap-header-left span {
-  font-size: 11px;
-  color: #bfdbfe;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: min(500px, calc(100vw - 90px));
-}
-.address-fullmap-close {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.15);
-  border: 1.5px solid rgba(255, 255, 255, 0.3);
-  color: #fff;
-  font-size: 15px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.2s;
-  -webkit-tap-highlight-color: transparent;
-  flex-shrink: 0;
-}
-.address-fullmap-close:hover { background: rgba(255, 255, 255, 0.28); }
-
 .info-value--with-action {
   display: flex;
   flex-wrap: wrap;
@@ -1973,47 +1924,7 @@ html { scroll-behavior: smooth; }
   margin-left: 0;
 }
 
-/* Full map — rider-style overlay chrome */
-.address-map-preview-wrap.is-fullscreen {
-  position: fixed;
-  inset: 0;
-  z-index: 10050;
-  margin: 0;
-  border-radius: 0;
-  border: none;
-  display: flex;
-  flex-direction: column;
-  background: #1a1f36;
-  animation: none;
-  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
-}
-.address-map-preview-wrap.is-fullscreen .address-map-preview-header {
-  background: linear-gradient(135deg, #1e3a8a, #1e40af);
-  color: #fff;
-  border-bottom: none;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 14px;
-}
-.address-map-preview-wrap.is-fullscreen .address-map-inner-wrap {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-.address-map-preview-wrap.is-fullscreen .address-map-preview-container {
-  flex: 1;
-  height: auto;
-  min-height: 0;
-}
-.address-map-preview-wrap.is-fullscreen .address-pin-search {
-  flex-shrink: 0;
-  background: #fff;
-}
-.address-map-preview-wrap.is-fullscreen .address-map-preview-hint {
-  flex-shrink: 0;
-}
-
+/* Full map — same overlay pattern as rider FullscreenMapModal */
 body.checkout-fullmap-open {
   overflow: hidden !important;
 }
@@ -2021,11 +1932,16 @@ body.checkout-fullmap-open {
 .checkout-fullmap-overlay {
   position: fixed !important;
   inset: 0 !important;
-  z-index: 10060;
+  z-index: 100000 !important;
   display: flex;
   flex-direction: column;
   background: #0f172a;
+  animation: checkoutFsmFadeIn 0.2s ease;
   padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+}
+@keyframes checkoutFsmFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 .checkout-fullmap-shell {
   flex: 1;
@@ -2135,13 +2051,13 @@ body.checkout-fullmap-open {
   .address-map-preview-container {
     height: 220px;
   }
-  .address-map-preview-wrap.is-fullscreen .address-map-preview-container {
-    height: auto;
-  }
   .address-fullmap-btn {
     font-size: 10px;
     padding: 6px 8px;
   }
+  .checkout-fullmap-header { padding: 8px 12px !important; }
+  .checkout-fullmap-header-left strong { font-size: 12px; }
+  .checkout-fullmap-header-left span { font-size: 10px; }
 }
 
 
