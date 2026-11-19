@@ -1542,8 +1542,8 @@ export const rejectCustomerCancel = mutation({
 });
 
 /**
- * Admin cancels an order before confirm (pending), with optional PayMongo refund info.
- * Called from payments.adminCancelOrder. Unpaid confirmed orders may also use this.
+ * Admin cancels an order before confirm (pending only), with optional PayMongo refund info.
+ * Once admin confirms, cancel is locked.
  */
 export const applyAdminCancel = mutation({
   args: {
@@ -1567,20 +1567,14 @@ export const applyAdminCancel = mutation({
     if (status === "completed") {
       return { success: false, error: "Completed orders cannot be cancelled." };
     }
-    if (status === "shipped" || status === "out_for_delivery") {
-      return {
-        success: false,
-        error: "Cannot cancel while the order is shipped / out for delivery.",
-      };
-    }
 
     const wasPaid = String(order.paymentStatus || "").toLowerCase() === "paid";
     const isUnconfirmed = !status || status === "pending" || status === "pending payment";
-    // Paid: only before admin confirms. Unpaid: pending or processing (confirmed) OK.
-    if (wasPaid && !isUnconfirmed) {
+    // Cancel only before admin confirms
+    if (!isUnconfirmed) {
       return {
         success: false,
-        error: "Paid confirmed orders need the cancel-request / refund flow.",
+        error: "Order is already confirmed — cancel is no longer allowed.",
       };
     }
 

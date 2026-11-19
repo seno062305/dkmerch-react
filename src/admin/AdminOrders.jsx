@@ -965,9 +965,9 @@ const AdminOrders = () => {
     const wasPaid = String(target?.paymentStatus || '').toLowerCase() === 'paid';
     const status = String(target?.orderStatus || '').toLowerCase();
     const isUnconfirmed = !status || status === 'pending';
-    // Paid + already confirmed → still use cancel-request / refund flow
-    if (wasPaid && !isUnconfirmed) {
-      showNotification('Paid confirmed orders need the cancel-request / refund flow.', 'error');
+    // After admin confirm — cancel is locked for everyone
+    if (!isUnconfirmed) {
+      showNotification('This order is already confirmed — cancel is no longer allowed.', 'error');
       return;
     }
     try {
@@ -1803,8 +1803,8 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
   const isWalkIn       = isWalkInOrder(order);
   const isRiderManaged = !isLbc && (currentStatus === 'shipped' || currentStatus === 'out_for_delivery');
   const canConfirm     = isPaid && currentStatus === 'pending' && order.cancelRequestStatus !== 'requested';
-  // Unpaid anytime (before rider). Paid only while still pending (before admin confirm) — auto-refunds.
-  const canCancel      = !isDone && !isRiderManaged && (!isPaid || currentStatus === 'pending');
+  // Cancel only while still pending (before admin confirm). Confirmed+ = locked.
+  const canCancel      = !isDone && currentStatus === 'pending';
   const hasPromo       = !!(order.promoCode && discount > 0);
   const walkInPhone    = String(order.phone || '').trim();
   const rawNote        = String(order.notes || '').trim();
@@ -2541,7 +2541,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
                     </div>
                   </div>
                 )}
-                {!isDone && !isRiderManaged && (
+                {!isDone && (
                   <div className="status-btn-wrapper">
                     <button
                       className={`status-btn cancelled ${!canCancel ? 'is-blocked' : ''}`}
@@ -2550,7 +2550,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
                       title={
                         canCancel
                           ? (isPaid ? 'Cancel & refund via PayMongo' : 'Cancel Order')
-                          : 'Paid confirmed — use cancel request / refund flow'
+                          : 'Already confirmed — cancel is locked'
                       }
                     >
                       <i className="fas fa-times-circle"></i><span>Cancel Order</span>
@@ -2560,9 +2560,9 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
                         <i className="fas fa-info-circle"></i> Paid + pending — cancel will auto-refund
                       </div>
                     )}
-                    {isPaid && currentStatus !== 'pending' && (
+                    {currentStatus !== 'pending' && (
                       <div className="block-reason">
-                        <i className="fas fa-lock"></i> Paid & confirmed — use cancel request / refund flow
+                        <i className="fas fa-lock"></i> Confirmed — cancel is no longer available
                       </div>
                     )}
                   </div>

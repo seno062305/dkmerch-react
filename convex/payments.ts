@@ -588,10 +588,11 @@ export const adminCancelOrder = action({
 
     const wasPaid = String(order.paymentStatus || "").toLowerCase() === "paid";
     const isUnconfirmed = !status || status === "pending" || status === "pending payment";
-    if (wasPaid && !isUnconfirmed) {
+    // Cancel only before admin confirms (paid or unpaid)
+    if (!isUnconfirmed) {
       return {
         success: false,
-        error: "Paid confirmed orders need the cancel-request / refund flow.",
+        error: "Order is already confirmed — cancel is no longer allowed.",
       };
     }
 

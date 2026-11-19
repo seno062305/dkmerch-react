@@ -62,7 +62,7 @@ const QA = {
       },
       {
         label: "How do I cancel my order?",
-        answer: `You can cancel from Track Order while no rider has accepted yet — paid orders are auto-refunded to GCash/Maya and admin is notified. If a rider already accepted:\n\n1. Go to **My Orders** page\n2. Find your order\n3. Contact support at **dkmerchtest@gmail.com** with your Order ID\n\nNote: Orders that are already **Out for Delivery** cannot be cancelled.`
+        answer: `You can request cancel from **Track Order** only before admin confirms your order. Admin reviews the request (paid orders are refunded via GCash/Maya if approved).\n\nOnce the order is **Confirmed**, cancel is no longer available. Contact support at **dkmerchtest@gmail.com** with your Order ID if you need help.`
       },
       {
         label: "I didn't receive an email confirmation.",

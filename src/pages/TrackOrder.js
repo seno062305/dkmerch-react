@@ -16,14 +16,13 @@ import { getOverlayRoot } from '../utils/scrollLock';
 import { validateImageFile, IMAGE_ACCEPT_NO_GIF } from '../utils/imageUpload';
 import './TrackOrder.css';
 
-/** Cancel allowed on Active orders until rider pickup / out for delivery. */
+/** Cancel only before admin confirms — once confirmed, cancel is locked. */
 const canCustomerCancelOrder = (order) => {
   if (!order) return false;
   const status = String(order.orderStatus || order.status || '').toLowerCase().replace(/\s+/g, '_');
   if (order.cancelRequestStatus === 'requested') return false;
-  if (['cancelled', 'delivered', 'completed', 'out_for_delivery', 'shipped', 'in_transit'].includes(status)) {
-    return false;
-  }
+  // Pending / pending payment only
+  if (status && status !== 'pending' && status !== 'pending_payment') return false;
   if (order.riderId || order.riderInfo) return false;
   return true;
 };
