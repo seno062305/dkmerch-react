@@ -519,8 +519,11 @@ async function refundPaymongoPayment(order: any, amount: number, notes: string) 
 export const processDamageRefundPay = action({
   args: {
     orderId: v.string(),
+    /** Origin-based URLs from admin browser so Continue to Merchant keeps same session */
+    successUrl: v.optional(v.string()),
+    cancelUrl: v.optional(v.string()),
   },
-  handler: async (ctx, { orderId }) => {
+  handler: async (ctx, { orderId, successUrl, cancelUrl }) => {
     const order = await ctx.runQuery(api.orders.getOrderById, { orderId });
     if (!order) return { success: false, error: "Order not found." };
 
@@ -570,8 +573,11 @@ export const processDamageRefundPay = action({
       };
     }
 
-    // No auto-refund — open / reuse hosted PayMongo (do NOT mark paid yet)
-    let checkoutUrl = order.returnPaymentLinkUrl || "";
+    // No auto-refund — open hosted PayMongo (do NOT mark paid yet).
+    // Always create a fresh session when client passes success/cancel URLs so
+    // Continue to Merchant returns to this admin origin (avoids logout / wrong host).
+    const forceFreshCheckout = !!(successUrl || cancelUrl);
+    let checkoutUrl = forceFreshCheckout ? "" : (order.returnPaymentLinkUrl || "");
     const secretKey = process.env.PAYMONGO_SECRET_KEY;
     if (secretKey && !checkoutUrl) {
       try {
@@ -610,8 +616,10 @@ export const processDamageRefundPay = action({
                   quantity: 1,
                 }],
                 payment_method_types: methodTypes,
-                success_url: `${baseUrl}/admin/orders?returnPay=success&orderId=${encodeURIComponent(orderId)}`,
-                cancel_url: `${baseUrl}/admin/orders?returnPay=cancel&orderId=${encodeURIComponent(orderId)}`,
+                success_url: (successUrl && String(successUrl).trim())
+                  || `${baseUrl}/paymongo-return.html?returnPay=success&tab=refunds&orderId=${encodeURIComponent(orderId)}`,
+                cancel_url: (cancelUrl && String(cancelUrl).trim())
+                  || `${baseUrl}/paymongo-return.html?returnPay=cancel&tab=refunds&orderId=${encodeURIComponent(orderId)}`,
                 description: desc,
                 send_email_receipt: false,
                 show_description: true,

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Returning to DKMerch Admin…</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: system-ui, sans-serif;
+      background: #fc1268;
+      color: #fff;
+    }
+    p { opacity: 0.95; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <p>Returning to admin Orders…</p>
+  <script>
+    (function () {
+      var q = new URLSearchParams(window.location.search);
+      var returnPay = q.get('returnPay') || 'success';
+      var orderId = q.get('orderId') || '';
+      var tab = q.get('tab') || 'refunds';
+      var payload = {
+        type: 'dkmerch-return-pay',
+        returnPay: returnPay,
+        orderId: orderId,
+        tab: tab,
+        t: Date.now(),
+      };
+      try {
+        localStorage.setItem('dkmerch_return_pay_event', JSON.stringify(payload));
+      } catch (e) { /* ignore */ }
+
+      // Prefer notifying the original admin tab (keeps session — no re-login)
+      try {
+        if (window.opener && !window.opener.closed) {
+          window.opener.postMessage(payload, window.location.origin);
+          window.close();
+          // If close blocked, still fall through to redirect after a beat
+          setTimeout(function () {
+            window.location.replace(
+              '/admin/orders?tab=' + encodeURIComponent(tab)
+              + '&returnPay=' + encodeURIComponent(returnPay)
+              + (orderId ? '&orderId=' + encodeURIComponent(orderId) : '')
+            );
+          }, 400);
+          return;
+        }
+      } catch (e) { /* ignore */ }
+
+      window.location.replace(
+        '/admin/orders?tab=' + encodeURIComponent(tab)
+        + '&returnPay=' + encodeURIComponent(returnPay)
+        + (orderId ? '&orderId=' + encodeURIComponent(orderId) : '')
+      );
+    })();
+  </script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { useSearchParams } from 'react-router-dom';
@@ -504,50 +504,109 @@ const AdminOrders = () => {
 
   const confirmReturnPaymentAction = useAction(api.payments.confirmReturnPayment);
 
-  // Return from PayMongo Return Payment checkout — only mark paid if PayMongo really paid
+  // Deep-link tab from PayMongo return (?tab=refunds|cancelled)
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab === 'refunds' || tab === 'cancelled' || tab === 'pending') {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
+
+  const handleReturnPayLanding = useCallback(async ({ returnPay, orderId, tab }) => {
+    if (!orderId) return;
+    if (tab === 'refunds' || tab === 'cancelled' || tab === 'pending') {
+      setActiveTab(tab);
+    } else {
+      setActiveTab('refunds');
+    }
+    const openOrder = () => {
+      const match = (orders || []).find((o) => o.orderId === orderId);
+      if (match) setSelectedOrder(match);
+    };
+    if (returnPay === 'cancel') {
+      openOrder();
+      showNotification('PayMongo Return Payment not completed. Use Continue Return Payment to try again.', 'error');
+      return;
+    }
+    if (returnPay !== 'success') return;
+    try {
+      const result = await confirmReturnPaymentAction({ orderId });
+      openOrder();
+      if (result?.payConfirmed) {
+        setSelectedOrder((prev) =>
+          prev?.orderId === orderId
+            ? { ...prev, refundPayStartedAt: new Date().toISOString(), paymongoRefundId: result.refundId || prev.paymongoRefundId }
+            : prev
+        );
+        showNotification('Return Payment confirmed on PayMongo.', 'success');
+      } else {
+        showNotification(result?.error || 'PayMongo not completed yet. Continue Return Payment.', 'error');
+      }
+    } catch (err) {
+      openOrder();
+      showNotification(err?.message || 'Could not verify Return Payment.', 'error');
+    }
+  }, [orders, confirmReturnPaymentAction, showNotification]);
+
+  // Return from PayMongo — URL query (same-tab fallback) or postMessage/localStorage (popup)
   useEffect(() => {
     const returnPay = searchParams.get('returnPay');
     const orderId = searchParams.get('orderId');
+    const tab = searchParams.get('tab') || 'refunds';
     if (!returnPay || !orderId) return;
     const next = new URLSearchParams(searchParams);
     next.delete('returnPay');
     next.delete('orderId');
+    next.delete('tab');
     setSearchParams(next, { replace: true });
+    handleReturnPayLanding({ returnPay, orderId, tab });
+  }, [searchParams, setSearchParams, handleReturnPayLanding]);
 
-    const openOrder = () => {
-      const match = (orders || []).find((o) => o.orderId === orderId);
-      if (match) {
-        setSelectedOrder(match);
-        setActiveTab(match.refundStatus === 'requested' ? 'refunds' : 'pending');
-      }
+  useEffect(() => {
+    const onMsg = (e) => {
+      if (e.origin !== window.location.origin) return;
+      const data = e.data;
+      if (!data || data.type !== 'dkmerch-return-pay') return;
+      handleReturnPayLanding({
+        returnPay: data.returnPay,
+        orderId: data.orderId,
+        tab: data.tab || 'refunds',
+      });
     };
-
-    (async () => {
-      if (returnPay === 'cancel') {
-        openOrder();
-        showNotification('PayMongo Return Payment not completed. Use Continue Return Payment to try again.', 'error');
-        return;
-      }
-      if (returnPay !== 'success') return;
+    const onStorage = (e) => {
+      if (e.key !== 'dkmerch_return_pay_event' || !e.newValue) return;
       try {
-        const result = await confirmReturnPaymentAction({ orderId });
-        openOrder();
-        if (result?.payConfirmed) {
-          setSelectedOrder((prev) =>
-            prev?.orderId === orderId
-              ? { ...prev, refundPayStartedAt: new Date().toISOString(), paymongoRefundId: result.refundId || prev.paymongoRefundId }
-              : prev
-          );
-          showNotification('Return Payment confirmed on PayMongo.', 'success');
-        } else {
-          showNotification(result?.error || 'PayMongo not completed yet. Continue Return Payment.', 'error');
+        const data = JSON.parse(e.newValue);
+        if (data?.type !== 'dkmerch-return-pay') return;
+        handleReturnPayLanding({
+          returnPay: data.returnPay,
+          orderId: data.orderId,
+          tab: data.tab || 'refunds',
+        });
+      } catch { /* ignore */ }
+    };
+    window.addEventListener('message', onMsg);
+    window.addEventListener('storage', onStorage);
+    // Same-tab localStorage write from bridge (rare)
+    try {
+      const raw = localStorage.getItem('dkmerch_return_pay_event');
+      if (raw) {
+        const data = JSON.parse(raw);
+        if (data?.type === 'dkmerch-return-pay' && Date.now() - Number(data.t || 0) < 120000) {
+          localStorage.removeItem('dkmerch_return_pay_event');
+          handleReturnPayLanding({
+            returnPay: data.returnPay,
+            orderId: data.orderId,
+            tab: data.tab || 'refunds',
+          });
         }
-      } catch (err) {
-        openOrder();
-        showNotification(err?.message || 'Could not verify Return Payment.', 'error');
       }
-    })();
-  }, [searchParams, orders, setSearchParams, showNotification, confirmReturnPaymentAction]);
+    } catch { /* ignore */ }
+    return () => {
+      window.removeEventListener('message', onMsg);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, [handleReturnPayLanding]);
   const updateOrderStatusMutation = useMutation(api.orders.updateOrderStatus);
   const updateOrderFieldsMutation = useMutation(api.orders.updateOrderFields);
   const approveLbcDeliveryMutation = useMutation(api.orders.approveLbcDelivery);
@@ -1071,23 +1130,27 @@ const AdminOrders = () => {
     }
   };
 
-  const handleProcessRefundPay = async (orderId) => {
+  const handleProcessRefundPay = async (orderId, opts = {}) => {
     const shortId = formatOrderShortId(orderId);
     const amount = selectedOrder?.finalTotal ?? selectedOrder?.total ?? 0;
+    const tab = opts.tab === 'cancelled' ? 'cancelled' : 'refunds';
     const hasContinueLink = !!(selectedOrder?.returnPaymentLinkUrl && !selectedOrder?.refundPayStartedAt && !selectedOrder?.paymongoRefundId);
     const ok = await confirm({
       title: hasContinueLink ? 'Continue Return Payment?' : 'Return Payment via PayMongo?',
       message: hasContinueLink
         ? `Continue PayMongo for order #${shortId}? If you backed out earlier, finish payment there — it is not marked paid until completed.`
-        : `Return ₱${Number(amount).toLocaleString('en-PH')} for order #${shortId} to the customer’s original GCash/Maya?\n\nPayMongo will open. Backing out does NOT mark it paid — use Continue Return Payment to resume.`,
+        : `Return ₱${Number(amount).toLocaleString('en-PH')} for order #${shortId} to the customer’s original GCash/Maya?\n\nPayMongo opens in a new tab. Keep this admin page open — after PayMongo, you return to the ${tab === 'cancelled' ? 'Cancel' : 'Refund'} tab.`,
       confirmLabel: 'Pay',
       cancelLabel: 'Back',
       variant: 'primary',
       icon: 'fa-credit-card',
     });
     if (!ok) return { success: false };
+    const origin = window.location.origin;
+    const successUrl = `${origin}/paymongo-return.html?returnPay=success&tab=${encodeURIComponent(tab)}&orderId=${encodeURIComponent(orderId)}`;
+    const cancelUrl = `${origin}/paymongo-return.html?returnPay=cancel&tab=${encodeURIComponent(tab)}&orderId=${encodeURIComponent(orderId)}`;
     try {
-      const result = await processDamageRefundPayAction({ orderId });
+      const result = await processDamageRefundPayAction({ orderId, successUrl, cancelUrl });
       if (!result?.success) {
         showNotification(result?.error || 'PayMongo refund failed.', 'error');
         return { success: false };
@@ -1095,7 +1158,6 @@ const AdminOrders = () => {
       if (selectedOrder?.orderId === orderId) {
         setSelectedOrder((prev) => ({
           ...prev,
-          // Only mark started when PayMongo actually confirmed
           ...(result.payConfirmed
             ? {
                 refundPayStartedAt: new Date().toISOString(),
@@ -1106,13 +1168,20 @@ const AdminOrders = () => {
         }));
       }
       if (result?.payConfirmed) {
+        setActiveTab(tab);
         showNotification(
           `₱${Number(result.refundAmount || amount).toLocaleString('en-PH')} returned. You can finish with optional proof.`,
           'success'
         );
       } else if (result?.checkoutUrl) {
-        window.open(result.checkoutUrl, '_blank', 'noopener,noreferrer');
-        showNotification('PayMongo opened. Complete Pay there. If you go Back, use Continue Return Payment.', 'success');
+        // Keep opener link so paymongo-return.html can close popup without logging out admin
+        const payWin = window.open(result.checkoutUrl, 'dkmerch_paymongo_return');
+        if (!payWin) {
+          showNotification('Pop-up blocked. Allow pop-ups for PayMongo, then try again.', 'error');
+          return { success: false, ...result };
+        }
+        setActiveTab(tab);
+        showNotification('PayMongo opened in a new tab. Keep this page open — you will return here after Continue to merchant.', 'success');
       } else {
         showNotification(result?.error || 'Could not open PayMongo. Try again.', 'error');
         return { success: false, ...result };
@@ -2827,20 +2896,9 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
                       <div className="block-reason"><i className="fas fa-lock"></i> Awaiting payment — cancel anytime before confirm</div>
                     )}
                     {isPaid && (
-                      <>
-                        <button
-                          type="button"
-                          className="status-btn return-payment"
-                          onClick={() => setShowCancelModal(true)}
-                          disabled={!canCancel}
-                          title="Return Payment via PayMongo"
-                        >
-                          <i className="fas fa-hand-holding-usd"></i><span>Return Payment</span>
-                        </button>
-                        <div className="block-reason" style={{ color: '#0ea5e9' }}>
-                          <i className="fas fa-info-circle"></i> Paid — Return Payment opens PayMongo (same as refund), then proof upload
-                        </div>
-                      </>
+                      <div className="block-reason" style={{ color: '#0ea5e9' }}>
+                        <i className="fas fa-info-circle"></i> Paid — use Cancel Order for Return Payment via PayMongo
+                      </div>
                     )}
                   </div>
                 )}
@@ -3000,7 +3058,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
         <CancelReasonModal
           order={order}
           generateUploadUrl={generateRefundUploadUrl}
-          onProcessReturnPay={onProcessRefundPay}
+          onProcessReturnPay={(id) => onProcessRefundPay?.(id, { tab: 'cancelled' })}
           onConfirmReturnPayment={onConfirmReturnPayment}
           onConfirm={async (reason, proofPhotoId) => {
             await onCancelWithReason(order.orderId, reason, proofPhotoId);
