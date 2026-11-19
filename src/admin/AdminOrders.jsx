@@ -474,7 +474,8 @@ const WaybillModal = ({ order, onClose }) => {
 /* ══════════════════════════════════════
    MAIN ADMIN ORDERS
 ══════════════════════════════════════ */
-const ORDER_PAGE_SIZES = [10, 20, 30, 40, 50];
+const ORDER_PAGE_SIZE = 10;
+const SIDE_CARD_PAGE_SIZE = 5;
 
 const AdminOrders = () => {
   const { confirm } = useConfirm();
@@ -485,8 +486,8 @@ const AdminOrders = () => {
   const [statusFilter,  setStatusFilter]  = useState('all');
   const [startDate,     setStartDate]     = useState('');
   const [endDate,       setEndDate]       = useState('');
-  const [pageSize,      setPageSize]      = useState(10);
   const [page,          setPage]          = useState(0);
+  const [sidePage,      setSidePage]      = useState(0);
 
   const orders = useQuery(api.orders.getAllOrders) || [];
   const storeSettings = useQuery(api.settings.getSettings);
@@ -695,7 +696,7 @@ const AdminOrders = () => {
     ];
   }, [activeTab]);
 
-  useEffect(() => { setPage(0); }, [activeTab, searchTerm, statusFilter, startDate, endDate, pageSize]);
+  useEffect(() => { setPage(0); setSidePage(0); }, [activeTab, searchTerm, statusFilter, startDate, endDate]);
 
   // Migrate removed tabs to closest match
   useEffect(() => {
@@ -744,9 +745,9 @@ const AdminOrders = () => {
   }, [validOrders, activeTab, searchTerm, statusFilter, startDate, endDate]);
 
   const pagedOrders = useMemo(() => {
-    const start = page * pageSize;
-    return filteredOrders.slice(start, start + pageSize);
-  }, [filteredOrders, page, pageSize]);
+    const start = page * ORDER_PAGE_SIZE;
+    return filteredOrders.slice(start, start + ORDER_PAGE_SIZE);
+  }, [filteredOrders, page]);
 
   const getStatusColor = (status, order = null) => {
     if (order?.deliveryFailedFinal || String(order?.status || status || '').toLowerCase() === 'failed delivery') {
@@ -794,6 +795,20 @@ const AdminOrders = () => {
       'pending'
     );
   }, [validOrders, searchTerm, startDate, endDate, storeSettings?.storeLat, storeSettings?.storeLng]);
+
+  const sidePanelOrders = useMemo(() => {
+    if (activeTab === 'refunds') return refundRequestOrders;
+    if (activeTab === 'lbc') return lbcAwaitingOrders;
+    if (activeTab === 'cancelled') return cancelRequestOrders;
+    return [];
+  }, [activeTab, refundRequestOrders, lbcAwaitingOrders, cancelRequestOrders]);
+
+  const sideTotalPages = Math.max(1, Math.ceil(sidePanelOrders.length / SIDE_CARD_PAGE_SIZE) || 1);
+  const safeSidePage = Math.min(sidePage, sideTotalPages - 1);
+  const pagedSideOrders = sidePanelOrders.slice(
+    safeSidePage * SIDE_CARD_PAGE_SIZE,
+    safeSidePage * SIDE_CARD_PAGE_SIZE + SIDE_CARD_PAGE_SIZE
+  );
 
   const mapStatusToTrackingStatus = (adminStatus) => {
     const statusMap = { pending: 'Processing', confirmed: 'Confirmed', shipped: 'Shipped', out_for_delivery: 'Out for Delivery', completed: 'Delivered', cancelled: 'Cancelled' };
@@ -1108,19 +1123,35 @@ const AdminOrders = () => {
     cancelled: 'No canceled orders',
   };
 
+  const showSplitPager = activeTab === 'lbc' || activeTab === 'refunds' || activeTab === 'cancelled';
+
   const renderOrdersTable = () => (
     filteredOrders.length === 0 ? (
-      <div className="empty-orders">
-        {activeTab === 'refunds' ? (
-          <DkIcon name={DK_ICONS.ordersRefunded} className="orders-dk-icon" size={28} alt="" />
-        ) : (
-          <i className={`fas ${activeTab === 'cancelled' ? 'fa-ban' : 'fa-inbox'}`}></i>
+      <div className="orders-table-container">
+        <div className="empty-orders">
+          {activeTab === 'refunds' ? (
+            <DkIcon name={DK_ICONS.ordersRefunded} className="orders-dk-icon" size={28} alt="" />
+          ) : activeTab === 'lbc' ? (
+            <i className="fas fa-truck"></i>
+          ) : (
+            <i className={`fas ${activeTab === 'cancelled' ? 'fa-ban' : 'fa-inbox'}`}></i>
+          )}
+          <p>{emptyCopy[activeTab] || 'No orders found'}</p>
+        </div>
+        {showSplitPager && (
+          <AdminPager
+            total={0}
+            page={0}
+            pageSize={ORDER_PAGE_SIZE}
+            onPageChange={setPage}
+            hidePageSize
+            alwaysShow
+          />
         )}
-        <p>{emptyCopy[activeTab] || 'No orders found'}</p>
       </div>
     ) : (
       <div className="orders-table-container">
-        <div className="dk-fixed-page dk-fixed-page--table" style={fixedPageStyle(pageSize)}>
+        <div className="dk-fixed-page dk-fixed-page--table" style={fixedPageStyle(ORDER_PAGE_SIZE)}>
           <table className="orders-table">
             <thead>
               <tr>
@@ -1157,6 +1188,9 @@ const AdminOrders = () => {
                           <span className="orders-latest-flag" title="Latest order">
                             <i className="fas fa-bolt"></i> Latest
                           </span>
+                        )}
+                        {activeTab === 'lbc' && (
+                          <span className="orders-lbc-chip"><i className="fas fa-check"></i> Approved</span>
                         )}
                         {refundRequested && (
                           <span className="orders-refund-flag" title="Refund requested">
@@ -1225,10 +1259,10 @@ const AdminOrders = () => {
         <AdminPager
           total={filteredOrders.length}
           page={page}
-          pageSize={pageSize}
+          pageSize={ORDER_PAGE_SIZE}
           onPageChange={setPage}
-          onPageSizeChange={setPageSize}
-          pageSizeOptions={ORDER_PAGE_SIZES}
+          hidePageSize
+          alwaysShow={showSplitPager}
         />
       </div>
     )
@@ -1323,109 +1357,61 @@ const AdminOrders = () => {
         <div className="orders-split">
           <aside className="orders-split-left">
             <div className="orders-priority-head">
-              <div>
-                {activeTab === 'refunds' ? (
-                  <>
-                    <h2>
-                      <DkIcon name={DK_ICONS.ordersRefunds} className="orders-dk-icon" size={16} alt="" />
-                      Request Refunds
-                    </h2>
-                    <p>Pending customer refund requests</p>
-                  </>
-                ) : activeTab === 'lbc' ? (
-                  <>
-                    <h2><i className="fas fa-truck"></i> LBC Incoming</h2>
-                    <p>Awaiting admin approval with delivery proof</p>
-                  </>
-                ) : (
-                  <>
-                    <h2><i className="fas fa-ban"></i> Request Cancel</h2>
-                    <p>Pending customer cancel requests</p>
-                  </>
-                )}
-              </div>
-              <span className="orders-priority-count">
-                {(
-                  activeTab === 'refunds'
-                    ? refundRequestOrders
-                    : activeTab === 'lbc'
-                      ? lbcAwaitingOrders
-                      : cancelRequestOrders
-                ).length}
-              </span>
+              {activeTab === 'refunds' ? (
+                <>
+                  <h2>
+                    <DkIcon name={DK_ICONS.ordersRefunds} className="orders-dk-icon" size={16} alt="" />
+                    Request Refunds
+                  </h2>
+                  <p>Pending customer refund requests</p>
+                </>
+              ) : activeTab === 'lbc' ? (
+                <>
+                  <h2><i className="fas fa-truck"></i> LBC Incoming</h2>
+                  <p>Awaiting admin approval with delivery proof</p>
+                </>
+              ) : (
+                <>
+                  <h2><i className="fas fa-ban"></i> Request Cancel</h2>
+                  <p>Pending customer cancel requests</p>
+                </>
+              )}
             </div>
 
-            {activeTab === 'lbc' ? (
-              lbcAwaitingOrders.length === 0 ? (
-                <div className="orders-priority-empty">
-                  <i className="fas fa-inbox"></i>
-                  <p>No incoming LBC orders to approve</p>
-                </div>
-              ) : (
-                <div className="orders-priority-list">
-                  {lbcAwaitingOrders.map((order) => {
-                    const pm = getPaymentMethodLabel(order);
-                    const busy = acceptingLbcId === order.orderId;
-                    return (
-                      <div key={order.orderId} className="orders-priority-card is-awaiting">
-                        <div className="orders-priority-main">
-                          <div className="orders-priority-card-top">
-                            <strong>#{formatOrderShortId(order)}</strong>
-                            <span className="orders-refund-flag orders-refund-flag--lbc">
-                              <i className="fas fa-truck"></i> LBC
-                            </span>
-                          </div>
-                          <div className="orders-priority-customer">
-                            <span>{order.customerName || 'Customer'}</span>
-                            <small>{order.email || ''}</small>
-                          </div>
-                          <div className="orders-priority-meta">
-                            <span>₱{(order.finalTotal ?? order.total ?? 0).toLocaleString('en-PH')}</span>
-                            <span className="orders-priority-method" style={{ color: pm.color }}>
-                              <PaymentMethodMark pm={pm} /> {pm.label}
-                            </span>
-                            <span>{order.items?.length || 0} item(s)</span>
-                          </div>
-                        </div>
-                        <div className="orders-priority-actions">
-                          <button type="button" className="view-btn" onClick={() => setSelectedOrder(order)}>
-                            <i className="fas fa-eye"></i> View
-                          </button>
-                          <button
-                            type="button"
-                            className="orders-priority-confirm"
-                            onClick={() => openLbcApprove(order)}
-                            disabled={busy}
-                          >
-                            {busy
-                              ? <><i className="fas fa-spinner fa-spin"></i> Approving…</>
-                              : <><i className="fas fa-check"></i> Approve</>}
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )
-            ) : (activeTab === 'refunds' ? refundRequestOrders : cancelRequestOrders).length === 0 ? (
-              <div className="orders-priority-empty">
-                <i className="fas fa-check-circle"></i>
-                <p>{activeTab === 'refunds' ? 'No refund requests' : 'No cancel requests'}</p>
+            {sidePanelOrders.length === 0 ? (
+              <div className="orders-priority-empty dk-fixed-page dk-fixed-page--stack" style={fixedPageStyle(SIDE_CARD_PAGE_SIZE, { '--dk-row-h': '100px', '--dk-gap': '0px' })}>
+                <i className={`fas ${activeTab === 'lbc' ? 'fa-inbox' : 'fa-check-circle'}`}></i>
+                <p>
+                  {activeTab === 'lbc'
+                    ? 'No incoming LBC orders to approve'
+                    : activeTab === 'refunds'
+                      ? 'No refund requests'
+                      : 'No cancel requests'}
+                </p>
               </div>
             ) : (
-              <div className="orders-priority-list">
-                {(activeTab === 'refunds' ? refundRequestOrders : cancelRequestOrders).map((order) => {
+              <div
+                className="orders-priority-list dk-fixed-page dk-fixed-page--stack"
+                style={fixedPageStyle(SIDE_CARD_PAGE_SIZE, { '--dk-row-h': '100px', '--dk-gap': '0px' })}
+              >
+                {pagedSideOrders.map((order) => {
                   const pm = getPaymentMethodLabel(order);
+                  const busy = acceptingLbcId === order.orderId;
                   const isCancelPanel = activeTab === 'cancelled';
+                  const isLbcPanel = activeTab === 'lbc';
                   return (
                     <div
                       key={order.orderId}
-                      className={`orders-priority-card is-awaiting has-refund${isCancelPanel ? ' is-cancel-request' : ''}`}
+                      className={`orders-priority-card is-awaiting${!isLbcPanel ? ' has-refund' : ''}${isCancelPanel ? ' is-cancel-request' : ''}`}
                     >
                       <div className="orders-priority-main">
                         <div className="orders-priority-card-top">
                           <strong>#{formatOrderShortId(order)}</strong>
-                          {isCancelPanel ? (
+                          {isLbcPanel ? (
+                            <span className="orders-refund-flag orders-refund-flag--lbc">
+                              <i className="fas fa-truck"></i> LBC
+                            </span>
+                          ) : isCancelPanel ? (
                             <span className="orders-refund-flag orders-refund-flag--cancel">
                               <i className="fas fa-ban"></i> Requested
                             </span>
@@ -1449,14 +1435,34 @@ const AdminOrders = () => {
                       </div>
                       <div className="orders-priority-actions">
                         <button type="button" className="view-btn" onClick={() => setSelectedOrder(order)}>
-                          <i className="fas fa-eye"></i> Review
+                          <i className="fas fa-eye"></i> {isLbcPanel ? 'View' : 'Review'}
                         </button>
+                        {isLbcPanel && (
+                          <button
+                            type="button"
+                            className="orders-priority-confirm"
+                            onClick={() => openLbcApprove(order)}
+                            disabled={busy}
+                          >
+                            {busy
+                              ? <><i className="fas fa-spinner fa-spin"></i> Approving…</>
+                              : <><i className="fas fa-check"></i> Approve</>}
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
                 })}
               </div>
             )}
+            <AdminPager
+              total={sidePanelOrders.length}
+              page={safeSidePage}
+              pageSize={SIDE_CARD_PAGE_SIZE}
+              onPageChange={setSidePage}
+              hidePageSize
+              alwaysShow
+            />
           </aside>
 
           <section className="orders-split-right">
@@ -1464,96 +1470,25 @@ const AdminOrders = () => {
               <div className="orders-list-caption">
                 {activeTab === 'refunds' ? (
                   <>
-                    <DkIcon name={DK_ICONS.ordersRefunded} className="orders-dk-icon" size={16} alt="" />
-                    Refunded
+                    <h2>
+                      <DkIcon name={DK_ICONS.ordersRefunded} className="orders-dk-icon" size={16} alt="" />
+                      Refunded
+                    </h2>
+                    <p>Approved and rejected refunds</p>
                   </>
                 ) : activeTab === 'lbc' ? (
                   <>
-                    <i className="fas fa-truck"></i>
-                    Approved LBC
-                    {filteredOrders.length > 0 && (
-                      <span className="orders-list-caption-count">{filteredOrders.length}</span>
-                    )}
+                    <h2><i className="fas fa-truck"></i> Approved LBC</h2>
+                    <p>Delivered via LBC with proof</p>
                   </>
                 ) : (
                   <>
-                    <i className="fas fa-ban"></i>
-                    Canceled
+                    <h2><i className="fas fa-ban"></i> Canceled</h2>
+                    <p>Cancelled orders</p>
                   </>
                 )}
               </div>
-              {activeTab === 'lbc' ? (
-                filteredOrders.length === 0 ? (
-                  <div className="empty-orders">
-                    <i className="fas fa-truck"></i>
-                    <p>No approved LBC deliveries yet</p>
-                  </div>
-                ) : (
-                  <div className="orders-table-container">
-                    <div className="dk-fixed-page dk-fixed-page--table" style={fixedPageStyle(Math.max(pageSize, filteredOrders.length))}>
-                      <table className="orders-table">
-                        <thead>
-                          <tr>
-                            <th>Order ID</th>
-                            <th>Customer</th>
-                            <th>Items</th>
-                            <th>Total</th>
-                            <th>Payment</th>
-                            <th>Status</th>
-                            <th>Date</th>
-                            <th>Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {filteredOrders.map((order) => {
-                            const pm = getPaymentMethodLabel(order);
-                            return (
-                              <tr key={order.orderId}>
-                                <td data-label="Order ID">
-                                  <strong>#{formatOrderShortId(order)}</strong>
-                                  <span className="orders-lbc-chip"><i className="fas fa-check"></i> Approved</span>
-                                </td>
-                                <td data-label="Customer">
-                                  <div className="customer-info">
-                                    <strong>{order.customerName || '—'}</strong>
-                                    <small>{order.email || ''}</small>
-                                  </div>
-                                </td>
-                                <td data-label="Items">{order.items?.length || 0} item(s)</td>
-                                <td data-label="Total">₱{(order.finalTotal ?? order.total ?? 0).toLocaleString('en-PH')}</td>
-                                <td data-label="Payment">
-                                  <span className="orders-priority-method" style={{ color: pm.color }}>
-                                    <PaymentMethodMark pm={pm} /> {pm.label}
-                                  </span>
-                                </td>
-                                <td data-label="Status">
-                                  <span className="status-badge" style={{ backgroundColor: getStatusColor(order.orderStatus, order) }}>
-                                    {getStatusLabel(order.orderStatus, order)}
-                                  </span>
-                                </td>
-                                <td data-label="Date">
-                                  {order._creationTime
-                                    ? new Date(order._creationTime).toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-                                    : '—'}
-                                </td>
-                                <td data-label="Actions">
-                                  <div className="orders-row-actions">
-                                    <button type="button" className="view-btn" onClick={() => setSelectedOrder(order)}>
-                                      <i className="fas fa-eye"></i> View
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )
-              ) : (
-                renderOrdersTable()
-              )}
+              {renderOrdersTable()}
             </div>
           </section>
         </div>
