@@ -124,7 +124,7 @@
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
-  min-width: 0;
+  min-width: max-content;
 }
 .order-card-msg-pill {
   display: inline-flex;
@@ -146,9 +146,13 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  padding: 2px 7px;
+  padding: 3px 8px;
   border-radius: 999px;
   white-space: nowrap;
+  flex-shrink: 0;
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
 }
 .order-card-meta-line {
   display: flex;
@@ -1357,7 +1361,19 @@
   .order-card-id { font-size: 11px; }
   .order-card-name { font-size: 12px; -webkit-line-clamp: 2; }
   .order-card-price { font-size: 13px; }
-  .order-status-chip { font-size: 8px; padding: 2px 6px; max-width: 46%; overflow: hidden; text-overflow: ellipsis; }
+  .order-card-top {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 4px 8px;
+  }
+  .order-status-chip {
+    font-size: 9px;
+    padding: 3px 8px;
+    max-width: none;
+    overflow: visible;
+    text-overflow: clip;
+    line-height: 1.2;
+  }
   .order-view-btn {
     display: inline-flex !important;
     align-items: center;
@@ -1419,10 +1435,25 @@
 }
 
 @media (max-width: 600px) {
-  .orders-tab-bar { padding: 4px; gap: 2px; margin-bottom: 12px; }
-  .orders-tab-btn { padding: 10px 8px; font-size: 12px; gap: 5px; }
-  .orders-tab-btn .tab-label { display: none; }
-  .tab-count { min-width: 18px; height: 18px; font-size: 10px; }
+  .orders-tab-bar { padding: 4px; gap: 3px; margin-bottom: 12px; }
+  .orders-tab-btn {
+    padding: 8px 6px;
+    font-size: 11px;
+    gap: 4px;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .orders-tab-btn .tab-label {
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.15;
+    max-width: 100%;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: nowrap;
+  }
+  .tab-count { min-width: 16px; height: 16px; font-size: 9px; padding: 0 4px; }
   .lightbox-arrow { width: 38px; height: 38px; font-size: 15px; }
   .lightbox-arrow-left  { left: 10px; }
   .lightbox-arrow-right { right: 10px; }
