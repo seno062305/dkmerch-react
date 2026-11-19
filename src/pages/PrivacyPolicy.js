@@ -1,16 +1,8 @@
 import React from 'react';
 import './LegalPage.css';
 
-const PrivacyPolicy = () => {
-  return (
-    <div className="legal-page">
-      <div className="legal-container">
-        <div className="legal-header">
-          <h1>Privacy Policy</h1>
-          <p className="legal-updated">Last updated: November 2026</p>
-        </div>
-
-        <div className="legal-content">
+export const PrivacyContent = () => (
+  <div className="legal-content">
           <div className="legal-privacy-banner">
             <div>
               <strong>RA 10173 — Data Privacy Act of 2012</strong>
@@ -277,7 +269,18 @@ const PrivacyPolicy = () => {
               We aim to respond within 15 business days.
             </p>
           </section>
+  </div>
+);
+
+const PrivacyPolicy = () => {
+  return (
+    <div className="legal-page">
+      <div className="legal-container">
+        <div className="legal-header">
+          <h1>Privacy Policy</h1>
+          <p className="legal-updated">Last updated: November 2026</p>
         </div>
+        <PrivacyContent />
       </div>
     </div>
   );
