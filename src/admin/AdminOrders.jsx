@@ -818,14 +818,29 @@ const AdminOrders = () => {
   };
 
   const handleCancelWithReason = async (orderId, reason) => {
+    const target = orders?.find((o) => o.orderId === orderId) || selectedOrder;
+    if (String(target?.paymentStatus || '').toLowerCase() === 'paid') {
+      showNotification('Paid orders cannot be cancelled directly. Use the cancel request / refund flow.', 'error');
+      return;
+    }
     try {
-      await updateOrderFieldsMutation({ orderId, cancelReason: reason, orderStatus: 'cancelled', status: 'Cancelled' });
+      const result = await updateOrderFieldsMutation({
+        orderId,
+        cancelReason: reason,
+        orderStatus: 'cancelled',
+        status: 'Cancelled',
+      });
+      if (result?.success === false) {
+        showNotification(result?.message || 'Failed to cancel order.', 'error');
+        return;
+      }
       if (selectedOrder?.orderId === orderId) {
         setSelectedOrder(prev => ({ ...prev, orderStatus: 'cancelled', status: 'Cancelled', cancelReason: reason }));
       }
+      showNotification('Order cancelled.', 'success');
     } catch (err) {
       console.error('Failed to cancel order:', err);
-      showNotification('Failed to cancel order. Please try again.', 'error');
+      showNotification(err?.data || err?.message || 'Failed to cancel order. Please try again.', 'error');
     }
   };
 
@@ -1371,7 +1386,8 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
   const isLbc          = isLbcOrder(order, storePin);
   const isRiderManaged = !isLbc && (currentStatus === 'shipped' || currentStatus === 'out_for_delivery');
   const canConfirm     = isPaid && currentStatus === 'pending' && order.cancelRequestStatus !== 'requested';
-  const canCancel      = !isDone && !isRiderManaged;
+  // Paid orders must go through cancel-request + refund — not direct Cancel Order
+  const canCancel      = !isDone && !isRiderManaged && !isPaid;
   const hasPromo       = !!(order.promoCode && discount > 0);
   const hasDeliveryProof = !!(order.deliveryProofPhoto);
   const otpVerified      = !!(order.deliveryOtpVerified);
@@ -1968,11 +1984,21 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
                   {!isPaid && <div className="block-reason"><i className="fas fa-lock"></i> Awaiting payment</div>}
                   {isPaid && currentStatus === 'confirmed' && <div className="block-reason" style={{ color: '#0ea5e9' }}><i className="fas fa-check"></i> Processing — order confirmed</div>}
                 </div>
-                {canCancel && (
+                {!isDone && !isRiderManaged && (
                   <div className="status-btn-wrapper">
-                    <button className="status-btn cancelled" onClick={() => setShowCancelModal(true)}>
+                    <button
+                      className={`status-btn cancelled ${!canCancel ? 'is-blocked' : ''}`}
+                      onClick={() => canCancel && setShowCancelModal(true)}
+                      disabled={!canCancel}
+                      title={isPaid ? 'Paid orders cannot be cancelled directly' : 'Cancel Order'}
+                    >
                       <i className="fas fa-times-circle"></i><span>Cancel Order</span>
                     </button>
+                    {isPaid && (
+                      <div className="block-reason">
+                        <i className="fas fa-lock"></i> Paid — use cancel request / refund flow
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

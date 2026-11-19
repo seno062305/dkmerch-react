@@ -323,6 +323,17 @@ export const updateOrderStatus = mutation({
       .first();
     if (!order) return { success: false };
 
+    // Direct admin cancel is only for unpaid orders
+    if (
+      String(orderStatus || "").toLowerCase() === "cancelled"
+      && String(order.paymentStatus || "").toLowerCase() === "paid"
+    ) {
+      return {
+        success: false,
+        message: "Paid orders cannot be cancelled directly. Use the cancel request / refund flow.",
+      };
+    }
+
     const now     = new Date().toISOString();
     const updates: any = { status };
     if (orderStatus !== undefined) updates.orderStatus = orderStatus;
@@ -402,6 +413,17 @@ export const updateOrderFields = mutation({
     const filtered: any = Object.fromEntries(
       Object.entries(updates).filter(([, v]) => v !== undefined)
     );
+
+    // Direct admin cancel is only for unpaid orders (paid → cancel-request + refund)
+    if (
+      String(filtered.orderStatus || "").toLowerCase() === "cancelled"
+      && String(order.paymentStatus || "").toLowerCase() === "paid"
+    ) {
+      return {
+        success: false,
+        message: "Paid orders cannot be cancelled directly. Use the cancel request / refund flow.",
+      };
+    }
 
     if (filtered.orderStatus === 'confirmed')        filtered.confirmedAt      = now;
     if (filtered.orderStatus === 'shipped')          filtered.shippedAt        = now;
