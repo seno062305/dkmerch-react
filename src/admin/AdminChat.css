@@ -217,7 +217,10 @@
   display: grid;
   grid-template-columns: 300px 1fr;
   gap: 12px;
-  min-height: calc(100vh - 160px);
+  /* Fixed pane height so composer stays pinned; only messages scroll */
+  height: calc(100vh - 150px);
+  max-height: calc(100vh - 150px);
+  min-height: 420px;
 }
 
 .admin-chat-list {
@@ -228,6 +231,9 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
 }
 
 .admin-chat-convo {
@@ -238,6 +244,9 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
 }
 
 .admin-chat-convo:has(.admin-chat-convo-head) {
@@ -578,7 +587,10 @@
 
 .admin-chat-messages {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding: 14px;
   background: #f8fafc;
   display: flex;
@@ -662,9 +674,22 @@
 
 .admin-chat-composer {
   display: flex;
+  align-items: center;
   gap: 8px;
   padding: 10px 12px;
   border-top: 1px solid #eef2f7;
+  background: #fff;
+  flex-shrink: 0;
+  position: sticky;
+  bottom: 0;
+  z-index: 6;
+  box-shadow: 0 -6px 16px rgba(15, 23, 42, 0.04);
+}
+
+.admin-chat-preview,
+.admin-chat-error {
+  flex-shrink: 0;
+  background: #fff;
 }
 
 .admin-chat-composer input[type="text"] {
@@ -704,12 +729,20 @@
 
 @media (max-width: 900px) {
   .admin-chat-page {
-    padding: 4px 0 12px;
+    display: flex;
+    flex-direction: column;
+    padding: 4px 0 0;
+    /* admin-content already pads for bottom nav — fill remaining viewport */
+    height: calc(100dvh - max(12px, env(safe-area-inset-top, 0px)) - 76px - env(safe-area-inset-bottom, 0px));
+    max-height: calc(100dvh - max(12px, env(safe-area-inset-top, 0px)) - 76px - env(safe-area-inset-bottom, 0px));
+    overflow: hidden;
+    box-sizing: border-box;
   }
 
   .admin-chat-header {
     margin-bottom: 10px;
     padding: 0 4px;
+    flex-shrink: 0;
   }
 
   .admin-chat-logo {
@@ -731,7 +764,10 @@
 
   .admin-chat-layout {
     grid-template-columns: 1fr;
-    min-height: calc(100dvh - 168px);
+    flex: 1;
+    min-height: 0;
+    height: auto;
+    max-height: none;
   }
 
   .admin-chat-list.desktop-only {
@@ -741,7 +777,9 @@
   /* Telegram-style: full chat list until a thread is opened */
   .admin-chat-list.mobile-pane {
     display: none;
-    min-height: calc(100dvh - 168px);
+    height: 100%;
+    min-height: 0;
+    max-height: none;
     border-radius: 0;
     border-left: none;
     border-right: none;
@@ -782,8 +820,14 @@
   }
 
   .admin-chat-convo {
-    min-height: calc(100dvh - 168px);
+    height: 100%;
+    min-height: 0;
+    max-height: none;
     border-radius: 0;
+  }
+
+  .admin-chat-convo-head {
+    flex-shrink: 0;
   }
 
   .admin-chat-mobile-back,

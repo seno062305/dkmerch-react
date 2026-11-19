@@ -41,7 +41,7 @@ const AdminChat = () => {
     return window.matchMedia(MOBILE_CHAT_MQ).matches;
   });
   const fileRef = useRef(null);
-  const bottomRef = useRef(null);
+  const messagesRef = useRef(null);
   const holdTimerRef = useRef(null);
   const holdMovedRef = useRef(false);
   const didLongPressRef = useRef(false);
@@ -133,7 +133,9 @@ const AdminChat = () => {
   }, [activeId, heartbeatPresence]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const box = messagesRef.current;
+    if (!box) return;
+    box.scrollTop = box.scrollHeight;
   }, [messages.length, activeId]);
 
   useEffect(() => {
@@ -506,7 +508,7 @@ const AdminChat = () => {
                 </button>
               </div>
 
-              <div className="admin-chat-messages">
+              <div className="admin-chat-messages" ref={messagesRef}>
                 {messages.map((msg) => {
                   const isMine = msg.senderRole === 'admin';
                   const seen = isMine && customerLastReadAt >= msg.createdAt;
@@ -535,7 +537,6 @@ const AdminChat = () => {
                     </div>
                   );
                 })}
-                <div ref={bottomRef} />
               </div>
 
               {preview && (
