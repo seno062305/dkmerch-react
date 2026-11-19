@@ -951,9 +951,9 @@ const TrackOrder = ({ onProductClick }) => {
   });
 
   const FILTERS = [
-    { key: 'active',    icon: 'fa-box',          label: 'Active',     count: activeOrders.length,    desc: 'Active & ongoing orders' },
-    { key: 'delivered', icon: 'fa-check-double', label: 'Delivered',  count: deliveredOrders.length, desc: 'Successfully delivered' },
-    { key: 'cancelled', icon: 'fa-ban',          label: 'Cancelled',  count: cancelledOrders.length, desc: 'Cancelled orders' },
+    { key: 'active',    label: 'Orders', count: activeOrders.length,    desc: 'Active & ongoing orders' },
+    { key: 'delivered', label: 'Delivered',   count: deliveredOrders.length, desc: 'Successfully delivered' },
+    { key: 'cancelled', label: 'Cancelled',  count: cancelledOrders.length, desc: 'Cancelled orders' },
   ];
 
   const guestActiveOrders = sortByNewest(emailOrders).filter(
@@ -1158,7 +1158,7 @@ const TrackOrder = ({ onProductClick }) => {
               </button>
             ) : (
               <button type="button" className="btn btn-primary btn-small order-view-btn" onClick={openCardDetails}>
-                <i className="fas fa-eye"></i> Details
+                Details
                 {riderChatUnread > 0 && (
                   <span className="order-chat-unread-badge" title={`${riderChatUnread} new rider message${riderChatUnread > 1 ? 's' : ''}`}>
                     {riderChatUnread > 9 ? '9+' : riderChatUnread}
@@ -1168,12 +1168,12 @@ const TrackOrder = ({ onProductClick }) => {
             )}
             {isLbcOrder(order) && (
               <button type="button" className="btn lbc-track-btn order-card-lbc-btn" onClick={openLbcTracker}>
-                <i className="fas fa-truck"></i> LBC
+                LBC
               </button>
             )}
             {!isGuest && canCustomerCancelOrder(order) && (
               <button type="button" className="btn order-cancel-btn" onClick={() => openCancelOrder(order)}>
-                <i className="fas fa-ban"></i> Cancel
+                Cancel
               </button>
             )}
             {showReviewRefund && (
@@ -1196,7 +1196,7 @@ const TrackOrder = ({ onProductClick }) => {
                     else showNotification('Open the product to leave a review.', 'info');
                   }}
                 >
-                  <i className="fas fa-star"></i> Review
+                  Review
                 </button>
                 {showRefundBtn && (
                   <button
@@ -1204,7 +1204,7 @@ const TrackOrder = ({ onProductClick }) => {
                     className={`btn order-refund-btn${order.refundStatus === 'rejected' ? ' order-refund-retry-btn' : ''}`}
                     onClick={() => setRefundOrder(order)}
                   >
-                    <i className={`fas ${order.refundStatus === 'rejected' ? 'fa-redo' : 'fa-undo'}`}></i> Refund
+                    Refund
                   </button>
                 )}
               </div>
@@ -1292,16 +1292,23 @@ const TrackOrder = ({ onProductClick }) => {
             <div className="orders-tab-bar">
               {FILTERS.map(f => (
                 <button key={f.key} className={`orders-tab-btn ${filter === f.key ? 'active' : ''}`} onClick={() => handleFilterClick(f.key)}>
-                  <i className={`fas ${f.icon}`}></i><span className="tab-label">{f.label}</span>
+                  <span className="tab-label">{f.label}</span>
                   {f.count > 0 && <span className={`tab-count ${filter === f.key ? 'tab-count-active' : ''}`}>{f.count}</span>}
                 </button>
               ))}
             </div>
-            <div ref={ordersListRef} className="tab-context-bar"><i className={`fas ${activeTab?.icon}`}></i><span><strong>{activeTab?.label}</strong> — {activeTab?.desc}{filteredOrders.length > 0 && <span className="tab-context-count"> · {filteredOrders.length} order{filteredOrders.length !== 1 ? 's' : ''}</span>}</span></div>
+            <div ref={ordersListRef} className="tab-context-bar">
+              <span>
+                <strong>{activeTab?.label}</strong> — {activeTab?.desc}
+                {filteredOrders.length > 0 && (
+                  <span className="tab-context-count"> · {filteredOrders.length} order{filteredOrders.length !== 1 ? 's' : ''}</span>
+                )}
+              </span>
+            </div>
             {filteredOrders.length === 0 ? (
               <div className="orders-empty">
                 <i className="fas fa-shopping-bag orders-empty-icon" aria-hidden="true"></i>
-                <h3>{filter === 'active' ? 'No Active Orders' : `No ${activeTab?.label} Yet`}</h3>
+                <h3>{filter === 'active' ? 'No Orders Yet' : `No ${activeTab?.label} Yet`}</h3>
                 <p>{filter === 'active' && 'No active orders. Delivered and cancelled are under their own tabs.'}{filter === 'delivered' && 'No delivered orders.'}{filter === 'cancelled' && 'No cancelled orders.'}</p>
                 {filter === 'active' && (
                   <button className="btn btn-primary" onClick={() => navigate('/collections')}>

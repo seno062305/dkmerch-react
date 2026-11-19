@@ -124,7 +124,7 @@
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
-  min-width: max-content;
+  min-width: 0;
 }
 .order-card-msg-pill {
   display: inline-flex;
@@ -146,13 +146,9 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  padding: 3px 8px;
+  padding: 2px 7px;
   border-radius: 999px;
   white-space: nowrap;
-  flex-shrink: 0;
-  max-width: none;
-  overflow: visible;
-  text-overflow: clip;
 }
 .order-card-meta-line {
   display: flex;
@@ -329,14 +325,15 @@
 .order-view-btn {
   width: auto;
   justify-content: center;
+  font-size: 12px;
+  padding: 0 12px;
   margin: 0;
   position: relative;
-  background: #111827 !important;
+  background: #fc1268 !important;
   color: #fff !important;
-  border: none !important;
+  border: 1px solid #fc1268 !important;
   box-shadow: none;
 }
-.order-view-btn i { font-size: 10px; }
 
 .order-chat-unread-badge {
   position: absolute;
@@ -1123,34 +1120,37 @@
 
 .orders-tab-btn {
   flex: 1; display: flex; align-items: center; justify-content: center;
-  gap: 8px; padding: 12px 16px; border: none;
+  gap: 8px; padding: 11px 14px; border: none;
   background: transparent; border-radius: 10px;
-  font-size: 13px; font-weight: 600; color: #888;
-  cursor: pointer; transition: all 0.22s ease; white-space: nowrap; position: relative;
+  font-size: 13px; font-weight: 600; color: #64748b;
+  cursor: pointer; transition: background 0.15s ease, color 0.15s ease; white-space: nowrap; position: relative;
 }
 
-.orders-tab-btn:hover:not(.active) { background: #f5f5f5; color: #444; }
-.orders-tab-btn.active { background: linear-gradient(135deg, #fc1268, #8b5cf6); color: white; box-shadow: 0 4px 14px rgba(252,18,104,0.28); }
+.orders-tab-btn:hover:not(.active) { background: #f8fafc; color: #334155; }
+.orders-tab-btn.active {
+  background: #fc1268;
+  color: #fff;
+  box-shadow: none;
+}
 .orders-tab-btn .tab-label { font-size: 13px; }
 
 .tab-count {
   display: inline-flex; align-items: center; justify-content: center;
   min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px;
   font-size: 11px; font-weight: 700;
-  background: rgba(0,0,0,0.08); color: #555; transition: all 0.2s;
+  background: #e2e8f0; color: #475569; transition: background 0.15s, color 0.15s;
 }
 
-.tab-count.tab-count-active { background: rgba(255,255,255,0.25); color: white; }
+.tab-count.tab-count-active { background: rgba(255,255,255,0.28); color: #fff; }
 
 .tab-context-bar {
   display: flex; align-items: center; gap: 10px; padding: 10px 16px;
-  background: #f8f0ff; border-radius: 10px; margin-bottom: 20px;
-  font-size: 13px; color: #6a1b9a; border: 1px solid #e5e7eb;
+  background: #fff1f5; border-radius: 10px; margin-bottom: 20px;
+  font-size: 13px; color: #9f1239; border: 1px solid #ffe4ef;
 }
 
-.tab-context-bar i { font-size: 14px; color: #8b5cf6; flex-shrink: 0; }
-.tab-context-bar strong { color: #4c1d95; }
-.tab-context-count { color: #8b5cf6; font-weight: 600; }
+.tab-context-bar strong { color: #831843; }
+.tab-context-count { color: #fc1268; font-weight: 600; }
 
 .timeline-timestamp {
   display: inline-flex; align-items: center; gap: 5px;
@@ -1349,6 +1349,14 @@
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
     min-height: 88px;
+    overflow: visible;
+  }
+  .order-card-info {
+    min-width: 0;
+    overflow: visible;
+  }
+  .orders-tab-bar {
+    overflow: visible;
   }
   .order-card-thumb {
     flex: 0 0 78px;
@@ -1360,43 +1368,46 @@
   .order-card-id { font-size: 11px; }
   .order-card-name { font-size: 12px; -webkit-line-clamp: 2; }
   .order-card-price { font-size: 13px; }
-  .order-card-top {
-    flex-wrap: wrap;
-    align-items: flex-start;
-    gap: 4px 8px;
-  }
   .order-status-chip {
     font-size: 9px;
-    padding: 3px 8px;
+    padding: 2px 7px;
     max-width: none;
-    overflow: visible;
-    text-overflow: clip;
-    line-height: 1.2;
-  }
-  .order-view-btn {
-    display: inline-flex !important;
-    align-items: center;
-    gap: 4px;
-    padding: 4px 8px;
-    font-size: 10px;
+    flex-shrink: 0;
   }
   .order-card-actions {
-    gap: 4px;
-    margin-top: 4px;
+    gap: 6px;
+    margin-top: 8px;
     flex-wrap: wrap;
+    overflow: visible;
   }
-  .order-card-lbc-btn {
-    width: auto !important;
-    margin: 0 !important;
-    padding: 4px 8px !important;
-    font-size: 10px !important;
+  .order-card-actions > .btn,
+  .order-card-actions > .order-view-btn,
+  .order-card-actions > .order-cancel-btn,
+  .order-card-actions > .order-card-lbc-btn,
+  .order-card-actions > .btn-continue-payment {
+    flex: 1 1 calc(33.33% - 4px);
+    height: 34px;
+    min-height: 34px;
+    max-height: 34px;
+    padding: 0 8px;
+    font-size: 12px;
   }
-  .order-review-btn,
-  .order-refund-btn,
-  .order-cancel-btn,
+  .order-card-actions-row {
+    flex: 1 1 100%;
+    width: 100%;
+    margin-top: 0;
+  }
+  .order-card-actions-row .order-review-btn,
+  .order-card-actions-row .order-refund-btn {
+    flex: 1 1 0;
+    height: 34px;
+    min-height: 34px;
+    font-size: 12px;
+    padding: 0 8px;
+  }
   .order-proof-btn {
-    font-size: 10px;
-    padding: 4px 8px;
+    font-size: 11px;
+    padding: 5px 8px;
     margin: 0;
     width: auto;
   }
@@ -1419,10 +1430,26 @@
   .order-card-id { font-size: 10px; }
   .order-card-name { font-size: 12px; }
   .order-card-price { font-size: 12px; }
-  .order-card-actions { gap: 6px; }
-  .order-review-btn,
-  .order-refund-btn,
-  .order-cancel-btn,
+  .order-card-actions { gap: 5px; flex-wrap: wrap; }
+  .order-card-actions > .btn,
+  .order-card-actions > .order-view-btn,
+  .order-card-actions > .order-cancel-btn,
+  .order-card-actions > .order-card-lbc-btn,
+  .order-card-actions > .btn-continue-payment {
+    flex: 1 1 calc(50% - 3px);
+    height: 34px;
+    min-height: 34px;
+    max-height: 34px;
+    font-size: 11px;
+    padding: 0 6px;
+  }
+  .order-card-actions-row .order-review-btn,
+  .order-card-actions-row .order-refund-btn {
+    height: 34px;
+    min-height: 34px;
+    font-size: 11px;
+    padding: 0 6px;
+  }
   .order-proof-btn {
     display: inline-flex;
     font-size: 10px;
@@ -1443,34 +1470,24 @@
 }
 
 @media (max-width: 600px) {
-  .orders-tab-bar { padding: 4px; gap: 3px; margin-bottom: 12px; }
-  .orders-tab-btn {
-    padding: 8px 6px;
-    font-size: 11px;
+  .orders-tab-bar {
+    padding: 4px;
     gap: 4px;
-    flex-direction: row;
-    flex-wrap: nowrap;
-    align-items: center;
-    justify-content: center;
+    margin-bottom: 12px;
+  }
+  .orders-tab-btn {
+    padding: 10px 6px;
+    font-size: 12px;
+    gap: 5px;
     min-width: 0;
   }
   .orders-tab-btn .tab-label {
     display: inline;
-    font-size: 10px;
-    font-weight: 700;
-    line-height: 1.15;
-    max-width: none;
-    overflow: visible;
-    text-overflow: clip;
-    white-space: nowrap;
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
-  .tab-count {
-    min-width: 16px;
-    height: 16px;
-    font-size: 9px;
-    padding: 0 4px;
-    flex-shrink: 0;
-  }
+  .tab-count { min-width: 18px; height: 18px; font-size: 10px; flex-shrink: 0; }
   .lightbox-arrow { width: 38px; height: 38px; font-size: 15px; }
   .lightbox-arrow-left  { left: 10px; }
   .lightbox-arrow-right { right: 10px; }
@@ -1709,44 +1726,48 @@
 .order-card-refund-expired { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #9ca3af; margin-bottom: 6px; }
 .order-card-refund-expired i { font-size: 10px; }
 
-/* Actions under order cards — same-size compact chips in one row */
+/* Actions under order cards — equal height row */
 .order-card-actions {
   display: flex;
   flex-direction: row;
-  flex-wrap: nowrap;
-  gap: 5px;
-  margin-top: 4px;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
   width: 100%;
   align-items: stretch;
 }
+
 .order-card-actions > .btn,
-.order-card-actions > button {
+.order-card-actions > .order-view-btn,
+.order-card-actions > .order-cancel-btn,
+.order-card-actions > .order-card-lbc-btn,
+.order-card-actions > .btn-continue-payment {
   flex: 1 1 0;
-  width: auto !important;
   min-width: 0;
-  min-height: 28px;
-  height: 28px;
-  padding: 0 8px !important;
-  font-size: 10px !important;
+  height: 34px;
+  min-height: 34px;
+  max-height: 34px;
+  padding: 0 10px;
+  margin: 0;
+  font-size: 12px;
   font-weight: 700;
-  border-radius: 7px !important;
-  gap: 4px !important;
   line-height: 1;
+  border-radius: 8px;
   box-sizing: border-box;
-  display: inline-flex !important;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 5px;
   white-space: nowrap;
 }
-.order-card-actions > .btn i,
-.order-card-actions > button i {
-  font-size: 10px !important;
-}
+
 .order-card-actions > .order-card-actions-row {
   flex: 1 1 100%;
   height: auto;
   min-height: 0;
-  padding: 0 !important;
+  max-height: none;
+  padding: 0;
+  display: flex;
 }
 
 .order-card-actions-row {
@@ -1755,6 +1776,7 @@
   gap: 6px;
   width: 100%;
   flex: 1 1 100%;
+  flex-basis: 100%;
 }
 
 .order-card-actions-row .order-review-btn,
@@ -1804,14 +1826,13 @@
 
 /* Cancel order (active tab) */
 .order-cancel-btn {
-  background: #fff !important;
-  border: 1px solid #dc2626 !important;
-  color: #dc2626 !important;
+  background: #fff;
+  border: 1.5px solid #dc2626;
+  color: #dc2626;
   cursor: pointer;
-  margin: 0;
-  transition: background 0.2s, border-color 0.2s, color 0.2s;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
-.order-cancel-btn:hover:not(:disabled) { background: #fef2f2 !important; border-color: #b91c1c !important; color: #b91c1c !important; }
+.order-cancel-btn:hover:not(:disabled) { background: #fef2f2; border-color: #b91c1c; color: #b91c1c; }
 .order-cancel-btn:disabled { opacity: 0.65; cursor: not-allowed; }
 .modal-cancel-order-btn {
   margin: 0 0 14px;
@@ -2286,13 +2307,18 @@
   margin: 12px 16px;
 }
 .order-card-lbc-btn {
-  margin: 0 !important;
-  background: linear-gradient(135deg, #ea580c, #c2410c) !important;
+  width: auto;
+  margin: 0;
+  justify-content: center;
+  background: #ea580c !important;
   color: #fff !important;
-  border: none !important;
-  box-shadow: none !important;
+  border: 1px solid #ea580c !important;
+  box-shadow: none;
 }
-.order-card-lbc-btn i { font-size: 10px; }
+.order-card-lbc-btn:hover {
+  background: #c2410c !important;
+  border-color: #c2410c !important;
+}
 .lbc-track-panel-icon {
   width: 56px;
   height: 56px;
@@ -2317,10 +2343,11 @@
 }
 .lbc-track-btn {
   display: inline-flex; align-items: center; gap: 8px;
-  background: linear-gradient(135deg, #ea580c, #c2410c);
+  background: #ea580c;
   color: #fff; border: none; border-radius: 10px;
   padding: 10px 14px; font-size: 13px; font-weight: 700; cursor: pointer;
 }
+.lbc-track-btn:hover { background: #c2410c; }
 .lbc-track-link {
   font-size: 12px; font-weight: 600; color: #9a3412; text-decoration: underline;
 }
