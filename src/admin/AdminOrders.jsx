@@ -34,6 +34,9 @@ const getPaymentMethodLabel = (order) => {
 const isWalkInOrder = (o) =>
   !!o?.isWalkIn || String(o?.deliveryMethod || '').toLowerCase() === 'store';
 
+const isPlaceholderWalkInEmail = (email) =>
+  /walkin@dkmerch\.local/i.test(String(email || '').trim());
+
 const REFUND_METHOD_LABELS = {
   gcash: { label: 'GCash', brand: 'gcash', color: '#007fff' },
   maya:  { label: 'Maya',  brand: 'maya',  color: '#00b4aa' },
@@ -1216,7 +1219,18 @@ const AdminOrders = () => {
                         )}
                       </div>
                     </td>
-                    <td data-label="Customer"><div className="customer-info"><strong>{order.customerName || 'N/A'}</strong><small>{order.email || 'N/A'}</small></div></td>
+                    <td data-label="Customer">
+                      <div className="customer-info">
+                        <strong>{order.customerName || 'N/A'}</strong>
+                        {isWalkInOrder(order) ? (
+                          order.phone
+                            ? <small>{order.phone}</small>
+                            : <small>Walk-in</small>
+                        ) : (
+                          <small>{order.email || 'N/A'}</small>
+                        )}
+                      </div>
+                    </td>
                     <td data-label="Items">{order.items.length} item(s)</td>
                     <td data-label="Total">
                       <strong>₱{(order.finalTotal ?? order.total ?? 0).toLocaleString('en-PH')}</strong>
@@ -1773,11 +1787,18 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
   const isPaid         = paymentStatus === 'paid';
   const isDone         = currentStatus === 'completed' || currentStatus === 'cancelled';
   const isLbc          = isLbcOrder(order, storePin);
+  const isWalkIn       = isWalkInOrder(order);
   const isRiderManaged = !isLbc && (currentStatus === 'shipped' || currentStatus === 'out_for_delivery');
   const canConfirm     = isPaid && currentStatus === 'pending' && order.cancelRequestStatus !== 'requested';
   // Paid orders must go through cancel-request + refund — not direct Cancel Order
   const canCancel      = !isDone && !isRiderManaged && !isPaid;
   const hasPromo       = !!(order.promoCode && discount > 0);
+  const walkInPhone    = String(order.phone || '').trim();
+  const rawNote        = String(order.notes || '').trim();
+  const walkInNote     = isWalkIn && /^walk-in sale \(manual record\)$/i.test(rawNote)
+    ? ''
+    : rawNote;
+  const showCustomerEmail = !isWalkIn && !isPlaceholderWalkInEmail(order.email);
   const hasDeliveryProof = !!(order.deliveryProofPhoto);
   const otpVerified      = !!(order.deliveryOtpVerified);
   const hasRefund        = !!(order.refundStatus);
@@ -1894,12 +1915,21 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
           <div className="order-modal-pane order-modal-pane--left">
 
           <div className="modal-section">
-            <h3><i className="fas fa-user"></i> Customer Information</h3>
+            <h3><i className="fas fa-user"></i> {isWalkIn ? 'Walk-in Details' : 'Customer Information'}</h3>
             <div className="order-info-grid">
               <div className="info-item"><label>Full Name</label><strong>{order.customerName || 'N/A'}</strong></div>
-              <div className="info-item"><label>Email</label><span>{order.email || 'N/A'}</span></div>
-              <div className="info-item"><label>Phone</label><span>{order.phone || 'N/A'}</span></div>
-              <div className="info-item"><label>Delivery Address</label><span>{order.shippingAddress || 'N/A'}</span></div>
+              {showCustomerEmail && (
+                <div className="info-item"><label>Email</label><span>{order.email || 'N/A'}</span></div>
+              )}
+              {(!isWalkIn || walkInPhone) && (
+                <div className="info-item"><label>Phone</label><span>{walkInPhone || order.phone || 'N/A'}</span></div>
+              )}
+              {!isWalkIn && (
+                <div className="info-item"><label>Delivery Address</label><span>{order.shippingAddress || 'N/A'}</span></div>
+              )}
+              {isWalkIn && (
+                <div className="info-item"><label>Sale type</label><span>In-store / Walk-in</span></div>
+              )}
             </div>
           </div>
 
@@ -1911,10 +1941,10 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
               <div className="info-item"><label>Payment Method</label><span className="method-display" style={{ color: pm.color, display: 'inline-flex', alignItems: 'center', gap: 6 }}><PaymentMethodMark pm={pm} /> {pm.label}</span></div>
               <div className="info-item"><label>Payment Status</label><span className={`payment-badge ${isPaid ? 'paid' : 'pending'}`}>{isPaid ? 'Paid' : 'Pending'}</span></div>
             </div>
-            {String(order.notes || '').trim() && (
+            {walkInNote && (
               <div className="customer-note-box">
-                <label><i className="fas fa-sticky-note"></i> Customer Note</label>
-                <p>{String(order.notes).trim()}</p>
+                <label><i className="fas fa-sticky-note"></i> {isWalkIn ? 'Note' : 'Customer Note'}</label>
+                <p>{walkInNote}</p>
               </div>
             )}
           </div>
@@ -2342,14 +2372,16 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
             <h3><i className="fas fa-calculator"></i> Order Summary</h3>
             <div className="order-totals">
               <div className="total-row"><span>Subtotal:</span><strong>₱{subtotal.toLocaleString('en-PH')}</strong></div>
-              <div className="total-row">
-                <span>Shipping:</span>
-                <strong>
-                  {isLbc
-                    ? 'LBC · arrange with customer'
-                    : `₱${shippingFee.toLocaleString('en-PH')}`}
-                </strong>
-              </div>
+              {!isWalkIn && (
+                <div className="total-row">
+                  <span>Shipping:</span>
+                  <strong>
+                    {isLbc
+                      ? 'LBC · arrange with customer'
+                      : `₱${shippingFee.toLocaleString('en-PH')}`}
+                  </strong>
+                </div>
+              )}
               {hasPromo && <>
                 <div className="total-row promo-discount-admin-row"><span><i className="fas fa-tag" style={{ marginRight: '6px', color: '#ec4899' }}></i>Promo ({order.promoCode}):</span><strong>−₱{discount.toLocaleString('en-PH')}</strong></div>
                 <div className="total-row"><span style={{ color: '#6b7280' }}>Original:</span><strong style={{ color: '#6b7280', textDecoration: 'line-through' }}>₱{originalTotal.toLocaleString('en-PH')}</strong></div>
@@ -2357,7 +2389,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
               {paymentFee > 0 && (
                 <div className="total-row">
                   <span>
-                    Tax ({paymentFeeLabel}{paymentFeePct ? ` ${paymentFeePct}` : ''}):
+                    Handling Fee ({paymentFeeLabel}{paymentFeePct ? ` ${paymentFeePct}` : ''}):
                   </span>
                   <strong>₱{paymentFee.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
                 </div>
@@ -2859,15 +2891,17 @@ const WalkInRecordModal = ({ onClose, onSubmit }) => {
 
         <div className="walkin-body">
           <div className="walkin-col walkin-col--products">
-            <label className="walkin-label">Available products</label>
-            <input
-              type="search"
-              className="walkin-search"
-              placeholder="Search product name or category…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              autoFocus
-            />
+            <div className="walkin-products-sticky">
+              <label className="walkin-label">Available products</label>
+              <input
+                type="search"
+                className="walkin-search"
+                placeholder="Search product name or category…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                autoFocus
+              />
+            </div>
             <div className="walkin-product-list">
               {available.length === 0 ? (
                 <div className="walkin-empty">No matching products with stock.</div>

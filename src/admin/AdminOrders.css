@@ -5,6 +5,7 @@
   margin: 0;
   width: 100%;
   box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 /* ══════════════════════════
@@ -850,6 +851,12 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-start;
+  position: sticky;
+  top: 0;
+  z-index: 25;
+  background: #fff;
+  padding: 8px 0;
+  margin-top: -4px;
 }
 .filter-group {
   flex: 1 1 280px;
@@ -2410,10 +2417,17 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  padding: 12px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100vw;
 }
 .walkin-modal {
   width: min(920px, 100%);
+  max-width: 100%;
   max-height: min(92vh, 860px);
   background: #fff;
   border-radius: 16px;
@@ -2421,6 +2435,9 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  min-width: 0;
 }
 .walkin-header {
   display: flex;
@@ -2451,15 +2468,32 @@
   min-height: 0;
   flex: 1;
   overflow: hidden;
+  overflow-x: hidden;
+  min-width: 0;
+  width: 100%;
 }
 .walkin-col {
   padding: 14px 16px;
   overflow: auto;
+  overflow-x: hidden;
   min-height: 0;
+  min-width: 0;
+  box-sizing: border-box;
 }
 .walkin-col--products {
   border-right: 1px solid #f1f5f9;
   background: #fafbfc;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.walkin-products-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  flex-shrink: 0;
+  background: #fafbfc;
+  padding-bottom: 4px;
 }
 .walkin-label {
   display: block;
@@ -2472,6 +2506,7 @@
 }
 .walkin-search {
   width: 100%;
+  max-width: 100%;
   box-sizing: border-box;
   padding: 10px 12px;
   border: 1px solid #e2e8f0;
@@ -2483,6 +2518,11 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
 }
 .walkin-product-row {
   display: flex;
@@ -2705,22 +2745,88 @@
 }
 
 @media (max-width: 760px) {
+  .walkin-overlay {
+    padding: 8px;
+    align-items: flex-start;
+    padding-top: max(8px, env(safe-area-inset-top));
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+  }
+  .walkin-modal {
+    max-height: min(96dvh, 100%);
+    border-radius: 14px;
+    width: 100%;
+  }
+  .walkin-header {
+    padding: 14px 14px 10px;
+  }
+  .walkin-header h3 { font-size: 16px; }
+  .walkin-header p { font-size: 12px; }
   .walkin-body {
     grid-template-columns: 1fr;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
   .walkin-col--products {
     border-right: none;
     border-bottom: 1px solid #f1f5f9;
-    max-height: 38vh;
+    max-height: none;
+    overflow: visible;
+  }
+  .walkin-products-sticky {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    margin: 0 -14px;
+    padding: 0 14px 8px;
+    border-bottom: 1px solid #eef2f7;
+  }
+  .walkin-col {
+    padding: 12px 14px;
+    overflow: visible;
+  }
+  .walkin-col--cart {
+    overflow: visible;
+  }
+  .walkin-product-list {
+    max-height: 42vh;
+    overflow: auto;
+  }
+  .walkin-fields {
+    grid-template-columns: 1fr;
+  }
+  .walkin-fields label:nth-child(3),
+  .walkin-fields label:nth-child(4) {
+    grid-column: auto;
+  }
+  .walkin-footer {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 12px 14px;
+    gap: 10px;
+  }
+  .walkin-footer-actions {
+    width: 100%;
+  }
+  .walkin-cancel,
+  .walkin-submit {
+    flex: 1;
+    justify-content: center;
   }
   .walkin-line {
-    grid-template-columns: 1fr auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
       "info remove"
       "qty total";
+    min-width: 0;
   }
-  .walkin-line-info { grid-area: info; }
+  .walkin-line-info { grid-area: info; min-width: 0; }
   .walkin-line-qty { grid-area: qty; }
   .walkin-line-total { grid-area: total; justify-self: end; }
   .walkin-line-remove { grid-area: remove; justify-self: end; }
+  .walkin-product-row {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
 }

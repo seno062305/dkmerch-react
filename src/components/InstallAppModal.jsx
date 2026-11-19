@@ -72,7 +72,8 @@ export default function InstallAppModal({
   if (!open) return null;
 
   const handleNative = async () => {
-    if (!onNativeInstall) {
+    // No Chrome/Edge install prompt yet — fall back to manual Add to Home Screen hint
+    if (!canNativeInstall || !onNativeInstall) {
       setAndroidHint(true);
       return;
     }

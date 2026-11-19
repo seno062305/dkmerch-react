@@ -1909,7 +1909,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
               {summaryPaymentFee > 0 && (
                 <div className="customer-total-row">
                   <span>
-                    Tax ({summaryFeeLabel}{summaryFeePct ? ` ${summaryFeePct}` : ''}):
+                    Handling Fee ({summaryFeeLabel}{summaryFeePct ? ` ${summaryFeePct}` : ''}):
                   </span>
                   <strong>₱{summaryPaymentFee.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
                 </div>

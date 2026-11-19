@@ -215,7 +215,7 @@ export const createWalkInOrder = mutation({
     const email =
       String(args.email || "").trim() || "walkin@dkmerch.local";
     const phone = String(args.phone || "").trim() || undefined;
-    const notes = String(args.notes || "").trim() || "Walk-in sale (Manual Record)";
+    const notes = String(args.notes || "").trim() || undefined;
 
     await ensureOrderCounterSeeded(db);
     const orderSeq = await allocateOrderSeq(db);
@@ -240,7 +240,7 @@ export const createWalkInOrder = mutation({
       paymentStatus: "paid",
       paidAt: now,
       deliveryConfirmedAt: now,
-      notes,
+      ...(notes ? { notes } : {}),
       isWalkIn: true,
       paymentReceivedEmailSent: true, // no customer email for walk-in placeholder
     });

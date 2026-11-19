@@ -1760,7 +1760,7 @@ const Checkout = () => {
       title: isZeroPay ? 'Place free order?' : 'Proceed to payment?',
       message: isZeroPay
         ? `Place this order?\n\nTotal: ₱0\n${isOutsideNCR ? 'LBC shipping will be arranged with admin separately.' : ''}`
-        : `Place this order and pay with ${paymentFeeInfo.label}?\n\nSubtotal + shipping: ₱${Number(merchandiseTotal || 0).toLocaleString('en-PH')}\nTax (${paymentFeeInfo.label} ${formatFeeRatePercent(paymentFeeInfo.rate)}): ₱${Number(paymentFee || 0).toLocaleString('en-PH')}\nTotal: ₱${Number(finalTotal || 0).toLocaleString('en-PH')}${isOutsideNCR ? '\n(LBC shipping not included — arrange with admin)' : ''}`,
+        : `Place this order and pay with ${paymentFeeInfo.label}?\n\nSubtotal + shipping: ₱${Number(merchandiseTotal || 0).toLocaleString('en-PH')}\nHandling Fee (${paymentFeeInfo.label} ${formatFeeRatePercent(paymentFeeInfo.rate)}): ₱${Number(paymentFee || 0).toLocaleString('en-PH')}\nTotal: ₱${Number(finalTotal || 0).toLocaleString('en-PH')}${isOutsideNCR ? '\n(LBC shipping not included — arrange with admin)' : ''}`,
       confirmLabel: isZeroPay ? 'Place Order' : 'Pay Now',
       cancelLabel: 'Cancel',
       variant: 'primary',
@@ -2468,7 +2468,7 @@ const Checkout = () => {
                     <div className="summary-row summary-row-tax">
                       <span>
                         <i className="fas fa-receipt" style={{ marginRight: '6px', color: '#0ea5e9' }}></i>
-                        Tax ({paymentFeeInfo.label} {formatFeeRatePercent(paymentFeeInfo.rate)})
+                        Handling Fee ({paymentFeeInfo.label} {formatFeeRatePercent(paymentFeeInfo.rate)})
                       </span>
                       <span>₱{paymentFee.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </div>
