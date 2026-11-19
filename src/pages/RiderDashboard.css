@@ -1319,13 +1319,25 @@
 .rider-delete-btn {
   display: flex; align-items: center; justify-content: center; gap: 8px;
   width: 100%; margin-top: 8px; padding: 10px 14px;
-  background: transparent; border: 1.5px solid #e5e7eb;
-  border-radius: 10px; color: #e5e7eb;
+  background: #fff5f5; border: 1.5px solid #fecaca;
+  border-radius: 10px; color: #b91c1c;
   font-size: 13px; font-weight: 600; cursor: pointer;
   transition: all 0.2s; min-height: 40px;
   -webkit-tap-highlight-color: transparent; touch-action: manipulation;
 }
-.rider-delete-btn:hover { background: #fee2e2; border-color: #e5e7eb; }
+.rider-delete-btn i { color: #b91c1c; }
+.rider-delete-btn:hover,
+.rider-delete-btn:focus-visible {
+  background: #fee2e2;
+  border-color: #f87171;
+  color: #991b1b;
+}
+.rider-delete-btn:hover i,
+.rider-delete-btn:focus-visible i { color: #991b1b; }
+.rider-delete-btn:active {
+  background: #fecaca;
+  color: #7f1d1d;
+}
 
 /* ------ NOT APPROVED ------ */
 .rider-not-approved {

@@ -126,12 +126,59 @@ export const createOrder = mutation({
       }
     }
 
+    // Promo: one use per customer email
+    const promoCode = String(args.promoCode || "").toUpperCase().trim();
+    const emailNorm = String(args.email || "").trim().toLowerCase();
+    if (promoCode) {
+      if (!emailNorm || !emailNorm.includes("@")) {
+        throw new Error("Login required to use a promo code.");
+      }
+      const promo = await db
+        .query("promos")
+        .withIndex("by_code", (q) => q.eq("code", promoCode))
+        .first();
+      if (!promo || !promo.isActive) {
+        throw new Error("Invalid or inactive promo code.");
+      }
+      const prior = await db
+        .query("orders")
+        .withIndex("by_email", (q) => q.eq("email", emailNorm))
+        .collect();
+      const alreadyUsed = prior.some((o: any) => {
+        const st = String(o.orderStatus || o.status || "").toLowerCase();
+        if (st === "cancelled") return false;
+        return String(o.promoCode || "").toUpperCase().trim() === promoCode;
+      });
+      if (alreadyUsed) {
+        throw new Error("You already used this promo code. Each account can use it only once.");
+      }
+    }
+
     // Make sure counter doc exists so concurrent checkouts OCC-serialize (not all get the same #)
     await ensureOrderCounterSeeded(db);
     const orderSeq = await allocateOrderSeq(db);
     const orderId = buildOrderId(orderSeq);
     const { orderId: _ignored, ...rest } = args;
-    await db.insert("orders", { ...rest, orderId, orderSeq });
+    const insertDoc: any = {
+      ...rest,
+      email: emailNorm || rest.email,
+      orderId,
+      orderSeq,
+    };
+    if (promoCode) insertDoc.promoCode = promoCode;
+    await db.insert("orders", insertDoc);
+
+    // Count redemption for admin stats
+    if (promoCode) {
+      const promo = await db
+        .query("promos")
+        .withIndex("by_code", (q) => q.eq("code", promoCode))
+        .first();
+      if (promo) {
+        await db.patch(promo._id, { usedCount: Number(promo.usedCount || 0) + 1 });
+      }
+    }
+
     return { success: true, orderId, orderSeq };
   },
 });

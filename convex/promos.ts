@@ -49,6 +49,35 @@ function isPromoValid(promo: any, nowMs: number): { valid: boolean; message?: st
   return { valid: true };
 }
 
+/** True if this email already placed a non-cancelled order with the promo (one use per account). */
+async function hasEmailUsedPromo(db: any, code: string, email: string): Promise<boolean> {
+  const codeNorm = String(code || "").toUpperCase().trim();
+  const emailNorm = String(email || "").trim().toLowerCase();
+  if (!codeNorm || !emailNorm || !emailNorm.includes("@")) return false;
+
+  const rows = await db
+    .query("orders")
+    .withIndex("by_email", (q: any) => q.eq("email", emailNorm))
+    .collect();
+
+  // Also match legacy mixed-case emails
+  let all = rows;
+  const raw = String(email || "").trim();
+  if (raw && raw !== emailNorm) {
+    const extra = await db
+      .query("orders")
+      .withIndex("by_email", (q: any) => q.eq("email", raw))
+      .collect();
+    all = [...rows, ...extra];
+  }
+
+  return all.some((o: any) => {
+    const st = String(o.orderStatus || o.status || "").toLowerCase();
+    if (st === "cancelled") return false;
+    return String(o.promoCode || "").toUpperCase().trim() === codeNorm;
+  });
+}
+
 // ── Get all promos (admin) ──
 export const getAllPromos = query(async ({ db }) => {
   return await db.query("promos").order("desc").collect();
@@ -81,10 +110,14 @@ export const getActivePromosInternal = internalQuery({
   },
 });
 
-// ── Validate promo code ──
+// ── Validate promo code (one use per customer email) ──
 export const validatePromo = query({
-  args: { code: v.string() },
-  handler: async ({ db }, { code }) => {
+  args: {
+    code: v.string(),
+    /** Required for one-use-per-account check */
+    email: v.optional(v.string()),
+  },
+  handler: async ({ db }, { code, email }) => {
     const nowMs = Date.now();
     const promo = await db
       .query("promos")
@@ -95,6 +128,13 @@ export const validatePromo = query({
 
     const check = isPromoValid(promo, nowMs);
     if (!check.valid) return check;
+
+    if (email && (await hasEmailUsedPromo(db, promo.code, email))) {
+      return {
+        valid: false,
+        message: "You already used this promo code. Each account can use it only once.",
+      };
+    }
 
     return {
       valid: true,
@@ -250,17 +290,42 @@ export const deletePromo = mutation({
   },
 });
 
-// ── Increment used count ──
+// ── Increment used count (global counter for admin stats) ──
 export const incrementPromoUsage = mutation({
   args: { code: v.string() },
   handler: async ({ db }, { code }) => {
     const promo = await db
       .query("promos")
-      .withIndex("by_code", (q) => q.eq("code", code))
+      .withIndex("by_code", (q) => q.eq("code", code.toUpperCase().trim()))
       .first();
     if (!promo) return { success: false };
-    await db.patch(promo._id, { usedCount: promo.usedCount + 1 });
+    await db.patch(promo._id, { usedCount: Number(promo.usedCount || 0) + 1 });
     return { success: true };
+  },
+});
+
+/** Server-side gate: can this email still redeem the promo? */
+export const assertPromoUsableByEmail = mutation({
+  args: {
+    code: v.string(),
+    email: v.string(),
+  },
+  handler: async ({ db }, { code, email }) => {
+    const nowMs = Date.now();
+    const promo = await db
+      .query("promos")
+      .withIndex("by_code", (q) => q.eq("code", code.toUpperCase().trim()))
+      .first();
+    if (!promo) return { ok: false, message: "Invalid promo code." };
+    const check = isPromoValid(promo, nowMs);
+    if (!check.valid) return { ok: false, message: check.message || "Promo not available." };
+    if (await hasEmailUsedPromo(db, promo.code, email)) {
+      return {
+        ok: false,
+        message: "You already used this promo code. Each account can use it only once.",
+      };
+    }
+    return { ok: true };
   },
 });
 

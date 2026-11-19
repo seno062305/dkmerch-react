@@ -23,16 +23,19 @@ const PromoCodeInput = ({
   subtotal = 0,
   productGroup = '',
 }) => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const [code, setCode] = useState('');
   const [pendingCode, setPendingCode] = useState(null); // code being validated
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const userEmail = String(user?.email || '').trim().toLowerCase();
 
-  // Call Convex validatePromo — uses server-side time (cannot be faked)
+  // Server time + one-use-per-account check
   const validationResult = useQuery(
     api.promos.validatePromo,
-    pendingCode ? { code: pendingCode } : 'skip'
+    pendingCode
+      ? { code: pendingCode, ...(userEmail ? { email: userEmail } : {}) }
+      : 'skip'
   );
 
   // When validation result comes back, process it

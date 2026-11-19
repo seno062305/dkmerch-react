@@ -129,7 +129,7 @@ const QA = {
       },
       {
         label: "Can I use multiple promo codes?",
-        answer: `Only **one promo code** can be used per order at DKMerch.\n\nMake sure to choose the promo that gives you the best discount for your order! All promo discounts are **percentage-based** with a maximum discount cap.`
+        answer: `Each promo code can be used **only once per account** at DKMerch.\n\nAlso, only **one promo code** applies per order. Choose the best deal for your items — discounts are **percentage-based** with a maximum cap.`
       },
     ]
   },
