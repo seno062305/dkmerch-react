@@ -1770,7 +1770,11 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
               </button>
               {proofExpanded && (
                 <div className="customer-pod-body">
-                  <p className="customer-pod-note">Photo taken by your rider when the order was delivered. Tap the photo to view full size.</p>
+                  <p className="customer-pod-note">
+                    {isLbcOrder(order)
+                      ? 'Proof uploaded by admin when LBC delivered your order. Tap the photo to view full size.'
+                      : 'Photo taken by your rider when the order was delivered. Tap the photo to view full size.'}
+                  </p>
                   <button
                     type="button"
                     className="customer-pod-photo-btn"

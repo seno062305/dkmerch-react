@@ -382,10 +382,17 @@ export const updateOrderStatus = mutation({
   },
 });
 
-/** Admin accepts an LBC (outside rider area) order into the LBC shipping queue. */
-export const acceptLbcOrder = mutation({
-  args: { orderId: v.string() },
-  handler: async ({ db, scheduler }, { orderId }) => {
+/**
+ * Admin approves LBC delivery with required proof photo.
+ * Marks order Delivered and shows proof on the customer Track Order page.
+ */
+export const approveLbcDelivery = mutation({
+  args: {
+    orderId: v.string(),
+    /** Required proof image (data URL) that LBC delivered the parcel */
+    photo: v.string(),
+  },
+  handler: async ({ db, scheduler }, { orderId, photo }) => {
     const order = await db
       .query("orders")
       .withIndex("by_orderId", (q) => q.eq("orderId", orderId))
@@ -394,47 +401,63 @@ export const acceptLbcOrder = mutation({
 
     const status = String(order.orderStatus || "").toLowerCase();
     if (status === "cancelled") {
-      return { success: false, message: "Canceled orders cannot be accepted for LBC." };
+      return { success: false, message: "Canceled orders cannot be approved." };
     }
-    if ((order as any).lbcAcceptedAt) {
-      return { success: true, alreadyAccepted: true };
+    if (status === "completed" && (order as any).deliveryProofPhoto) {
+      return { success: true, alreadyApproved: true };
     }
     if (String(order.paymentStatus || "").toLowerCase() !== "paid") {
-      return { success: false, message: "Order must be paid before accepting for LBC." };
+      return { success: false, message: "Order must be paid before approving LBC delivery." };
+    }
+
+    const proof = String(photo || "").trim();
+    if (!proof) {
+      return { success: false, message: "Upload LBC delivery proof photo before approving." };
+    }
+    if (proof.length > 900_000) {
+      return { success: false, message: "Photo is too large. Please use a smaller image." };
     }
 
     const now = new Date().toISOString();
     const patch: Record<string, unknown> = {
-      lbcAcceptedAt: now,
       deliveryMethod: "lbc",
+      lbcAcceptedAt: now,
+      deliveryProofPhoto: proof,
+      deliveryConfirmedAt: now,
+      orderStatus: "completed",
+      status: "Delivered",
     };
-    // Confirm if still pending so it leaves the unpaid/pending queue cleanly
-    if (!status || status === "pending") {
-      patch.orderStatus = "confirmed";
-      patch.status = "Confirmed";
+    if (!order.confirmedAt) {
       patch.confirmedAt = now;
+    }
+    if (!order.shippedAt) {
+      patch.shippedAt = now;
     }
     await db.patch(order._id, patch as any);
 
     if (order.email) {
       await notifyCustomerInApp(db, {
         email: order.email,
-        type: "order_update",
-        title: `LBC shipping · #${shortOrderId(orderId)}`,
-        body: "Admin accepted your order for LBC Express shipping. Tracking details will follow.",
+        type: "order_delivered",
+        title: `Delivered via LBC · #${shortOrderId(orderId)}`,
+        body: "Your order was delivered by LBC Express. View the delivery proof on Track Order.",
         url: `/track-order?order=${encodeURIComponent(orderId)}`,
         orderId,
       });
       await scheduler.runAfter(0, internal.webPush.sendToEmail, {
         email: order.email,
-        title: `LBC shipping · #${shortOrderId(orderId)}`,
-        body: "Your order was accepted for LBC Express. Tracking details will follow.",
+        title: `Delivered via LBC · #${shortOrderId(orderId)}`,
+        body: "Your order was delivered by LBC Express. Open Track Order to view proof.",
         url: `/track-order?order=${encodeURIComponent(orderId)}`,
       });
-    }
-
-    if (!status || status === "pending") {
-      await onOrderConfirmed(scheduler, db, order, orderId);
+      await scheduler.runAfter(0, internal.sendEmail.sendOrderStatusUpdateEmail, {
+        to: order.email,
+        customerName: order.customerName || "Customer",
+        orderId,
+        orderStatus: "completed",
+        actorLabel: "Admin",
+        note: "Delivered via LBC Express. Delivery proof is available on Track Order.",
+      });
     }
 
     return { success: true };

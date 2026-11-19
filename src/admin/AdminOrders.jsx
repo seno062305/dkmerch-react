@@ -493,13 +493,16 @@ const AdminOrders = () => {
   const storePin = { storeLat: storeSettings?.storeLat, storeLng: storeSettings?.storeLng };
   const updateOrderStatusMutation = useMutation(api.orders.updateOrderStatus);
   const updateOrderFieldsMutation = useMutation(api.orders.updateOrderFields);
-  const acceptLbcOrderMutation    = useMutation(api.orders.acceptLbcOrder);
+  const approveLbcDeliveryMutation = useMutation(api.orders.approveLbcDelivery);
   const deleteOrderMutation       = useMutation(api.orders.deleteOrder);
   const resolveRefundMutation     = useMutation(api.orders.resolveRefund);
   const rejectCustomerCancelMutation = useMutation(api.orders.rejectCustomerCancel);
   const approveCustomerCancelAction  = useAction(api.payments.approveCustomerCancel);
   const approveDamageRefundAction    = useAction(api.payments.approveDamageRefund);
   const [acceptingLbcId, setAcceptingLbcId] = useState(null);
+  const [lbcApproveOrder, setLbcApproveOrder] = useState(null);
+  const [lbcApprovePhoto, setLbcApprovePhoto] = useState('');
+  const lbcProofInputRef = useRef(null);
 
   const validOrders = orders.filter(o => o.orderId && o.items?.length > 0);
 
@@ -547,21 +550,22 @@ const AdminOrders = () => {
   const hasAnyCancelRequest = (o) => !!o.cancelRequestStatus;
 
   const isLbcDeliveryOrder = (o) => isLbcOrder(o, storePin);
-  const isLbcAccepted = (o) => !!o?.lbcAcceptedAt;
-  /** Paid LBC orders waiting for admin Accept (not yet in Accepted panel). */
+  const isLbcApproved = (o) =>
+    !!o?.lbcAcceptedAt
+    || (isLbcDeliveryOrder(o)
+      && String(o.orderStatus || '').toLowerCase() === 'completed'
+      && !!o?.deliveryProofPhoto);
+  /** Paid LBC orders waiting for admin Approve + delivery proof. */
   const isLbcAwaitingAccept = (o) => {
-    if (!isLbcDeliveryOrder(o) || isCancelledStatus(o) || isLbcAccepted(o)) return false;
+    if (!isLbcDeliveryOrder(o) || isCancelledStatus(o) || isLbcApproved(o)) return false;
     if (String(o.paymentStatus || '').toLowerCase() !== 'paid') return false;
     const st = String(o.orderStatus || 'pending').toLowerCase();
-    return st === 'pending' || st === 'confirmed';
+    return st !== 'completed' && st !== 'cancelled';
   };
-  /** Accepted LBC queue — includes shipped/delivered after accept. */
+  /** Approved LBC (delivered with proof). */
   const isLbcAcceptedQueue = (o) => {
     if (!isLbcDeliveryOrder(o) || isCancelledStatus(o)) return false;
-    if (isLbcAccepted(o)) return true;
-    // Legacy LBC already past confirm without lbcAcceptedAt — treat shipped+ as accepted
-    const st = String(o.orderStatus || '').toLowerCase();
-    return st === 'shipped' || st === 'out_for_delivery' || st === 'completed';
+    return isLbcApproved(o);
   };
 
   const matchesSearchDate = (order) => {
@@ -795,25 +799,45 @@ const AdminOrders = () => {
     return statusMap[adminStatus] || 'Processing';
   };
 
-  const handleAcceptLbc = async (order) => {
+  const openLbcApprove = (order) => {
+    setLbcApproveOrder(order);
+    setLbcApprovePhoto('');
+  };
+
+  const closeLbcApprove = () => {
+    if (acceptingLbcId) return;
+    setLbcApproveOrder(null);
+    setLbcApprovePhoto('');
+  };
+
+  const handleLbcProofPick = (file) => {
+    if (!file) return;
+    const check = validateImageFile(file);
+    if (check?.ok === false) {
+      showNotification(check.error || 'Invalid image file.', 'warning');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => setLbcApprovePhoto(String(e.target?.result || ''));
+    reader.readAsDataURL(file);
+  };
+
+  const handleApproveLbc = async () => {
+    const order = lbcApproveOrder;
     if (!order?.orderId) return;
+    if (!lbcApprovePhoto) {
+      showNotification('Upload LBC delivery proof before approving.', 'warning');
+      return;
+    }
     const shortId = formatOrderShortId(order);
-    const ok = await confirm({
-      title: 'Accept for LBC shipping?',
-      message:
-        `Accept order #${shortId} for ${order.customerName || 'the customer'}?\n\n` +
-        `This moves it to the Accepted LBC list. Ship via LBC Express and send the tracking ID to the customer.`,
-      confirmLabel: 'Accept LBC',
-      cancelLabel: 'Cancel',
-      variant: 'primary',
-      icon: 'fa-truck',
-    });
-    if (!ok) return;
     setAcceptingLbcId(order.orderId);
     try {
-      const result = await acceptLbcOrderMutation({ orderId: order.orderId });
+      const result = await approveLbcDeliveryMutation({
+        orderId: order.orderId,
+        photo: lbcApprovePhoto,
+      });
       if (!result?.success) {
-        showNotification(result?.message || 'Could not accept LBC order.', 'error');
+        showNotification(result?.message || 'Could not approve LBC delivery.', 'error');
         return;
       }
       if (selectedOrder?.orderId === order.orderId) {
@@ -821,20 +845,23 @@ const AdminOrders = () => {
           ...prev,
           lbcAcceptedAt: new Date().toISOString(),
           deliveryMethod: 'lbc',
-          ...(String(prev?.orderStatus || '').toLowerCase() === 'pending'
-            ? { orderStatus: 'confirmed', status: 'Confirmed' }
-            : {}),
+          deliveryProofPhoto: lbcApprovePhoto,
+          deliveryConfirmedAt: new Date().toISOString(),
+          orderStatus: 'completed',
+          status: 'Delivered',
         }));
       }
+      setLbcApproveOrder(null);
+      setLbcApprovePhoto('');
       showNotification(
-        result.alreadyAccepted
-          ? `Order #${shortId} was already accepted for LBC.`
-          : `Order #${shortId} accepted for LBC shipping.`,
+        result.alreadyApproved
+          ? `Order #${shortId} was already approved.`
+          : `Order #${shortId} approved as delivered via LBC. Customer notified.`,
         'success'
       );
     } catch (err) {
       console.error(err);
-      showNotification('Failed to accept LBC order.', 'error');
+      showNotification('Failed to approve LBC delivery.', 'error');
     } finally {
       setAcceptingLbcId(null);
     }
@@ -1069,7 +1096,7 @@ const AdminOrders = () => {
     pending: 'No pending orders',
     confirmed: 'No processing orders',
     shipped: 'No shipped orders',
-    lbc: 'No accepted LBC orders yet',
+    lbc: 'No approved LBC deliveries yet',
     refunds: 'No refunded orders yet',
     cancelled: 'No canceled orders',
   };
@@ -1300,8 +1327,8 @@ const AdminOrders = () => {
                   </>
                 ) : activeTab === 'lbc' ? (
                   <>
-                    <h2><i className="fas fa-truck"></i> Accepted LBC</h2>
-                    <p>Orders accepted for LBC Express shipping</p>
+                    <h2><i className="fas fa-truck"></i> Approved LBC</h2>
+                    <p>Delivered via LBC with admin proof</p>
                   </>
                 ) : (
                   <>
@@ -1325,7 +1352,7 @@ const AdminOrders = () => {
               filteredOrders.length === 0 ? (
                 <div className="orders-priority-empty">
                   <i className="fas fa-truck"></i>
-                  <p>No accepted LBC orders yet</p>
+                  <p>No approved LBC deliveries yet</p>
                 </div>
               ) : (
                 <div className="orders-priority-list">
@@ -1337,7 +1364,7 @@ const AdminOrders = () => {
                           <div className="orders-priority-card-top">
                             <strong>#{formatOrderShortId(order)}</strong>
                             <span className="orders-refund-flag orders-refund-flag--lbc">
-                              <i className="fas fa-check"></i> Accepted
+                              <i className="fas fa-check"></i> Approved
                             </span>
                           </div>
                           <div className="orders-priority-customer">
@@ -1500,12 +1527,12 @@ const AdminOrders = () => {
                                     <button
                                       type="button"
                                       className="accept-btn"
-                                      onClick={() => handleAcceptLbc(order)}
+                                      onClick={() => openLbcApprove(order)}
                                       disabled={busy}
                                     >
                                       {busy
-                                        ? <><i className="fas fa-spinner fa-spin"></i> Accepting…</>
-                                        : <><i className="fas fa-check"></i> Accept</>}
+                                        ? <><i className="fas fa-spinner fa-spin"></i> Approving…</>
+                                        : <><i className="fas fa-check"></i> Approve</>}
                                     </button>
                                   </div>
                                 </td>
@@ -1527,6 +1554,80 @@ const AdminOrders = () => {
         <div className="orders-container orders-container--full">
           {renderOrdersTable()}
         </div>
+      )}
+
+      {lbcApproveOrder && createPortal(
+        <div className="lbc-approve-overlay" onClick={closeLbcApprove}>
+          <div
+            className="lbc-approve-modal"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="lbc-approve-title"
+          >
+            <h3 id="lbc-approve-title">Approve LBC delivery?</h3>
+            <p className="lbc-approve-sub">
+              Approve order #{formatOrderShortId(lbcApproveOrder)} for {lbcApproveOrder.customerName || 'the customer'}?
+            </p>
+            <p className="lbc-approve-desc">
+              Upload proof that LBC already delivered this order. The photo is required and will show on the customer Track Order page.
+            </p>
+            <div className="lbc-approve-upload">
+              <label>Delivery proof photo <em>(required)</em></label>
+              <button
+                type="button"
+                className={`lbc-approve-drop ${lbcApprovePhoto ? 'has-photo' : ''}`}
+                onClick={() => lbcProofInputRef.current?.click()}
+                disabled={!!acceptingLbcId}
+              >
+                {lbcApprovePhoto ? (
+                  <span className="lbc-approve-preview-wrap">
+                    <img src={lbcApprovePhoto} alt="LBC delivery proof" className="lbc-approve-preview" />
+                    <span>Change photo</span>
+                  </span>
+                ) : (
+                  <span className="lbc-approve-placeholder">
+                    <i className="fas fa-cloud-upload-alt"></i>
+                    Upload LBC delivery proof
+                  </span>
+                )}
+              </button>
+              <input
+                ref={lbcProofInputRef}
+                type="file"
+                accept={IMAGE_ACCEPT_NO_GIF}
+                style={{ display: 'none' }}
+                onChange={(e) => handleLbcProofPick(e.target.files?.[0])}
+              />
+              {lbcApprovePhoto && (
+                <button
+                  type="button"
+                  className="lbc-approve-remove"
+                  onClick={() => setLbcApprovePhoto('')}
+                  disabled={!!acceptingLbcId}
+                >
+                  Remove photo
+                </button>
+              )}
+            </div>
+            <div className="lbc-approve-actions">
+              <button type="button" className="lbc-approve-cancel" onClick={closeLbcApprove} disabled={!!acceptingLbcId}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="lbc-approve-submit"
+                onClick={handleApproveLbc}
+                disabled={!lbcApprovePhoto || !!acceptingLbcId}
+              >
+                {acceptingLbcId
+                  ? <><i className="fas fa-spinner fa-spin"></i> Approving…</>
+                  : <><i className="fas fa-check"></i> Approve</>}
+              </button>
+            </div>
+          </div>
+        </div>,
+        getOverlayRoot?.() || document.body
       )}
 
       {selectedOrder && (
