@@ -115,10 +115,17 @@ const buildFullAddress = ({ address, barangay, city, province, zipCode }) =>
 /** Parse Nominatim reverse/search addressdetails into checkout fields (PH). */
 const parseNominatimAddress = (data) => {
   const a = data?.address || {};
-  const road = a.road || a.pedestrian || a.path || a.residential || a.street || a.cycleway || '';
+  const road =
+    a.road || a.pedestrian || a.path || a.residential || a.street
+    || a.cycleway || a.unclassified || a.service || a.footway
+    || a.living_street || a.track || '';
   const street = [a.house_number, road].filter(Boolean).join(' ').trim()
     || a.building
     || a.amenity
+    || a.shop
+    || a.office
+    || (typeof data?.name === 'string' ? data.name.trim() : '')
+    || String(data?.display_name || '').split(',')[0]?.trim()
     || '';
   const barangay = a.suburb || a.neighbourhood || a.quarter || a.village
     || a.hamlet || a.barangay || a.city_district || '';
@@ -154,6 +161,8 @@ const AddressMapPicker = ({
   const suggestRef     = useRef(null);
   const fieldsRef      = useRef({ address, barangay, city, province, zipCode });
   const suppressForwardGeocodeRef = useRef(false);
+  /** After map pin move/search, don't snap pin back via forward-geocode until user edits a field. */
+  const pinDrivenRef = useRef(false);
   const reverseAbortRef = useRef(null);
 
   const [leafletReady,    setLeafletReady]    = useState(!!window.L);
@@ -247,6 +256,8 @@ const AddressMapPicker = ({
     const controller = new AbortController();
     reverseAbortRef.current = controller;
 
+    pinDrivenRef.current = true;
+    suppressForwardGeocodeRef.current = true;
     applyPinOnMap(lat, lng, fieldsRef.current, { fly });
     onSelectSuggestion({ ...fieldsRef.current, lat, lng });
     setGeocoding(true);
@@ -261,16 +272,17 @@ const AddressMapPicker = ({
         addressdetails: '1',
       });
       const res = await fetch(`https://nominatim.openstreetmap.org/reverse?${params}`, {
-        headers: { 'Accept-Language': 'en', 'User-Agent': 'DKMerchCheckout/1.0' },
+        headers: { Accept: 'application/json', 'Accept-Language': 'en' },
         signal: controller.signal,
       });
       const data = await res.json();
       if (controller.signal.aborted) return;
 
       const parsed = parseNominatimAddress(data);
-      // Keep previous street if Nominatim only returned area-level names
+      // Pin move always replaces street from lookup (do not keep the old street).
+      // Area fields may fall back if Nominatim omitted them.
       const merged = {
-        address: parsed.address || fieldsRef.current.address || '',
+        address: parsed.address || '',
         barangay: parsed.barangay || fieldsRef.current.barangay || '',
         city: parsed.city || fieldsRef.current.city || '',
         province: parsed.province || fieldsRef.current.province || '',
@@ -278,14 +290,17 @@ const AddressMapPicker = ({
       };
       fieldsRef.current = merged;
       suppressForwardGeocodeRef.current = true;
+      pinDrivenRef.current = true;
       onFieldsChange(merged);
       onSelectSuggestion({ ...merged, lat, lng });
       applyPinOnMap(lat, lng, merged, { fly: false });
 
       const withinNCR = isWithinRiderRange(lat, lng, storeLat, storeLng);
       setStatusText(withinNCR
-        ? 'Address filled from pin — edit fields if needed'
-        : '⚠️ Outside rider area — address filled · LBC Express'
+        ? (merged.address
+          ? 'Address updated from pin — edit fields if needed'
+          : 'Pin set — enter street address manually')
+        : '⚠️ Outside rider area — address updated · LBC Express'
       );
     } catch (err) {
       if (err?.name === 'AbortError') return;
@@ -295,12 +310,12 @@ const AddressMapPicker = ({
         setGeocoding(false);
         reverseAbortRef.current = null;
       }
-      setTimeout(() => { suppressForwardGeocodeRef.current = false; }, 1200);
+      setTimeout(() => { suppressForwardGeocodeRef.current = false; }, 2500);
     }
   }, [applyPinOnMap, onFieldsChange, onSelectSuggestion, storeLat, storeLng]);
 
   const geocodeFilledAddress = useCallback(async () => {
-    if (suppressForwardGeocodeRef.current) return false;
+    if (suppressForwardGeocodeRef.current || pinDrivenRef.current) return false;
     const fields = fieldsRef.current;
     const street = (fields.address || '').trim();
     const cty = (fields.city || '').trim();
@@ -433,10 +448,11 @@ const AddressMapPicker = ({
     }
   }, []);
 
-  // While map is open, keep pin aligned with filled address fields
+  // While map is open, keep pin aligned with manually typed address fields
+  // (skipped after pin drag/tap/search until the user edits a field)
   useEffect(() => {
     if (!mapVisible || !mapInstanceRef.current) return;
-    if (suppressForwardGeocodeRef.current) return;
+    if (suppressForwardGeocodeRef.current || pinDrivenRef.current) return;
     if (!(address || '').trim() && !(city || '').trim()) return;
     const t = setTimeout(() => { geocodeFilledAddress(); }, 800);
     return () => clearTimeout(t);
@@ -484,6 +500,7 @@ const AddressMapPicker = ({
   };
 
   const handleField = (field, val) => {
+    pinDrivenRef.current = false;
     onFieldsChange({ address, barangay, city, province, zipCode, [field]: val });
   };
 
@@ -977,7 +994,11 @@ const Checkout = () => {
       province: province ?? prev.province,
       zipCode: zipCode ?? prev.zipCode,
     }));
-    if (lat != null && lng != null) setAddressCoords({ lat, lng });
+    if (lat != null && lng != null) {
+      const coords = { lat, lng };
+      setAddressCoords(coords);
+      setSavedCoords(coords);
+    }
   };
 
   const isContactComplete = () =>
