@@ -560,6 +560,88 @@ export const approveDamageRefund = action({
 });
 
 /**
+ * Admin cancels an order before confirm (pending).
+ * Unpaid → cancel immediately. Paid → PayMongo refund, then cancel + restore stock.
+ */
+export const adminCancelOrder = action({
+  args: {
+    orderId: v.string(),
+    reason: v.string(),
+  },
+  handler: async (ctx, { orderId, reason }) => {
+    const order = await ctx.runQuery(api.orders.getOrderById, { orderId });
+    if (!order) return { success: false, error: "Order not found." };
+
+    const status = String(order.orderStatus || order.status || "").toLowerCase();
+    if (status === "cancelled") {
+      return { success: false, error: "Order is already cancelled." };
+    }
+    if (status === "completed") {
+      return { success: false, error: "Completed orders cannot be cancelled." };
+    }
+    if (status === "shipped" || status === "out_for_delivery") {
+      return {
+        success: false,
+        error: "Cannot cancel while the order is shipped / out for delivery.",
+      };
+    }
+
+    const wasPaid = String(order.paymentStatus || "").toLowerCase() === "paid";
+    const isUnconfirmed = !status || status === "pending" || status === "pending payment";
+    if (wasPaid && !isUnconfirmed) {
+      return {
+        success: false,
+        error: "Paid confirmed orders need the cancel-request / refund flow.",
+      };
+    }
+
+    const amount = Number(order.finalTotal ?? order.total ?? 0);
+    let refunded = false;
+    let refundId = "";
+
+    if (wasPaid && amount > 0) {
+      const pay = await refundPaymongoPayment(order, amount, `Admin cancel ${orderId}`);
+      if (!pay.refunded) {
+        // No PayMongo session (e.g. manually marked paid) — still allow cancel
+        if (order.paymentLinkId) {
+          return {
+            success: false,
+            error: pay.error || "PayMongo refund failed. Try again or refund manually.",
+          };
+        }
+      } else {
+        refunded = true;
+        refundId = pay.refundId;
+      }
+    }
+
+    const result = await ctx.runMutation(api.orders.applyAdminCancel, {
+      orderId,
+      reason,
+      refunded,
+      refundId: refundId || undefined,
+      refundAmount: wasPaid ? amount : 0,
+    });
+
+    if (!result?.success) {
+      return {
+        success: false,
+        error: result?.error || "Cancel failed after refund. Contact support.",
+        refunded,
+        refundId,
+      };
+    }
+
+    return {
+      success: true,
+      refunded,
+      refundAmount: wasPaid ? amount : 0,
+      refundId,
+    };
+  },
+});
+
+/**
  * Admin approves a customer cancel request.
  * If paid → refund via PayMongo, then finalize cancel.
  */

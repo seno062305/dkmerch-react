@@ -507,6 +507,7 @@ const AdminOrders = () => {
   const resolveRefundMutation     = useMutation(api.orders.resolveRefund);
   const rejectCustomerCancelMutation = useMutation(api.orders.rejectCustomerCancel);
   const approveCustomerCancelAction  = useAction(api.payments.approveCustomerCancel);
+  const adminCancelOrderAction       = useAction(api.payments.adminCancelOrder);
   const approveDamageRefundAction    = useAction(api.payments.approveDamageRefund);
   const [acceptingLbcId, setAcceptingLbcId] = useState(null);
   const [lbcApproveOrder, setLbcApproveOrder] = useState(null);
@@ -961,25 +962,37 @@ const AdminOrders = () => {
 
   const handleCancelWithReason = async (orderId, reason) => {
     const target = orders?.find((o) => o.orderId === orderId) || selectedOrder;
-    if (String(target?.paymentStatus || '').toLowerCase() === 'paid') {
-      showNotification('Paid orders cannot be cancelled directly. Use the cancel request / refund flow.', 'error');
+    const wasPaid = String(target?.paymentStatus || '').toLowerCase() === 'paid';
+    const status = String(target?.orderStatus || '').toLowerCase();
+    const isUnconfirmed = !status || status === 'pending';
+    // Paid + already confirmed → still use cancel-request / refund flow
+    if (wasPaid && !isUnconfirmed) {
+      showNotification('Paid confirmed orders need the cancel-request / refund flow.', 'error');
       return;
     }
     try {
-      const result = await updateOrderFieldsMutation({
-        orderId,
-        cancelReason: reason,
-        orderStatus: 'cancelled',
-        status: 'Cancelled',
-      });
+      const result = await adminCancelOrderAction({ orderId, reason });
       if (result?.success === false) {
-        showNotification(result?.message || 'Failed to cancel order.', 'error');
+        showNotification(result?.error || result?.message || 'Failed to cancel order.', 'error');
         return;
       }
       if (selectedOrder?.orderId === orderId) {
-        setSelectedOrder(prev => ({ ...prev, orderStatus: 'cancelled', status: 'Cancelled', cancelReason: reason }));
+        setSelectedOrder((prev) => ({
+          ...prev,
+          orderStatus: 'cancelled',
+          status: 'Cancelled',
+          cancelReason: reason,
+          cancelledBy: 'admin',
+        }));
       }
-      showNotification('Order cancelled.', 'success');
+      showNotification(
+        wasPaid && result?.refunded
+          ? 'Order cancelled. PayMongo refund sent to customer.'
+          : wasPaid
+            ? 'Order cancelled. Check refund if payment was manual.'
+            : 'Order cancelled.',
+        'success'
+      );
     } catch (err) {
       console.error('Failed to cancel order:', err);
       showNotification(err?.data || err?.message || 'Failed to cancel order. Please try again.', 'error');
@@ -1790,8 +1803,8 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
   const isWalkIn       = isWalkInOrder(order);
   const isRiderManaged = !isLbc && (currentStatus === 'shipped' || currentStatus === 'out_for_delivery');
   const canConfirm     = isPaid && currentStatus === 'pending' && order.cancelRequestStatus !== 'requested';
-  // Paid orders must go through cancel-request + refund — not direct Cancel Order
-  const canCancel      = !isDone && !isRiderManaged && !isPaid;
+  // Unpaid anytime (before rider). Paid only while still pending (before admin confirm) — auto-refunds.
+  const canCancel      = !isDone && !isRiderManaged && (!isPaid || currentStatus === 'pending');
   const hasPromo       = !!(order.promoCode && discount > 0);
   const walkInPhone    = String(order.phone || '').trim();
   const rawNote        = String(order.notes || '').trim();
@@ -2534,13 +2547,22 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
                       className={`status-btn cancelled ${!canCancel ? 'is-blocked' : ''}`}
                       onClick={() => canCancel && setShowCancelModal(true)}
                       disabled={!canCancel}
-                      title={isPaid ? 'Paid orders cannot be cancelled directly' : 'Cancel Order'}
+                      title={
+                        canCancel
+                          ? (isPaid ? 'Cancel & refund via PayMongo' : 'Cancel Order')
+                          : 'Paid confirmed — use cancel request / refund flow'
+                      }
                     >
                       <i className="fas fa-times-circle"></i><span>Cancel Order</span>
                     </button>
-                    {isPaid && (
+                    {isPaid && currentStatus === 'pending' && (
+                      <div className="block-reason" style={{ color: '#0ea5e9' }}>
+                        <i className="fas fa-info-circle"></i> Paid + pending — cancel will auto-refund
+                      </div>
+                    )}
+                    {isPaid && currentStatus !== 'pending' && (
                       <div className="block-reason">
-                        <i className="fas fa-lock"></i> Paid — use cancel request / refund flow
+                        <i className="fas fa-lock"></i> Paid & confirmed — use cancel request / refund flow
                       </div>
                     )}
                   </div>
@@ -2706,6 +2728,9 @@ const CancelReasonModal = ({ order, onConfirm, onClose }) => {
   const [error,          setError]          = useState('');
   const isOther     = selectedPreset === 'Other reason';
   const finalReason = isOther ? customReason.trim() : selectedPreset;
+  const isPaidPending =
+    String(order?.paymentStatus || '').toLowerCase() === 'paid'
+    && String(order?.orderStatus || '').toLowerCase() === 'pending';
 
   return (
     <div className="cancel-reason-overlay" onClick={onClose}>
@@ -2717,6 +2742,11 @@ const CancelReasonModal = ({ order, onConfirm, onClose }) => {
         </div>
         <div className="cancel-reason-body">
           <p className="cancel-reason-prompt">Select or enter a cancellation reason.</p>
+          {isPaidPending && (
+            <p className="cancel-reason-prompt" style={{ color: '#0ea5e9', marginTop: 0 }}>
+              This order is paid but not confirmed yet — cancelling will refund the customer via PayMongo.
+            </p>
+          )}
           <div className="cancel-presets">
             {CANCEL_PRESETS.map(preset => (
               <button key={preset} className={`cancel-preset-chip ${selectedPreset === preset ? 'active' : ''}`} onClick={() => { setSelectedPreset(preset); setError(''); if (preset !== 'Other reason') setCustomReason(''); }}>

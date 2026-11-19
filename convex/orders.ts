@@ -451,14 +451,15 @@ export const updateOrderStatus = mutation({
       .first();
     if (!order) return { success: false };
 
-    // Direct admin cancel is only for unpaid orders
+    // Paid cancels must go through payments.adminCancelOrder / cancel-request flow
+    // (auto-refund). Exception: never via this status-only mutation.
     if (
       String(orderStatus || "").toLowerCase() === "cancelled"
       && String(order.paymentStatus || "").toLowerCase() === "paid"
     ) {
       return {
         success: false,
-        message: "Paid orders cannot be cancelled directly. Use the cancel request / refund flow.",
+        message: "Paid orders cannot be cancelled here. Use Cancel Order (pending) or the cancel-request refund flow.",
       };
     }
 
@@ -732,14 +733,15 @@ export const updateOrderFields = mutation({
       Object.entries(updates).filter(([, v]) => v !== undefined)
     );
 
-    // Direct admin cancel is only for unpaid orders (paid → cancel-request + refund)
+    // Paid cancels need refund handling — use payments.adminCancelOrder (pending)
+    // or approveCustomerCancel (cancel-request flow).
     if (
       String(filtered.orderStatus || "").toLowerCase() === "cancelled"
       && String(order.paymentStatus || "").toLowerCase() === "paid"
     ) {
       return {
         success: false,
-        message: "Paid orders cannot be cancelled directly. Use the cancel request / refund flow.",
+        message: "Paid orders cannot be cancelled here. Use Cancel Order (before confirm) or the cancel-request refund flow.",
       };
     }
 
@@ -1540,6 +1542,152 @@ export const rejectCustomerCancel = mutation({
 });
 
 /**
+ * Admin cancels an order before confirm (pending), with optional PayMongo refund info.
+ * Called from payments.adminCancelOrder. Unpaid confirmed orders may also use this.
+ */
+export const applyAdminCancel = mutation({
+  args: {
+    orderId: v.string(),
+    reason: v.string(),
+    refunded: v.optional(v.boolean()),
+    refundId: v.optional(v.string()),
+    refundAmount: v.optional(v.number()),
+  },
+  handler: async ({ db, scheduler }, args) => {
+    const order = await db
+      .query("orders")
+      .withIndex("by_orderId", (q) => q.eq("orderId", args.orderId))
+      .first();
+    if (!order) return { success: false, error: "Order not found." };
+
+    const status = String(order.orderStatus || order.status || "").toLowerCase();
+    if (status === "cancelled") {
+      return { success: false, error: "Order is already cancelled." };
+    }
+    if (status === "completed") {
+      return { success: false, error: "Completed orders cannot be cancelled." };
+    }
+    if (status === "shipped" || status === "out_for_delivery") {
+      return {
+        success: false,
+        error: "Cannot cancel while the order is shipped / out for delivery.",
+      };
+    }
+
+    const wasPaid = String(order.paymentStatus || "").toLowerCase() === "paid";
+    const isUnconfirmed = !status || status === "pending" || status === "pending payment";
+    // Paid: only before admin confirms. Unpaid: pending or processing (confirmed) OK.
+    if (wasPaid && !isUnconfirmed) {
+      return {
+        success: false,
+        error: "Paid confirmed orders need the cancel-request / refund flow.",
+      };
+    }
+
+    const reason = String(args.reason || "").trim();
+    if (reason.length < 3) {
+      return { success: false, error: "Cancellation reason is required." };
+    }
+
+    const now = new Date().toISOString();
+    const amount = Number(args.refundAmount ?? order.finalTotal ?? order.total ?? 0);
+    const existingHistory = (order as any).refundHistory || [];
+    const patch: any = {
+      status: "Cancelled",
+      orderStatus: "cancelled",
+      cancelledAt: now,
+      cancelReason: reason,
+      cancelledBy: "admin",
+    };
+
+    // Clear / resolve any open customer cancel request
+    if (order.cancelRequestStatus === "requested") {
+      patch.cancelRequestStatus = "approved";
+      patch.cancelRequestNote = "Cancelled directly by admin";
+      patch.cancelResolvedAt = now;
+    }
+
+    if (wasPaid) {
+      patch.refundStatus = "approved";
+      patch.refundReason = "admin_cancel";
+      patch.refundAmount = amount;
+      patch.refundRequestedAt = now;
+      patch.refundResolvedAt = now;
+      patch.refundPaidAt = now;
+      patch.refundAccountName = order.customerName || "";
+      patch.refundAdminNote = args.refunded
+        ? "Admin cancelled (before confirm) — refunded via PayMongo"
+        : "Admin cancelled (before confirm) — refund may need manual follow-up";
+      if (args.refundId) patch.paymongoRefundId = args.refundId;
+      patch.refundHistory = [
+        ...existingHistory,
+        {
+          requestedAt: now,
+          resolvedAt: now,
+          status: "approved",
+          reason: "admin_cancel",
+          refundAmount: amount,
+          refundId: args.refundId || "",
+          adminNote: reason,
+        },
+      ];
+    }
+
+    if (order.stockDeducted) {
+      for (const item of order.items || []) {
+        const qty = Number(item.quantity || 1);
+        if (!item?.id || qty <= 0) continue;
+        try {
+          const product = await db.get(item.id as any);
+          if (product && typeof (product as any).stock === "number") {
+            await db.patch(product._id, {
+              stock: Number((product as any).stock) + qty,
+            });
+          }
+        } catch { /* ignore */ }
+      }
+      patch.stockDeducted = false;
+    }
+
+    await db.patch(order._id, patch);
+
+    const shortId = shortOrderId(args.orderId);
+    if (order.email) {
+      const note = wasPaid
+        ? `${reason}. Refund of ₱${amount.toLocaleString("en-PH")} was initiated to your payment method.`
+        : reason;
+      await scheduler.runAfter(0, internal.sendEmail.sendOrderStatusUpdateEmail, {
+        to: order.email,
+        customerName: order.customerName || "Customer",
+        orderId: args.orderId,
+        orderStatus: "cancelled",
+        actorLabel: "Admin",
+        note,
+      });
+      const body = wasPaid
+        ? `Admin cancelled your order. Refund ₱${amount.toLocaleString("en-PH")} is on the way.`
+        : `Admin cancelled your order. Reason: ${reason}`;
+      await scheduler.runAfter(0, internal.webPush.sendToEmail, {
+        email: order.email,
+        title: `Order cancelled · #${shortId}`,
+        body,
+        url: `/track-order?order=${encodeURIComponent(args.orderId)}`,
+      });
+      await notifyCustomerInApp(db, {
+        email: order.email,
+        type: "order_cancelled",
+        title: `Order cancelled · #${shortId}`,
+        body,
+        url: `/track-order?order=${encodeURIComponent(args.orderId)}`,
+        orderId: args.orderId,
+      });
+    }
+
+    return { success: true, refunded: !!args.refunded, refundAmount: wasPaid ? amount : 0 };
+  },
+});
+
+/**
  * Finalize cancel after admin approves (and optional PayMongo refund).
  * Called from payments.approveCustomerCancel action.
  */
@@ -1567,7 +1715,8 @@ export const applyCustomerCancel = mutation({
     const amount = Number(args.refundAmount ?? order.finalTotal ?? order.total ?? 0);
     const reason = order.cancelRequestReason || "Cancelled by customer (admin approved)";
 
-    if (wasPaid && !args.proofPhotoId) {
+    // PayMongo auto-refund does not need screenshot proof; manual path still does
+    if (wasPaid && !args.proofPhotoId && !args.refunded) {
       return {
         success: false,
         error: "Upload a screenshot proof that the refund was sent before approving.",
