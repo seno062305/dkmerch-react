@@ -329,18 +329,12 @@
 .order-view-btn {
   width: auto;
   justify-content: center;
-  font-size: 11px;
-  font-weight: 700;
-  padding: 4px 9px;
   margin: 0;
   position: relative;
   background: #111827 !important;
   color: #fff !important;
   border: none !important;
-  border-radius: 7px;
   box-shadow: none;
-  line-height: 1.2;
-  gap: 4px;
 }
 .order-view-btn i { font-size: 10px; }
 
@@ -1715,21 +1709,38 @@
 .order-card-refund-expired { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #9ca3af; margin-bottom: 6px; }
 .order-card-refund-expired i { font-size: 10px; }
 
-/* Actions under order cards — compact inline chips */
+/* Actions under order cards — same-size compact chips in one row */
 .order-card-actions {
   display: flex;
   flex-direction: row;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 5px;
   margin-top: 4px;
   width: 100%;
-  align-items: center;
+  align-items: stretch;
 }
 .order-card-actions > .btn,
 .order-card-actions > button {
-  flex: 0 0 auto;
+  flex: 1 1 0;
   width: auto !important;
-  min-height: 0;
+  min-width: 0;
+  min-height: 28px;
+  height: 28px;
+  padding: 0 8px !important;
+  font-size: 10px !important;
+  font-weight: 700;
+  border-radius: 7px !important;
+  gap: 4px !important;
+  line-height: 1;
+  box-sizing: border-box;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+.order-card-actions > .btn i,
+.order-card-actions > button i {
+  font-size: 10px !important;
 }
 
 .order-card-actions-row {
@@ -1787,27 +1798,14 @@
 
 /* Cancel order (active tab) */
 .order-cancel-btn {
-  width: auto;
-  justify-content: center;
-  font-size: 11px;
-  padding: 4px 9px;
-  background: #fff;
-  border: 1px solid #dc2626;
-  color: #dc2626;
-  border-radius: 7px;
+  background: #fff !important;
+  border: 1px solid #dc2626 !important;
+  color: #dc2626 !important;
   cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  transition: all 0.2s;
-  font-weight: 700;
   margin: 0;
-  box-sizing: border-box;
-  line-height: 1.2;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
 }
-.order-cancel-btn i { font-size: 10px; }
-.order-cancel-btn:hover:not(:disabled) { background: #fef2f2; border-color: #b91c1c; color: #b91c1c; }
+.order-cancel-btn:hover:not(:disabled) { background: #fef2f2 !important; border-color: #b91c1c !important; color: #b91c1c !important; }
 .order-cancel-btn:disabled { opacity: 0.65; cursor: not-allowed; }
 .modal-cancel-order-btn {
   margin: 0 0 14px;
@@ -2282,16 +2280,11 @@
   margin: 12px 16px;
 }
 .order-card-lbc-btn {
-  width: auto !important;
   margin: 0 !important;
-  justify-content: center;
-  padding: 4px 9px !important;
-  font-size: 11px !important;
-  font-weight: 700;
-  border-radius: 7px !important;
-  gap: 4px !important;
-  line-height: 1.2;
-  box-shadow: none;
+  background: linear-gradient(135deg, #ea580c, #c2410c) !important;
+  color: #fff !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 .order-card-lbc-btn i { font-size: 10px; }
 .lbc-track-panel-icon {

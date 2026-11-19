@@ -299,7 +299,8 @@ const RewardsModal = ({ onClose }) => {
                   setRedeeming(null); setPickSuccess(null);
                 }}
               >
-                <i className={`fas ${t.icon}`}></i> {t.label}
+                <i className={`fas ${t.icon}`}></i>
+                <span className="rm-tab-label">{t.label}</span>
               </button>
             ))}
           </div>

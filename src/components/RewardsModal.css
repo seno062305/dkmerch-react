@@ -19,7 +19,9 @@
   border-radius: 20px;
   width: 100%;
   max-width: 520px;
-  max-height: 88vh;
+  /* Fixed shell size so tab switches don't grow/shrink the modal */
+  height: min(88vh, 640px);
+  max-height: min(88vh, 640px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -116,7 +118,7 @@
   letter-spacing: 0.4px;
 }
 
-/* ── Tabs ── */
+/* ── Tabs — equal width for all ── */
 .rm-tabs {
   display: flex;
   background: white;
@@ -125,11 +127,13 @@
 }
 
 .rm-tab {
-  flex: 1;
-  padding: 12px 8px;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 44px;
+  padding: 0 6px;
   border: none;
   background: transparent;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: #9ca3af;
   cursor: pointer;
@@ -138,17 +142,24 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  transition: all 0.2s;
+  gap: 4px;
+  transition: color 0.2s, background 0.2s, border-color 0.2s;
+  white-space: nowrap;
+  box-sizing: border-box;
 }
 
 .rm-tab:hover  { color: #fc1268; background: #fdf2f8; }
 .rm-tab.active { color: #fc1268; border-bottom-color: #fc1268; background: #fdf2f8; }
-.rm-tab i { font-size: 12px; }
+.rm-tab i { font-size: 11px; flex-shrink: 0; }
+.rm-tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* ── Body ── */
 .rm-body {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -855,9 +866,17 @@
   }
   .rm-modal {
     border-radius: 16px;
-    max-height: min(82dvh, 720px);
+    height: min(82dvh, 620px);
+    max-height: min(82dvh, 620px);
     max-width: min(420px, calc(100vw - 28px));
   }
+  .rm-tab {
+    height: 42px;
+    font-size: 10px;
+    padding: 0 4px;
+    gap: 3px;
+  }
+  .rm-tab i { font-size: 10px; }
   .rm-picker-overlay {
     padding: 14px;
     align-items: center;
