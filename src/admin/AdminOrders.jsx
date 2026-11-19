@@ -1622,11 +1622,11 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onDele
   const hasCancelRequest = !!(order.cancelRequestStatus);
   const pm = getPaymentMethodLabel(order);
 
-  // Print Waybill only while packing (confirmed). Hide once shipped / OFD / done.
+  // Rider waybill only — never for LBC; only while confirmed (hide after shipped).
   const canPrintWaybill =
     isPaid
-    && currentStatus === 'confirmed'
-    && !['shipped', 'out_for_delivery', 'completed', 'cancelled'].includes(currentStatus);
+    && !isLbc
+    && currentStatus === 'confirmed';
 
   const handleRefundResolve = async (status) => {
     setResolvingRefund(true);
