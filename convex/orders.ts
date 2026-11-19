@@ -389,7 +389,103 @@ export const updateOrderStatus = mutation({
 });
 
 /**
- * Admin approves LBC delivery with required proof photo.
+ * Admin marks a confirmed LBC order as shipped (with photo → customer chat).
+ * Moves the order to the Shipped tab; Confirm Deliver unlocks after this.
+ */
+export const markLbcShipped = mutation({
+  args: {
+    orderId: v.string(),
+    /** Shipping proof image (data URL) */
+    photo: v.string(),
+    /** Optional Convex storage id so the same photo is sent in customer chat */
+    imageStorageId: v.optional(v.id("_storage")),
+  },
+  handler: async ({ db, scheduler }, { orderId, photo, imageStorageId }) => {
+    const order = await db
+      .query("orders")
+      .withIndex("by_orderId", (q) => q.eq("orderId", orderId))
+      .first();
+    if (!order) return { success: false, message: "Order not found." };
+
+    if (!(await isLbcDelivery(db, order))) {
+      return { success: false, message: "This order is not an LBC shipment." };
+    }
+    if (String(order.paymentStatus || "").toLowerCase() !== "paid") {
+      return { success: false, message: "Order must be paid before marking as shipped." };
+    }
+
+    const status = String(order.orderStatus || "").toLowerCase();
+    if (status === "cancelled") {
+      return { success: false, message: "Canceled orders cannot be shipped." };
+    }
+    if (status === "completed") {
+      return { success: false, message: "Order is already delivered." };
+    }
+    if (status === "pending") {
+      return { success: false, message: "Confirm the order first, then mark it as shipped." };
+    }
+    if (status === "shipped" || status === "out_for_delivery") {
+      return { success: true, alreadyShipped: true };
+    }
+    if (status !== "confirmed") {
+      return { success: false, message: "Only processing (confirmed) LBC orders can be marked shipped." };
+    }
+
+    const proof = String(photo || "").trim();
+    if (!proof) {
+      return { success: false, message: "Upload a shipping photo before marking as shipped." };
+    }
+    if (proof.length > 900_000) {
+      return { success: false, message: "Photo is too large. Please use a smaller image." };
+    }
+
+    const now = new Date().toISOString();
+    await db.patch(order._id, {
+      deliveryMethod: "lbc",
+      orderStatus: "shipped",
+      status: "Shipped",
+      shippedAt: now,
+      lbcShippedPhoto: proof,
+      ...(imageStorageId ? { lbcShippedPhotoId: imageStorageId } : {}),
+    } as any);
+
+    await scheduler.runAfter(0, internal.supportChat.sendOrderShippedChat, {
+      orderId,
+      imageStorageId: imageStorageId || undefined,
+      isLbc: true,
+    });
+
+    if (order.email) {
+      await notifyCustomerInApp(db, {
+        email: order.email,
+        type: "order_update",
+        title: `Shipped via LBC · #${shortOrderId(orderId)}`,
+        body: "Your order was marked shipped. Check chat for the shipping photo.",
+        url: `/track-order?order=${encodeURIComponent(orderId)}`,
+        orderId,
+      });
+      await scheduler.runAfter(0, internal.webPush.sendToEmail, {
+        email: order.email,
+        title: `Shipped via LBC · #${shortOrderId(orderId)}`,
+        body: "Your order is on the way via LBC Express.",
+        url: `/track-order?order=${encodeURIComponent(orderId)}`,
+      });
+      await scheduler.runAfter(0, internal.sendEmail.sendOrderStatusUpdateEmail, {
+        to: order.email,
+        customerName: order.customerName || "Customer",
+        orderId,
+        orderStatus: "shipped",
+        actorLabel: "Admin",
+        note: "Shipped via LBC Express. Shipping proof was sent to your chat.",
+      });
+    }
+
+    return { success: true };
+  },
+});
+
+/**
+ * Admin confirms LBC delivery with required proof photo.
  * Marks order Delivered and shows proof on the customer Track Order page.
  */
 export const approveLbcDelivery = mutation({
@@ -413,12 +509,18 @@ export const approveLbcDelivery = mutation({
       return { success: true, alreadyApproved: true };
     }
     if (String(order.paymentStatus || "").toLowerCase() !== "paid") {
-      return { success: false, message: "Order must be paid before approving LBC delivery." };
+      return { success: false, message: "Order must be paid before confirming LBC delivery." };
     }
-    if (String(order.orderStatus || "").toLowerCase() === "pending") {
+    if (status === "pending" || status === "confirmed") {
       return {
         success: false,
-        message: "Confirm the paid order first — then approve LBC delivery from the LBC tab.",
+        message: "Mark the LBC order as Shipped first (with photo), then Confirm Deliver.",
+      };
+    }
+    if (status !== "shipped" && status !== "out_for_delivery") {
+      return {
+        success: false,
+        message: "Only shipped LBC orders can be marked delivered.",
       };
     }
 

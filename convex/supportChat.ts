@@ -388,6 +388,93 @@ export const sendOrderConfirmedChat = internalMutation({
   },
 });
 
+/**
+ * After admin marks LBC (or other) order as shipped: send chat + optional photo.
+ */
+export const sendOrderShippedChat = internalMutation({
+  args: {
+    orderId: v.string(),
+    imageStorageId: v.optional(v.id("_storage")),
+    isLbc: v.optional(v.boolean()),
+  },
+  handler: async ({ db }, { orderId, imageStorageId, isLbc }) => {
+    const order = await db
+      .query("orders")
+      .withIndex("by_orderId", (q: any) => q.eq("orderId", orderId))
+      .first();
+    if (!order?.email) return { success: false, reason: "no_email" };
+
+    const email = normalizeEmail(order.email);
+    if (!email) return { success: false, reason: "no_email" };
+
+    const lbc = !!isLbc || String(order.deliveryMethod || "").toLowerCase() === "lbc";
+    const shortId = shortOrderId(orderId);
+    const name = String(order.customerName || "Customer").trim() || "Customer";
+    const body = [
+      `Hi ${name}!`,
+      ``,
+      lbc
+        ? `Your order #${shortId} has been shipped via LBC Express.`
+        : `Your order #${shortId} has been marked as shipped.`,
+      imageStorageId
+        ? `Here's the shipping proof photo:`
+        : `We'll update you again when it's out for delivery / delivered.`,
+      ``,
+      `Track your order anytime in the app.`,
+    ].join("\n");
+    const preview = imageStorageId
+      ? `Shipped · #${shortId} 📷`
+      : `Order #${shortId} shipped`;
+    const now = Date.now();
+    let thread = await findThreadByEmail(db, email);
+
+    if (!thread) {
+      const threadId = await db.insert("supportThreads", {
+        customerEmail: email,
+        customerName: order.customerName || "Customer",
+        customerUserId: order.userId ? String(order.userId) : undefined,
+        lastMessageAt: now,
+        lastMessagePreview: preview,
+        unreadByAdmin: 0,
+        unreadByCustomer: 1,
+        status: "open",
+        updatedAt: now,
+        createdAt: now,
+      });
+      await db.insert("supportMessages", {
+        threadId,
+        senderRole: "admin",
+        senderName: "DKMerch Admin",
+        body,
+        imageStorageId: imageStorageId || undefined,
+        createdAt: now,
+      });
+      await upsertPresence(db, "admin", now);
+      return { success: true, threadId };
+    }
+
+    await db.insert("supportMessages", {
+      threadId: thread._id,
+      senderRole: "admin",
+      senderName: "DKMerch Admin",
+      body,
+      imageStorageId: imageStorageId || undefined,
+      createdAt: now,
+    });
+    await db.patch(thread._id, {
+      customerName: order.customerName || thread.customerName,
+      lastMessageAt: now,
+      lastMessagePreview: preview,
+      unreadByCustomer: (thread.unreadByCustomer || 0) + 1,
+      status: "open",
+      archivedAt: 0,
+      adminOnlineAt: now,
+      updatedAt: now,
+    });
+    await upsertPresence(db, "admin", now);
+    return { success: true, threadId: thread._id };
+  },
+});
 
 export const listThreadsForAdmin = query({
   args: {},

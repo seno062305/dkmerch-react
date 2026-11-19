@@ -495,6 +495,8 @@ const AdminOrders = () => {
   const updateOrderStatusMutation = useMutation(api.orders.updateOrderStatus);
   const updateOrderFieldsMutation = useMutation(api.orders.updateOrderFields);
   const approveLbcDeliveryMutation = useMutation(api.orders.approveLbcDelivery);
+  const markLbcShippedMutation = useMutation(api.orders.markLbcShipped);
+  const generateChatUploadUrl = useMutation(api.supportChat.generateChatUploadUrl);
   const resolveRefundMutation     = useMutation(api.orders.resolveRefund);
   const rejectCustomerCancelMutation = useMutation(api.orders.rejectCustomerCancel);
   const approveCustomerCancelAction  = useAction(api.payments.approveCustomerCancel);
@@ -815,6 +817,11 @@ const AdminOrders = () => {
   };
 
   const openLbcApprove = (order) => {
+    const st = String(order?.orderStatus || '').toLowerCase();
+    if (st !== 'shipped' && st !== 'out_for_delivery') {
+      showNotification('Mark this LBC order as Shipped first (View → Shipped with photo).', 'warning');
+      return;
+    }
     setLbcApproveOrder(order);
     setLbcApprovePhoto('');
   };
@@ -1201,9 +1208,13 @@ const AdminOrders = () => {
                       </td>
                     )}
                     <td data-label="Rider">
-                      {order.riderInfo
-                        ? <div style={{ fontSize: '12px' }}><strong>{order.riderInfo.name}</strong><div style={{ color: '#888' }}>{order.riderInfo.plate}</div></div>
-                        : <span style={{ color: '#ccc', fontSize: '12px' }}>-</span>}
+                      {isLbcDeliveryOrder(order) ? (
+                        <span className="orders-lbc-chip orders-lbc-chip--rider"><i className="fas fa-truck"></i> LBC</span>
+                      ) : order.riderInfo ? (
+                        <div style={{ fontSize: '12px' }}><strong>{order.riderInfo.name}</strong><div style={{ color: '#888' }}>{order.riderInfo.plate}</div></div>
+                      ) : (
+                        <span style={{ color: '#ccc', fontSize: '12px' }}>-</span>
+                      )}
                     </td>
                     <td data-label="Date" style={{ whiteSpace: 'nowrap', fontSize: '13px' }}>
                       {order._creationTime
@@ -1349,7 +1360,7 @@ const AdminOrders = () => {
               ) : activeTab === 'lbc' ? (
                 <>
                   <h2><i className="fas fa-truck"></i> LBC Incoming</h2>
-                  <p>Awaiting admin approval with delivery proof</p>
+                  <p>Ship first, then Confirm Deliver with proof</p>
                 </>
               ) : (
                 <>
@@ -1364,7 +1375,7 @@ const AdminOrders = () => {
                 <i className={`fas ${activeTab === 'lbc' ? 'fa-inbox' : 'fa-check-circle'}`}></i>
                 <p>
                   {activeTab === 'lbc'
-                    ? 'No incoming LBC orders to approve'
+                    ? 'No incoming LBC orders'
                     : activeTab === 'refunds'
                       ? 'No refund requests'
                       : 'No cancel requests'}
@@ -1380,6 +1391,8 @@ const AdminOrders = () => {
                   const busy = acceptingLbcId === order.orderId;
                   const isCancelPanel = activeTab === 'cancelled';
                   const isLbcPanel = activeTab === 'lbc';
+                  const lbcStatus = String(order.orderStatus || '').toLowerCase();
+                  const canConfirmDeliver = isLbcPanel && (lbcStatus === 'shipped' || lbcStatus === 'out_for_delivery');
                   return (
                     <div
                       key={order.orderId}
@@ -1390,7 +1403,7 @@ const AdminOrders = () => {
                           <strong>#{formatOrderShortId(order)}</strong>
                           {isLbcPanel ? (
                             <span className="orders-refund-flag orders-refund-flag--lbc">
-                              <i className="fas fa-truck"></i> LBC
+                              <i className="fas fa-truck"></i> {lbcStatus === 'shipped' || lbcStatus === 'out_for_delivery' ? 'Shipped' : 'LBC'}
                             </span>
                           ) : isCancelPanel ? (
                             <span className="orders-refund-flag orders-refund-flag--cancel">
@@ -1423,14 +1436,18 @@ const AdminOrders = () => {
                             type="button"
                             className="orders-priority-confirm"
                             onClick={() => openLbcApprove(order)}
-                            disabled={busy}
+                            disabled={busy || !canConfirmDeliver}
+                            title={canConfirmDeliver ? 'Confirm Deliver' : 'Mark as Shipped first from View'}
                           >
                             {busy
-                              ? <><i className="fas fa-spinner fa-spin"></i> Approving…</>
-                              : <><i className="fas fa-check"></i> Approve</>}
+                              ? <><i className="fas fa-spinner fa-spin"></i> Confirming…</>
+                              : <><i className="fas fa-check"></i> Confirm Deliver</>}
                           </button>
                         )}
                       </div>
+                      {isLbcPanel && !canConfirmDeliver && (
+                        <p className="orders-lbc-ship-hint">Mark Shipped in View first</p>
+                      )}
                     </div>
                   );
                 })}
@@ -1488,9 +1505,9 @@ const AdminOrders = () => {
             aria-modal="true"
             aria-labelledby="lbc-approve-title"
           >
-            <h3 id="lbc-approve-title">Approve LBC delivery?</h3>
+            <h3 id="lbc-approve-title">Confirm LBC delivery?</h3>
             <p className="lbc-approve-sub">
-              Approve order #{formatOrderShortId(lbcApproveOrder)} for {lbcApproveOrder.customerName || 'the customer'}?
+              Confirm deliver for order #{formatOrderShortId(lbcApproveOrder)} — {lbcApproveOrder.customerName || 'the customer'}?
             </p>
             <p className="lbc-approve-desc">
               Upload proof that LBC already delivered this order. The photo is required and will show on the customer Track Order page.
@@ -1544,8 +1561,8 @@ const AdminOrders = () => {
                 disabled={!lbcApprovePhoto || !!acceptingLbcId}
               >
                 {acceptingLbcId
-                  ? <><i className="fas fa-spinner fa-spin"></i> Approving…</>
-                  : <><i className="fas fa-check"></i> Approve</>}
+                  ? <><i className="fas fa-spinner fa-spin"></i> Confirming…</>
+                  : <><i className="fas fa-check"></i> Confirm Deliver</>}
               </button>
             </div>
           </div>
@@ -1561,6 +1578,34 @@ const AdminOrders = () => {
           onCancelWithReason={handleCancelWithReason}
           onResolveRefund={handleResolveRefund}
           onResolveCancelRequest={handleResolveCancelRequest}
+          onMarkLbcShipped={async (orderId, { photo, imageStorageId }) => {
+            const result = await markLbcShippedMutation({
+              orderId,
+              photo,
+              ...(imageStorageId ? { imageStorageId } : {}),
+            });
+            if (result?.success) {
+              setSelectedOrder((prev) =>
+                prev?.orderId === orderId
+                  ? {
+                      ...prev,
+                      orderStatus: 'shipped',
+                      status: 'Shipped',
+                      shippedAt: new Date().toISOString(),
+                      lbcShippedPhoto: photo,
+                    }
+                  : prev
+              );
+              showNotification(
+                result.alreadyShipped
+                  ? 'Order already marked shipped.'
+                  : `Order #${formatOrderShortId(orderId)} shipped — moved to Shipped tab. Photo sent to customer chat.`,
+                'success'
+              );
+            }
+            return result;
+          }}
+          generateChatUploadUrl={generateChatUploadUrl}
           getStatusColor={getStatusColor}
           getStatusLabel={getStatusLabel}
           storePin={storePin}
@@ -1599,9 +1644,12 @@ const RejectConfirmDialog = ({ order, adminNote, onConfirm, onCancel }) => {
 /* ══════════════════════════════════════
    ORDER MODAL
 ══════════════════════════════════════ */
-const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onResolveRefund, onResolveCancelRequest, getStatusColor, getStatusLabel, storePin = null }) => {
+const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onResolveRefund, onResolveCancelRequest, onMarkLbcShipped, generateChatUploadUrl, getStatusColor, getStatusLabel, storePin = null }) => {
   useBodyScrollLock(true);
   const [showCancelModal,   setShowCancelModal]   = useState(false);
+  const [lbcShipPhoto, setLbcShipPhoto] = useState('');
+  const [shippingLbc, setShippingLbc] = useState(false);
+  const lbcShipInputRef = useRef(null);
   const [proofExpanded,     setProofExpanded]     = useState(false);
   const [photoExpanded2,    setPhotoExpanded2]    = useState(false);
   const [refundAdminNote,   setRefundAdminNote]   = useState('');
@@ -1742,8 +1790,9 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
           {isPaid && currentStatus === 'pending' && !isLbc && <div className="flow-notice success"><i className="fas fa-check-circle"></i><div><strong>Payment received!</strong><p>Confirm order below. Riders can then claim it by scanning the waybill.</p></div></div>}
           {isPaid && currentStatus === 'pending' && isLbc && <div className="flow-notice success"><i className="fas fa-box"></i><div><strong>Payment received — LBC Express</strong><p>Confirm below. This outside-NCR order will not go to riders; ship via LBC and send the tracking ID to the customer.</p></div></div>}
           {isPaid && currentStatus === 'confirmed' && !isLbc && <div className="flow-notice info"><i className="fas fa-motorcycle"></i><div><strong>Processing</strong><p>Order confirmed — visible to riders. They claim it by scanning the waybill.</p></div></div>}
-          {isPaid && currentStatus === 'confirmed' && isLbc && <div className="flow-notice info"><i className="fas fa-truck"></i><div><strong>Processing — LBC</strong><p>Now in the LBC tab. Customer was sent an order-details chat. Upload delivery proof there to Approve.</p></div></div>}
-          {isRiderManaged && <div className="flow-notice purple"><i className="fas fa-shipping-fast"></i><div><strong>Rider is handling delivery</strong><p>Rider confirms via OTP + photo proof.</p></div></div>}
+          {isPaid && currentStatus === 'confirmed' && isLbc && <div className="flow-notice info"><i className="fas fa-truck"></i><div><strong>Processing — LBC</strong><p>Mark as Shipped below (upload photo → auto-sent to customer chat). Then Confirm Deliver in the LBC tab.</p></div></div>}
+          {isPaid && currentStatus === 'shipped' && isLbc && <div className="flow-notice purple"><i className="fas fa-shipping-fast"></i><div><strong>Shipped — LBC</strong><p>Order is in the Shipped tab. Confirm Deliver in the LBC tab with delivery proof when LBC finishes.</p></div></div>}
+          {isRiderManaged && !isLbc && <div className="flow-notice purple"><i className="fas fa-shipping-fast"></i><div><strong>Rider is handling delivery</strong><p>Rider confirms via OTP + photo proof.</p></div></div>}
           {order.cancelRequestStatus === 'requested' && (
             <div className="flow-notice warning">
               <i className="fas fa-ban"></i>
@@ -2248,6 +2297,110 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
                   {!isPaid && <div className="block-reason"><i className="fas fa-lock"></i> Awaiting payment</div>}
                   {isPaid && currentStatus === 'confirmed' && <div className="block-reason" style={{ color: '#0ea5e9' }}><i className="fas fa-check"></i> Processing — order confirmed</div>}
                 </div>
+                {isLbc && isPaid && currentStatus === 'confirmed' && (
+                  <div className="status-btn-wrapper status-btn-wrapper--lbc-ship">
+                    <div className="lbc-ship-box">
+                      <label className="lbc-ship-label">
+                        <i className="fas fa-camera"></i> Shipping photo <em>(required)</em>
+                      </label>
+                      <button
+                        type="button"
+                        className={`lbc-ship-drop ${lbcShipPhoto ? 'has-photo' : ''}`}
+                        onClick={() => lbcShipInputRef.current?.click()}
+                      >
+                        {lbcShipPhoto ? (
+                          <img src={lbcShipPhoto} alt="LBC shipping proof" className="lbc-ship-preview" />
+                        ) : (
+                          <span><i className="fas fa-cloud-upload-alt"></i> Upload photo to ship</span>
+                        )}
+                      </button>
+                      <input
+                        ref={lbcShipInputRef}
+                        type="file"
+                        accept="image/*"
+                        hidden
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          e.target.value = '';
+                          if (!file) return;
+                          if (file.size > 4_500_000) {
+                            alert('Photo is too large. Please use a smaller image.');
+                            return;
+                          }
+                          const reader = new FileReader();
+                          reader.onload = (ev) => setLbcShipPhoto(String(ev.target?.result || ''));
+                          reader.readAsDataURL(file);
+                        }}
+                      />
+                      {lbcShipPhoto && (
+                        <button type="button" className="lbc-ship-remove" onClick={() => setLbcShipPhoto('')}>
+                          Remove photo
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="status-btn shipped lbc-ship-submit"
+                        disabled={!lbcShipPhoto || shippingLbc || !onMarkLbcShipped}
+                        onClick={async () => {
+                          if (!lbcShipPhoto || !onMarkLbcShipped) return;
+                          setShippingLbc(true);
+                          try {
+                            let imageStorageId;
+                            if (generateChatUploadUrl) {
+                              try {
+                                const uploadUrl = await generateChatUploadUrl({});
+                                const blob = await (await fetch(lbcShipPhoto)).blob();
+                                const res = await fetch(uploadUrl, {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': blob.type || 'image/jpeg' },
+                                  body: blob,
+                                });
+                                if (res.ok) {
+                                  const json = await res.json();
+                                  imageStorageId = json.storageId;
+                                }
+                              } catch (uploadErr) {
+                                console.warn('Chat photo upload failed, sending text only', uploadErr);
+                              }
+                            }
+                            const result = await onMarkLbcShipped(order.orderId, {
+                              photo: lbcShipPhoto,
+                              imageStorageId,
+                            });
+                            if (!result?.success && !result?.alreadyShipped) {
+                              alert(result?.message || 'Failed to mark as shipped.');
+                            } else {
+                              setLbcShipPhoto('');
+                            }
+                          } catch (err) {
+                            console.error(err);
+                            alert(err?.message || 'Failed to mark as shipped.');
+                          } finally {
+                            setShippingLbc(false);
+                          }
+                        }}
+                      >
+                        {shippingLbc
+                          ? <><i className="fas fa-spinner fa-spin"></i><span>Shipping…</span></>
+                          : <><i className="fas fa-shipping-fast"></i><span>Shipped</span></>}
+                      </button>
+                      <div className="block-reason" style={{ color: '#6366f1' }}>
+                        <i className="fas fa-info-circle"></i> Photo auto-sends to customer chat · moves to Shipped tab
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {isLbc && currentStatus === 'shipped' && (
+                  <div className="status-btn-wrapper">
+                    <button className="status-btn shipped is-current is-blocked" disabled>
+                      <i className="fas fa-shipping-fast"></i><span>Shipped</span>
+                      <span className="current-indicator">LBC</span>
+                    </button>
+                    <div className="block-reason" style={{ color: '#6366f1' }}>
+                      <i className="fas fa-check"></i> Shipped — Confirm Deliver in LBC tab
+                    </div>
+                  </div>
+                )}
                 {!isDone && !isRiderManaged && (
                   <div className="status-btn-wrapper">
                     <button

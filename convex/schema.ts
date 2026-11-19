@@ -230,6 +230,10 @@ export default defineSchema({
     deliveryMethod: v.optional(v.string()),
     /** Admin accepted this LBC order into the LBC shipping queue */
     lbcAcceptedAt: v.optional(v.string()),
+    /** Photo proof when admin marks LBC order as shipped (data URL) */
+    lbcShippedPhoto: v.optional(v.string()),
+    /** Storage id for shipped proof sent to customer chat */
+    lbcShippedPhotoId: v.optional(v.id("_storage")),
     paymentMethod: v.string(),
     notes: v.optional(v.string()),
     riderId: v.optional(v.string()),
