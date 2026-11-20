@@ -1,0 +1,33 @@
+[
+  {
+    "_creationTime": 1795109956888.0776,
+    "_id": "kn77b7e6229ktt5jj8y096tey18jhras",
+    "createdAt": "2026-11-19T17:39:16.888Z",
+    "customerName": "Mio Mio",
+    "message": "Mio Mio requested cancel for #0-NWK4TC (₱971.19). Reason: Wrong item / wrong variant",
+    "orderId": "DK-0010-NWK4TC",
+    "read": true,
+    "total": 971.19,
+    "type": "customer_cancel_request"
+  },
+  {
+    "_creationTime": 1795110352878.7644,
+    "_id": "kn7fhhxaztxxe46sr9w2zf6j3x8jgq32",
+    "createdAt": "2026-11-19T17:45:52.878Z",
+    "customerName": "Mio Mio",
+    "orderId": "DK-0001-YZ3XIT",
+    "read": true,
+    "total": 5025.63,
+    "type": "new_order"
+  },
+  {
+    "_creationTime": 1795111377086.087,
+    "_id": "kn71ee0eah280sz65xf78bppbn8jh255",
+    "createdAt": "2026-11-19T18:02:57.086Z",
+    "customerName": "Mio Mio",
+    "orderId": "DK-0003-VPURZ4",
+    "read": false,
+    "total": 4798.68,
+    "type": "new_order"
+  }
+]
