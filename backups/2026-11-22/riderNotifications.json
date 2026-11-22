@@ -1,0 +1,69 @@
+[
+  {
+    "_creationTime": 1795109956888.0776,
+    "_id": "kn77b7e6229ktt5jj8y096tey18jhras",
+    "createdAt": "2026-11-19T17:39:16.888Z",
+    "customerName": "Mio Mio",
+    "message": "Mio Mio requested cancel for #0-NWK4TC (₱971.19). Reason: Wrong item / wrong variant",
+    "orderId": "DK-0010-NWK4TC",
+    "read": true,
+    "total": 971.19,
+    "type": "customer_cancel_request"
+  },
+  {
+    "_creationTime": 1795110352878.7644,
+    "_id": "kn7fhhxaztxxe46sr9w2zf6j3x8jgq32",
+    "createdAt": "2026-11-19T17:45:52.878Z",
+    "customerName": "Mio Mio",
+    "orderId": "DK-0001-YZ3XIT",
+    "read": true,
+    "total": 5025.63,
+    "type": "new_order"
+  },
+  {
+    "_creationTime": 1795111377086.087,
+    "_id": "kn71ee0eah280sz65xf78bppbn8jh255",
+    "createdAt": "2026-11-19T18:02:57.086Z",
+    "customerName": "Mio Mio",
+    "orderId": "DK-0003-VPURZ4",
+    "read": false,
+    "total": 4798.68,
+    "type": "new_order"
+  },
+  {
+    "_creationTime": 1795152318484.3948,
+    "_id": "kn70kj8nm6tf8wehgd1pjaz00s8jj5s8",
+    "createdAt": "2026-11-20T05:25:18.484Z",
+    "customerName": "John Paul Inconado",
+    "orderId": "DK-0002-SUV0KR",
+    "read": false,
+    "total": 4169.96,
+    "type": "new_order"
+  },
+  {
+    "_creationTime": 1795157202050.5454,
+    "_id": "kn71047kweqk5d74ehvp2h8mp58jjagd",
+    "createdAt": "2026-11-20T06:46:42.050Z",
+    "customerName": "seno",
+    "orderId": "DK-0007-SWMJG9",
+    "read": false,
+    "total": 1091.82,
+    "type": "new_order"
+  },
+  {
+    "_creationTime": 1795157585440.8545,
+    "_id": "kn771tm82bjacvf8nbd22eh87h8jjyyh",
+    "address": "Valenzuela, Philippines",
+    "attempt": 1,
+    "createdAt": "2026-11-20T06:53:05.440Z",
+    "customerName": "seno",
+    "deviceLabel": "DKMerch App · Pixel 7",
+    "lat": 14.6766667,
+    "lng": 120.9809182,
+    "message": "⚠️ samantha reported failed delivery (Attempt 1/3) for Order #7-SWMJG9 · seno. Last seen: Valenzuela, Philippines · Device: DKMerch App · Pixel 7 · Delivery attempt was unsuccessful : Recipient Request Reschedule Delivery — Reason: Cannot be reached",
+    "orderId": "DK-0007-SWMJG9",
+    "read": false,
+    "total": 1091.82,
+    "type": "delivery_failed_attempt"
+  }
+]
