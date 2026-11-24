@@ -13,7 +13,7 @@ import { useCloseOnHistoryBack } from '../hooks/useCloseOnHistoryBack';
 import { createPortal } from 'react-dom';
 import { formatOrderShortId } from '../utils/orderId';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
-import { getOverlayRoot } from '../utils/scrollLock';
+import { forceUnlockBodyScroll, getOverlayRoot } from '../utils/scrollLock';
 import { validateImageFile, IMAGE_ACCEPT_NO_GIF } from '../utils/imageUpload';
 import {
   clearPaySessionAll,
@@ -1058,6 +1058,7 @@ const TrackOrder = ({ onProductClick }) => {
       if (!id) return;
       try { await releasePaymentHold({ orderId: id }); } catch { /* ignore */ }
       clearPaySessionAll();
+      forceUnlockBodyScroll();
     };
 
     const askLeavePayment = async () => {
@@ -1478,6 +1479,8 @@ const TrackOrder = ({ onProductClick }) => {
           home: '/',
           role: 'user',
         });
+        // Unlock before redirect so Back → Leave → Pay is tappable again
+        setContinuingPayment(false);
         goToPayMongo(
           result.paymentLinkUrl,
           `/track-order?order=${encodeURIComponent(order.orderId)}`
@@ -2069,6 +2072,8 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
         home: '/',
         role: 'user',
       });
+      // Unlock before redirect so Back → Leave → Complete Payment works again
+      setContinuingPayment(false);
       goToPayMongo(
         result.paymentLinkUrl,
         `/track-order?order=${encodeURIComponent(order.orderId)}`

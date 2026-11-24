@@ -14,6 +14,7 @@ import {
   roleHome,
   PAY_RETURN_KEY,
 } from '../utils/paymentLeaveGuard';
+import { forceUnlockBodyScroll } from '../utils/scrollLock';
 import '../components/ConfirmModal.css';
 import './PayingBridge.css';
 
@@ -94,6 +95,7 @@ const PayingBridge = () => {
     }
     clearPaySessionAll();
     try { sessionStorage.removeItem(PAY_RETURN_KEY); } catch { /* ignore */ }
+    forceUnlockBodyScroll();
     showNotification(
       'Payment cancelled. You can pay again anytime — no waiting period.',
       'info',

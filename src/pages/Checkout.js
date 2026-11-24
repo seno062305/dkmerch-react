@@ -30,6 +30,7 @@ import {
   readPaySession,
   roleHome,
 } from '../utils/paymentLeaveGuard';
+import { forceUnlockBodyScroll } from '../utils/scrollLock';
 import './Checkout.css';
 
 // ─── LALAMOVE SHIPPING CONFIG ─────────────────────────────────────────────────
@@ -1414,6 +1415,13 @@ const Checkout = () => {
   const shippingFee = isOutsideNCR ? 0 : (shippingInfo?.fee ?? 0);
   const deliveryMethod = isOutsideNCR ? 'lbc' : 'rider';
 
+  // Always allow Pay again after returning from PayMongo / /paying
+  useEffect(() => {
+    placingOrderRef.current = false;
+    setLoading(false);
+    forceUnlockBodyScroll();
+  }, []);
+
   // PayMongo leave: Cancel link clears hold; Back button asks for confirmation first
   useEffect(() => {
     let cancelled = false;
@@ -1428,6 +1436,9 @@ const Checkout = () => {
       pendingCheckoutOrderRef.current = id;
       try { sessionStorage.setItem('dk_checkout_pending_order', id); } catch { /* ignore */ }
       clearPaySessionAll();
+      placingOrderRef.current = false;
+      setLoading(false);
+      forceUnlockBodyScroll();
     };
 
     const leavePayment = async ({ notify = true } = {}) => {
@@ -1895,6 +1906,11 @@ const Checkout = () => {
     placingOrderRef.current = true;
     setLoading(true);
 
+    const unlockPlaceOrder = () => {
+      placingOrderRef.current = false;
+      setLoading(false);
+    };
+
     try {
       const shipping = shippingFee;
 
@@ -2009,7 +2025,7 @@ const Checkout = () => {
             : 'Order placed successfully!',
           'success'
         );
-        setLoading(false);
+        unlockPlaceOrder();
         navigate(`/order-success?orderId=${encodeURIComponent(orderId)}`);
         return;
       }
@@ -2055,7 +2071,7 @@ const Checkout = () => {
         } else {
           const result = await createPaymentLink(payArgs);
           if (result?.ok === false || result?.blocked || !result?.paymentLinkUrl) {
-            setLoading(false);
+            unlockPlaceOrder();
             showNotification(
               result?.message
                 || 'Another customer is already paying for this item. Please wait until their 5-minute payment window ends.',
@@ -2063,7 +2079,6 @@ const Checkout = () => {
               { fullText: true, duration: 6000 }
             );
             // Stay on checkout/payment — do not leave this tab when the hold notif shows
-            placingOrderRef.current = false;
             return;
           }
           paymentLinkUrl = result.paymentLinkUrl;
@@ -2077,8 +2092,7 @@ const Checkout = () => {
             paymentLinkUrl = result.paymentLinkUrl;
           } catch (fnErr) {
             console.error('Failover pay/email error:', fnErr);
-            setLoading(false);
-            placingOrderRef.current = false;
+            unlockPlaceOrder();
             if (usedFailover) {
               showNotification(
                 `Order ${orderId} was saved offline, but payment setup failed. Try again later or contact support.`,
@@ -2091,8 +2105,7 @@ const Checkout = () => {
             return;
           }
         } else {
-          setLoading(false);
-          placingOrderRef.current = false;
+          unlockPlaceOrder();
           if (usedFailover) {
             showNotification(
               `Order ${orderId} was saved while offline. Configure failover Cloud Functions to enable live payment.`,
@@ -2149,8 +2162,7 @@ const Checkout = () => {
       } catch { /* ignore */ }
 
       if (!paymentLinkUrl) {
-        setLoading(false);
-        placingOrderRef.current = false;
+        unlockPlaceOrder();
         showNotification(
           'Payment link could not be opened. Stay on this page and try Place Order / Pay again in a moment.',
           'warning',
@@ -2159,19 +2171,19 @@ const Checkout = () => {
         return;
       }
 
-      setLoading(false);
       markPayInProgress({
         orderId,
         checkoutUrl: paymentLinkUrl,
         home: payerHome,
         role: role || 'user',
       });
-      // Push our page into history so phone/desktop Back hits confirm first
+      // Unlock before redirect so Back → Leave → Pay works (bfcache / slow assign)
+      unlockPlaceOrder();
+      // Push /paying then open PayMongo — Back shows leave confirm immediately
       goToPayMongo(paymentLinkUrl, `/checkout?orderId=${encodeURIComponent(orderId)}`);
 
     } catch (error) {
-      setLoading(false);
-      placingOrderRef.current = false;
+      unlockPlaceOrder();
       const detail = String(error?.data || error?.message || error || '').trim();
       const short = detail && detail.length < 160 ? detail : '';
       showNotification(
