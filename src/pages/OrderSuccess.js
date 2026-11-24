@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAction, useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useAuth } from '../context/AuthContext';
+import OversellChoiceCard from '../components/OversellChoiceCard';
 import './OrderSuccess.css';
 
 const homeForRole = (role) => {
@@ -164,14 +165,24 @@ const OrderSuccess = () => {
         ) : (
           <>
             <div className="success-icon-wrap">
-              <div className="success-icon">
-                <i className="fas fa-check"></i>
+              <div className={`success-icon ${order?.oversellStatus === 'choice_needed' || order?.oversellStatus === 'reserved' ? 'success-icon--pending' : ''}`}>
+                <i className={`fas ${order?.oversellStatus === 'choice_needed' ? 'fa-exclamation' : order?.oversellStatus === 'reserved' ? 'fa-bookmark' : 'fa-check'}`}></i>
               </div>
             </div>
 
-            <h1 className="success-title">Payment Successful! 🎉</h1>
+            <h1 className="success-title">
+              {order?.oversellStatus === 'choice_needed'
+                ? 'Payment received — stock issue'
+                : order?.oversellStatus === 'reserved'
+                  ? 'Payment received — reserved'
+                  : 'Payment Successful! 🎉'}
+            </h1>
             <p className="success-subtitle">
-              Salamat sa iyong order! Your payment has been received and your order is now being processed.
+              {order?.oversellStatus === 'choice_needed'
+                ? 'Your payment went through, but the last stock was taken by another buyer. Choose a refund or reserve the next restock below.'
+                : order?.oversellStatus === 'reserved'
+                  ? `You’re locked in for the next restock (about ${order.restockEtaLabel || '2–3 weeks'}).`
+                  : 'Salamat sa iyong order! Your payment has been received and your order is now being processed.'}
             </p>
 
             {orderId && (
@@ -181,29 +192,35 @@ const OrderSuccess = () => {
               </div>
             )}
 
-            <div className="success-steps">
-              <div className="success-step">
-                <div className="step-icon"><i className="fas fa-envelope"></i></div>
-                <div className="step-text">
-                  <strong>Check your email</strong>
-                  <p>Order confirmation has been sent to your email.</p>
+            {(order?.oversellStatus === 'choice_needed' || order?.oversellStatus === 'reserved') && (
+              <OversellChoiceCard order={order} />
+            )}
+
+            {!(order?.oversellStatus === 'choice_needed' || order?.oversellStatus === 'reserved') && (
+              <div className="success-steps">
+                <div className="success-step">
+                  <div className="step-icon"><i className="fas fa-envelope"></i></div>
+                  <div className="step-text">
+                    <strong>Check your email</strong>
+                    <p>Order confirmation has been sent to your email.</p>
+                  </div>
+                </div>
+                <div className="success-step">
+                  <div className="step-icon"><i className="fas fa-box"></i></div>
+                  <div className="step-text">
+                    <strong>Processing your order</strong>
+                    <p>We're preparing your K-Pop merch for shipment.</p>
+                  </div>
+                </div>
+                <div className="success-step">
+                  <div className="step-icon"><i className="fas fa-truck"></i></div>
+                  <div className="step-text">
+                    <strong>Track your order</strong>
+                    <p>You can track your order status anytime.</p>
+                  </div>
                 </div>
               </div>
-              <div className="success-step">
-                <div className="step-icon"><i className="fas fa-box"></i></div>
-                <div className="step-text">
-                  <strong>Processing your order</strong>
-                  <p>We're preparing your K-Pop merch for shipment.</p>
-                </div>
-              </div>
-              <div className="success-step">
-                <div className="step-icon"><i className="fas fa-truck"></i></div>
-                <div className="step-text">
-                  <strong>Track your order</strong>
-                  <p>You can track your order status anytime.</p>
-                </div>
-              </div>
-            </div>
+            )}
 
             <div className="success-actions">
               <button

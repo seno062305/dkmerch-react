@@ -30,56 +30,14 @@ import { readAuthGate, isAuthGateLocked, clearAuthGate } from "../lib/authGate";
 import { collectLoginDeviceInfo } from "../utils/deviceInfo";
 import { consumeKeepSessionAfterUpdate } from "../utils/appUpdate";
 import NewLoginAlertModal from "../components/NewLoginAlertModal";
-import SessionIdleModal from "../components/SessionIdleModal";
 import { useNotification } from "./NotificationContext";
 
 const AuthContext = createContext(null);
 const AUTH_USER_KEY = "authUser";
 const SESSION_ALIVE_KEY = "dkmerch_session_alive";
 const LAST_ACTIVE_KEY = "dkmerch_last_active";
-/** Customer-only: last real UI activity (not server heartbeat). */
-const CUSTOMER_IDLE_KEY = "dkmerch_customer_activity";
-const CUSTOMER_IDLE_MS = 10 * 60 * 1000; // 10 minutes
-const IDLE_NOTICE_KEY = "dkmerch_idle_logout_notice";
 /** New device waiting for "Yes, it's me" on the other device. */
 const PENDING_LOGIN_KEY = "dkmerch_pending_login";
-
-function markIdleLogoutNotice() {
-  try { sessionStorage.setItem(IDLE_NOTICE_KEY, "1"); } catch { /* ignore */ }
-}
-
-function consumeIdleLogoutNotice() {
-  try {
-    const on = sessionStorage.getItem(IDLE_NOTICE_KEY) === "1";
-    if (on) sessionStorage.removeItem(IDLE_NOTICE_KEY);
-    return on;
-  } catch {
-    return false;
-  }
-}
-
-function readCustomerActivityAt() {
-  try {
-    const n = Number(localStorage.getItem(CUSTOMER_IDLE_KEY) || 0);
-    return Number.isFinite(n) && n > 0 ? n : 0;
-  } catch {
-    return 0;
-  }
-}
-
-function writeCustomerActivityAt(ts = Date.now()) {
-  try { localStorage.setItem(CUSTOMER_IDLE_KEY, String(ts)); } catch { /* ignore */ }
-}
-
-function clearCustomerActivityAt() {
-  try { localStorage.removeItem(CUSTOMER_IDLE_KEY); } catch { /* ignore */ }
-}
-
-function isCustomerIdleExpired() {
-  const last = readCustomerActivityAt();
-  if (!last) return false;
-  return Date.now() - last >= CUSTOMER_IDLE_MS;
-}
 
 export function readPendingLogin() {
   try {
@@ -166,10 +124,6 @@ export const AuthProvider = ({ children }) => {
   const [needsDeviceUnlock, setNeedsDeviceUnlock] = useState(false);
   /** FB-style alert when another device signs into this account */
   const [securityAlert, setSecurityAlert] = useState(null);
-  /** Popup after auto-logout from customer inactivity */
-  const [idleSessionNotice, setIdleSessionNotice] = useState(() => consumeIdleLogoutNotice());
-  const customerActivityRef = useRef(0);
-  const logoutRef = useRef(null);
 
   const loginUserMutation  = useMutation(api.users.loginUser);
   const seedAdminMutation  = useMutation(api.users.seedAdmin);
@@ -371,37 +325,11 @@ export const AuthProvider = ({ children }) => {
       // Don't mark session alive yet when PIN is required — otherwise a soft
       // reopen would skip the pink PIN gate on the next cold start.
       if (!withPinGate) markSessionAlive();
-      if (storedUser.role === "user") {
-        writeCustomerActivityAt(Date.now());
-        customerActivityRef.current = Date.now();
-      }
       setUser(storedUser);
       setRole(storedUser.role);
       setIsAuthenticated(true); // keep route/page under the PIN overlay
       setNeedsDeviceUnlock(withPinGate);
     };
-
-    // Customer idle timeout across refresh / reopen
-    if (
-      storedUser?.role === "user"
-      && !loggedOut
-      && isCustomerIdleExpired()
-    ) {
-      clearAuthUser();
-      clearSessionAlive();
-      clearPendingLogin();
-      clearCustomerActivityAt();
-      markExplicitLogout();
-      clearDeviceUnlock();
-      markIdleLogoutNotice();
-      setIdleSessionNotice(true);
-      setUser(null);
-      setRole(null);
-      setIsAuthenticated(false);
-      setNeedsDeviceUnlock(false);
-      setIsReady(true);
-      return;
-    }
 
     // Use another account — soft-logged-out; keep unlock profile, never wipe on refresh
     if (gate === "switch") {
@@ -580,13 +508,6 @@ export const AuthProvider = ({ children }) => {
     try { clearAuthGate(); } catch { /* ignore */ }
     writeAuthUser(sessionUser);
     markSessionAlive();
-    if (sessionUser.role === "user") {
-      writeCustomerActivityAt(Date.now());
-      customerActivityRef.current = Date.now();
-      setIdleSessionNotice(false);
-    } else {
-      clearCustomerActivityAt();
-    }
     if (
       sessionUser.role === "user"
       || sessionUser.role === "admin"
@@ -610,7 +531,6 @@ export const AuthProvider = ({ children }) => {
     clearSessionAlive();
     clearPendingLogin();
     try { localStorage.removeItem(LAST_ACTIVE_KEY); } catch { /* ignore */ }
-    clearCustomerActivityAt();
     markExplicitLogout();
     clearDeviceUnlock();
     try { sessionStorage.removeItem("dkmerch_push_asked"); } catch { /* ignore */ }
@@ -1453,7 +1373,6 @@ export const AuthProvider = ({ children }) => {
     try { clearParkedRider(); } catch { /* ignore */ }
     try { clearParkedCustomer(); } catch { /* ignore */ }
     try { localStorage.removeItem(LAST_ACTIVE_KEY); } catch { /* ignore */ }
-    clearCustomerActivityAt();
     if (keepUnlock) {
       // Stay on PIN chrome — do not mark explicit logout / wipe unlock profile
       setNeedsDeviceUnlock(false);
@@ -1471,74 +1390,6 @@ export const AuthProvider = ({ children }) => {
     setRole(null);
     setIsAuthenticated(false);
   };
-  logoutRef.current = logout;
-
-  // Customer-only: auto-logout after 10 minutes with no real activity + popup
-  useEffect(() => {
-    if (!isReady || !isAuthenticated || role !== "user" || needsDeviceUnlock) {
-      return undefined;
-    }
-
-    const now = Date.now();
-    const stored = readCustomerActivityAt() || now;
-    customerActivityRef.current = stored;
-    writeCustomerActivityAt(stored);
-
-    let writeThrottle = 0;
-    const bump = () => {
-      const ts = Date.now();
-      customerActivityRef.current = ts;
-      if (ts - writeThrottle < 2000) return;
-      writeThrottle = ts;
-      writeCustomerActivityAt(ts);
-    };
-
-    const events = [
-      "pointerdown",
-      "keydown",
-      "touchstart",
-      "scroll",
-      "mousemove",
-      "click",
-      "wheel",
-    ];
-    events.forEach((ev) => window.addEventListener(ev, bump, { passive: true, capture: true }));
-    const onVis = () => {
-      if (document.visibilityState === "visible") bump();
-    };
-    document.addEventListener("visibilitychange", onVis);
-
-    const check = () => {
-      const last = customerActivityRef.current || readCustomerActivityAt();
-      if (!last) {
-        bump();
-        return;
-      }
-      if (Date.now() - last < CUSTOMER_IDLE_MS) return;
-      clearCustomerActivityAt();
-      customerActivityRef.current = 0;
-      markIdleLogoutNotice();
-      setIdleSessionNotice(true);
-      try { logoutRef.current?.(); } catch { /* ignore */ }
-      try {
-        if (
-          window.location.pathname.startsWith("/checkout")
-          || window.location.pathname.startsWith("/settings")
-          || window.location.pathname.startsWith("/chat")
-        ) {
-          window.location.assign("/");
-        }
-      } catch { /* ignore */ }
-    };
-
-    const id = window.setInterval(check, 15_000);
-    check();
-    return () => {
-      window.clearInterval(id);
-      events.forEach((ev) => window.removeEventListener(ev, bump, { capture: true }));
-      document.removeEventListener("visibilitychange", onVis);
-    };
-  }, [isReady, isAuthenticated, role, needsDeviceUnlock]);
 
   const clearDeviceUnlockPrompt = () => setNeedsDeviceUnlock(false);
 
@@ -1785,14 +1636,6 @@ export const AuthProvider = ({ children }) => {
           onConfirmNo={handleSecurityNo}
         />
       )}
-      <SessionIdleModal
-        open={idleSessionNotice}
-        minutes={10}
-        onClose={() => {
-          try { sessionStorage.removeItem(IDLE_NOTICE_KEY); } catch { /* ignore */ }
-          setIdleSessionNotice(false);
-        }}
-      />
     </AuthContext.Provider>
   );
 };

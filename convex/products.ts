@@ -1,6 +1,7 @@
 // convex/products.ts
 import { query, mutation, internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
+import { tryFulfillReservedOrders } from "./payments";
 
 const phtToMs = (date: string, time: string): number => {
   return new Date(`${date}T${time}:00+08:00`).getTime();
@@ -158,8 +159,18 @@ export const updateProduct = mutation({
     if (nextSale && nextOrig != null && nextPrice != null && Number(nextOrig) <= Number(nextPrice)) {
       throw new Error("Original price must be higher than the sale price.");
     }
+    const prevStock = Number((existing as any)?.stock);
     await db.patch(id, filtered);
-    return { success: true };
+    let reservedFulfilled = 0;
+    if (
+      filtered.stock != null
+      && Number.isFinite(Number(filtered.stock))
+      && (!Number.isFinite(prevStock) || Number(filtered.stock) > prevStock)
+    ) {
+      const res = await tryFulfillReservedOrders(db, String(id));
+      reservedFulfilled = Number(res?.fulfilled || 0);
+    }
+    return { success: true, reservedFulfilled };
   },
 });
 

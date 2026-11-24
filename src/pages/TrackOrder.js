@@ -14,6 +14,7 @@ import { formatOrderShortId } from '../utils/orderId';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
 import { getOverlayRoot } from '../utils/scrollLock';
 import { validateImageFile, IMAGE_ACCEPT_NO_GIF } from '../utils/imageUpload';
+import OversellChoiceCard from '../components/OversellChoiceCard';
 import './TrackOrder.css';
 
 /** Cancel only before admin confirms — once confirmed, cancel is locked. */
@@ -846,14 +847,23 @@ const TrackOrder = ({ onProductClick }) => {
     if (order?.deliveryFailedFinal || String(order?.status || '').toLowerCase() === 'failed delivery') {
       return 'Failed Delivery';
     }
+    const oversell = String(order?.oversellStatus || '');
+    if (oversell === 'choice_needed') return 'Choose refund or reserve';
+    if (oversell === 'reserved') return `Reserved · restock ${order.restockEtaLabel || '2–3 weeks'}`;
+    if (oversell === 'refund_pending') return 'Refund processing';
+    if (oversell === 'refunded') return 'Refunded (sold out)';
     const s = order.orderStatus || order.status || 'pending';
     const labels = {
       pending: 'Processing', confirmed: 'Confirmed', shipped: 'Shipped',
       out_for_delivery: 'Out for Delivery', completed: 'Delivered', cancelled: 'Cancelled',
+      awaiting_restock_choice: 'Choose refund or reserve',
+      awaiting_restock: `Reserved · restock ${order.restockEtaLabel || '2–3 weeks'}`,
       Processing: 'Processing', Confirmed: 'Confirmed', Shipped: 'Shipped',
       'Out for Delivery': 'Out for Delivery', Delivered: 'Delivered', Cancelled: 'Cancelled',
       'Failed Delivery': 'Failed Delivery',
       'Pending Payment': 'Pending Payment',
+      'Awaiting Restock Choice': 'Choose refund or reserve',
+      'Reserved — Awaiting Restock': `Reserved · restock ${order.restockEtaLabel || '2–3 weeks'}`,
     };
     return labels[s] || s;
   };
@@ -1143,6 +1153,28 @@ const TrackOrder = ({ onProductClick }) => {
             )}
             {isLbcOrder(order) && <span className="order-card-lbc-badge"><i className="fas fa-truck"></i> LBC</span>}
           </div>
+          {(order.oversellStatus === 'choice_needed' || order.oversellStatus === 'reserved') && (
+            <div
+              className="order-card-preorder-badge"
+              style={{
+                background: order.oversellStatus === 'reserved' ? '#f0fdf4' : '#fff7ed',
+                color: order.oversellStatus === 'reserved' ? '#166534' : '#9a3412',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <i className={`fas ${order.oversellStatus === 'reserved' ? 'fa-bookmark' : 'fa-exclamation-triangle'}`}></i>
+              <span>
+                {order.oversellStatus === 'reserved'
+                  ? `Reserved · restock in ${order.restockEtaLabel || '2–3 weeks'}`
+                  : `Sold out after pay · restock ${order.restockEtaLabel || '2–3 weeks'} — choose below`}
+              </span>
+            </div>
+          )}
+          {(order.oversellStatus === 'choice_needed' || order.oversellStatus === 'reserved') && (
+            <div onClick={(e) => e.stopPropagation()}>
+              <OversellChoiceCard order={order} compact />
+            </div>
+          )}
           {releaseDate && (
             <div className="order-card-preorder-badge">
               <i className="fas fa-calendar-alt"></i>
@@ -1503,7 +1535,8 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
   const isOutForDelivery = isOutForDeliveryStatus(order);
   const needsPayment     = order.status === 'Pending Payment' && order.paymentStatus !== 'paid';
   const delivered        = ['delivered','completed'].includes((order.orderStatus || order.status || '').toLowerCase());
-  const canCancel        = !isGuest && canCustomerCancelOrder(order);
+  const canCancel        = !isGuest && canCustomerCancelOrder(order)
+    && !['choice_needed', 'reserved', 'refund_pending'].includes(String(order.oversellStatus || ''));
   const timelineSteps    = getTimelineSteps(order);
   const showDeliverySplit = !!(order.riderInfo && !isCancelled && !isLbcOrder(order));
   const refundAmount     = (order.finalTotal ?? order.total ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2 });
@@ -1640,6 +1673,10 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
               <i className="fas fa-times"></i>
             </button>
           </div>
+
+          {(order.oversellStatus === 'choice_needed' || order.oversellStatus === 'reserved') && (
+            <OversellChoiceCard order={order} />
+          )}
 
           {isGuest && (
             <div className="guest-modal-notice"><i className="fas fa-lock"></i><span>Viewing as guest — order timeline only. <a href="/login" onClick={e => { e.preventDefault(); onClose(); window.dispatchEvent(new Event('openLoginModal')); }}>Log in</a> for full access.</span></div>

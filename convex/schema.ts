@@ -288,6 +288,18 @@ export default defineSchema({
     /** True after stock was deducted on successful payment (restore only if set). */
     stockDeducted: v.optional(v.boolean()),
     stockIssue: v.optional(v.boolean()),
+    /**
+     * Oversell race after PayMongo paid:
+     * choice_needed | reserved | refund_pending | refunded | fulfilled
+     */
+    oversellStatus: v.optional(v.string()),
+    /** Shown to customer while reserved, e.g. "2–3 weeks" */
+    restockEtaLabel: v.optional(v.string()),
+    oversellDetectedAt: v.optional(v.string()),
+    reservedAt: v.optional(v.string()),
+    oversellResolvedAt: v.optional(v.string()),
+    /** Snapshot of shortages at oversell detect time */
+    oversellShortages: v.optional(v.any()),
     /** Unpaid order had stock restored after legacy checkout-hold bug */
     stockLegacyRestored: v.optional(v.boolean()),
     confirmedAt: v.optional(v.string()),

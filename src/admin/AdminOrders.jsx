@@ -503,6 +503,7 @@ const AdminOrders = () => {
   const storePin = { storeLat: storeSettings?.storeLat, storeLng: storeSettings?.storeLng };
 
   const confirmReturnPaymentAction = useAction(api.payments.confirmReturnPayment);
+  const fulfillReservedOrdersMutation = useMutation(api.payments.fulfillReservedOrders);
 
   // Deep-link tab from PayMongo return (?tab=refunds|cancelled)
   useEffect(() => {
@@ -627,23 +628,28 @@ const AdminOrders = () => {
 
   const validOrders = orders.filter(o => o.orderId && o.items?.length > 0);
 
-  const orderTimeMs = (o) =>
-    o._creationTime || new Date(o.createdAt || 0).getTime() || 0;
-
-  /** Prefer store order number when both have it; else creation time (FIFO). */
-  const cmpFifo = (a, b) => {
-    const aSeq = Number(a.orderSeq) || 0;
-    const bSeq = Number(b.orderSeq) || 0;
-    if (aSeq > 0 && bSeq > 0) return aSeq - bSeq;
-    return orderTimeMs(a) - orderTimeMs(b);
+  const orderTimeMs = (o) => {
+    const created = Number(o?._creationTime);
+    if (Number.isFinite(created) && created > 0) return created;
+    const parsed = new Date(o?.createdAt || 0).getTime();
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
   };
 
-  const paidTimeMs = (o) => {
-    if (o.paidAt) {
-      const t = new Date(o.paidAt).getTime();
-      if (!Number.isNaN(t)) return t;
-    }
-    return orderTimeMs(o);
+  /** Newest first — creation time, then orderSeq, then orderId. */
+  const cmpNewest = (a, b) => {
+    const tb = orderTimeMs(b);
+    const ta = orderTimeMs(a);
+    if (tb !== ta) return tb - ta;
+    const bSeq = Number(b.orderSeq) || 0;
+    const aSeq = Number(a.orderSeq) || 0;
+    if (bSeq !== aSeq) return bSeq - aSeq;
+    return String(b.orderId || '').localeCompare(String(a.orderId || ''));
+  };
+
+  const eventTimeMs = (o, field) => {
+    if (!o?.[field]) return 0;
+    const t = new Date(o[field]).getTime();
+    return Number.isFinite(t) && t > 0 ? t : 0;
   };
 
   const isPendingStatus = (o) => {
@@ -681,6 +687,11 @@ const AdminOrders = () => {
   const hasCancelRequest = (o) => o.cancelRequestStatus === 'requested';
   const hasAnyCancelRequest = (o) => !!o.cancelRequestStatus;
 
+  const isOversellReserved = (o) => {
+    const st = String(o?.oversellStatus || '');
+    return st === 'reserved' || st === 'choice_needed' || st === 'refund_pending';
+  };
+
   const isLbcDeliveryOrder = (o) => isLbcOrder(o, storePin);
   const isLbcApproved = (o) =>
     !!o?.lbcAcceptedAt
@@ -716,32 +727,22 @@ const AdminOrders = () => {
     return matchesSearch && matchesDate;
   };
 
-  /** Newest first (desc). On Pending, paid still float to top, then newest within each group. */
-  const cmpNewest = (a, b) => cmpFifo(b, a);
+  /** Newest first on every Orders tab (and side panels). */
   const sortOrdersForTab = (list, tab) => {
     const rows = [...list];
-    if (tab === 'pending') {
-      return rows.sort((a, b) => {
-        const aPaid = a.paymentStatus === 'paid' ? 0 : 1;
-        const bPaid = b.paymentStatus === 'paid' ? 0 : 1;
-        if (aPaid !== bPaid) return aPaid - bPaid;
-        if (aPaid === 0) return paidTimeMs(b) - paidTimeMs(a);
-        return cmpNewest(a, b);
-      });
-    }
     if (tab === 'refunds') {
       return rows.sort((a, b) => {
-        const aTime = a.refundRequestedAt ? new Date(a.refundRequestedAt).getTime() : 0;
-        const bTime = b.refundRequestedAt ? new Date(b.refundRequestedAt).getTime() : 0;
-        if (aTime && bTime) return bTime - aTime;
+        const aTime = eventTimeMs(a, 'refundRequestedAt');
+        const bTime = eventTimeMs(b, 'refundRequestedAt');
+        if (aTime || bTime) return bTime - aTime;
         return cmpNewest(a, b);
       });
     }
     if (tab === 'cancelled') {
       return rows.sort((a, b) => {
-        const aTime = a.cancelRequestedAt ? new Date(a.cancelRequestedAt).getTime() : 0;
-        const bTime = b.cancelRequestedAt ? new Date(b.cancelRequestedAt).getTime() : 0;
-        if (aTime && bTime) return bTime - aTime;
+        const aTime = eventTimeMs(a, 'cancelRequestedAt');
+        const bTime = eventTimeMs(b, 'cancelRequestedAt');
+        if (aTime || bTime) return bTime - aTime;
         return cmpNewest(a, b);
       });
     }
@@ -751,13 +752,14 @@ const AdminOrders = () => {
   const tabCounts = {
     all:        validOrders.length,
     // Cancel requests are handled under Canceled → Request Cancel (not Pending)
-    pending:    validOrders.filter((o) => isPendingStatus(o) && !hasCancelRequest(o)).length,
+    pending:    validOrders.filter((o) => isPendingStatus(o) && !hasCancelRequest(o) && !isOversellReserved(o)).length,
     confirmed:  validOrders.filter((o) => isProcessingStatus(o) && !hasCancelRequest(o)).length,
     shipped:    validOrders.filter((o) => isShippedStatus(o) && !hasCancelRequest(o) && !isLbcDeliveryOrder(o)).length,
     // LBC tab = pipeline only; finished LBC deliveries live under Completed
     lbc:        validOrders.filter((o) => isLbcAwaitingAccept(o)).length,
     completed:  validOrders.filter((o) => isCompletedStatus(o)).length,
     manual:     validOrders.filter((o) => isWalkInOrder(o)).length,
+    reserved:   validOrders.filter(isOversellReserved).length,
     refunds:    validOrders.filter(hasAnyRefund).length,
     cancelled:  validOrders.filter((o) => isCancelledStatus(o) || hasAnyCancelRequest(o)).length,
   };
@@ -851,7 +853,7 @@ const AdminOrders = () => {
         matchesTab = true;
       } else if (activeTab === 'pending') {
         // Keep open cancel requests out of Pending — they live in Canceled → Request Cancel
-        matchesTab = isPendingStatus(order) && !hasCancelRequest(order);
+        matchesTab = isPendingStatus(order) && !hasCancelRequest(order) && !isOversellReserved(order);
       } else if (activeTab === 'confirmed') {
         matchesTab = isProcessingStatus(order) && !hasCancelRequest(order);
       } else if (activeTab === 'shipped') {
@@ -862,6 +864,8 @@ const AdminOrders = () => {
         matchesTab = isCompletedStatus(order);
       } else if (activeTab === 'manual') {
         matchesTab = isWalkInOrder(order);
+      } else if (activeTab === 'reserved') {
+        matchesTab = isOversellReserved(order);
       } else if (activeTab === 'lbc') {
         // Left panel = awaiting accept; completed LBC orders are under Completed
         matchesTab = false;
@@ -894,6 +898,10 @@ const AdminOrders = () => {
     if (order?.deliveryFailedFinal || String(order?.status || status || '').toLowerCase() === 'failed delivery') {
       return 'Failed Delivery';
     }
+    const oversell = String(order?.oversellStatus || '');
+    if (oversell === 'choice_needed') return 'Oversell — needs choice';
+    if (oversell === 'reserved') return `Reserved · ${order.restockEtaLabel || '2–3 weeks'}`;
+    if (oversell === 'refund_pending') return 'Oversell refund pending';
     const labels = {
       pending: 'Pending',
       confirmed: 'Processing',
@@ -901,6 +909,8 @@ const AdminOrders = () => {
       out_for_delivery: 'Out for Delivery',
       completed: 'Completed',
       cancelled: 'Canceled',
+      awaiting_restock: `Reserved · ${order?.restockEtaLabel || '2–3 weeks'}`,
+      awaiting_restock_choice: 'Oversell — needs choice',
     };
     return labels[status] || status || 'Pending';
   };
@@ -925,7 +935,7 @@ const AdminOrders = () => {
   const lbcAwaitingOrders = useMemo(() => {
     return sortOrdersForTab(
       validOrders.filter((o) => isLbcAwaitingAccept(o) && matchesSearchDate(o)),
-      'pending'
+      'lbc'
     );
   }, [validOrders, searchTerm, startDate, endDate, storeSettings?.storeLat, storeSettings?.storeLng]);
 
@@ -1349,6 +1359,7 @@ const AdminOrders = () => {
     { key: 'lbc',       icon: 'fa-truck',         label: 'LBC' },
     { key: 'completed', icon: 'fa-check-circle',  label: 'Completed' },
     { key: 'manual',    icon: 'fa-store',         label: 'Manual' },
+    { key: 'reserved',  icon: 'fa-bookmark',      label: 'Reserved' },
     { key: 'refunds',   dkIcon: DK_ICONS.ordersRefunds, label: 'Refunds' },
     { key: 'cancelled', icon: 'fa-ban',           label: 'Canceled' },
   ];
@@ -1361,8 +1372,32 @@ const AdminOrders = () => {
     lbc: 'Finished LBC deliveries are under Completed',
     completed: 'No completed orders yet',
     manual: 'No walk-in sales yet — record one above',
+    reserved: 'No reserved / oversell orders',
     refunds: 'No refunded orders yet',
     cancelled: 'No canceled orders',
+  };
+
+  const handleFulfillReserved = async () => {
+    const ok = await confirm({
+      title: 'Fulfill reserved orders?',
+      message: 'Assign available stock to reserved oversell orders (oldest first). Customers will be notified.',
+      confirmLabel: 'Fulfill now',
+      cancelLabel: 'Cancel',
+      variant: 'warning',
+      icon: 'fa-bookmark',
+    });
+    if (!ok) return;
+    try {
+      const res = await fulfillReservedOrdersMutation({});
+      showNotification(
+        res?.fulfilled
+          ? `Fulfilled ${res.fulfilled} reserved order(s).`
+          : 'No reserved orders could be fulfilled yet (need more stock).',
+        res?.fulfilled ? 'success' : 'info'
+      );
+    } catch (err) {
+      showNotification(err?.message || 'Fulfill failed.', 'error');
+    }
   };
 
   const renderOrdersTable = () => (
@@ -1793,6 +1828,24 @@ const AdminOrders = () => {
                 onClick={() => setShowWalkInModal(true)}
               >
                 <i className="fas fa-plus"></i> Record Sale
+              </button>
+            </div>
+          )}
+          {activeTab === 'reserved' && (
+            <div className="orders-manual-banner">
+              <div className="orders-manual-banner-copy">
+                <h3><i className="fas fa-bookmark"></i> Oversell · Reserved</h3>
+                <p>
+                  Paid orders waiting on next stock (customer ETA: 2–3 weeks). Restocking a product
+                  auto-assigns here first. Or fulfill now if stock is already available.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="orders-manual-record-btn orders-manual-record-btn--solid"
+                onClick={handleFulfillReserved}
+              >
+                <i className="fas fa-box-open"></i> Fulfill from stock
               </button>
             </div>
           )}
@@ -2243,8 +2296,32 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
         </div>
 
         <div className="modal-body">
+          {String(order.oversellStatus || '') === 'choice_needed' && (
+            <div className="flow-notice warning">
+              <i className="fas fa-exclamation-triangle"></i>
+              <div>
+                <strong>Oversell — waiting on customer</strong>
+                <p>
+                  Paid, but stock was gone. Customer must choose refund or reserve.
+                  Expected restock shown to them: <strong>{order.restockEtaLabel || '2–3 weeks'}</strong>.
+                </p>
+              </div>
+            </div>
+          )}
+          {String(order.oversellStatus || '') === 'reserved' && (
+            <div className="flow-notice info">
+              <i className="fas fa-bookmark"></i>
+              <div>
+                <strong>Reserved for next stock</strong>
+                <p>
+                  Customer locked this order. ETA shown: <strong>{order.restockEtaLabel || '2–3 weeks'}</strong>.
+                  Restock the product (or use Reserved tab → Fulfill) to assign stock automatically.
+                </p>
+              </div>
+            </div>
+          )}
           {!isPaid && <div className="flow-notice warning"><i className="fas fa-exclamation-triangle"></i><div><strong>Payment not yet confirmed</strong><p>Do not confirm until payment is verified via PayMongo.</p></div></div>}
-          {isPaid && currentStatus === 'pending' && !isLbc && <div className="flow-notice success"><i className="fas fa-check-circle"></i><div><strong>Payment received!</strong><p>Confirm order below. Riders can then claim it by scanning the waybill.</p></div></div>}
+          {isPaid && currentStatus === 'pending' && !isLbc && !order.oversellStatus && <div className="flow-notice success"><i className="fas fa-check-circle"></i><div><strong>Payment received!</strong><p>Confirm order below. Riders can then claim it by scanning the waybill.</p></div></div>}
           {isPaid && currentStatus === 'pending' && isLbc && <div className="flow-notice success"><i className="fas fa-box"></i><div><strong>Payment received — LBC Express</strong><p>Confirm below. This outside-NCR order will not go to riders; ship via LBC and send the tracking ID to the customer.</p></div></div>}
           {isPaid && currentStatus === 'confirmed' && !isLbc && <div className="flow-notice info"><i className="fas fa-motorcycle"></i><div><strong>Processing</strong><p>Order confirmed — visible to riders. They claim it by scanning the waybill.</p></div></div>}
           {isPaid && currentStatus === 'confirmed' && isLbc && <div className="flow-notice info"><i className="fas fa-truck"></i><div><strong>Processing — LBC</strong><p>Mark as Shipped below (upload photo → auto-sent to customer chat). Then Confirm Deliver in the LBC tab.</p></div></div>}
