@@ -1,0 +1,21 @@
+[
+  {
+    "_creationTime": 1795501400714.8486,
+    "_id": "kh76c3ce46zs5wjz8fpy85wj5x8jt661",
+    "accuracy": 15.006999969482422,
+    "heading": 235.1612091064453,
+    "isTracking": false,
+    "lastKnownAddress": "East Service Road, Tunas, Malhacan, Meycauayan, Bulacan, Central Luzon, 3020, Philippines",
+    "lastKnownAt": 1795501567404,
+    "lastKnownLat": 14.749883,
+    "lastKnownLng": 120.971392,
+    "lat": 14.749883,
+    "lng": 120.971392,
+    "orderId": "DK-0013-AVCJBR",
+    "riderEmail": "nabel.leal04@gmail.com",
+    "riderName": "samantha",
+    "sessionId": "1795501314882-vhisjw63-czsiy9l0",
+    "speed": 0,
+    "updatedAt": 1795501567846
+  }
+]
