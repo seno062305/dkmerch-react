@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAction, useMutation, useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useAuth } from '../context/AuthContext';
+import { clearPaySessionAll } from '../utils/paymentLeaveGuard';
 import './OrderSuccess.css';
 
 const homeForRole = (role) => {
@@ -37,12 +38,7 @@ const OrderSuccess = () => {
 
   const goPayerHome = useCallback(() => {
     const home = resolveHome();
-    try {
-      sessionStorage.removeItem('dk_post_payment_home');
-      sessionStorage.removeItem('dk_post_payment_order');
-      sessionStorage.removeItem('dk_post_payment_role');
-      sessionStorage.removeItem('dk_pay_hold_active');
-    } catch { /* ignore */ }
+    clearPaySessionAll();
     navigate(home, { replace: true });
   }, [navigate, resolveHome]);
 
@@ -93,7 +89,7 @@ const OrderSuccess = () => {
       // Still not paid after retries — release hold so others can pay (user backed out)
       if (cancelled) return;
       try { await releasePaymentHold({ orderId }); } catch { /* ignore */ }
-      try { sessionStorage.removeItem('dk_pay_hold_active'); } catch { /* ignore */ }
+      clearPaySessionAll();
       if (isReady && (role === 'admin' || role === 'rider')) {
         goPayerHome();
         return;

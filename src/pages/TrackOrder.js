@@ -7,6 +7,7 @@ import { useUserOrders, useOrdersByEmail } from '../utils/orderStorage';
 import { useProducts, usePreOrderProducts } from '../utils/productStorage';
 import { isLbcOrder, openLbcTracker, LBC_TRACK_URL } from '../utils/deliveryUtils';
 import { useNotification } from '../context/NotificationContext';
+import { useConfirm } from '../context/ConfirmContext';
 import DeliveryChatPanel from '../components/DeliveryChatPanel';
 import { useCloseOnHistoryBack } from '../hooks/useCloseOnHistoryBack';
 import { createPortal } from 'react-dom';
@@ -14,6 +15,13 @@ import { formatOrderShortId } from '../utils/orderId';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
 import { getOverlayRoot } from '../utils/scrollLock';
 import { validateImageFile, IMAGE_ACCEPT_NO_GIF } from '../utils/imageUpload';
+import {
+  clearPaySessionAll,
+  goToPayMongo,
+  markPayInProgress,
+  readPaySession,
+  roleHome,
+} from '../utils/paymentLeaveGuard';
 import './TrackOrder.css';
 
 /** Cancel only before admin confirms — once confirmed, cancel is locked. */
@@ -1004,7 +1012,8 @@ const RiderMap = ({ orderId, riderName, orderData }) => {
 const TrackOrder = ({ onProductClick }) => {
   const navigate = useNavigate();
   const { showNotification } = useNotification();
-  const { user, isAuthenticated } = useAuth();
+  const { confirm } = useConfirm();
+  const { user, isAuthenticated, role } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const orderIdParam = searchParams.get('order') || searchParams.get('orderId') || searchParams.get('id');
   const highlightParam = searchParams.get('highlight') === '1';
@@ -1041,41 +1050,97 @@ const TrackOrder = ({ onProductClick }) => {
     orderIdParam ? { orderId: orderIdParam } : 'skip'
   );
 
-  // Back / cancel from PayMongo → clear payment hold so stock is free again
+  // PayMongo Cancel clears hold; phone/desktop Back asks confirmation first
   useEffect(() => {
-    const payCancel = searchParams.get('payCancel') === '1';
-    const cancelId = searchParams.get('order') || searchParams.get('orderId') || '';
-    const clearHold = async (orderId, notify) => {
+    let cancelled = false;
+    const clearHold = async (orderId) => {
       const id = String(orderId || '').trim();
       if (!id) return;
       try { await releasePaymentHold({ orderId: id }); } catch { /* ignore */ }
-      try {
-        if (sessionStorage.getItem('dk_pay_hold_active') === id) {
-          sessionStorage.removeItem('dk_pay_hold_active');
+      clearPaySessionAll();
+    };
+
+    const askLeavePayment = async () => {
+      const sess = readPaySession();
+      const id = sess.orderId || searchParams.get('order') || searchParams.get('orderId') || '';
+      if (!id && !sess.checkoutUrl) return;
+
+      const stay = await confirm({
+        title: 'Payment still in progress',
+        message:
+          'You still have an open PayMongo payment. Leave and cancel it, or continue to finish paying?\n\nIf you leave, the item unlocks for other customers right away.',
+        confirmLabel: 'Continue payment',
+        cancelLabel: 'Leave payment',
+        variant: 'warning',
+        icon: 'fa-credit-card',
+      });
+      if (cancelled) return;
+      if (stay) {
+        if (sess.checkoutUrl) {
+          window.location.assign(sess.checkoutUrl);
+          return;
         }
-      } catch { /* ignore */ }
-      if (notify) {
+        showNotification('Payment session expired. Tap Pay again.', 'warning', { fullText: true });
+        await clearHold(id);
+        return;
+      }
+      await clearHold(id);
+      showNotification(
+        'Payment cancelled. You can pay again anytime — no waiting period.',
+        'info',
+        { fullText: true, duration: 4500 }
+      );
+      const home = roleHome(role, sess.home);
+      if (role === 'admin' || role === 'rider') navigate(home, { replace: true });
+      else {
+        const next = new URLSearchParams(searchParams);
+        next.delete('paying');
+        next.delete('payCancel');
+        setSearchParams(next, { replace: true });
+      }
+    };
+
+    if (searchParams.get('payCancel') === '1') {
+      const cancelId = searchParams.get('order') || searchParams.get('orderId') || readPaySession().orderId;
+      clearHold(cancelId).then(() => {
         showNotification(
           'Payment cancelled. You can pay again anytime — no waiting period.',
           'info',
           { fullText: true, duration: 4500 }
         );
-      }
-    };
-    if (payCancel && cancelId) {
-      clearHold(cancelId, true);
-      const next = new URLSearchParams(searchParams);
-      next.delete('payCancel');
-      setSearchParams(next, { replace: true });
+        const next = new URLSearchParams(searchParams);
+        next.delete('payCancel');
+        setSearchParams(next, { replace: true });
+      });
+      return () => { cancelled = true; };
     }
+
+    if (searchParams.get('paying') === '1') {
+      askLeavePayment();
+    }
+
     const onPageShow = () => {
-      let pending = '';
-      try { pending = sessionStorage.getItem('dk_pay_hold_active') || ''; } catch { /* ignore */ }
-      if (pending) clearHold(pending, true);
+      const sess = readPaySession();
+      if (!sess.orderId && !sess.checkoutUrl) return;
+      if (searchParams.get('paying') === '1' || searchParams.get('payCancel') === '1') return;
+      askLeavePayment();
     };
     window.addEventListener('pageshow', onPageShow);
-    return () => window.removeEventListener('pageshow', onPageShow);
-  }, [searchParams, setSearchParams, releasePaymentHold, showNotification]);
+
+    const onBeforeUnload = (e) => {
+      const sess = readPaySession();
+      if (!sess.orderId) return;
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener('pageshow', onPageShow);
+      window.removeEventListener('beforeunload', onBeforeUnload);
+    };
+  }, [confirm, navigate, releasePaymentHold, role, searchParams, setSearchParams, showNotification]);
 
   useEffect(() => {
     if (!orderIdParam) {
@@ -1384,7 +1449,7 @@ const TrackOrder = ({ onProductClick }) => {
         const feeMethod = String(order.paymentFeeMethod || order.paymentMethod || '').toLowerCase();
         const paymentMethodType = feeMethod.includes('maya') ? 'paymaya' : feeMethod.includes('gcash') ? 'gcash' : undefined;
         const origin = window.location.origin;
-        try { sessionStorage.setItem('dk_pay_hold_active', order.orderId); } catch { /* ignore */ }
+        markPayInProgress({ orderId: order.orderId, home: '/', role: 'user' });
         const result = await createPaymentLink({
           orderId: order.orderId,
           amount: order.finalTotal ?? order.total,
@@ -1397,7 +1462,7 @@ const TrackOrder = ({ onProductClick }) => {
           ...(paymentMethodType ? { paymentMethodType } : {}),
         });
         if (result?.ok === false || result?.blocked || !result?.paymentLinkUrl) {
-          try { sessionStorage.removeItem('dk_pay_hold_active'); } catch { /* ignore */ }
+          clearPaySessionAll();
           showNotification(
             result?.message
               || 'Another customer is already paying for this item. Try again when their 5-minute window ends.',
@@ -1407,9 +1472,18 @@ const TrackOrder = ({ onProductClick }) => {
           setContinuingPayment(false);
           return;
         }
-        window.location.href = result.paymentLinkUrl;
+        markPayInProgress({
+          orderId: order.orderId,
+          checkoutUrl: result.paymentLinkUrl,
+          home: '/',
+          role: 'user',
+        });
+        goToPayMongo(
+          result.paymentLinkUrl,
+          `/track-order?order=${encodeURIComponent(order.orderId)}`
+        );
       } catch (err) {
-        try { sessionStorage.removeItem('dk_pay_hold_active'); } catch { /* ignore */ }
+        clearPaySessionAll();
         const msg = String(err?.message || err?.data || '');
         showNotification(
           /out of stock|paying for this item|payment window/i.test(msg) ? msg : 'Failed. Please try again.',
@@ -1966,7 +2040,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
       const feeMethod = String(order.paymentFeeMethod || order.paymentMethod || '').toLowerCase();
       const paymentMethodType = feeMethod.includes('maya') ? 'paymaya' : feeMethod.includes('gcash') ? 'gcash' : undefined;
       const origin = window.location.origin;
-      try { sessionStorage.setItem('dk_pay_hold_active', order.orderId); } catch { /* ignore */ }
+      markPayInProgress({ orderId: order.orderId, home: '/', role: 'user' });
       const result = await createPaymentLink({
         orderId: order.orderId,
         amount: order.finalTotal ?? order.total,
@@ -1979,7 +2053,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
         ...(paymentMethodType ? { paymentMethodType } : {}),
       });
       if (result?.ok === false || result?.blocked || !result?.paymentLinkUrl) {
-        try { sessionStorage.removeItem('dk_pay_hold_active'); } catch { /* ignore */ }
+        clearPaySessionAll();
         showNotification(
           result?.message
             || 'Another customer is already paying for this item. Try again when their 5-minute window ends.',
@@ -1989,9 +2063,18 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
         setContinuingPayment(false);
         return;
       }
-      window.location.href = result.paymentLinkUrl;
+      markPayInProgress({
+        orderId: order.orderId,
+        checkoutUrl: result.paymentLinkUrl,
+        home: '/',
+        role: 'user',
+      });
+      goToPayMongo(
+        result.paymentLinkUrl,
+        `/track-order?order=${encodeURIComponent(order.orderId)}`
+      );
     } catch (err) {
-      try { sessionStorage.removeItem('dk_pay_hold_active'); } catch { /* ignore */ }
+      clearPaySessionAll();
       const msg = String(err?.message || err?.data || '');
       showNotification(
         /out of stock|paying for this item|payment window/i.test(msg) ? msg : 'Failed. Please try again.',

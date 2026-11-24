@@ -23,6 +23,13 @@ import { isAppOutdated } from '../utils/appUpdate';
 import { getOverlayRoot } from '../utils/scrollLock';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
 import { computePaymentFee, formatFeeRatePercent } from '../utils/paymentFees';
+import {
+  clearPaySessionAll,
+  goToPayMongo,
+  markPayInProgress,
+  readPaySession,
+  roleHome,
+} from '../utils/paymentLeaveGuard';
 import './Checkout.css';
 
 // ─── LALAMOVE SHIPPING CONFIG ─────────────────────────────────────────────────
@@ -1406,21 +1413,23 @@ const Checkout = () => {
   const shippingFee = isOutsideNCR ? 0 : (shippingInfo?.fee ?? 0);
   const deliveryMethod = isOutsideNCR ? 'lbc' : 'rider';
 
-  // Release payment hold when user cancels / backs out of PayMongo (no cooldown left behind)
+  // PayMongo leave: Cancel link clears hold; Back button asks for confirmation first
   useEffect(() => {
-    const clearHold = async (orderId, { notify = false } = {}) => {
+    let cancelled = false;
+
+    const clearHold = async (orderId) => {
       const id = String(orderId || '').trim();
       if (!id) return;
-      try {
-        await releasePaymentHold({ orderId: id });
-      } catch { /* ignore */ }
-      try {
-        const pending = sessionStorage.getItem('dk_post_payment_order');
-        if (pending && pending === id) {
-          sessionStorage.removeItem('dk_post_payment_order');
-          sessionStorage.removeItem('dk_pay_hold_active');
-        }
-      } catch { /* ignore */ }
+      try { await releasePaymentHold({ orderId: id }); } catch { /* ignore */ }
+      clearPaySessionAll();
+    };
+
+    const leavePayment = async ({ notify = true } = {}) => {
+      const sess = readPaySession();
+      const params = new URLSearchParams(window.location.search);
+      const id = sess.orderId || params.get('orderId') || params.get('order') || '';
+      const home = roleHome(role, sess.home);
+      await clearHold(id);
       if (notify) {
         showNotification(
           'Payment cancelled. You can pay again anytime — no waiting period.',
@@ -1428,28 +1437,89 @@ const Checkout = () => {
           { fullText: true, duration: 4500 }
         );
       }
+      // Customer stays on checkout; admin / rider return to their own account home
+      navigate(role === 'admin' || role === 'rider' ? home : '/checkout', { replace: true });
+    };
+
+    const askLeavePayment = async () => {
+      const { orderId, checkoutUrl } = readPaySession();
+      const params = new URLSearchParams(window.location.search);
+      const id = orderId || params.get('orderId') || params.get('order') || '';
+      if (!id && !checkoutUrl) return;
+
+      const stay = await confirm({
+        title: 'Payment still in progress',
+        message:
+          'You still have an open PayMongo payment. Leave and cancel it, or continue to finish paying?\n\nIf you leave, the item unlocks for other customers right away.',
+        confirmLabel: 'Continue payment',
+        cancelLabel: 'Leave payment',
+        variant: 'warning',
+        icon: 'fa-credit-card',
+      });
+      if (cancelled) return;
+      if (stay) {
+        const url = checkoutUrl || readPaySession().checkoutUrl;
+        if (url) {
+          window.location.assign(url);
+          return;
+        }
+        showNotification('Payment session expired. Place the order again to pay.', 'warning', { fullText: true });
+        await clearHold(id);
+        navigate('/checkout', { replace: true });
+        return;
+      }
+      await leavePayment({ notify: true });
     };
 
     const params = new URLSearchParams(window.location.search);
     const cancelOrderId = params.get('orderId') || params.get('order') || '';
+
+    // Explicit PayMongo "Cancel" — leave without extra prompt
     if (params.get('payCancel') === '1' && cancelOrderId) {
-      clearHold(cancelOrderId, { notify: true });
-      params.delete('payCancel');
-      params.delete('orderId');
-      params.delete('order');
-      const next = params.toString();
-      navigate(next ? `/checkout?${next}` : '/checkout', { replace: true });
+      const returnHome = params.get('returnHome') || '';
+      clearHold(cancelOrderId).then(() => {
+        showNotification(
+          'Payment cancelled. You can pay again anytime — no waiting period.',
+          'info',
+          { fullText: true, duration: 4500 }
+        );
+        const dest = (returnHome === '/admin' || returnHome === '/rider')
+          ? returnHome
+          : '/checkout';
+        navigate(dest, { replace: true });
+      });
+      return () => { cancelled = true; };
     }
 
-    // Browser Back from PayMongo (same-tab) — drop hold so others can pay immediately
-    const onReturnFromPay = () => {
-      let pending = '';
-      try { pending = sessionStorage.getItem('dk_pay_hold_active') || ''; } catch { /* ignore */ }
-      if (pending) clearHold(pending, { notify: true });
+    // Returned via phone/desktop Back onto our paying marker
+    if (params.get('paying') === '1') {
+      askLeavePayment();
+    }
+
+    const onPageShow = () => {
+      const { orderId, checkoutUrl } = readPaySession();
+      if (!orderId && !checkoutUrl) return;
+      const q = new URLSearchParams(window.location.search);
+      if (q.get('paying') === '1' || q.get('payCancel') === '1') return;
+      // Back landed on plain checkout while a pay session is still open
+      askLeavePayment();
     };
-    window.addEventListener('pageshow', onReturnFromPay);
-    return () => window.removeEventListener('pageshow', onReturnFromPay);
-  }, [navigate, releasePaymentHold, showNotification]);
+    window.addEventListener('pageshow', onPageShow);
+
+    const onBeforeUnload = (e) => {
+      const { orderId } = readPaySession();
+      if (!orderId) return;
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener('pageshow', onPageShow);
+      window.removeEventListener('beforeunload', onBeforeUnload);
+    };
+  }, [confirm, navigate, releasePaymentHold, role, showNotification]);
 
   // ── Init form ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1941,12 +2011,11 @@ const Checkout = () => {
         role === 'admin' ? '/admin' :
         role === 'rider' ? '/rider' :
         '/';
-      try {
-        sessionStorage.setItem('dk_post_payment_home', payerHome);
-        sessionStorage.setItem('dk_post_payment_order', orderId);
-        sessionStorage.setItem('dk_post_payment_role', role || 'user');
-        sessionStorage.setItem('dk_pay_hold_active', orderId);
-      } catch { /* ignore */ }
+      markPayInProgress({
+        orderId,
+        home: payerHome,
+        role: role || 'user',
+      });
 
       const payArgs = {
         orderId,
@@ -1958,10 +2027,10 @@ const Checkout = () => {
         paymentMethodType: paymentFeeInfo.method === 'maya' ? 'paymaya' : 'gcash',
         // Always land on order-success first (to verify payment), then page routes by role
         successUrl: `${origin}/order-success?orderId=${encodeURIComponent(orderId)}`,
-        // Cancel / back from PayMongo → release hold immediately (no leftover cooldown)
-        cancelUrl:  role === 'admin' || role === 'rider'
-          ? `${origin}${payerHome}?payCancel=1&orderId=${encodeURIComponent(orderId)}`
-          : `${origin}/checkout?payCancel=1&orderId=${encodeURIComponent(orderId)}`,
+        // Always return here so we can clear the hold; then send admin/rider to their home
+        cancelUrl:
+          `${origin}/checkout?payCancel=1&orderId=${encodeURIComponent(orderId)}`
+          + `&returnHome=${encodeURIComponent(payerHome)}`,
       };
 
       try {
@@ -2075,7 +2144,14 @@ const Checkout = () => {
       }
 
       setLoading(false);
-      window.location.href = paymentLinkUrl;
+      markPayInProgress({
+        orderId,
+        checkoutUrl: paymentLinkUrl,
+        home: payerHome,
+        role: role || 'user',
+      });
+      // Push our page into history so phone/desktop Back hits confirm first
+      goToPayMongo(paymentLinkUrl, `/checkout?orderId=${encodeURIComponent(orderId)}`);
 
     } catch (error) {
       setLoading(false);
