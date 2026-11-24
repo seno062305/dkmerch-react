@@ -4,6 +4,8 @@ export const PAY_LINK_KEY = 'dk_pay_checkout_url';
 export const PAY_ORDER_KEY = 'dk_post_payment_order';
 export const PAY_HOME_KEY = 'dk_post_payment_home';
 export const PAY_ROLE_KEY = 'dk_post_payment_role';
+/** Where to send the user after they choose Leave on /paying */
+export const PAY_RETURN_KEY = 'dk_post_payment_return';
 
 export function readPaySession() {
   try {
@@ -49,6 +51,7 @@ export function clearPaySessionAll() {
     sessionStorage.removeItem(PAY_ORDER_KEY);
     sessionStorage.removeItem(PAY_HOME_KEY);
     sessionStorage.removeItem(PAY_ROLE_KEY);
+    sessionStorage.removeItem(PAY_RETURN_KEY);
   } catch { /* ignore */ }
 }
 
@@ -60,15 +63,24 @@ export function roleHome(role, storedHome) {
 }
 
 /**
- * Open PayMongo after planting a history entry so phone/desktop Back
- * returns to our site first (where we can show a leave confirmation).
+ * Open PayMongo after planting `/paying` in history.
+ * Browser Back from PayMongo hits `/paying` immediately (confirm only —
+ * not Checkout / Order Details), so the user is not "removed" into the app
+ * until they choose Leave. Continue re-opens PayMongo.
  */
 export function goToPayMongo(checkoutUrl, returnPath) {
   if (!checkoutUrl) return;
   try {
-    const url = new URL(returnPath, window.location.origin);
-    url.searchParams.set('paying', '1');
-    window.history.pushState({ dkPaying: true }, '', `${url.pathname}${url.search}`);
+    const orderId =
+      sessionStorage.getItem(PAY_HOLD_KEY) ||
+      sessionStorage.getItem(PAY_ORDER_KEY) ||
+      '';
+    if (returnPath) {
+      sessionStorage.setItem(PAY_RETURN_KEY, String(returnPath));
+    }
+    const bridge = new URL('/paying', window.location.origin);
+    if (orderId) bridge.searchParams.set('orderId', orderId);
+    window.history.pushState({ dkPaying: true }, '', `${bridge.pathname}${bridge.search}`);
   } catch { /* ignore */ }
   window.location.assign(checkoutUrl);
 }

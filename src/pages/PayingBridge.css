@@ -1,0 +1,33 @@
+.paying-bridge {
+  min-height: 100dvh;
+  min-height: 100vh;
+  background: #0f0a14;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.paying-bridge-backdrop {
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 50% 20%, rgba(252, 18, 104, 0.22), transparent 55%),
+    #0f0a14;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.paying-bridge-loading {
+  color: #fff;
+  font-size: 1.5rem;
+  opacity: 0.7;
+}
+
+.paying-bridge-overlay {
+  /* Solid cover — no Order Details / Checkout peeking through */
+  background: rgba(15, 10, 20, 0.92) !important;
+}
+
+.paying-bridge-overlay .dk-confirm-message {
+  white-space: pre-line;
+}

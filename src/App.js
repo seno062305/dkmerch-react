@@ -63,6 +63,7 @@ import AdminStoreDetails from './admin/AdminStoreDetails';
 import AdminRewards from './admin/AdminRewards';
 import Checkout from './pages/Checkout';
 import OrderSuccess from './pages/OrderSuccess';
+import PayingBridge from './pages/PayingBridge';
 
 // 🛵 Rider Dashboard
 import RiderDashboard from './pages/RiderDashboard';
@@ -86,6 +87,7 @@ const StartupRedirect = ({ children }) => {
         path.startsWith('/promo') ||
         path.startsWith('/order-success') ||
         path.startsWith('/track-order') ||
+        path.startsWith('/paying') ||
         path.startsWith('/verify-email');
 
       if (role === 'admin' && path === '/' && !isExempt) {
@@ -490,10 +492,11 @@ function AppContent() {
   const isSettingsRoute   = location.pathname === '/settings' || location.pathname.startsWith('/settings/');
   const isMoreRoute       = location.pathname === '/more' || location.pathname.startsWith('/more/');
   const isCheckoutRoute   = location.pathname === '/checkout' || location.pathname.startsWith('/checkout/');
-  const hideHeaderFooter  = isAdminRoute || isPromoRoute || isRiderTrackRoute || isRiderDashRoute || isVerifyRoute;
+  const isPayingRoute     = location.pathname === '/paying' || location.pathname.startsWith('/paying/');
+  const hideHeaderFooter  = isAdminRoute || isPromoRoute || isRiderTrackRoute || isRiderDashRoute || isVerifyRoute || isPayingRoute;
   const hideFooterOnly    = isCustomerChatRoute;
   // Hide floating chat/install FABs on form-heavy pages so they don't cover inputs
-  const showChatBot       = !isAdminRoute && !isPromoRoute && !isRiderTrackRoute && !isRiderDashRoute && !isVerifyRoute && !isCustomerChatRoute && !isSettingsRoute && !isMoreRoute && !isCheckoutRoute;
+  const showChatBot       = !isAdminRoute && !isPromoRoute && !isRiderTrackRoute && !isRiderDashRoute && !isVerifyRoute && !isCustomerChatRoute && !isSettingsRoute && !isMoreRoute && !isCheckoutRoute && !isPayingRoute;
   const showCustomerNav   = !hideHeaderFooter;
 
   useEffect(() => {
@@ -524,6 +527,7 @@ function AppContent() {
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/wishlist"      element={<WishlistPage onProductClick={(p) => { setCurrentProduct(p); setShowProductModal(true); }} />} />
             <Route path="/checkout"      element={<Checkout />} />
+            <Route path="/paying"        element={<PayingBridge />} />
             <Route path="/settings"      element={<Settings />} />
             <Route path="/more"          element={<MoreSettings />} />
             <Route path="/chat"          element={<CustomerChat />} />
