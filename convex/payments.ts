@@ -126,7 +126,7 @@ export async function evaluateOrderStock(db: any, order: any) {
       return {
         ok: false,
         blocked: true,
-        message: `Another customer is already paying for this item. Stock unlocks in about ${wait} if they don’t finish payment.`,
+        message: `Another customer is currently on PayMongo for this item. If they cancel or go back, you can pay right away (unlocks in about ${wait} if they stay).`,
         retryAfterSec: Math.max(1, Math.ceil((blockExpiry - Date.now()) / 1000)),
         expiresAt: blockExpiry,
         shortages,
@@ -236,48 +236,60 @@ export const createPaymentLink = action({
       (cancelUrl && String(cancelUrl).trim()) ||
       `${baseUrl}/checkout`;
 
-    const response = await fetch("https://api.paymongo.com/v1/checkout_sessions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Basic ${encoded}`,
-      },
-      body: JSON.stringify({
-        data: {
-          attributes: {
-            billing: {
-              name:  customerName  || "Customer",
-              email: customerEmail || "customer@dkmerch.com",
-              phone: customerPhone || "",
-            },
-            line_items: [{
-              currency:    "PHP",
-              amount:      Math.round(amount * 100),
-              description: description,
-              name:        description,
-              quantity:    1,
-            }],
-            payment_method_types: methodTypes,
-            success_url: resolvedSuccess,
-            cancel_url:  resolvedCancel,
-            description: remarks || orderId,
-            send_email_receipt: false,
-            show_description:   true,
-            show_line_items:    true,
-          },
+    let response;
+    try {
+      response = await fetch("https://api.paymongo.com/v1/checkout_sessions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Basic ${encoded}`,
         },
-      }),
-    });
+        body: JSON.stringify({
+          data: {
+            attributes: {
+              billing: {
+                name:  customerName  || "Customer",
+                email: customerEmail || "customer@dkmerch.com",
+                phone: customerPhone || "",
+              },
+              line_items: [{
+                currency:    "PHP",
+                amount:      Math.round(amount * 100),
+                description: description,
+                name:        description,
+                quantity:    1,
+              }],
+              payment_method_types: methodTypes,
+              success_url: resolvedSuccess,
+              cancel_url:  resolvedCancel,
+              description: remarks || orderId,
+              send_email_receipt: false,
+              show_description:   true,
+              show_line_items:    true,
+            },
+          },
+        }),
+      });
+    } catch (err) {
+      // Never leave a hold if PayMongo never opened
+      await ctx.runMutation(api.payments.releasePaymentHold, { orderId });
+      throw err;
+    }
 
     if (!response.ok) {
-      const error = await response.json();
+      const error = await response.json().catch(() => ({}));
       console.error("PayMongo API error:", JSON.stringify(error));
+      await ctx.runMutation(api.payments.releasePaymentHold, { orderId });
       throw new Error(`PayMongo error: ${JSON.stringify(error)}`);
     }
 
     const data = await response.json();
     const session     = data.data;
     const checkoutUrl = session.attributes.checkout_url;
+    if (!checkoutUrl) {
+      await ctx.runMutation(api.payments.releasePaymentHold, { orderId });
+      throw new Error("PayMongo did not return a checkout URL.");
+    }
 
     await ctx.runMutation(api.payments.savePaymentLink, {
       orderId,

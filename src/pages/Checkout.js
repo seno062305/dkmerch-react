@@ -1281,6 +1281,7 @@ const Checkout = () => {
   );
   const saveProfileMut           = useMutation(api.users.saveProfile);
   const createPaymentLink        = useAction(api.payments.createPaymentLink);
+  const releasePaymentHold       = useMutation(api.payments.releasePaymentHold);
   const markOrderPaid            = useMutation(api.payments.markOrderPaid);
   const latestAppUpdate          = useQuery(api.appUpdates.getLatestUpdate);
   const markTicketCheckedOutMut  = useMutation(api.rewards.markTicketCheckedOut);
@@ -1404,6 +1405,51 @@ const Checkout = () => {
   // LBC fee is arranged with admin — not charged at checkout payment
   const shippingFee = isOutsideNCR ? 0 : (shippingInfo?.fee ?? 0);
   const deliveryMethod = isOutsideNCR ? 'lbc' : 'rider';
+
+  // Release payment hold when user cancels / backs out of PayMongo (no cooldown left behind)
+  useEffect(() => {
+    const clearHold = async (orderId, { notify = false } = {}) => {
+      const id = String(orderId || '').trim();
+      if (!id) return;
+      try {
+        await releasePaymentHold({ orderId: id });
+      } catch { /* ignore */ }
+      try {
+        const pending = sessionStorage.getItem('dk_post_payment_order');
+        if (pending && pending === id) {
+          sessionStorage.removeItem('dk_post_payment_order');
+          sessionStorage.removeItem('dk_pay_hold_active');
+        }
+      } catch { /* ignore */ }
+      if (notify) {
+        showNotification(
+          'Payment cancelled. You can pay again anytime — no waiting period.',
+          'info',
+          { fullText: true, duration: 4500 }
+        );
+      }
+    };
+
+    const params = new URLSearchParams(window.location.search);
+    const cancelOrderId = params.get('orderId') || params.get('order') || '';
+    if (params.get('payCancel') === '1' && cancelOrderId) {
+      clearHold(cancelOrderId, { notify: true });
+      params.delete('payCancel');
+      params.delete('orderId');
+      params.delete('order');
+      const next = params.toString();
+      navigate(next ? `/checkout?${next}` : '/checkout', { replace: true });
+    }
+
+    // Browser Back from PayMongo (same-tab) — drop hold so others can pay immediately
+    const onReturnFromPay = () => {
+      let pending = '';
+      try { pending = sessionStorage.getItem('dk_pay_hold_active') || ''; } catch { /* ignore */ }
+      if (pending) clearHold(pending, { notify: true });
+    };
+    window.addEventListener('pageshow', onReturnFromPay);
+    return () => window.removeEventListener('pageshow', onReturnFromPay);
+  }, [navigate, releasePaymentHold, showNotification]);
 
   // ── Init form ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1899,6 +1945,7 @@ const Checkout = () => {
         sessionStorage.setItem('dk_post_payment_home', payerHome);
         sessionStorage.setItem('dk_post_payment_order', orderId);
         sessionStorage.setItem('dk_post_payment_role', role || 'user');
+        sessionStorage.setItem('dk_pay_hold_active', orderId);
       } catch { /* ignore */ }
 
       const payArgs = {
@@ -1911,9 +1958,10 @@ const Checkout = () => {
         paymentMethodType: paymentFeeInfo.method === 'maya' ? 'paymaya' : 'gcash',
         // Always land on order-success first (to verify payment), then page routes by role
         successUrl: `${origin}/order-success?orderId=${encodeURIComponent(orderId)}`,
+        // Cancel / back from PayMongo → release hold immediately (no leftover cooldown)
         cancelUrl:  role === 'admin' || role === 'rider'
-          ? `${origin}${payerHome}`
-          : `${origin}/checkout`,
+          ? `${origin}${payerHome}?payCancel=1&orderId=${encodeURIComponent(orderId)}`
+          : `${origin}/checkout?payCancel=1&orderId=${encodeURIComponent(orderId)}`,
       };
 
       try {
@@ -1931,8 +1979,7 @@ const Checkout = () => {
               'warning',
               { fullText: true, duration: 6000 }
             );
-            // Stay on site with the unpaid order — never redirect to a blank/undefined URL
-            navigate(`/track-order?order=${encodeURIComponent(orderId)}`, { replace: true });
+            // Stay on checkout/payment — do not leave this tab when the hold notif shows
             return;
           }
           paymentLinkUrl = result.paymentLinkUrl;
@@ -2020,11 +2067,10 @@ const Checkout = () => {
       if (!paymentLinkUrl) {
         setLoading(false);
         showNotification(
-          'Payment link could not be opened. Your order is saved — try Pay again from Track Order.',
+          'Payment link could not be opened. Stay on this page and try Place Order / Pay again in a moment.',
           'warning',
           { fullText: true, duration: 6000 }
         );
-        navigate(`/track-order?order=${encodeURIComponent(orderId)}`, { replace: true });
         return;
       }
 

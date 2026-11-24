@@ -290,7 +290,12 @@
   word-break: break-word;
 }
 .release-date-info.released { background: #f0fdf4; color: #15803d; border-color: #e5e7eb; }
-.release-date-info.sale-date-info { background: #fef2f2; color: #e5e7eb; border-color: #e5e7eb; }
+.release-date-info.sale-date-info {
+  background: #fef2f2;
+  color: #991b1b;
+  border-color: #fecaca;
+}
+.release-date-info.sale-date-info i { color: #dc2626; }
 
 .product-pricing { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
 .price { font-size: 18px; font-weight: 700; color: #ee4d2d; }

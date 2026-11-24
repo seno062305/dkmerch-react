@@ -1008,6 +1008,7 @@ const TrackOrder = ({ onProductClick }) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const orderIdParam = searchParams.get('order') || searchParams.get('orderId') || searchParams.get('id');
   const highlightParam = searchParams.get('highlight') === '1';
+  const releasePaymentHold = useMutation(api.payments.releasePaymentHold);
 
   const [filter,             setFilter]             = useState('active');
   const [selectedOrderId,    setSelectedOrderId]    = useState(null);
@@ -1039,6 +1040,42 @@ const TrackOrder = ({ onProductClick }) => {
     api.orders.getOrderById,
     orderIdParam ? { orderId: orderIdParam } : 'skip'
   );
+
+  // Back / cancel from PayMongo → clear payment hold so stock is free again
+  useEffect(() => {
+    const payCancel = searchParams.get('payCancel') === '1';
+    const cancelId = searchParams.get('order') || searchParams.get('orderId') || '';
+    const clearHold = async (orderId, notify) => {
+      const id = String(orderId || '').trim();
+      if (!id) return;
+      try { await releasePaymentHold({ orderId: id }); } catch { /* ignore */ }
+      try {
+        if (sessionStorage.getItem('dk_pay_hold_active') === id) {
+          sessionStorage.removeItem('dk_pay_hold_active');
+        }
+      } catch { /* ignore */ }
+      if (notify) {
+        showNotification(
+          'Payment cancelled. You can pay again anytime — no waiting period.',
+          'info',
+          { fullText: true, duration: 4500 }
+        );
+      }
+    };
+    if (payCancel && cancelId) {
+      clearHold(cancelId, true);
+      const next = new URLSearchParams(searchParams);
+      next.delete('payCancel');
+      setSearchParams(next, { replace: true });
+    }
+    const onPageShow = () => {
+      let pending = '';
+      try { pending = sessionStorage.getItem('dk_pay_hold_active') || ''; } catch { /* ignore */ }
+      if (pending) clearHold(pending, true);
+    };
+    window.addEventListener('pageshow', onPageShow);
+    return () => window.removeEventListener('pageshow', onPageShow);
+  }, [searchParams, setSearchParams, releasePaymentHold, showNotification]);
 
   useEffect(() => {
     if (!orderIdParam) {
@@ -1346,6 +1383,8 @@ const TrackOrder = ({ onProductClick }) => {
         // Always mint a fresh link after stock check (don't reuse a stale PayMongo session)
         const feeMethod = String(order.paymentFeeMethod || order.paymentMethod || '').toLowerCase();
         const paymentMethodType = feeMethod.includes('maya') ? 'paymaya' : feeMethod.includes('gcash') ? 'gcash' : undefined;
+        const origin = window.location.origin;
+        try { sessionStorage.setItem('dk_pay_hold_active', order.orderId); } catch { /* ignore */ }
         const result = await createPaymentLink({
           orderId: order.orderId,
           amount: order.finalTotal ?? order.total,
@@ -1353,9 +1392,12 @@ const TrackOrder = ({ onProductClick }) => {
           customerName: order.customerName,
           customerEmail: order.email,
           customerPhone: order.phone,
+          successUrl: `${origin}/order-success?orderId=${encodeURIComponent(order.orderId)}`,
+          cancelUrl: `${origin}/track-order?payCancel=1&order=${encodeURIComponent(order.orderId)}`,
           ...(paymentMethodType ? { paymentMethodType } : {}),
         });
         if (result?.ok === false || result?.blocked || !result?.paymentLinkUrl) {
+          try { sessionStorage.removeItem('dk_pay_hold_active'); } catch { /* ignore */ }
           showNotification(
             result?.message
               || 'Another customer is already paying for this item. Try again when their 5-minute window ends.',
@@ -1367,6 +1409,7 @@ const TrackOrder = ({ onProductClick }) => {
         }
         window.location.href = result.paymentLinkUrl;
       } catch (err) {
+        try { sessionStorage.removeItem('dk_pay_hold_active'); } catch { /* ignore */ }
         const msg = String(err?.message || err?.data || '');
         showNotification(
           /out of stock|paying for this item|payment window/i.test(msg) ? msg : 'Failed. Please try again.',
@@ -1922,6 +1965,8 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
       // Always mint a fresh link after stock check (don't reuse a stale PayMongo session)
       const feeMethod = String(order.paymentFeeMethod || order.paymentMethod || '').toLowerCase();
       const paymentMethodType = feeMethod.includes('maya') ? 'paymaya' : feeMethod.includes('gcash') ? 'gcash' : undefined;
+      const origin = window.location.origin;
+      try { sessionStorage.setItem('dk_pay_hold_active', order.orderId); } catch { /* ignore */ }
       const result = await createPaymentLink({
         orderId: order.orderId,
         amount: order.finalTotal ?? order.total,
@@ -1929,9 +1974,12 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
         customerName: order.customerName,
         customerEmail: order.email,
         customerPhone: order.phone,
+        successUrl: `${origin}/order-success?orderId=${encodeURIComponent(order.orderId)}`,
+        cancelUrl: `${origin}/track-order?payCancel=1&order=${encodeURIComponent(order.orderId)}`,
         ...(paymentMethodType ? { paymentMethodType } : {}),
       });
       if (result?.ok === false || result?.blocked || !result?.paymentLinkUrl) {
+        try { sessionStorage.removeItem('dk_pay_hold_active'); } catch { /* ignore */ }
         showNotification(
           result?.message
             || 'Another customer is already paying for this item. Try again when their 5-minute window ends.',
@@ -1943,6 +1991,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
       }
       window.location.href = result.paymentLinkUrl;
     } catch (err) {
+      try { sessionStorage.removeItem('dk_pay_hold_active'); } catch { /* ignore */ }
       const msg = String(err?.message || err?.data || '');
       showNotification(
         /out of stock|paying for this item|payment window/i.test(msg) ? msg : 'Failed. Please try again.',

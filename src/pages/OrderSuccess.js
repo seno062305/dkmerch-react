@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useAction, useQuery } from 'convex/react';
+import { useAction, useMutation, useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useAuth } from '../context/AuthContext';
 import './OrderSuccess.css';
@@ -17,6 +17,7 @@ const OrderSuccess = () => {
   const orderId = searchParams.get('orderId');
   const { role, isReady } = useAuth();
   const checkPaymentStatus = useAction(api.payments.checkPaymentStatus);
+  const releasePaymentHold = useMutation(api.payments.releasePaymentHold);
 
   // checking | paid | unpaid — never treat "redirect only" as paid
   const [status, setStatus] = useState('checking');
@@ -40,6 +41,7 @@ const OrderSuccess = () => {
       sessionStorage.removeItem('dk_post_payment_home');
       sessionStorage.removeItem('dk_post_payment_order');
       sessionStorage.removeItem('dk_post_payment_role');
+      sessionStorage.removeItem('dk_pay_hold_active');
     } catch { /* ignore */ }
     navigate(home, { replace: true });
   }, [navigate, resolveHome]);
@@ -88,8 +90,10 @@ const OrderSuccess = () => {
         }
       }
 
-      // Still not paid after retries — do NOT fake success
+      // Still not paid after retries — release hold so others can pay (user backed out)
       if (cancelled) return;
+      try { await releasePaymentHold({ orderId }); } catch { /* ignore */ }
+      try { sessionStorage.removeItem('dk_pay_hold_active'); } catch { /* ignore */ }
       if (isReady && (role === 'admin' || role === 'rider')) {
         goPayerHome();
         return;
@@ -99,7 +103,7 @@ const OrderSuccess = () => {
 
     verifyWithRetry();
     return () => { cancelled = true; };
-  }, [order, orderId, role, isReady, checkPaymentStatus, goPayerHome]);
+  }, [order, orderId, role, isReady, checkPaymentStatus, goPayerHome, releasePaymentHold]);
 
   useEffect(() => {
     if (!isReady || !orderId) return;
