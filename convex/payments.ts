@@ -2,7 +2,6 @@
 import { action, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { api } from "./_generated/api";
-import { insertCustomerNotification } from "./customerNotifications";
 
 async function findProductForOrderItem(db: any, item: any) {
   const raw = item?.id || item?.productId;
@@ -23,53 +22,88 @@ async function findProductForOrderItem(db: any, item: any) {
   );
 }
 
-export const RESTOCK_ETA_LABEL = "2–3 weeks";
+/** Soft lock while PayMongo checkout is open. */
+export const PAYMENT_HOLD_MS = 5 * 60 * 1000;
 
-/** Qty held by paid reserved / choice-needed oversell orders (not yet deducted). */
-export async function reservedQtyForProduct(db: any, product: any) {
-  if (!product?._id) return 0;
-  const pid = String(product._id);
-  const alt = String((product as any).id || "");
-  const orders = await db.query("orders").collect();
-  let held = 0;
-  for (const order of orders) {
-    const st = String((order as any).oversellStatus || "");
-    if (st !== "reserved" && st !== "choice_needed" && st !== "refund_pending") continue;
-    if (String(order.paymentStatus || "").toLowerCase() !== "paid") continue;
-    for (const item of order.items || []) {
-      const raw = String(item?.id || item?.productId || "");
-      if (!raw) continue;
-      if (raw !== pid && raw !== alt && String(item?.productId || "") !== pid) continue;
-      held += Math.max(0, Math.floor(Number(item.quantity || item.qty || 1)));
-    }
-  }
-  return held;
+function formatHoldWait(ms: number) {
+  const sec = Math.max(1, Math.ceil(ms / 1000));
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  if (m <= 0) return `${s}s`;
+  return s > 0 ? `${m}m ${s}s` : `${m}m`;
 }
 
-/** Sellable units = on-hand stock minus reserved oversell claims. */
-export async function sellableStockForProduct(db: any, product: any) {
+/** Active payment-hold qty for a product (lazy-deletes expired rows). */
+export async function activeHoldQtyForProduct(
+  db: any,
+  productId: string,
+  excludeOrderId?: string
+) {
+  const now = Date.now();
+  const rows = await db
+    .query("paymentHolds")
+    .withIndex("by_productId", (q: any) => q.eq("productId", String(productId)))
+    .collect();
+  let held = 0;
+  let latestExpiry = 0;
+  for (const row of rows) {
+    if (Number(row.expiresAt) <= now) {
+      await db.delete(row._id);
+      continue;
+    }
+    if (excludeOrderId && String(row.orderId) === String(excludeOrderId)) continue;
+    held += Math.max(0, Math.floor(Number(row.qty) || 0));
+    latestExpiry = Math.max(latestExpiry, Number(row.expiresAt) || 0);
+  }
+  return { held, latestExpiry };
+}
+
+/** Sellable = on-hand stock minus other customers' active payment holds. */
+export async function sellableStockForProduct(
+  db: any,
+  product: any,
+  excludeOrderId?: string
+) {
   const onHand = Number((product as any)?.stock);
-  if (!Number.isFinite(onHand)) return Infinity;
-  const held = await reservedQtyForProduct(db, product);
-  return Math.max(0, onHand - held);
+  if (!Number.isFinite(onHand)) return { available: Infinity, latestExpiry: 0, held: 0 };
+  const { held, latestExpiry } = await activeHoldQtyForProduct(
+    db,
+    String(product._id),
+    excludeOrderId
+  );
+  return { available: Math.max(0, onHand - held), latestExpiry, held };
+}
+
+export async function clearPaymentHoldsForOrder(db: any, orderId: string) {
+  const rows = await db
+    .query("paymentHolds")
+    .withIndex("by_orderId", (q: any) => q.eq("orderId", String(orderId)))
+    .collect();
+  for (const row of rows) await db.delete(row._id);
 }
 
 /** Check if unpaid order can still take stock (for continue payment). */
 export async function evaluateOrderStock(db: any, order: any) {
-  if (!order) return { ok: false, message: "Order not found.", shortages: [] as any[] };
+  if (!order) return { ok: false, message: "Order not found.", shortages: [] as any[], blocked: false };
   if (String(order.paymentStatus || "").toLowerCase() === "paid") {
-    return { ok: true, message: "Already paid.", shortages: [] as any[] };
+    return { ok: true, message: "Already paid.", shortages: [] as any[], blocked: false };
   }
   if (order.isRewardOrder) {
-    return { ok: true, message: "Reward order.", shortages: [] as any[] };
+    return { ok: true, message: "Reward order.", shortages: [] as any[], blocked: false };
   }
   const shortages: { name: string; needed: number; available: number }[] = [];
+  let blockExpiry = 0;
+  let blockedByHold = false;
   for (const item of order.items || []) {
     const qty = Number(item.quantity || item.qty || 1);
     if (qty <= 0) continue;
     const product = await findProductForOrderItem(db, item);
     if (!product) continue;
-    const available = await sellableStockForProduct(db, product);
+    const { available, latestExpiry, held } = await sellableStockForProduct(
+      db,
+      product,
+      String(order.orderId || "")
+    );
     if (!Number.isFinite(available)) continue;
     if (available < qty) {
       shortages.push({
@@ -77,153 +111,59 @@ export async function evaluateOrderStock(db: any, order: any) {
         needed: qty,
         available: Math.max(0, available),
       });
+      if (held > 0 && latestExpiry > Date.now()) {
+        blockedByHold = true;
+        blockExpiry = Math.max(blockExpiry, latestExpiry);
+      }
     }
   }
   if (shortages.length) {
     const detail = shortages
       .map((s) => `${s.name} (need ${s.needed}, left ${s.available})`)
       .join("; ");
+    if (blockedByHold && blockExpiry > Date.now()) {
+      const wait = formatHoldWait(blockExpiry - Date.now());
+      return {
+        ok: false,
+        blocked: true,
+        message: `Another customer is already paying for this item. Stock unlocks in about ${wait} if they don’t finish payment.`,
+        retryAfterSec: Math.max(1, Math.ceil((blockExpiry - Date.now()) / 1000)),
+        expiresAt: blockExpiry,
+        shortages,
+      };
+    }
     return {
       ok: false,
-      message: `Out of stock: ${detail}. Another customer paid first.`,
+      blocked: false,
+      message: `Out of stock: ${detail}.`,
       shortages,
     };
   }
-  return { ok: true, message: "Stock available.", shortages: [] as any[] };
-}
-
-async function collectPaidShortages(db: any, order: any) {
-  const shortages: { name: string; needed: number; available: number; productId?: string }[] = [];
-  for (const item of order.items || []) {
-    const qty = Number(item.quantity || item.qty || 1);
-    if (qty <= 0) continue;
-    const product = await findProductForOrderItem(db, item);
-    if (!product || typeof (product as any).stock !== "number") continue;
-    const stock = Number((product as any).stock);
-    if (stock < qty) {
-      shortages.push({
-        name: String(item.name || (product as any).name || "Item"),
-        needed: qty,
-        available: Math.max(0, stock),
-        productId: String(product._id),
-      });
-    }
-  }
-  return shortages;
+  return { ok: true, message: "Stock available.", shortages: [] as any[], blocked: false };
 }
 
 /** Idempotent stock deduct after a paid sale (online or walk-in). */
 export async function deductStockForPaidOrder(db: any, order: any) {
   if (!order || order.stockDeducted) return { deducted: false, skipped: true };
-  const oversell = String((order as any).oversellStatus || "");
-  if (
-    oversell === "choice_needed"
-    || oversell === "reserved"
-    || oversell === "refund_pending"
-    || oversell === "refunded"
-  ) {
-    return { deducted: false, skipped: true, stockIssue: true, needsOversellChoice: oversell === "choice_needed" };
-  }
   if (order.isRewardOrder) {
     await db.patch(order._id, { stockDeducted: true, stockIssue: false });
+    await clearPaymentHoldsForOrder(db, String(order.orderId || ""));
     return { deducted: false, skipped: true };
   }
 
-  const shortages = await collectPaidShortages(db, order);
-  if (shortages.length) {
-    // Do NOT clamp/oversell — paid customer must choose refund or reserve.
-    await db.patch(order._id, {
-      stockIssue: true,
-      oversellStatus: "choice_needed",
-      orderStatus: "awaiting_restock_choice",
-      status: "Awaiting Restock Choice",
-      restockEtaLabel: RESTOCK_ETA_LABEL,
-      oversellDetectedAt: new Date().toISOString(),
-      oversellShortages: shortages,
-    } as any);
-    if (order.email) {
-      await insertCustomerNotification(db, {
-        email: String(order.email),
-        type: "oversell_choice",
-        title: "Item sold out — choose next step",
-        body: `Order ${order.orderId} was paid, but stock was taken by another buyer. Choose a refund or reserve for the next restock (about ${RESTOCK_ETA_LABEL}).`,
-        url: `/track-order?orderId=${encodeURIComponent(String(order.orderId))}`,
-        orderId: String(order.orderId),
-      });
-    }
-    return { deducted: false, stockIssue: true, needsOversellChoice: true, shortages };
-  }
-
+  let stockIssue = false;
   for (const item of order.items || []) {
     const qty = Number(item.quantity || item.qty || 1);
     if (qty <= 0) continue;
     const product = await findProductForOrderItem(db, item);
     if (!product || typeof (product as any).stock !== "number") continue;
     const stock = Number((product as any).stock);
+    if (stock < qty) stockIssue = true;
     await db.patch(product._id, { stock: Math.max(0, stock - qty) });
   }
-  await db.patch(order._id, { stockDeducted: true, stockIssue: false });
-  return { deducted: true, stockIssue: false };
-}
-
-/** After restock: assign on-hand units to reserved orders (FIFO). */
-export async function tryFulfillReservedOrders(db: any, productId?: string) {
-  const orders = await db.query("orders").collect();
-  const reserved = orders
-    .filter((o: any) =>
-      String(o.oversellStatus || "") === "reserved"
-      && String(o.paymentStatus || "").toLowerCase() === "paid"
-      && !o.stockDeducted
-    )
-    .sort((a: any, b: any) => {
-      const ta = new Date(a.reservedAt || a.oversellDetectedAt || 0).getTime();
-      const tb = new Date(b.reservedAt || b.oversellDetectedAt || 0).getTime();
-      return ta - tb;
-    });
-
-  let fulfilled = 0;
-  for (const order of reserved) {
-    if (productId) {
-      const touches = (order.items || []).some((item: any) => {
-        const raw = String(item?.id || item?.productId || "");
-        return raw === String(productId) || String(item?.productId || "") === String(productId);
-      });
-      if (!touches) continue;
-    }
-    const shortages = await collectPaidShortages(db, order);
-    if (shortages.length) continue;
-
-    for (const item of order.items || []) {
-      const qty = Number(item.quantity || item.qty || 1);
-      if (qty <= 0) continue;
-      const product = await findProductForOrderItem(db, item);
-      if (!product || typeof (product as any).stock !== "number") continue;
-      const stock = Number((product as any).stock);
-      await db.patch(product._id, { stock: Math.max(0, stock - qty) });
-    }
-    const now = new Date().toISOString();
-    await db.patch(order._id, {
-      stockDeducted: true,
-      stockIssue: false,
-      oversellStatus: "fulfilled",
-      orderStatus: "pending",
-      status: "Pending",
-      oversellResolvedAt: now,
-      restockEtaLabel: undefined,
-    } as any);
-    if (order.email) {
-      await insertCustomerNotification(db, {
-        email: String(order.email),
-        type: "oversell_fulfilled",
-        title: "Your reserved item is ready",
-        body: `Good news! Stock for order ${order.orderId} is now available. We’re preparing your order.`,
-        url: `/track-order?orderId=${encodeURIComponent(String(order.orderId))}`,
-        orderId: String(order.orderId),
-      });
-    }
-    fulfilled += 1;
-  }
-  return { fulfilled };
+  await db.patch(order._id, { stockDeducted: true, stockIssue });
+  await clearPaymentHoldsForOrder(db, String(order.orderId || ""));
+  return { deducted: true, stockIssue };
 }
 
 export { findProductForOrderItem };
@@ -265,10 +205,16 @@ export const createPaymentLink = action({
     cancelUrl: v.optional(v.string()),
   },
   handler: async (ctx, { orderId, amount, description, customerName, customerEmail, customerPhone, remarks, paymentMethodType, successUrl, cancelUrl }) => {
-    // Re-check stock before opening / refreshing PayMongo (continue payment race)
-    const stockCheck = await ctx.runQuery(api.payments.checkOrderStock, { orderId });
-    if (stockCheck && stockCheck.ok === false) {
-      throw new Error(stockCheck.message || "Items are out of stock.");
+    // Soft-lock stock for 5 minutes — blocks other buyers from starting PayMongo
+    const hold = await ctx.runMutation(api.payments.acquirePaymentHold, { orderId });
+    if (hold && hold.ok === false) {
+      return {
+        ok: false,
+        blocked: !!hold.blocked,
+        message: hold.message || "Items are unavailable for payment right now.",
+        retryAfterSec: hold.retryAfterSec || 0,
+        expiresAt: hold.expiresAt || 0,
+      };
     }
 
     const secretKey = process.env.PAYMONGO_SECRET_KEY;
@@ -339,7 +285,77 @@ export const createPaymentLink = action({
       paymentLinkUrl: checkoutUrl,
     });
 
-    return { paymentLinkId: session.id, paymentLinkUrl: checkoutUrl };
+    return {
+      ok: true,
+      paymentLinkId: session.id,
+      paymentLinkUrl: checkoutUrl,
+      holdExpiresAt: hold?.expiresAt || 0,
+    };
+  },
+});
+
+/** Lock order items for PAYMENT_HOLD_MS so others cannot start paying. */
+export const acquirePaymentHold = mutation({
+  args: { orderId: v.string() },
+  handler: async ({ db }, { orderId }) => {
+    const order = await db
+      .query("orders")
+      .withIndex("by_orderId", (q) => q.eq("orderId", orderId))
+      .first();
+    if (!order) return { ok: false, blocked: false, message: "Order not found." };
+    if (String(order.paymentStatus || "").toLowerCase() === "paid") {
+      return { ok: true, skipped: true, expiresAt: 0 };
+    }
+    if (order.isRewardOrder) return { ok: true, skipped: true, expiresAt: 0 };
+
+    const stockCheck = await evaluateOrderStock(db, order);
+    if (!stockCheck.ok) {
+      return {
+        ok: false,
+        blocked: !!stockCheck.blocked,
+        message: stockCheck.message,
+        retryAfterSec: stockCheck.retryAfterSec || 0,
+        expiresAt: stockCheck.expiresAt || 0,
+      };
+    }
+
+    const now = Date.now();
+    const expiresAt = now + PAYMENT_HOLD_MS;
+    await clearPaymentHoldsForOrder(db, orderId);
+
+    for (const item of order.items || []) {
+      const qty = Math.max(0, Math.floor(Number(item.quantity || item.qty || 1)));
+      if (qty <= 0) continue;
+      const product = await findProductForOrderItem(db, item);
+      if (!product || typeof (product as any).stock !== "number") continue;
+      await db.insert("paymentHolds", {
+        orderId: String(orderId),
+        productId: String(product._id),
+        productName: String(item.name || (product as any).name || "Item"),
+        qty,
+        createdAt: now,
+        expiresAt,
+      });
+    }
+
+    await db.patch(order._id, {
+      paymentHoldUntil: expiresAt,
+    } as any);
+
+    return { ok: true, expiresAt, holdMs: PAYMENT_HOLD_MS };
+  },
+});
+
+export const releasePaymentHold = mutation({
+  args: { orderId: v.string() },
+  handler: async ({ db }, { orderId }) => {
+    await clearPaymentHoldsForOrder(db, orderId);
+    const order = await db
+      .query("orders")
+      .withIndex("by_orderId", (q) => q.eq("orderId", orderId))
+      .first();
+    if (order) await db.patch(order._id, { paymentHoldUntil: undefined } as any);
+    return { success: true };
   },
 });
 
@@ -424,8 +440,6 @@ export const checkPaymentStatus = action({
               status: "paid",
               paymentMethod,
               stockIssue: !!paid?.stockIssue,
-              needsOversellChoice: !!paid?.needsOversellChoice,
-              oversellStatus: paid?.oversellStatus || "",
             };
           }
 
@@ -544,6 +558,7 @@ export const markOrderPaid = mutation({
       const updates: any = {
         paymentStatus: "paid",
         paidAt:        new Date().toISOString(),
+        paymentHoldUntil: undefined,
       };
       if (paymentMethod) updates.paymentMethod = paymentMethod;
       await db.patch(order._id, updates);
@@ -562,7 +577,6 @@ export const markOrderPaid = mutation({
       && String(paidOrder.paymentStatus || "").toLowerCase() === "paid"
       && paidOrder.email
       && !(paidOrder as any).paymentReceivedEmailSent
-      && !(deductResult as any)?.needsOversellChoice
     ) {
       await db.patch(paidOrder._id, { paymentReceivedEmailSent: true } as any);
       const items = (paidOrder.items || []).map((i: any) => ({
@@ -598,199 +612,7 @@ export const markOrderPaid = mutation({
       success: true,
       newlyPaid: !alreadyPaid,
       stockIssue: !!(deductResult as any)?.stockIssue || !!(latest as any)?.stockIssue,
-      needsOversellChoice:
-        !!(deductResult as any)?.needsOversellChoice
-        || String((latest as any)?.oversellStatus || "") === "choice_needed",
-      oversellStatus: String((latest as any)?.oversellStatus || ""),
-      restockEtaLabel: String((latest as any)?.restockEtaLabel || RESTOCK_ETA_LABEL),
     };
-  },
-});
-
-/** Customer: keep paid order and wait for next restock (locked claim). */
-export const chooseOversellReserve = mutation({
-  args: { orderId: v.string(), email: v.optional(v.string()) },
-  handler: async ({ db }, { orderId, email }) => {
-    const order = await db
-      .query("orders")
-      .withIndex("by_orderId", (q) => q.eq("orderId", orderId))
-      .first();
-    if (!order) return { success: false, message: "Order not found." };
-    if (String(order.paymentStatus || "").toLowerCase() !== "paid") {
-      return { success: false, message: "Order is not paid." };
-    }
-    if (String((order as any).oversellStatus || "") !== "choice_needed") {
-      return {
-        success: false,
-        message: "This order is not waiting for an oversell choice.",
-      };
-    }
-    const emailNorm = String(email || "").trim().toLowerCase();
-    if (
-      emailNorm
-      && String(order.email || "").trim().toLowerCase() !== emailNorm
-    ) {
-      return { success: false, message: "Email does not match this order." };
-    }
-    const now = new Date().toISOString();
-    await db.patch(order._id, {
-      oversellStatus: "reserved",
-      orderStatus: "awaiting_restock",
-      status: "Reserved — Awaiting Restock",
-      reservedAt: now,
-      restockEtaLabel: RESTOCK_ETA_LABEL,
-    } as any);
-    if (order.email) {
-      await insertCustomerNotification(db, {
-        email: String(order.email),
-        type: "oversell_reserved",
-        title: "Item reserved for you",
-        body: `Order ${order.orderId} is reserved. Next stock is expected in about ${RESTOCK_ETA_LABEL}. You’re first in line when it arrives.`,
-        url: `/track-order?orderId=${encodeURIComponent(String(order.orderId))}`,
-        orderId: String(order.orderId),
-      });
-    }
-    return { success: true, restockEtaLabel: RESTOCK_ETA_LABEL };
-  },
-});
-
-/** Customer: auto-refund PayMongo payment after oversell. */
-export const chooseOversellRefund = action({
-  args: { orderId: v.string(), email: v.optional(v.string()) },
-  handler: async (ctx, { orderId, email }) => {
-    const order = await ctx.runQuery(api.orders.getOrderById, { orderId });
-    if (!order) return { success: false, message: "Order not found." };
-    if (String(order.paymentStatus || "").toLowerCase() !== "paid") {
-      return { success: false, message: "Order is not paid." };
-    }
-    if (String((order as any).oversellStatus || "") !== "choice_needed") {
-      return {
-        success: false,
-        message: "This order is not waiting for an oversell choice.",
-      };
-    }
-    const emailNorm = String(email || "").trim().toLowerCase();
-    if (
-      emailNorm
-      && String(order.email || "").trim().toLowerCase() !== emailNorm
-    ) {
-      return { success: false, message: "Email does not match this order." };
-    }
-
-    await ctx.runMutation(api.payments.setOversellRefundPending, { orderId });
-
-    const amount = Number(order.finalTotal ?? order.total ?? 0);
-    const refund = await refundPaymongoPayment(
-      order,
-      amount,
-      `Oversell auto-refund for ${orderId}`
-    );
-
-    if (!refund.refunded) {
-      // Allow customer to retry choice / admin to finish manually
-      await ctx.runMutation(api.payments.revertOversellRefundPending, { orderId });
-      return {
-        success: false,
-        message: refund.error || "Refund failed. Please contact support or try again.",
-        refundPending: false,
-      };
-    }
-
-    await ctx.runMutation(api.payments.finalizeOversellRefund, {
-      orderId,
-      refundId: refund.refundId || "",
-    });
-    return { success: true, refunded: true, refundId: refund.refundId };
-  },
-});
-
-export const setOversellRefundPending = mutation({
-  args: { orderId: v.string() },
-  handler: async ({ db }, { orderId }) => {
-    const order = await db
-      .query("orders")
-      .withIndex("by_orderId", (q) => q.eq("orderId", orderId))
-      .first();
-    if (!order) return { success: false };
-    await db.patch(order._id, {
-      oversellStatus: "refund_pending",
-      refundStatus: "requested",
-      refundReason: "Oversell — customer chose refund",
-      refundRequestedAt: new Date().toISOString(),
-      refundAmount: Number(order.finalTotal ?? order.total ?? 0),
-    } as any);
-    return { success: true };
-  },
-});
-
-export const revertOversellRefundPending = mutation({
-  args: { orderId: v.string() },
-  handler: async ({ db }, { orderId }) => {
-    const order = await db
-      .query("orders")
-      .withIndex("by_orderId", (q) => q.eq("orderId", orderId))
-      .first();
-    if (!order) return { success: false };
-    if (String((order as any).oversellStatus || "") !== "refund_pending") {
-      return { success: false };
-    }
-    await db.patch(order._id, {
-      oversellStatus: "choice_needed",
-      orderStatus: "awaiting_restock_choice",
-      status: "Awaiting Restock Choice",
-      refundStatus: undefined,
-      refundReason: undefined,
-      refundRequestedAt: undefined,
-      refundAmount: undefined,
-      restockEtaLabel: RESTOCK_ETA_LABEL,
-    } as any);
-    return { success: true };
-  },
-});
-
-export const finalizeOversellRefund = mutation({
-  args: { orderId: v.string(), refundId: v.optional(v.string()) },
-  handler: async ({ db }, { orderId, refundId }) => {
-    const order = await db
-      .query("orders")
-      .withIndex("by_orderId", (q) => q.eq("orderId", orderId))
-      .first();
-    if (!order) return { success: false };
-    const now = new Date().toISOString();
-    await db.patch(order._id, {
-      oversellStatus: "refunded",
-      orderStatus: "cancelled",
-      status: "Cancelled",
-      paymentStatus: "refunded",
-      cancelledAt: now,
-      cancelledBy: "system",
-      cancelReason: "Oversell — automatic refund",
-      refundStatus: "approved",
-      refundResolvedAt: now,
-      refundPaidAt: now,
-      paymongoRefundId: refundId || (order as any).paymongoRefundId,
-      oversellResolvedAt: now,
-      restockEtaLabel: undefined,
-    } as any);
-    if (order.email) {
-      await insertCustomerNotification(db, {
-        email: String(order.email),
-        type: "oversell_refunded",
-        title: "Refund sent",
-        body: `Your payment for order ${order.orderId} was refunded because the item sold out. Funds return via GCash/Maya (usually 1–3 business days).`,
-        url: `/track-order?orderId=${encodeURIComponent(String(order.orderId))}`,
-        orderId: String(order.orderId),
-      });
-    }
-    return { success: true };
-  },
-});
-
-/** Admin: try to fulfill reserved oversell orders from current stock. */
-export const fulfillReservedOrders = mutation({
-  args: { productId: v.optional(v.string()) },
-  handler: async ({ db }, { productId }) => {
-    return await tryFulfillReservedOrders(db, productId);
   },
 });
 
@@ -880,13 +702,33 @@ export const processDamageRefundPay = action({
     const wasPaid = String(order.paymentStatus || "").toLowerCase() === "paid";
     const isPaidPending = wasPaid && (!status || status === "pending" || status === "pending payment");
     const isDamageRefund = order.refundStatus === "requested";
+    const isFailedDelivery = !!(order as any).deliveryFailedFinal
+      || String((order as any).status || "").toLowerCase() === "failed delivery"
+      || status === "failed_delivery";
+    const failedDeliveryAwaiting = isFailedDelivery
+      && wasPaid
+      && (!order.refundStatus || order.refundStatus === "requested");
 
-    if (!isDamageRefund && !isPaidPending) {
+    if (!isDamageRefund && !isPaidPending && !failedDeliveryAwaiting) {
       return { success: false, error: "No pending refund / Return Payment for this order." };
     }
 
-    const amount = Number(order.finalTotal ?? order.total ?? order.refundAmount ?? 0);
+    // Prefer stored refundAmount (failed delivery = product only, shipping excluded)
+    let amount = Number(order.refundAmount ?? 0);
+    if (!(amount > 0) && isFailedDelivery) {
+      const shipping = Number((order as any).shippingFee ?? 0);
+      const total = Number(order.finalTotal ?? order.total ?? 0);
+      amount = (order as any).subtotal != null
+        ? Math.max(0, Number((order as any).subtotal))
+        : Math.max(0, total - (Number.isFinite(shipping) ? shipping : 0));
+    }
+    if (!(amount > 0)) amount = Number(order.finalTotal ?? order.total ?? 0);
     if (!(amount > 0)) return { success: false, error: "Invalid refund amount." };
+
+    // Ensure failed-delivery orders have an open refund request for Return Payment UI
+    if (failedDeliveryAwaiting && order.refundStatus !== "requested") {
+      await ctx.runMutation(api.orders.ensureFailedDeliveryRefund, { orderId });
+    }
 
     // Already confirmed return
     if (order.paymongoRefundId || order.refundPayStartedAt) {
@@ -1078,7 +920,7 @@ export const confirmReturnPayment = action({
       return {
         success: true,
         payConfirmed: true,
-        refundAmount: Number(order.finalTotal ?? order.total ?? 0),
+        refundAmount: Number(order.refundAmount ?? order.finalTotal ?? order.total ?? 0),
         checkoutUrl: order.returnPaymentLinkUrl || "",
       };
     } catch (err: any) {
@@ -1104,7 +946,7 @@ export const approveDamageRefund = action({
       return { success: false, error: "No pending refund request for this order." };
     }
 
-    const amount = Number(order.finalTotal ?? order.total ?? order.refundAmount ?? 0);
+    const amount = Number(order.refundAmount ?? order.finalTotal ?? order.total ?? 0);
     if (!(amount > 0)) return { success: false, error: "Invalid refund amount." };
 
     // Proof optional while testing

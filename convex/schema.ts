@@ -281,6 +281,8 @@ export default defineSchema({
     paymentStatus: v.optional(v.string()),
     paymentLinkId: v.optional(v.string()),
     paymentLinkUrl: v.optional(v.string()),
+    /** Epoch ms — soft PayMongo stock lock expiry for this unpaid order */
+    paymentHoldUntil: v.optional(v.number()),
     paymongoRefundId: v.optional(v.string()),
     paidAt: v.optional(v.string()),
     /** Set after Payment Received email was sent (only on fully paid). */
@@ -756,5 +758,21 @@ export default defineSchema({
     lastSentAt: v.number(),
     nextAllowedAt: v.number(),
   }).index("by_email", ["email"]),
+
+  /**
+   * Soft stock lock while a customer is on PayMongo (5 minutes).
+   * Blocks other buyers from starting payment for the same units until expiry or paid.
+   */
+  paymentHolds: defineTable({
+    orderId: v.string(),
+    productId: v.string(),
+    productName: v.optional(v.string()),
+    qty: v.number(),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+  })
+    .index("by_orderId", ["orderId"])
+    .index("by_productId", ["productId"])
+    .index("by_expiresAt", ["expiresAt"]),
 
 });

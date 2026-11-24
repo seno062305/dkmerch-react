@@ -243,6 +243,7 @@
 .status-delivery   { background: #f3e5f5; color: #6a1b9a; }
 .status-delivered  { background: #e8f5e9; color: var(--success-color); }
 .status-cancelled  { background: #ffebee; color: var(--danger-color); }
+.status-failed-delivery { background: #fee2e2; color: #991b1b; }
 
 .order-card-info {
   padding: 10px 12px;
@@ -302,6 +303,7 @@
 .order-status-text.status-delivery   { color: #6a1b9a; }
 .order-status-text.status-delivered  { color: var(--success-color); }
 .order-status-text.status-cancelled  { color: var(--danger-color); }
+.order-status-text.status-failed-delivery { color: #991b1b; }
 
 .order-card-date {
   display: flex;
@@ -628,10 +630,10 @@
   max-width: min(1120px, 97vw);
 }
 
-/* Split: left = rider/map/OTP · center = timeline · right = chat */
+/* Split: left = timeline · center = rider/map/OTP · right = chat */
 .track-delivery-split {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(260px, 0.95fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) minmax(260px, 0.95fr);
   gap: 12px;
   align-items: stretch;
   margin-bottom: 18px;
@@ -639,7 +641,7 @@
 }
 
 .track-delivery-split:not(.has-chat) {
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
 }
 
 .track-delivery-left,
@@ -651,42 +653,7 @@
   gap: 10px;
 }
 
-.track-delivery-left .rider-info-banner {
-  margin-bottom: 0;
-}
-
-.track-delivery-left .rider-map-section,
-.track-delivery-left .customer-otp-section {
-  margin-bottom: 0;
-}
-
-.track-delivery-left .rider-map-container {
-  height: 200px;
-}
-
-.track-delivery-left .otp-display-header p,
-.track-delivery-left .otp-generate-header p {
-  font-size: 11px;
-  line-height: 1.35;
-}
-
-.track-delivery-left .otp-digit {
-  width: 40px;
-  height: 48px;
-  font-size: 22px;
-}
-
-.track-delivery-left .otp-code-display {
-  gap: 8px;
-  margin: 10px 0;
-}
-
-.track-delivery-left .otp-generate-card,
-.track-delivery-left .otp-display-card {
-  padding: 12px;
-}
-
-.track-delivery-center {
+.track-delivery-left {
   background: #fafafa;
   border: 1px solid #eee;
   border-radius: 14px;
@@ -694,7 +661,7 @@
   overflow: hidden;
 }
 
-.track-delivery-center .tracking-timeline {
+.track-delivery-left .tracking-timeline {
   margin-bottom: 0;
   flex: 1;
   min-height: 0;
@@ -702,22 +669,57 @@
   scrollbar-width: thin;
 }
 
-.track-delivery-center .tracking-timeline h3 {
+.track-delivery-left .tracking-timeline h3 {
   margin: 0 0 10px;
   font-size: 14px;
 }
 
-.track-delivery-center .timeline-item {
+.track-delivery-left .timeline-item {
   padding-bottom: 12px;
 }
 
-.track-delivery-center .timeline-content h4 {
+.track-delivery-left .timeline-content h4 {
   font-size: 13px;
 }
 
-.track-delivery-center .timeline-content p {
+.track-delivery-left .timeline-content p {
   font-size: 11px;
   margin: 2px 0 0;
+}
+
+.track-delivery-center .rider-info-banner {
+  margin-bottom: 0;
+}
+
+.track-delivery-center .rider-map-section,
+.track-delivery-center .customer-otp-section {
+  margin-bottom: 0;
+}
+
+.track-delivery-center .rider-map-container {
+  height: 200px;
+}
+
+.track-delivery-center .otp-display-header p,
+.track-delivery-center .otp-generate-header p {
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.track-delivery-center .otp-digit {
+  width: 40px;
+  height: 48px;
+  font-size: 22px;
+}
+
+.track-delivery-center .otp-code-display {
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.track-delivery-center .otp-generate-card,
+.track-delivery-center .otp-display-card {
+  padding: 12px;
 }
 
 .track-delivery-right {
@@ -777,24 +779,24 @@
     width: 100%;
     height: auto;
   }
-  .track-delivery-center {
+  .track-delivery-left {
     padding: 12px;
     max-height: none;
     overflow: visible;
   }
-  .track-delivery-center .tracking-timeline {
+  .track-delivery-left .tracking-timeline {
     overflow: visible;
     max-height: none;
   }
-  .track-delivery-left .rider-map-container {
+  .track-delivery-center .rider-map-container {
     height: 190px;
   }
-  .track-delivery-left .otp-digit {
+  .track-delivery-center .otp-digit {
     width: 36px;
     height: 44px;
     font-size: 18px;
   }
-  .track-delivery-left .otp-code-display {
+  .track-delivery-center .otp-code-display {
     gap: 6px;
     flex-wrap: nowrap;
   }
@@ -1026,6 +1028,80 @@
 .timeline-item.failed-attempt-step .timeline-content h4,
 .timeline-item.failed-attempt-step .timeline-desc-done {
   color: #0f766e;
+}
+.timeline-item.failed-final-step .timeline-marker {
+  background: #dc2626;
+  border-color: white;
+}
+.timeline-item.failed-final-step .timeline-marker i { color: white; }
+.timeline-item.failed-final-step .timeline-content h4,
+.timeline-item.failed-final-step .timeline-desc-done {
+  color: #991b1b;
+}
+.timeline-failed-refund-notice {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  color: #9a3412;
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.45;
+}
+.timeline-failed-refund-notice i {
+  color: #ea580c;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+.failed-delivery-banner {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+}
+.failed-delivery-banner-icon {
+  color: #dc2626;
+  font-size: 20px;
+  line-height: 1;
+}
+.failed-delivery-banner-text strong {
+  display: block;
+  color: #991b1b;
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+.failed-delivery-banner-text p {
+  margin: 0;
+  font-size: 12px;
+  color: #7f1d1d;
+  line-height: 1.45;
+}
+.order-card-failed-delivery-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #991b1b;
+  line-height: 1.35;
+}
+.order-card-failed-delivery-notice i {
+  color: #dc2626;
+  margin-top: 1px;
+  flex-shrink: 0;
 }
 
 .timeline-content { padding-top: 1px; }
@@ -1505,7 +1581,7 @@
 @media (max-width: 480px) {
   .otp-digit { width: 38px; height: 50px; font-size: 20px; }
   .orders-filter .filter-btn { padding: 7px 14px; font-size: 12px; }
-  .track-delivery-left .otp-digit {
+  .track-delivery-center .otp-digit {
     width: 32px;
     height: 40px;
     font-size: 16px;
@@ -1687,6 +1763,183 @@
 .rider-map-error p { font-size: 13px; margin: 0; }
 
 .rider-map-wrapper { position: relative; }
+
+.rider-map-inner-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.track-map-fullscreen-btn {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  z-index: 500;
+  background: white;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 7px 13px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #1e40af;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+  transition: all 0.2s;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  white-space: nowrap;
+}
+.track-map-fullscreen-btn:hover {
+  background: #eff6ff;
+  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.3);
+  transform: translateY(-1px);
+}
+.track-map-fullscreen-btn i { font-size: 11px; }
+
+/* Fullscreen map modal (same as rider Full Map) */
+body.track-fullscreen-map-open {
+  overflow: hidden !important;
+}
+.track-fullscreen-map-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 100000 !important;
+  display: flex;
+  flex-direction: column;
+  background: #0f172a;
+  animation: trackFsmFadeIn 0.2s ease;
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+}
+@keyframes trackFsmFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.track-fullscreen-map-shell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: #1a1f36;
+}
+.track-fullscreen-map-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, #1e3a8a, #1e40af);
+  color: white;
+  flex-shrink: 0;
+  gap: 12px;
+  padding: 10px 14px;
+}
+.track-fullscreen-map-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+.track-fullscreen-map-header-left > i {
+  color: #93c5fd;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.track-fullscreen-map-header-left > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.track-fullscreen-map-header-left strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: white;
+}
+.track-fullscreen-map-header-left span {
+  font-size: 11px;
+  color: #bfdbfe;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: min(500px, calc(100vw - 90px));
+}
+.track-fullscreen-map-close {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1.5px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  font-size: 15px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
+}
+.track-fullscreen-map-close:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+.track-fullscreen-map-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 16px 0;
+  background: #dbeafe;
+  flex-shrink: 0;
+}
+.track-fullscreen-map-loading-bar {
+  height: 3px;
+  background: linear-gradient(90deg, #e5e7eb, #3b82f6, #e5e7eb);
+  background-size: 200% 100%;
+  animation: trackFsmLoadingSlide 1.4s ease-in-out infinite;
+  border-radius: 2px;
+}
+@keyframes trackFsmLoadingSlide {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.track-fullscreen-map-loading span {
+  font-size: 11px;
+  color: #1e40af;
+  padding-bottom: 5px;
+  font-weight: 600;
+}
+.track-fullscreen-map-canvas {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  height: auto;
+}
+.track-fullscreen-map-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #f0f9ff;
+  border-top: 1px solid #e5e7eb;
+  font-size: 11px;
+  color: #64748b;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.track-fullscreen-map-footer i {
+  color: #3b82f6;
+  font-size: 11px;
+}
+.track-fullscreen-map-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 600;
+  color: #475569;
+}
 
 .rider-map-waiting-overlay {
   position: absolute; inset: 0; top: 32px;

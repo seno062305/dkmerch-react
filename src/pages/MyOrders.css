@@ -118,6 +118,7 @@
 .status-delivery   { background: #f3e5f5; color: #6a1b9a; }
 .status-delivered  { background: #e8f5e9; color: var(--success-color); }
 .status-cancelled  { background: #ffebee; color: var(--danger-color); }
+.status-failed-delivery { background: #fee2e2; color: #991b1b; }
 
 /* INFO */
 .order-card-info { padding: 14px 16px; }
@@ -178,6 +179,7 @@
 .order-status-text.status-delivery   { color: #6a1b9a; }
 .order-status-text.status-delivered  { color: var(--success-color); }
 .order-status-text.status-cancelled  { color: var(--danger-color); }
+.order-status-text.status-failed-delivery { color: #991b1b; }
 
 .order-card-date {
   display: flex;

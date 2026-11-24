@@ -22,8 +22,7 @@ function extractOrderId(raw) {
 
 /**
  * Built-in waybill scanner for riders.
- * Uses device camera + BarcodeDetector when available; always allows manual order ID entry.
- * Screen and printed QRs are both accepted — order ID must still match the selected Available order.
+ * Camera + BarcodeDetector only — no manual Order ID (waybill QR must be scanned).
  */
 const normalizeScanResult = (result) => {
   if (result === true) return { ok: true };
@@ -53,7 +52,6 @@ const WaybillScannerModal = ({ onClose, onScan, hint }) => {
   const cooldownRef = useRef(0);
   const [error, setError] = useState('');
   const [errorKind, setErrorKind] = useState(''); // 'mismatch' | 'cancelled' | 'error' | ''
-  const [manualId, setManualId] = useState('');
   const [scanning, setScanning] = useState(true);
   const [cameraReady, setCameraReady] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -77,7 +75,7 @@ const WaybillScannerModal = ({ onClose, onScan, hint }) => {
     const orderId = extractOrderId(raw);
     if (!orderId) {
       setErrorKind('error');
-      setError('Could not read an order ID from that code. Try again or enter it manually.');
+      setError('Could not read an order ID from that QR. Scan the waybill again.');
       return;
     }
     busyRef.current = true;
@@ -115,7 +113,7 @@ const WaybillScannerModal = ({ onClose, onScan, hint }) => {
     const start = async () => {
       setError('');
       if (!navigator.mediaDevices?.getUserMedia) {
-        setError('Camera not supported on this device. Enter the order ID manually.');
+        setError('Camera not supported on this device. Use a phone with a camera to scan the waybill.');
         setScanning(false);
         return;
       }
@@ -137,7 +135,7 @@ const WaybillScannerModal = ({ onClose, onScan, hint }) => {
 
         const Detector = window.BarcodeDetector;
         if (!Detector) {
-          setError('Live QR scan isn’t supported in this browser. Point a photo at the waybill or type the order ID.');
+          setError('Live QR scan isn’t supported in this browser. Open DKMerch in Chrome/Safari on your phone to scan.');
           return;
         }
 
@@ -183,39 +181,6 @@ const WaybillScannerModal = ({ onClose, onScan, hint }) => {
       stopCamera();
     };
   }, [handleDetected, stopCamera]);
-
-  const submitManual = async (e) => {
-    e.preventDefault();
-    const orderId = extractOrderId(manualId) || manualId.trim();
-    if (!orderId) {
-      setErrorKind('error');
-      setError('Enter a valid order ID from the waybill.');
-      return;
-    }
-    setSubmitting(true);
-    setError('');
-    setErrorKind('');
-    try {
-      const result = normalizeScanResult(await onScan(orderId));
-      if (!result.ok) {
-        const kind = result.reason === 'mismatch' ? 'mismatch' : result.reason === 'cancelled' ? 'cancelled' : 'error';
-        setErrorKind(kind);
-        setError(
-          result.message ||
-          (kind === 'mismatch'
-            ? 'QR mismatch — this waybill does not match the selected order. Order was not accepted.'
-            : 'Order was not accepted.')
-        );
-        return;
-      }
-      stopCamera();
-    } catch (err) {
-      setErrorKind('error');
-      setError(err?.message || 'Verify failed. Try again.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   const handleClose = () => {
     stopCamera();
@@ -269,22 +234,9 @@ const WaybillScannerModal = ({ onClose, onScan, hint }) => {
           </div>
         )}
 
-        <form className="wb-scan-manual" onSubmit={submitManual}>
-          <label htmlFor="wb-manual-id">Or enter Order ID</label>
-          <div className="wb-scan-manual-row">
-            <input
-              id="wb-manual-id"
-              value={manualId}
-              onChange={e => setManualId(e.target.value)}
-              placeholder="Full ID or last 8 characters"
-              autoComplete="off"
-              disabled={submitting}
-            />
-            <button type="submit" className="wb-scan-submit" disabled={submitting || !manualId.trim()}>
-              {submitting ? <i className="fas fa-spinner fa-spin"></i> : 'Verify'}
-            </button>
-          </div>
-        </form>
+        <p className="wb-scan-scan-only-hint">
+          <i className="fas fa-info-circle"></i> Scan only — type-in Order ID is disabled so the waybill QR must match.
+        </p>
       </div>
     </div>,
     getOverlayRoot() || document.body

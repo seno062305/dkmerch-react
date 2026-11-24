@@ -390,7 +390,7 @@ const NotificationBell = ({ onOpenFailedAttempt }) => {
     let cancelled = false;
     const run = async () => {
       const targets = (notifications || []).filter((n) => {
-        if (n.type !== 'delivery_failed_attempt') return false;
+        if (n.type !== 'delivery_failed_attempt' && n.type !== 'delivery_failed_final') return false;
         if (n.address || placeById[n._id]) return false;
         const lat = Number(n.lat);
         const lng = Number(n.lng);
@@ -421,7 +421,7 @@ const NotificationBell = ({ onOpenFailedAttempt }) => {
     const hrs = Math.floor(mins / 60); if (hrs < 24) return `${hrs}h ago`; return `${Math.floor(hrs / 24)}d ago`;
   };
   const handleNotifClick = async (n) => {
-    if (n.type !== 'delivery_failed_attempt' && n.type !== 'rider_at_customer') return;
+    if (n.type !== 'delivery_failed_attempt' && n.type !== 'delivery_failed_final' && n.type !== 'rider_at_customer') return;
     if (!onOpenFailedAttempt) return;
     if (!n.read) await markOneRead({ id: n._id }).catch(() => {});
     setOpen(false);
@@ -453,8 +453,8 @@ const NotificationBell = ({ onOpenFailedAttempt }) => {
             {notifications.length === 0
               ? <div className="ar-bell-empty"><span>🔕</span><span>No notifications yet</span></div>
               : notifications.map(n => {
-                  const clickable = (n.type === 'delivery_failed_attempt' || n.type === 'rider_at_customer') && !!onOpenFailedAttempt;
-                  const msg = n.type === 'delivery_failed_attempt'
+                  const clickable = (n.type === 'delivery_failed_attempt' || n.type === 'delivery_failed_final' || n.type === 'rider_at_customer') && !!onOpenFailedAttempt;
+                  const msg = (n.type === 'delivery_failed_attempt' || n.type === 'delivery_failed_final')
                     ? formatFailedAttemptNotice(n, placeById[n._id])
                     : (n.message || `Rider opened link for Order #${n.orderId?.slice(-8).toUpperCase()}`);
                   return (
@@ -474,7 +474,7 @@ const NotificationBell = ({ onOpenFailedAttempt }) => {
                     title={clickable ? 'Open map at rider last-seen location' : undefined}
                   >
                     <div className="ar-bell-item-icon">
-                      {n.type === 'delivery_failed_attempt' ? '⚠️' : n.type === 'rider_at_customer' ? '📍' : n.type === 'rider_link_reopened' ? '🔄' : '🛵'}
+                      {(n.type === 'delivery_failed_attempt' || n.type === 'delivery_failed_final') ? '⚠️' : n.type === 'rider_at_customer' ? '📍' : n.type === 'rider_link_reopened' ? '🔄' : '🛵'}
                     </div>
                     <div className="ar-bell-item-body">
                       <div className="ar-bell-item-msg">{msg}</div>

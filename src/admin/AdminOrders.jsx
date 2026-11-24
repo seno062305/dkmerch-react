@@ -503,7 +503,6 @@ const AdminOrders = () => {
   const storePin = { storeLat: storeSettings?.storeLat, storeLng: storeSettings?.storeLng };
 
   const confirmReturnPaymentAction = useAction(api.payments.confirmReturnPayment);
-  const fulfillReservedOrdersMutation = useMutation(api.payments.fulfillReservedOrders);
 
   // Deep-link tab from PayMongo return (?tab=refunds|cancelled)
   useEffect(() => {
@@ -668,8 +667,13 @@ const AdminOrders = () => {
   const isCancelledStatus = (o) =>
     String(o.orderStatus || '').toLowerCase() === 'cancelled';
 
-  const isFailedDelivery = (o) =>
-    String(o.status || '').toLowerCase().includes('failed');
+  const isFailedDelivery = (o) => {
+    if (!o) return false;
+    if (o.deliveryFailedFinal) return true;
+    const st = String(o.status || '').toLowerCase();
+    const os = String(o.orderStatus || '').toLowerCase();
+    return st === 'failed delivery' || os === 'failed_delivery' || st.includes('failed delivery');
+  };
 
   /** Rider + LBC successful deliveries (orderStatus completed / Delivered). */
   const isCompletedStatus = (o) => {
@@ -679,18 +683,23 @@ const AdminOrders = () => {
     return os === 'completed' || st === 'delivered' || st === 'completed';
   };
 
-  const hasRefundRequest = (o) => o.refundStatus === 'requested';
+  const hasRefundRequest = (o) => o.refundStatus === 'requested' && !isFailedDelivery(o);
   const isRefundResolved = (o) =>
-    o.refundStatus === 'approved' || o.refundStatus === 'rejected';
-  const hasAnyRefund = (o) => !!o.refundStatus;
+    (o.refundStatus === 'approved' || o.refundStatus === 'rejected') && !isFailedDelivery(o);
+  const hasAnyRefund = (o) => !!o.refundStatus && !isFailedDelivery(o);
+
+  /** Failed Delivery left panel — awaiting product Return Payment. */
+  const isFailedDeliveryAwaitingPay = (o) =>
+    isFailedDelivery(o)
+    && String(o.paymentStatus || '').toLowerCase() === 'paid'
+    && o.refundStatus !== 'approved'
+    && o.refundStatus !== 'rejected';
+
+  const isFailedDeliveryResolved = (o) =>
+    isFailedDelivery(o) && (o.refundStatus === 'approved' || o.refundStatus === 'rejected');
 
   const hasCancelRequest = (o) => o.cancelRequestStatus === 'requested';
   const hasAnyCancelRequest = (o) => !!o.cancelRequestStatus;
-
-  const isOversellReserved = (o) => {
-    const st = String(o?.oversellStatus || '');
-    return st === 'reserved' || st === 'choice_needed' || st === 'refund_pending';
-  };
 
   const isLbcDeliveryOrder = (o) => isLbcOrder(o, storePin);
   const isLbcApproved = (o) =>
@@ -730,10 +739,10 @@ const AdminOrders = () => {
   /** Newest first on every Orders tab (and side panels). */
   const sortOrdersForTab = (list, tab) => {
     const rows = [...list];
-    if (tab === 'refunds') {
+    if (tab === 'refunds' || tab === 'failed_delivery') {
       return rows.sort((a, b) => {
-        const aTime = eventTimeMs(a, 'refundRequestedAt');
-        const bTime = eventTimeMs(b, 'refundRequestedAt');
+        const aTime = eventTimeMs(a, 'refundRequestedAt') || eventTimeMs(a, 'deliveryConfirmedAt');
+        const bTime = eventTimeMs(b, 'refundRequestedAt') || eventTimeMs(b, 'deliveryConfirmedAt');
         if (aTime || bTime) return bTime - aTime;
         return cmpNewest(a, b);
       });
@@ -752,15 +761,15 @@ const AdminOrders = () => {
   const tabCounts = {
     all:        validOrders.length,
     // Cancel requests are handled under Canceled → Request Cancel (not Pending)
-    pending:    validOrders.filter((o) => isPendingStatus(o) && !hasCancelRequest(o) && !isOversellReserved(o)).length,
+    pending:    validOrders.filter((o) => isPendingStatus(o) && !hasCancelRequest(o)).length,
     confirmed:  validOrders.filter((o) => isProcessingStatus(o) && !hasCancelRequest(o)).length,
     shipped:    validOrders.filter((o) => isShippedStatus(o) && !hasCancelRequest(o) && !isLbcDeliveryOrder(o)).length,
     // LBC tab = pipeline only; finished LBC deliveries live under Completed
     lbc:        validOrders.filter((o) => isLbcAwaitingAccept(o)).length,
     completed:  validOrders.filter((o) => isCompletedStatus(o)).length,
     manual:     validOrders.filter((o) => isWalkInOrder(o)).length,
-    reserved:   validOrders.filter(isOversellReserved).length,
     refunds:    validOrders.filter(hasAnyRefund).length,
+    failed_delivery: validOrders.filter((o) => isFailedDelivery(o)).length,
     cancelled:  validOrders.filter((o) => isCancelledStatus(o) || hasAnyCancelRequest(o)).length,
   };
 
@@ -853,7 +862,7 @@ const AdminOrders = () => {
         matchesTab = true;
       } else if (activeTab === 'pending') {
         // Keep open cancel requests out of Pending — they live in Canceled → Request Cancel
-        matchesTab = isPendingStatus(order) && !hasCancelRequest(order) && !isOversellReserved(order);
+        matchesTab = isPendingStatus(order) && !hasCancelRequest(order);
       } else if (activeTab === 'confirmed') {
         matchesTab = isProcessingStatus(order) && !hasCancelRequest(order);
       } else if (activeTab === 'shipped') {
@@ -864,14 +873,15 @@ const AdminOrders = () => {
         matchesTab = isCompletedStatus(order);
       } else if (activeTab === 'manual') {
         matchesTab = isWalkInOrder(order);
-      } else if (activeTab === 'reserved') {
-        matchesTab = isOversellReserved(order);
       } else if (activeTab === 'lbc') {
         // Left panel = awaiting accept; completed LBC orders are under Completed
         matchesTab = false;
       } else if (activeTab === 'refunds') {
-        // Right list = resolved refunds (approved / rejected)
+        // Right list = resolved refunds (approved / rejected) — exclude failed delivery
         matchesTab = isRefundResolved(order);
+      } else if (activeTab === 'failed_delivery') {
+        // Right list = Return Payment finished (approved / rejected)
+        matchesTab = isFailedDeliveryResolved(order);
       } else if (activeTab === 'cancelled') {
         // Right list = canceled orders only (requests sit in left panel)
         matchesTab = isCancelledStatus(order);
@@ -887,32 +897,40 @@ const AdminOrders = () => {
   }, [filteredOrders, page]);
 
   const getStatusColor = (status, order = null) => {
-    if (order?.deliveryFailedFinal || String(order?.status || status || '').toLowerCase() === 'failed delivery') {
+    if (order?.deliveryFailedFinal
+      || String(order?.status || status || '').toLowerCase() === 'failed delivery'
+      || String(order?.orderStatus || status || '').toLowerCase() === 'failed_delivery'
+      || status === 'failed_delivery') {
       return '#dc2626';
     }
-    const colors = { pending: '#ffc107', confirmed: '#0ea5e9', shipped: '#6366f1', out_for_delivery: '#f97316', completed: '#28a745', cancelled: '#dc3545' };
+    const colors = { pending: '#ffc107', confirmed: '#0ea5e9', shipped: '#6366f1', out_for_delivery: '#f97316', completed: '#28a745', failed_delivery: '#dc2626', cancelled: '#dc3545' };
     return colors[status] || '#6c757d';
   };
 
   const getStatusLabel = (status, order = null) => {
-    if (order?.deliveryFailedFinal || String(order?.status || status || '').toLowerCase() === 'failed delivery') {
+    if (order?.deliveryFailedFinal
+      || String(order?.status || status || '').toLowerCase() === 'failed delivery'
+      || String(order?.orderStatus || status || '').toLowerCase() === 'failed_delivery') {
       return 'Failed Delivery';
     }
-    const oversell = String(order?.oversellStatus || '');
-    if (oversell === 'choice_needed') return 'Oversell — needs choice';
-    if (oversell === 'reserved') return `Reserved · ${order.restockEtaLabel || '2–3 weeks'}`;
-    if (oversell === 'refund_pending') return 'Oversell refund pending';
     const labels = {
       pending: 'Pending',
       confirmed: 'Processing',
       shipped: 'Shipped',
       out_for_delivery: 'Out for Delivery',
       completed: 'Completed',
+      failed_delivery: 'Failed Delivery',
       cancelled: 'Canceled',
-      awaiting_restock: `Reserved · ${order?.restockEtaLabel || '2–3 weeks'}`,
-      awaiting_restock_choice: 'Oversell — needs choice',
     };
     return labels[status] || status || 'Pending';
+  };
+
+  const failedDeliveryProductAmount = (o) => {
+    if (o?.refundAmount != null && Number(o.refundAmount) > 0) return Number(o.refundAmount);
+    const shipping = Number(o?.shippingFee || 0);
+    const total = Number(o?.finalTotal ?? o?.total ?? 0);
+    if (o?.subtotal != null && Number.isFinite(Number(o.subtotal))) return Math.max(0, Number(o.subtotal));
+    return Math.max(0, total - (Number.isFinite(shipping) ? shipping : 0));
   };
 
   /** Refunds tab left panel — open refund requests only. */
@@ -920,6 +938,14 @@ const AdminOrders = () => {
     return sortOrdersForTab(
       validOrders.filter((o) => hasRefundRequest(o) && matchesSearchDate(o)),
       'refunds'
+    );
+  }, [validOrders, searchTerm, startDate, endDate]);
+
+  /** Failed Delivery tab left panel — awaiting product Return Payment. */
+  const failedDeliveryAwaitingOrders = useMemo(() => {
+    return sortOrdersForTab(
+      validOrders.filter((o) => isFailedDeliveryAwaitingPay(o) && matchesSearchDate(o)),
+      'failed_delivery'
     );
   }, [validOrders, searchTerm, startDate, endDate]);
 
@@ -941,10 +967,11 @@ const AdminOrders = () => {
 
   const sidePanelOrders = useMemo(() => {
     if (activeTab === 'refunds') return refundRequestOrders;
+    if (activeTab === 'failed_delivery') return failedDeliveryAwaitingOrders;
     if (activeTab === 'lbc') return lbcAwaitingOrders;
     if (activeTab === 'cancelled') return cancelRequestOrders;
     return [];
-  }, [activeTab, refundRequestOrders, lbcAwaitingOrders, cancelRequestOrders]);
+  }, [activeTab, refundRequestOrders, failedDeliveryAwaitingOrders, lbcAwaitingOrders, cancelRequestOrders]);
 
   const sideTotalPages = Math.max(1, Math.ceil(sidePanelOrders.length / SIDE_CARD_PAGE_SIZE) || 1);
   const safeSidePage = Math.min(sidePage, sideTotalPages - 1);
@@ -1142,14 +1169,20 @@ const AdminOrders = () => {
 
   const handleProcessRefundPay = async (orderId, opts = {}) => {
     const shortId = formatOrderShortId(orderId);
-    const amount = selectedOrder?.finalTotal ?? selectedOrder?.total ?? 0;
-    const tab = opts.tab === 'cancelled' ? 'cancelled' : 'refunds';
+    const isFailed = isFailedDelivery(selectedOrder);
+    const amount = isFailed
+      ? failedDeliveryProductAmount(selectedOrder)
+      : (selectedOrder?.refundAmount ?? selectedOrder?.finalTotal ?? selectedOrder?.total ?? 0);
+    const tab = opts.tab === 'cancelled'
+      ? 'cancelled'
+      : (opts.tab === 'failed_delivery' || isFailed ? 'failed_delivery' : 'refunds');
+    const tabLabel = tab === 'cancelled' ? 'Cancel' : tab === 'failed_delivery' ? 'Failed Delivery' : 'Refund';
     const hasContinueLink = !!(selectedOrder?.returnPaymentLinkUrl && !selectedOrder?.refundPayStartedAt && !selectedOrder?.paymongoRefundId);
     const ok = await confirm({
       title: hasContinueLink ? 'Continue Return Payment?' : 'Return Payment via PayMongo?',
       message: hasContinueLink
         ? `Continue PayMongo for order #${shortId}? If you backed out earlier, finish payment there — it is not marked paid until completed.`
-        : `Return ₱${Number(amount).toLocaleString('en-PH')} for order #${shortId} to the customer’s original GCash/Maya?\n\nPayMongo opens in a new tab. Keep this admin page open — after PayMongo, you return to the ${tab === 'cancelled' ? 'Cancel' : 'Refund'} tab.`,
+        : `Return ₱${Number(amount).toLocaleString('en-PH')} for order #${shortId}${isFailed ? ' (product only — shipping excluded)' : ''} to the customer’s original GCash/Maya?\n\nPayMongo opens in a new tab. Keep this admin page open — after PayMongo, you return to the ${tabLabel} tab.`,
       confirmLabel: 'Pay',
       cancelLabel: 'Back',
       variant: 'primary',
@@ -1168,6 +1201,8 @@ const AdminOrders = () => {
       if (selectedOrder?.orderId === orderId) {
         setSelectedOrder((prev) => ({
           ...prev,
+          refundStatus: prev.refundStatus || 'requested',
+          refundAmount: result.refundAmount || amount || prev.refundAmount,
           ...(result.payConfirmed
             ? {
                 refundPayStartedAt: new Date().toISOString(),
@@ -1232,7 +1267,9 @@ const AdminOrders = () => {
   const handleResolveRefund = async (orderId, refundStatus, adminNote, proofPhotoId) => {
     if (refundStatus === 'approved') {
       // Proof optional while testing
-      const amount = selectedOrder?.finalTotal ?? selectedOrder?.total ?? 0;
+      const amount = isFailedDelivery(selectedOrder)
+        ? failedDeliveryProductAmount(selectedOrder)
+        : (selectedOrder?.refundAmount ?? selectedOrder?.finalTotal ?? selectedOrder?.total ?? 0);
       try {
         const result = await approveDamageRefundAction({
           orderId,
@@ -1357,10 +1394,10 @@ const AdminOrders = () => {
     { key: 'confirmed', icon: 'fa-spinner',       label: 'Processing' },
     { key: 'shipped',   icon: 'fa-shipping-fast', label: 'Shipped' },
     { key: 'lbc',       icon: 'fa-truck',         label: 'LBC' },
-    { key: 'completed', icon: 'fa-check-circle',  label: 'Completed' },
     { key: 'manual',    icon: 'fa-store',         label: 'Manual' },
-    { key: 'reserved',  icon: 'fa-bookmark',      label: 'Reserved' },
     { key: 'refunds',   dkIcon: DK_ICONS.ordersRefunds, label: 'Refunds' },
+    { key: 'completed', icon: 'fa-check-circle',  label: 'Completed' },
+    { key: 'failed_delivery', icon: 'fa-times-circle', label: 'Failed Delivery' },
     { key: 'cancelled', icon: 'fa-ban',           label: 'Canceled' },
   ];
 
@@ -1372,32 +1409,9 @@ const AdminOrders = () => {
     lbc: 'Finished LBC deliveries are under Completed',
     completed: 'No completed orders yet',
     manual: 'No walk-in sales yet — record one above',
-    reserved: 'No reserved / oversell orders',
     refunds: 'No refunded orders yet',
+    failed_delivery: 'No failed delivery returns yet',
     cancelled: 'No canceled orders',
-  };
-
-  const handleFulfillReserved = async () => {
-    const ok = await confirm({
-      title: 'Fulfill reserved orders?',
-      message: 'Assign available stock to reserved oversell orders (oldest first). Customers will be notified.',
-      confirmLabel: 'Fulfill now',
-      cancelLabel: 'Cancel',
-      variant: 'warning',
-      icon: 'fa-bookmark',
-    });
-    if (!ok) return;
-    try {
-      const res = await fulfillReservedOrdersMutation({});
-      showNotification(
-        res?.fulfilled
-          ? `Fulfilled ${res.fulfilled} reserved order(s).`
-          : 'No reserved orders could be fulfilled yet (need more stock).',
-        res?.fulfilled ? 'success' : 'info'
-      );
-    } catch (err) {
-      showNotification(err?.message || 'Fulfill failed.', 'error');
-    }
   };
 
   const renderOrdersTable = () => (
@@ -1592,7 +1606,7 @@ const AdminOrders = () => {
       <div className="orders-tabs">
         {tabs.map((t) => {
           const count = tabCounts[t.key] ?? 0;
-          const isAlert = t.key === 'refunds' || t.key === 'cancelled';
+          const isAlert = t.key === 'refunds' || t.key === 'cancelled' || t.key === 'failed_delivery';
           // Keep Pending badge lit even when another tab is selected
           const pendingLit = t.key === 'pending' && count > 0;
           const pendingNew = pendingLit && hasUnseenPending && activeTab !== 'pending';
@@ -1668,7 +1682,7 @@ const AdminOrders = () => {
         )}
       </div>
 
-      {activeTab === 'refunds' || activeTab === 'cancelled' || activeTab === 'lbc' ? (
+      {activeTab === 'refunds' || activeTab === 'cancelled' || activeTab === 'lbc' || activeTab === 'failed_delivery' ? (
         <div className="orders-split">
           <aside className="orders-split-left">
             <div className="orders-priority-head">
@@ -1679,6 +1693,11 @@ const AdminOrders = () => {
                     Request Refunds
                   </h2>
                   <p>Pending customer refund requests</p>
+                </>
+              ) : activeTab === 'failed_delivery' ? (
+                <>
+                  <h2><i className="fas fa-times-circle"></i> Failed Delivery</h2>
+                  <p>Awaiting product Return Payment (shipping excluded)</p>
                 </>
               ) : activeTab === 'lbc' ? (
                 <>
@@ -1701,7 +1720,9 @@ const AdminOrders = () => {
                     ? 'No incoming LBC orders'
                     : activeTab === 'refunds'
                       ? 'No refund requests'
-                      : 'No cancel requests'}
+                      : activeTab === 'failed_delivery'
+                        ? 'No failed deliveries awaiting return'
+                        : 'No cancel requests'}
                 </p>
               </div>
             ) : (
@@ -1713,13 +1734,17 @@ const AdminOrders = () => {
                   const pm = getPaymentMethodLabel(order);
                   const busy = acceptingLbcId === order.orderId;
                   const isCancelPanel = activeTab === 'cancelled';
+                  const isFailedPanel = activeTab === 'failed_delivery';
                   const isLbcPanel = activeTab === 'lbc';
                   const lbcStatus = String(order.orderStatus || '').toLowerCase();
                   const canConfirmDeliver = isLbcPanel && (lbcStatus === 'shipped' || lbcStatus === 'out_for_delivery');
+                  const displayAmt = isFailedPanel
+                    ? failedDeliveryProductAmount(order)
+                    : (order.finalTotal ?? order.total ?? order.refundAmount ?? 0);
                   return (
                     <div
                       key={order.orderId}
-                      className={`orders-priority-card is-awaiting${!isLbcPanel ? ' has-refund' : ''}${isCancelPanel ? ' is-cancel-request' : ''}`}
+                      className={`orders-priority-card is-awaiting${!isLbcPanel ? ' has-refund' : ''}${isCancelPanel ? ' is-cancel-request' : ''}${isFailedPanel ? ' is-failed-delivery' : ''}`}
                     >
                       <div className="orders-priority-main">
                         <div className="orders-priority-card-top">
@@ -1732,6 +1757,10 @@ const AdminOrders = () => {
                             <span className="orders-refund-flag orders-refund-flag--cancel">
                               <i className="fas fa-ban"></i> Requested
                             </span>
+                          ) : isFailedPanel ? (
+                            <span className="orders-refund-flag orders-refund-flag--failed">
+                              <i className="fas fa-times-circle"></i> Failed
+                            </span>
                           ) : (
                             <span className="orders-refund-flag">
                               <i className="fas fa-undo-alt"></i> Requested
@@ -1743,7 +1772,7 @@ const AdminOrders = () => {
                           <small>{order.email || ''}</small>
                         </div>
                         <div className="orders-priority-meta">
-                          <span>₱{(order.finalTotal ?? order.total ?? order.refundAmount ?? 0).toLocaleString('en-PH')}</span>
+                          <span>₱{Number(displayAmt).toLocaleString('en-PH')}</span>
                           <span className="orders-priority-method" style={{ color: pm.color }}>
                             <PaymentMethodMark pm={pm} /> {pm.label}
                           </span>
@@ -1798,6 +1827,11 @@ const AdminOrders = () => {
                     </h2>
                     <p>Approved and rejected refunds</p>
                   </>
+                ) : activeTab === 'failed_delivery' ? (
+                  <>
+                    <h2><i className="fas fa-check-circle"></i> Returned</h2>
+                    <p>Failed deliveries with product Return Payment completed</p>
+                  </>
                 ) : activeTab === 'lbc' ? (
                   <>
                     <h2><i className="fas fa-check-circle"></i> Completed</h2>
@@ -1828,24 +1862,6 @@ const AdminOrders = () => {
                 onClick={() => setShowWalkInModal(true)}
               >
                 <i className="fas fa-plus"></i> Record Sale
-              </button>
-            </div>
-          )}
-          {activeTab === 'reserved' && (
-            <div className="orders-manual-banner">
-              <div className="orders-manual-banner-copy">
-                <h3><i className="fas fa-bookmark"></i> Oversell · Reserved</h3>
-                <p>
-                  Paid orders waiting on next stock (customer ETA: 2–3 weeks). Restocking a product
-                  auto-assigns here first. Or fulfill now if stock is already available.
-                </p>
-              </div>
-              <button
-                type="button"
-                className="orders-manual-record-btn orders-manual-record-btn--solid"
-                onClick={handleFulfillReserved}
-              >
-                <i className="fas fa-box-open"></i> Fulfill from stock
               </button>
             </div>
           )}
@@ -2135,12 +2151,20 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
   const paymentFeeLabel = paymentFeeMethod.includes('maya') ? 'Maya' : paymentFeeMethod.includes('gcash') ? 'GCash' : 'E-wallet';
   const paymentFeePct = paymentFeeRate > 0 ? `${Math.round(paymentFeeRate * 10000) / 100}%` : '';
   const finalTotal    = order.finalTotal ?? (originalTotal - discount);
-  const refundAmount  = order.refundAmount ?? finalTotal;
-
   const currentStatus  = order.orderStatus || 'pending';
+  const isFailedDeliveryOrder = !!(order.deliveryFailedFinal
+    || String(order.status || '').toLowerCase() === 'failed delivery'
+    || currentStatus === 'failed_delivery');
+  const failedProductRefund = order.refundAmount != null && Number(order.refundAmount) > 0
+    ? Number(order.refundAmount)
+    : Math.max(0, Number(order.subtotal != null ? order.subtotal : (finalTotal - shippingFee)));
+  const refundAmount  = isFailedDeliveryOrder
+    ? failedProductRefund
+    : (order.refundAmount ?? finalTotal);
+
   const paymentStatus  = order.paymentStatus || 'pending';
   const isPaid         = paymentStatus === 'paid';
-  const isDone         = currentStatus === 'completed' || currentStatus === 'cancelled';
+  const isDone         = currentStatus === 'completed' || currentStatus === 'cancelled' || currentStatus === 'failed_delivery' || isFailedDeliveryOrder;
   const isLbc          = isLbcOrder(order, storePin);
   const isWalkIn       = isWalkInOrder(order);
   const isRiderManaged = !isLbc && (currentStatus === 'shipped' || currentStatus === 'out_for_delivery');
@@ -2156,7 +2180,12 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
   const showCustomerEmail = !isWalkIn && !isPlaceholderWalkInEmail(order.email);
   const hasDeliveryProof = !!(order.deliveryProofPhoto);
   const otpVerified      = !!(order.deliveryOtpVerified);
-  const hasRefund        = !!(order.refundStatus);
+  const hasRefund        = !!(order.refundStatus)
+    || (isFailedDeliveryOrder && isPaid && order.refundStatus !== 'rejected');
+  const failedDeliveryRefundOpen = isFailedDeliveryOrder
+    && isPaid
+    && order.refundStatus !== 'approved'
+    && order.refundStatus !== 'rejected';
   const hasCancelRequest = !!(order.cancelRequestStatus);
   const pm = getPaymentMethodLabel(order);
 
@@ -2296,32 +2325,8 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
         </div>
 
         <div className="modal-body">
-          {String(order.oversellStatus || '') === 'choice_needed' && (
-            <div className="flow-notice warning">
-              <i className="fas fa-exclamation-triangle"></i>
-              <div>
-                <strong>Oversell — waiting on customer</strong>
-                <p>
-                  Paid, but stock was gone. Customer must choose refund or reserve.
-                  Expected restock shown to them: <strong>{order.restockEtaLabel || '2–3 weeks'}</strong>.
-                </p>
-              </div>
-            </div>
-          )}
-          {String(order.oversellStatus || '') === 'reserved' && (
-            <div className="flow-notice info">
-              <i className="fas fa-bookmark"></i>
-              <div>
-                <strong>Reserved for next stock</strong>
-                <p>
-                  Customer locked this order. ETA shown: <strong>{order.restockEtaLabel || '2–3 weeks'}</strong>.
-                  Restock the product (or use Reserved tab → Fulfill) to assign stock automatically.
-                </p>
-              </div>
-            </div>
-          )}
           {!isPaid && <div className="flow-notice warning"><i className="fas fa-exclamation-triangle"></i><div><strong>Payment not yet confirmed</strong><p>Do not confirm until payment is verified via PayMongo.</p></div></div>}
-          {isPaid && currentStatus === 'pending' && !isLbc && !order.oversellStatus && <div className="flow-notice success"><i className="fas fa-check-circle"></i><div><strong>Payment received!</strong><p>Confirm order below. Riders can then claim it by scanning the waybill.</p></div></div>}
+          {isPaid && currentStatus === 'pending' && !isLbc && <div className="flow-notice success"><i className="fas fa-check-circle"></i><div><strong>Payment received!</strong><p>Confirm order below. Riders can then claim it by scanning the waybill.</p></div></div>}
           {isPaid && currentStatus === 'pending' && isLbc && <div className="flow-notice success"><i className="fas fa-box"></i><div><strong>Payment received — LBC Express</strong><p>Confirm below. This outside-NCR order will not go to riders; ship via LBC and send the tracking ID to the customer.</p></div></div>}
           {isPaid && currentStatus === 'confirmed' && !isLbc && <div className="flow-notice info"><i className="fas fa-motorcycle"></i><div><strong>Processing</strong><p>Order confirmed — visible to riders. They claim it by scanning the waybill.</p></div></div>}
           {isPaid && currentStatus === 'confirmed' && isLbc && <div className="flow-notice info"><i className="fas fa-truck"></i><div><strong>Processing — LBC</strong><p>Mark as Shipped below (upload photo → auto-sent to customer chat). Then Confirm Deliver in the LBC tab.</p></div></div>}
@@ -2659,11 +2664,30 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
 
           {hasRefund && (
             <div className="modal-section">
-              <h3><i className="fas fa-undo-alt"></i> Refund Request</h3>
-              <div className={`admin-refund-card admin-refund-${order.refundStatus}`}>
+              <h3>
+                <i className={`fas ${isFailedDeliveryOrder ? 'fa-times-circle' : 'fa-undo-alt'}`}></i>
+                {isFailedDeliveryOrder ? ' Failed Delivery Return' : ' Refund Request'}
+              </h3>
+              <div className={`admin-refund-card admin-refund-${order.refundStatus || (isFailedDeliveryOrder ? 'requested' : '')}`}>
                 <div className="admin-refund-details">
-                  <div className="admin-refund-row"><span>Reason</span><strong>📦 Item arrived damaged</strong></div>
-                  <div className="admin-refund-row admin-refund-amount-row"><span>Refund Amount</span><strong className="admin-refund-amount-value">₱{refundAmount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</strong></div>
+                  <div className="admin-refund-row">
+                    <span>Reason</span>
+                    <strong>
+                      {isFailedDeliveryOrder
+                        ? 'Failed Delivery — 3 unsuccessful attempts'
+                        : '📦 Item arrived damaged'}
+                    </strong>
+                  </div>
+                  <div className="admin-refund-row admin-refund-amount-row">
+                    <span>{isFailedDeliveryOrder ? 'Product return' : 'Refund Amount'}</span>
+                    <strong className="admin-refund-amount-value">₱{Number(refundAmount).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</strong>
+                  </div>
+                  {isFailedDeliveryOrder && (
+                    <div className="admin-refund-row">
+                      <span>Shipping fee</span>
+                      <strong style={{ color: '#991b1b' }}>Not refunded{shippingFee > 0 ? ` · ₱${Number(shippingFee).toLocaleString('en-PH', { minimumFractionDigits: 2 })}` : ''}</strong>
+                    </div>
+                  )}
                   {order.refundMethod && (
                     <div className="admin-refund-row"><span>Refund to</span>
                       <strong className="admin-refund-method-cell">
@@ -2673,12 +2697,12 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
                       </strong>
                     </div>
                   )}
-                  {order.refundComment && <div className="admin-refund-row"><span>Customer note</span><strong style={{ fontStyle: 'italic' }}>"{order.refundComment}"</strong></div>}
-                  <div className="admin-refund-row"><span>Requested at</span><strong>{order.refundRequestedAt ? new Date(order.refundRequestedAt).toLocaleString('en-PH') : '—'}</strong></div>
+                  {order.refundComment && <div className="admin-refund-row"><span>Note</span><strong style={{ fontStyle: 'italic' }}>"{order.refundComment}"</strong></div>}
+                  <div className="admin-refund-row"><span>Requested at</span><strong>{order.refundRequestedAt ? new Date(order.refundRequestedAt).toLocaleString('en-PH') : (order.deliveryConfirmedAt ? new Date(order.deliveryConfirmedAt).toLocaleString('en-PH') : '—')}</strong></div>
                   {order.refundStatus !== 'requested' && order.refundResolvedAt && <div className="admin-refund-row"><span>Resolved at</span><strong>{new Date(order.refundResolvedAt).toLocaleString('en-PH')}</strong></div>}
                   {order.refundAdminNote && <div className="admin-refund-row"><span>Admin note</span><strong>{order.refundAdminNote}</strong></div>}
                 </div>
-                {order.refundPhotoId && (
+                {order.refundPhotoId && !isFailedDeliveryOrder && (
                   <div className="admin-refund-photo-section">
                     <div className="admin-refund-photo-header" onClick={() => setPhotoExpanded2(!photoExpanded2)}>
                       <div className="admin-refund-photo-label"><i className="fas fa-camera"></i><strong>Damage Photo</strong></div>
@@ -2691,7 +2715,7 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
                     )}
                   </div>
                 )}
-                {order.refundStatus === 'requested' && (
+                {(order.refundStatus === 'requested' || failedDeliveryRefundOpen) && (
                   <div className="admin-refund-action">
                     <div className="admin-cancel-paymongo-card admin-refund-paymongo-card">
                       <div className="admin-cancel-paymongo-head">
@@ -2700,8 +2724,13 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
                       </div>
                       <div className="admin-cancel-paymongo-row">
                         <span>Amount to return</span>
-                        <strong>₱{refundAmount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</strong>
+                        <strong>₱{Number(refundAmount).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</strong>
                       </div>
+                      {isFailedDeliveryOrder && (
+                        <p className="admin-cancel-paymongo-hint" style={{ marginTop: 0 }}>
+                          Product cost only. Shipping fee is not included.
+                        </p>
+                      )}
                       <div className="admin-cancel-paymongo-row">
                         <span>Return via</span>
                         <strong className="admin-refund-method-cell">
@@ -2739,7 +2768,10 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
                               if (!onProcessRefundPay) return;
                               setProcessingRefundPay(true);
                               try {
-                                const result = await onProcessRefundPay(order.orderId);
+                                const result = await onProcessRefundPay(
+                                  order.orderId,
+                                  isFailedDeliveryOrder ? { tab: 'failed_delivery' } : undefined
+                                );
                                 if (result?.payConfirmed) setRefundPayDone(true);
                               } finally {
                                 setProcessingRefundPay(false);
@@ -2847,26 +2879,33 @@ const OrderModal = ({ order, onClose, onUpdateStatus, onCancelWithReason, onReso
                         >
                           {resolvingRefund
                             ? <><i className="fas fa-spinner fa-spin"></i> Finalizing…</>
-                            : <><i className="fas fa-check-circle"></i> Confirm Refund Complete</>}
+                            : <><i className="fas fa-check-circle"></i> {isFailedDeliveryOrder ? 'Confirm Return Complete' : 'Confirm Refund Complete'}</>}
                         </button>
                       </div>
                     )}
 
-                    <div className="admin-refund-action-btns" style={{ marginTop: 12 }}>
-                      <button
-                        className="admin-refund-reject-btn"
-                        onClick={() => setShowRejectConfirm(true)}
-                        disabled={resolvingRefund || processingRefundPay}
-                      >
-                        {resolvingRefund ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-times-circle"></i>} Reject
-                      </button>
-                    </div>
+                    {!isFailedDeliveryOrder && (
+                      <div className="admin-refund-action-btns" style={{ marginTop: 12 }}>
+                        <button
+                          className="admin-refund-reject-btn"
+                          onClick={() => setShowRejectConfirm(true)}
+                          disabled={resolvingRefund || processingRefundPay}
+                        >
+                          {resolvingRefund ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-times-circle"></i>} Reject
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
                 {order.refundStatus === 'approved' && (
                   <div className="admin-refund-resolved approved">
                     <i className="fas fa-check-circle"></i>
-                    <span>Refund of <strong>₱{refundAmount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</strong> approved and paid.</span>
+                    <span>
+                      {isFailedDeliveryOrder ? 'Product return' : 'Refund'} of{' '}
+                      <strong>₱{Number(refundAmount).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</strong>
+                      {' '}approved and paid.
+                      {isFailedDeliveryOrder ? ' Shipping fee was not refunded.' : ''}
+                    </span>
                     {refundAdminProofUrl && (
                       <a href={refundAdminProofUrl} target="_blank" rel="noreferrer" className="admin-cancel-proof-link">
                         <i className="fas fa-image"></i> View refund proof

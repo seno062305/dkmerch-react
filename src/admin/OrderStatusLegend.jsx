@@ -7,6 +7,7 @@ const STATUS_LEGEND = [
   { label: 'Shipped', color: '#6366f1' },
   { label: 'Out for Delivery', color: '#f97316' },
   { label: 'Completed', color: '#28a745' },
+  { label: 'Failed Delivery', color: '#dc2626' },
   { label: 'Canceled', color: '#dc3545' },
 ];
 

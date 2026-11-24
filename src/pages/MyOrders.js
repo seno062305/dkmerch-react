@@ -21,6 +21,14 @@ const MyOrders = () => {
 
   const getProductById = (id) => products.find(p => p._id === id || p.id === id);
 
+  const isFailedDeliveryOrder = (order) => {
+    if (!order) return false;
+    if (order.deliveryFailedFinal) return true;
+    const st = String(order.status || '').toLowerCase();
+    const os = String(order.orderStatus || '').toLowerCase();
+    return st === 'failed delivery' || os === 'failed_delivery';
+  };
+
   const getStatusClass = (status) => {
     const map = {
       'Processing': 'status-processing', 'Confirmed': 'status-confirmed',
@@ -30,21 +38,21 @@ const MyOrders = () => {
       'confirmed': 'status-confirmed', 'shipped': 'status-shipped',
       'out_for_delivery': 'status-delivery', 'completed': 'status-delivered',
       'cancelled': 'status-cancelled',
+      'Failed Delivery': 'status-failed-delivery', 'failed delivery': 'status-failed-delivery',
+      'failed_delivery': 'status-failed-delivery',
     };
     return map[status] || 'status-processing';
   };
 
   const getDisplayStatus = (order) => {
-    if (order?.deliveryFailedFinal || String(order?.status || '').toLowerCase() === 'failed delivery') {
-      return 'Failed Delivery';
-    }
+    if (isFailedDeliveryOrder(order)) return 'Failed Delivery';
     const s = order.orderStatus || order.status || 'pending';
     const labels = {
       pending: 'Processing', confirmed: 'Confirmed', shipped: 'Shipped',
       out_for_delivery: 'Out for Delivery', completed: 'Delivered',
       cancelled: 'Cancelled', Processing: 'Processing', Confirmed: 'Confirmed',
       Shipped: 'Shipped', Delivered: 'Delivered', Cancelled: 'Cancelled',
-      'Failed Delivery': 'Failed Delivery',
+      'Failed Delivery': 'Failed Delivery', failed_delivery: 'Failed Delivery',
     };
     return labels[s] || s;
   };
@@ -95,7 +103,9 @@ const MyOrders = () => {
               {filteredOrders.map(order => {
                 const orderDate = order._creationTime ? new Date(order._creationTime) : null;
                 const orderStatus = getDisplayStatus(order);
-                const statusKey = order.orderStatus || order.status || 'pending';
+                const statusKey = isFailedDeliveryOrder(order)
+                  ? 'Failed Delivery'
+                  : (order.orderStatus || order.status || 'pending');
                 const firstItem = order.items?.[0];
                 const firstProduct = firstItem ? getProductById(firstItem.id) : null;
                 const imgSrc = firstItem?.image || firstProduct?.image;

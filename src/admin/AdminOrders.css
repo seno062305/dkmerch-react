@@ -396,6 +396,14 @@
   text-transform: uppercase;
   white-space: nowrap;
 }
+.orders-refund-flag--failed {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fecaca;
+}
+.orders-priority-card.is-failed-delivery {
+  border-color: #fecaca;
+}
 .orders-refund-flag--cancel {
   background: #ffedd5;
   color: #c2410c;

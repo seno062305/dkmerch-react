@@ -14,7 +14,6 @@ import { formatOrderShortId } from '../utils/orderId';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
 import { getOverlayRoot } from '../utils/scrollLock';
 import { validateImageFile, IMAGE_ACCEPT_NO_GIF } from '../utils/imageUpload';
-import OversellChoiceCard from '../components/OversellChoiceCard';
 import './TrackOrder.css';
 
 /** Cancel only before admin confirms — once confirmed, cancel is locked. */
@@ -424,6 +423,239 @@ const NCR_BOUNDS = [
   [14.3500, 120.8500],
   [14.8000, 121.1500],
 ];
+const NCR_CENTER = [14.5995, 121.0];
+const NCR_MIN_ZOOM = 11;
+
+const fetchCustomerRoute = async (fromLat, fromLng, toLat, toLng) => {
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}?overview=full&geometries=geojson`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.code === 'Ok' && data.routes?.length > 0) {
+      return data.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+    }
+  } catch { /* ignore */ }
+  return null;
+};
+
+/** Fullscreen map — same experience as rider Full Map (portaled, NCR-locked). */
+const CustomerFullscreenMapModal = ({
+  address,
+  orderId,
+  coords,
+  riderCoords,
+  riderName,
+  onClose,
+}) => {
+  const mapRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const unmountedRef = useRef(false);
+  const routeLayerRef = useRef(null);
+  const [geocoding, setGeocoding] = useState(!coords);
+
+  useBodyScrollLock(true);
+  useCloseOnHistoryBack(true, onClose);
+
+  useEffect(() => {
+    document.body.classList.add('track-fullscreen-map-open');
+    return () => document.body.classList.remove('track-fullscreen-map-open');
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  useEffect(() => {
+    unmountedRef.current = false;
+    if (!mapRef.current || mapInstanceRef.current) return;
+    let intervalId = null;
+    let resizeObs = null;
+
+    const refreshSize = (map) => {
+      try { map.invalidateSize({ animate: false }); } catch { /* ignore */ }
+    };
+
+    const initMap = () => {
+      if (!window.L || !mapRef.current || unmountedRef.current) return;
+      try {
+        const L = window.L;
+        const startLat = coords?.lat ?? NCR_CENTER[0];
+        const startLng = coords?.lng ?? NCR_CENTER[1];
+        const map = L.map(mapRef.current, {
+          zoomControl: false,
+          tap: false,
+          scrollWheelZoom: true,
+          minZoom: NCR_MIN_ZOOM,
+          maxZoom: 19,
+          maxBounds: NCR_BOUNDS,
+          maxBoundsViscosity: 1.0,
+        }).setView([startLat, startLng], coords ? 16 : NCR_MIN_ZOOM + 1);
+        map.setMaxBounds(NCR_BOUNDS);
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+          maxZoom: 19,
+        }).addTo(map);
+
+        const youIcon = L.divIcon({
+          className: '',
+          html: `<div style="background:#fc1268;color:white;border-radius:50% 50% 50% 0;width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:20px;transform:rotate(-45deg);box-shadow:0 4px 14px rgba(252,18,104,0.55);border:3px solid white;"><span style="transform:rotate(45deg)">📍</span></div>`,
+          iconSize: [44, 44],
+          iconAnchor: [22, 44],
+          popupAnchor: [0, -48],
+        });
+        const shortId = orderId ? String(orderId).slice(-8).toUpperCase() : '';
+        const youMarker = L.marker([startLat, startLng], { icon: youIcon })
+          .addTo(map)
+          .bindPopup(
+            `<div style="font-size:13px;max-width:220px"><strong>📍 Your delivery address</strong>`
+            + (shortId ? `<br><small>Order #${shortId}</small>` : '')
+            + `<br><small>${address || ''}</small></div>`
+          );
+        mapInstanceRef.current = map;
+
+        const fitWithPadding = (points) => {
+          try {
+            map.fitBounds(points, {
+              paddingTopLeft: [24, 72],
+              paddingBottomRight: [24, 72],
+              maxZoom: 17,
+            });
+          } catch { /* ignore */ }
+        };
+
+        [80, 250, 500].forEach((ms) => setTimeout(() => {
+          if (unmountedRef.current || !mapInstanceRef.current) return;
+          refreshSize(map);
+          if (riderCoords?.lat && riderCoords?.lng) {
+            fitWithPadding([[riderCoords.lat, riderCoords.lng], [startLat, startLng]]);
+          }
+        }, ms));
+
+        if (typeof ResizeObserver !== 'undefined' && mapRef.current) {
+          resizeObs = new ResizeObserver(() => refreshSize(map));
+          resizeObs.observe(mapRef.current);
+        }
+
+        if (riderCoords?.lat && riderCoords?.lng) {
+          const riderIcon = L.divIcon({
+            className: '',
+            html: `<div style="width:50px;height:50px;background:linear-gradient(135deg,#6a0dad,#9b30ff);border-radius:50%;border:3px solid white;box-shadow:0 3px 14px rgba(106,13,173,0.5);display:flex;align-items:center;justify-content:center;font-size:24px;">🛵</div>`,
+            iconSize: [50, 50],
+            iconAnchor: [25, 25],
+            popupAnchor: [0, -28],
+          });
+          L.marker([riderCoords.lat, riderCoords.lng], { icon: riderIcon })
+            .addTo(map)
+            .bindPopup(`<strong>🛵 ${riderName || 'Your Rider'}</strong>`);
+          fitWithPadding([[riderCoords.lat, riderCoords.lng], [startLat, startLng]]);
+          fetchCustomerRoute(riderCoords.lat, riderCoords.lng, startLat, startLng).then((latlngs) => {
+            if (unmountedRef.current || !mapInstanceRef.current || !latlngs) return;
+            try {
+              if (routeLayerRef.current) mapInstanceRef.current.removeLayer(routeLayerRef.current);
+              routeLayerRef.current = L.polyline(latlngs, {
+                color: '#fc1268',
+                weight: 5,
+                opacity: 0.85,
+                lineJoin: 'round',
+                lineCap: 'round',
+              }).addTo(mapInstanceRef.current);
+              refreshSize(map);
+              fitWithPadding(latlngs);
+            } catch { /* ignore */ }
+          });
+        } else {
+          setTimeout(() => { try { youMarker.openPopup(); } catch { /* ignore */ } }, 400);
+        }
+
+        if (!coords && address) {
+          fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(`${address}, Philippines`)}&limit=1`, {
+            headers: { 'Accept-Language': 'en' },
+          }).then((r) => r.json()).then((data) => {
+            if (unmountedRef.current || !mapInstanceRef.current) return;
+            if (data?.length > 0) {
+              const lat = parseFloat(data[0].lat);
+              const lng = parseFloat(data[0].lon);
+              youMarker.setLatLng([lat, lng]);
+              if (riderCoords?.lat && riderCoords?.lng) {
+                fitWithPadding([[riderCoords.lat, riderCoords.lng], [lat, lng]]);
+              } else {
+                map.flyTo([lat, lng], 17, { animate: true, duration: 1.0 });
+              }
+            }
+            if (!unmountedRef.current) setGeocoding(false);
+          }).catch(() => { if (!unmountedRef.current) setGeocoding(false); });
+        } else {
+          setGeocoding(false);
+        }
+      } catch (err) {
+        console.error('Customer fullscreen map error:', err);
+        if (!unmountedRef.current) setGeocoding(false);
+      }
+    };
+
+    if (window.L) initMap();
+    else {
+      intervalId = setInterval(() => {
+        if (window.L) {
+          clearInterval(intervalId);
+          intervalId = null;
+          initMap();
+        }
+      }, 100);
+    }
+
+    return () => {
+      unmountedRef.current = true;
+      if (intervalId !== null) clearInterval(intervalId);
+      if (resizeObs) { try { resizeObs.disconnect(); } catch { /* ignore */ } }
+      if (mapInstanceRef.current) {
+        try { mapInstanceRef.current.remove(); } catch { /* ignore */ }
+        mapInstanceRef.current = null;
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const shortId = orderId ? String(orderId).slice(-8).toUpperCase() : '';
+
+  return createPortal(
+    <div className="track-fullscreen-map-overlay" role="dialog" aria-modal="true" aria-label="Full map">
+      <div className="track-fullscreen-map-shell" onClick={(e) => e.stopPropagation()}>
+        <div className="track-fullscreen-map-header">
+          <div className="track-fullscreen-map-header-left">
+            <i className="fas fa-map-marked-alt"></i>
+            <div>
+              <strong>Live delivery map{shortId ? ` · #${shortId}` : ''}</strong>
+              <span>{address}</span>
+            </div>
+          </div>
+          <button className="track-fullscreen-map-close" onClick={onClose} type="button" aria-label="Close map">
+            <i className="fas fa-times"></i>
+          </button>
+        </div>
+        {geocoding && (
+          <div className="track-fullscreen-map-loading">
+            <div className="track-fullscreen-map-loading-bar"></div>
+            <span>Locating address on map…</span>
+          </div>
+        )}
+        <div ref={mapRef} className="track-fullscreen-map-canvas" />
+        <div className="track-fullscreen-map-footer">
+          <span><i className="fas fa-hand-pointer"></i> Pinch to zoom · Drag to pan</span>
+          <span className="track-fullscreen-map-footer-right">
+            {riderCoords
+              ? <><i className="fas fa-route" style={{ color: '#fc1268' }}></i> Route · 🛵 Rider · 📍 You</>
+              : <><i className="fas fa-search-plus"></i> Use +/− to zoom</>}
+          </span>
+        </div>
+      </div>
+    </div>,
+    getOverlayRoot() || document.body
+  );
+};
 
 const RiderMap = ({ orderId, riderName, orderData }) => {
   const mapRef             = useRef(null);
@@ -439,6 +671,7 @@ const RiderMap = ({ orderId, riderName, orderData }) => {
   const [mapError,      setMapError]      = useState(null);
   const [leafletLoaded, setLeafletLoaded] = useState(!!window.L);
   const [lastUpdateTime,setLastUpdateTime]= useState(null);
+  const [showFullscreen, setShowFullscreen] = useState(false);
 
   const locationData = useQuery(api.riders.getRiderLocation, orderId ? { orderId } : 'skip');
 
@@ -705,33 +938,65 @@ const RiderMap = ({ orderId, riderName, orderData }) => {
 
   if (mapError) return <div className="rider-map-error"><i className="fas fa-map-marked-alt"></i><p>{mapError}</p><small>Try refreshing.</small></div>;
 
+  const destCoords = (orderData?.addressLat && orderData?.addressLng)
+    ? { lat: Number(orderData.addressLat), lng: Number(orderData.addressLng) }
+    : null;
+  const liveRiderCoords = isLive
+    ? { lat: locationData.lat, lng: locationData.lng }
+    : (hasLastKnown
+      ? { lat: locationData.lastKnownLat, lng: locationData.lastKnownLng }
+      : null);
+
   return (
-    <div className="rider-map-wrapper">
-      <div className={`rider-map-status-bar ${statusClass}`}>{statusContent}</div>
-      <div ref={mapRef} className="rider-map-container" />
-      {isLive && (
-        <div className="rider-map-accuracy">
-          {locationData.accuracy && <span><i className="fas fa-crosshairs"></i> ±{Math.round(locationData.accuracy)}m</span>}
-          {locationData.speed > 0 && <span style={{ marginLeft: 10 }}><i className="fas fa-tachometer-alt"></i> {Math.round((locationData.speed || 0) * 3.6)} km/h</span>}
-          <span style={{ marginLeft: 'auto', color: '#e53e3e', fontWeight: 700 }}>━━ Route &nbsp;·&nbsp; 🛵 = Rider &nbsp;·&nbsp; 📍 = You</span>
+    <>
+      <div className="rider-map-wrapper">
+        <div className={`rider-map-status-bar ${statusClass}`}>{statusContent}</div>
+        <div className="rider-map-inner-wrap">
+          <div ref={mapRef} className="rider-map-container" />
+          <button
+            type="button"
+            className="track-map-fullscreen-btn"
+            onClick={() => setShowFullscreen(true)}
+            title="View full map"
+          >
+            <i className="fas fa-expand-alt"></i>
+            <span>Full Map</span>
+          </button>
         </div>
-      )}
-      {!isLive && hasLastKnown && (
-        <div className="rider-map-accuracy" style={{ background: '#fef3c7', borderTop: '1px solid #fde68a' }}>
-          <span style={{ color: '#92400e' }}><i className="fas fa-exclamation-triangle" style={{ marginRight: 5 }}></i>Showing last known location{lastKnownAddr && <> · <strong>{lastKnownAddr}</strong></>}</span>
-          <span style={{ marginLeft: 'auto', color: '#9ca3af', fontWeight: 700 }}>- - = Last seen &nbsp;·&nbsp; 📍 = You</span>
-        </div>
-      )}
-      {!locationData && (
-        <div className="rider-map-waiting-overlay">
-          <div className="rider-map-waiting-inner">
-            <i className="fas fa-motorcycle"></i>
-            <p>Rider hasn't shared location yet</p>
-            <small>Updates automatically when rider starts moving</small>
+        {isLive && (
+          <div className="rider-map-accuracy">
+            {locationData.accuracy && <span><i className="fas fa-crosshairs"></i> ±{Math.round(locationData.accuracy)}m</span>}
+            {locationData.speed > 0 && <span style={{ marginLeft: 10 }}><i className="fas fa-tachometer-alt"></i> {Math.round((locationData.speed || 0) * 3.6)} km/h</span>}
+            <span style={{ marginLeft: 'auto', color: '#e53e3e', fontWeight: 700 }}>━━ Route &nbsp;·&nbsp; 🛵 = Rider &nbsp;·&nbsp; 📍 = You</span>
           </div>
-        </div>
+        )}
+        {!isLive && hasLastKnown && (
+          <div className="rider-map-accuracy" style={{ background: '#fef3c7', borderTop: '1px solid #fde68a' }}>
+            <span style={{ color: '#92400e' }}><i className="fas fa-exclamation-triangle" style={{ marginRight: 5 }}></i>Showing last known location{lastKnownAddr && <> · <strong>{lastKnownAddr}</strong></>}</span>
+            <span style={{ marginLeft: 'auto', color: '#9ca3af', fontWeight: 700 }}>- - = Last seen &nbsp;·&nbsp; 📍 = You</span>
+          </div>
+        )}
+        {!locationData && (
+          <div className="rider-map-waiting-overlay">
+            <div className="rider-map-waiting-inner">
+              <i className="fas fa-motorcycle"></i>
+              <p>Rider hasn't shared location yet</p>
+              <small>Updates automatically when rider starts moving</small>
+            </div>
+          </div>
+        )}
+      </div>
+      {showFullscreen && (
+        <CustomerFullscreenMapModal
+          address={orderData?.shippingAddress || orderData?.address || ''}
+          orderId={orderId}
+          coords={destCoords}
+          riderCoords={liveRiderCoords}
+          riderName={riderName}
+          onClose={() => setShowFullscreen(false)}
+        />
       )}
-    </div>
+    </>
   );
 };
 
@@ -831,45 +1096,53 @@ const TrackOrder = ({ onProductClick }) => {
   const handleOpenModal  = useCallback((order) => setSelectedOrderId(order._id), []);
   const getProductById   = useCallback((id) => products.find(p => p._id === id || p.id === id), [products]);
 
+  const isFailedDeliveryOrder = (order) => {
+    if (!order) return false;
+    if (order.deliveryFailedFinal) return true;
+    const st = String(order.status || '').toLowerCase();
+    const os = String(order.orderStatus || '').toLowerCase();
+    return st === 'failed delivery' || os === 'failed_delivery';
+  };
+
   const getStatusClass = (status) => {
     const map = {
       'Processing': 'status-processing', 'Confirmed': 'status-confirmed', 'Shipped': 'status-shipped',
       'Out for Delivery': 'status-delivery', 'out_for_delivery': 'status-delivery', 'Delivered': 'status-delivered',
       'Cancelled': 'status-cancelled', 'pending': 'status-processing', 'confirmed': 'status-confirmed',
       'shipped': 'status-shipped', 'completed': 'status-delivered', 'cancelled': 'status-cancelled',
-      'Failed Delivery': 'status-cancelled', 'failed delivery': 'status-cancelled',
+      'Failed Delivery': 'status-failed-delivery', 'failed delivery': 'status-failed-delivery',
+      'failed_delivery': 'status-failed-delivery',
       'Pending Payment': 'status-pending-payment',
     };
     return map[status] || 'status-processing';
   };
 
   const getDisplayStatus = (order) => {
-    if (order?.deliveryFailedFinal || String(order?.status || '').toLowerCase() === 'failed delivery') {
-      return 'Failed Delivery';
-    }
-    const oversell = String(order?.oversellStatus || '');
-    if (oversell === 'choice_needed') return 'Choose refund or reserve';
-    if (oversell === 'reserved') return `Reserved · restock ${order.restockEtaLabel || '2–3 weeks'}`;
-    if (oversell === 'refund_pending') return 'Refund processing';
-    if (oversell === 'refunded') return 'Refunded (sold out)';
+    if (isFailedDeliveryOrder(order)) return 'Failed Delivery';
     const s = order.orderStatus || order.status || 'pending';
     const labels = {
       pending: 'Processing', confirmed: 'Confirmed', shipped: 'Shipped',
       out_for_delivery: 'Out for Delivery', completed: 'Delivered', cancelled: 'Cancelled',
-      awaiting_restock_choice: 'Choose refund or reserve',
-      awaiting_restock: `Reserved · restock ${order.restockEtaLabel || '2–3 weeks'}`,
       Processing: 'Processing', Confirmed: 'Confirmed', Shipped: 'Shipped',
       'Out for Delivery': 'Out for Delivery', Delivered: 'Delivered', Cancelled: 'Cancelled',
-      'Failed Delivery': 'Failed Delivery',
+      'Failed Delivery': 'Failed Delivery', failed_delivery: 'Failed Delivery',
       'Pending Payment': 'Pending Payment',
-      'Awaiting Restock Choice': 'Choose refund or reserve',
-      'Reserved — Awaiting Restock': `Reserved · restock ${order.restockEtaLabel || '2–3 weeks'}`,
     };
     return labels[s] || s;
   };
 
   const isPendingPayment       = (order) => order.status === 'Pending Payment' && order.paymentStatus !== 'paid';
-  const isDelivered            = (order) => { const s = (order.orderStatus || order.status || '').toLowerCase(); return s === 'delivered' || s === 'completed'; };
+  // Successful deliveries only — Failed Delivery stays in Delivered tab but is not "delivered"
+  const isDelivered            = (order) => {
+    if (isFailedDeliveryOrder(order)) return true; // still listed under Delivered filter
+    const s = (order.orderStatus || order.status || '').toLowerCase();
+    return s === 'delivered' || s === 'completed';
+  };
+  const isSuccessfulDelivery   = (order) => {
+    if (isFailedDeliveryOrder(order)) return false;
+    const s = (order.orderStatus || order.status || '').toLowerCase();
+    return s === 'delivered' || s === 'completed';
+  };
   const isCancelledOrder       = (order) => { const s = (order.orderStatus || order.status || '').toLowerCase(); return s === 'cancelled'; };
   const isOutForDeliveryStatus = (order) => {
     const check = (val) => { if (!val) return false; return val.toLowerCase().replace(/[\s_-]+/g, '_') === 'out_for_delivery'; };
@@ -897,14 +1170,13 @@ const TrackOrder = ({ onProductClick }) => {
     const steps = [
       { label: 'Order Placed',      icon: 'fa-shopping-cart', completed: true, time: fmt(order._creationTime), desc: 'Customer · Your order has been placed.', actor: 'customer' },
       { label: 'Payment Confirmed', icon: 'fa-credit-card',   completed: order.paymentStatus === 'paid', time: fmt(order.paidAt), desc: order.paymentStatus === 'paid' ? 'Customer · Payment received.' : 'Customer · Waiting for payment.', actor: 'customer' },
-      { label: 'Order Confirmed',   icon: 'fa-check-circle',  completed: ['confirmed','shipped','out_for_delivery','delivered','completed'].includes(status), time: fmt(order.confirmedAt), desc: ['confirmed','shipped','out_for_delivery','delivered','completed'].includes(status) ? 'Admin · Order confirmed.' : 'Admin · Waiting for confirmation.', actor: 'admin' },
-      { label: 'Rider Assigned',    icon: 'fa-motorcycle',    completed: !!order.riderInfo || ['shipped','out_for_delivery','delivered','completed'].includes(status), time: fmt(order.shippedAt), desc: order.riderInfo ? `Rider · ${order.riderInfo.name} accepted your order.` : 'Rider · Waiting for rider.', actor: 'rider' },
-      { label: 'Out for Delivery',  icon: 'fa-shipping-fast', completed: ['out_for_delivery','delivered','completed'].includes(status), time: fmt(order.outForDeliveryAt), desc: ['out_for_delivery','delivered','completed'].includes(status) ? 'Rider · On the way to you.' : 'Rider · Waiting for pickup.', actor: 'rider' },
+      { label: 'Order Confirmed',   icon: 'fa-check-circle',  completed: ['confirmed','shipped','out_for_delivery','delivered','completed','failed_delivery'].includes(status), time: fmt(order.confirmedAt), desc: ['confirmed','shipped','out_for_delivery','delivered','completed','failed_delivery'].includes(status) ? 'Admin · Order confirmed.' : 'Admin · Waiting for confirmation.', actor: 'admin' },
+      { label: 'Rider Assigned',    icon: 'fa-motorcycle',    completed: !!order.riderInfo || ['shipped','out_for_delivery','delivered','completed','failed_delivery'].includes(status), time: fmt(order.shippedAt), desc: order.riderInfo ? `Rider · ${order.riderInfo.name} accepted your order.` : 'Rider · Waiting for rider.', actor: 'rider' },
+      { label: 'Out for Delivery',  icon: 'fa-shipping-fast', completed: ['out_for_delivery','delivered','completed','failed_delivery'].includes(status), time: fmt(order.outForDeliveryAt), desc: ['out_for_delivery','delivered','completed','failed_delivery'].includes(status) ? 'Rider · On the way to you.' : 'Rider · Waiting for pickup.', actor: 'rider' },
     ];
 
     const fails = Array.isArray(order.deliveryFailedAttempts) ? order.deliveryFailedAttempts : [];
-    const failedFinal = !!order.deliveryFailedFinal
-      || String(order.status || '').toLowerCase() === 'failed delivery';
+    const failedFinal = isFailedDeliveryOrder(order);
     fails.forEach((attempt) => {
       const n = Number(attempt?.attempt) || 0;
       const reason = String(attempt?.reason || '').trim();
@@ -923,13 +1195,18 @@ const TrackOrder = ({ onProductClick }) => {
       });
     });
 
+    const shippingFee = Number(order.shippingFee || 0);
+    const productRefund = order.refundAmount != null
+      ? Number(order.refundAmount)
+      : Math.max(0, Number(order.subtotal ?? ((order.finalTotal ?? order.total ?? 0) - shippingFee)));
+
     steps.push({
       label: failedFinal ? 'Failed Delivery' : 'Delivered',
       icon: failedFinal ? 'fa-times-circle' : 'fa-check-double',
-      completed: ['delivered', 'completed'].includes(status) || failedFinal,
+      completed: ['delivered', 'completed', 'failed_delivery'].includes(status) || failedFinal,
       time: fmt(order.deliveryConfirmedAt),
       desc: failedFinal
-        ? 'Rider · Closed after 3 unsuccessful delivery attempts.'
+        ? `Closed after 3 unsuccessful delivery attempts. Product cost (₱${productRefund.toLocaleString('en-PH', { minimumFractionDigits: 2 })}) will be refunded. Shipping fee${shippingFee > 0 ? ` (₱${shippingFee.toLocaleString('en-PH', { minimumFractionDigits: 2 })})` : ''} is not refunded.`
         : ['delivered', 'completed'].includes(status)
           ? 'Rider · Delivered successfully!'
           : fails.length
@@ -1039,8 +1316,9 @@ const TrackOrder = ({ onProductClick }) => {
 
     const ordDate      = order._creationTime ? new Date(order._creationTime) : null;
     const orderStatus  = getDisplayStatus(order);
-    const statusKey    = order.orderStatus || order.status || 'pending';
-    const delivered    = isDelivered(order);
+    const statusKey    = isFailedDeliveryOrder(order) ? 'Failed Delivery' : (order.orderStatus || order.status || 'pending');
+    const delivered    = isSuccessfulDelivery(order);
+    const failedFinal  = isFailedDeliveryOrder(order);
     const releaseDate  = getPreOrderReleaseDate(order);
     const needsPayment = isPendingPayment(order);
     const { canRefund, hoursLeft, expired } = getRefundWindow(order);
@@ -1073,11 +1351,20 @@ const TrackOrder = ({ onProductClick }) => {
           customerPhone: order.phone,
           ...(paymentMethodType ? { paymentMethodType } : {}),
         });
+        if (result?.ok === false || result?.blocked) {
+          showNotification(
+            result?.message
+              || 'Another customer is already paying for this item. Try again when their 5-minute window ends.',
+            'warning'
+          );
+          setContinuingPayment(false);
+          return;
+        }
         window.location.href = result.paymentLinkUrl;
       } catch (err) {
         const msg = String(err?.message || err?.data || '');
         showNotification(
-          /out of stock/i.test(msg) ? msg : 'Failed. Please try again.',
+          /out of stock|paying for this item|payment window/i.test(msg) ? msg : 'Failed. Please try again.',
           'error'
         );
         setContinuingPayment(false);
@@ -1153,35 +1440,20 @@ const TrackOrder = ({ onProductClick }) => {
             )}
             {isLbcOrder(order) && <span className="order-card-lbc-badge"><i className="fas fa-truck"></i> LBC</span>}
           </div>
-          {(order.oversellStatus === 'choice_needed' || order.oversellStatus === 'reserved') && (
-            <div
-              className="order-card-preorder-badge"
-              style={{
-                background: order.oversellStatus === 'reserved' ? '#f0fdf4' : '#fff7ed',
-                color: order.oversellStatus === 'reserved' ? '#166534' : '#9a3412',
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <i className={`fas ${order.oversellStatus === 'reserved' ? 'fa-bookmark' : 'fa-exclamation-triangle'}`}></i>
-              <span>
-                {order.oversellStatus === 'reserved'
-                  ? `Reserved · restock in ${order.restockEtaLabel || '2–3 weeks'}`
-                  : `Sold out after pay · restock ${order.restockEtaLabel || '2–3 weeks'} — choose below`}
-              </span>
-            </div>
-          )}
-          {(order.oversellStatus === 'choice_needed' || order.oversellStatus === 'reserved') && (
-            <div onClick={(e) => e.stopPropagation()}>
-              <OversellChoiceCard order={order} compact />
-            </div>
-          )}
           {releaseDate && (
             <div className="order-card-preorder-badge">
               <i className="fas fa-calendar-alt"></i>
               <span>Expected: {new Date(releaseDate).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
             </div>
           )}
+          {failedFinal && (
+            <div className="order-card-failed-delivery-notice">
+              <i className="fas fa-exclamation-triangle"></i>
+              <span>Failed Delivery — product cost refundable; shipping fee is not.</span>
+            </div>
+          )}
           {delivered && order.refundStatus && <RefundBadge status={order.refundStatus} />}
+          {failedFinal && order.refundStatus && <RefundBadge status={order.refundStatus} />}
           {order.cancelRequestStatus === 'requested' && (
             <div className="order-card-refund-timer"><i className="fas fa-hourglass-half"></i><span>Cancel pending</span></div>
           )}
@@ -1535,8 +1807,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
   const isOutForDelivery = isOutForDeliveryStatus(order);
   const needsPayment     = order.status === 'Pending Payment' && order.paymentStatus !== 'paid';
   const delivered        = ['delivered','completed'].includes((order.orderStatus || order.status || '').toLowerCase());
-  const canCancel        = !isGuest && canCustomerCancelOrder(order)
-    && !['choice_needed', 'reserved', 'refund_pending'].includes(String(order.oversellStatus || ''));
+  const canCancel        = !isGuest && canCustomerCancelOrder(order);
   const timelineSteps    = getTimelineSteps(order);
   const showDeliverySplit = !!(order.riderInfo && !isCancelled && !isLbcOrder(order));
   const refundAmount     = (order.finalTotal ?? order.total ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2 });
@@ -1592,7 +1863,7 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
       <h3>Order Timeline</h3>
       <div className="timeline">
         {timelineSteps.map((step, index) => (
-          <div key={index} className={`timeline-item ${step.completed ? 'completed' : ''} ${step.isCancelled ? 'cancelled-step' : ''} ${step.isFailedAttempt ? 'failed-attempt-step' : ''}${step.actor ? ` actor-${step.actor}` : ''}`}>
+          <div key={index} className={`timeline-item ${step.completed ? 'completed' : ''} ${step.isCancelled ? 'cancelled-step' : ''} ${step.isFailedAttempt ? 'failed-attempt-step' : ''} ${step.isFailedFinal ? 'failed-final-step' : ''}${step.actor ? ` actor-${step.actor}` : ''}`}>
             <div className="timeline-marker"><i className={`fas ${step.icon}`}></i></div>
             <div className="timeline-content">
               <div className="timeline-label-row">
@@ -1605,6 +1876,12 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
               </div>
               {step.time && step.completed && <span className="timeline-timestamp"><i className="fas fa-clock"></i> {step.time}</span>}
               <p className={step.completed ? 'timeline-desc-done' : 'timeline-desc-pending'}>{step.desc || (step.completed ? 'Completed' : 'Pending')}</p>
+              {step.isFailedFinal && (
+                <div className="timeline-failed-refund-notice">
+                  <i className="fas fa-info-circle"></i>
+                  <span>Product payment will be returned. Shipping fee is not included in the refund.</span>
+                </div>
+              )}
               {step.isFailedAttempt && step.photo && (
                 <button
                   type="button"
@@ -1644,11 +1921,20 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
         customerPhone: order.phone,
         ...(paymentMethodType ? { paymentMethodType } : {}),
       });
+      if (result?.ok === false || result?.blocked) {
+        showNotification(
+          result?.message
+            || 'Another customer is already paying for this item. Try again when their 5-minute window ends.',
+          'warning'
+        );
+        setContinuingPayment(false);
+        return;
+      }
       window.location.href = result.paymentLinkUrl;
     } catch (err) {
       const msg = String(err?.message || err?.data || '');
       showNotification(
-        /out of stock/i.test(msg) ? msg : 'Failed. Please try again.',
+        /out of stock|paying for this item|payment window/i.test(msg) ? msg : 'Failed. Please try again.',
         'error'
       );
       setContinuingPayment(false);
@@ -1663,7 +1949,11 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
 
           <div className="result-header">
             <h2>Order #{formatOrderShortId(order) || 'N/A'}</h2>
-            <div className={`status-badge ${getStatusClass(order.orderStatus || order.status)}`}>{getDisplayStatus(order)}</div>
+            <div className={`status-badge ${getStatusClass(
+              (order?.deliveryFailedFinal || String(order?.status || '').toLowerCase() === 'failed delivery' || String(order?.orderStatus || '').toLowerCase() === 'failed_delivery')
+                ? 'Failed Delivery'
+                : (order.orderStatus || order.status)
+            )}`}>{getDisplayStatus(order)}</div>
             <button
               className="modal-close-btn"
               onClick={(e) => { e.stopPropagation(); onClose(); }}
@@ -1674,18 +1964,24 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
             </button>
           </div>
 
-          {(order.oversellStatus === 'choice_needed' || order.oversellStatus === 'reserved') && (
-            <OversellChoiceCard order={order} />
-          )}
-
           {isGuest && (
             <div className="guest-modal-notice"><i className="fas fa-lock"></i><span>Viewing as guest — order timeline only. <a href="/login" onClick={e => { e.preventDefault(); onClose(); window.dispatchEvent(new Event('openLoginModal')); }}>Log in</a> for full access.</span></div>
+          )}
+
+          {(order?.deliveryFailedFinal || String(order?.status || '').toLowerCase() === 'failed delivery' || String(order?.orderStatus || '').toLowerCase() === 'failed_delivery') && (
+            <div className="failed-delivery-banner">
+              <div className="failed-delivery-banner-icon"><i className="fas fa-times-circle"></i></div>
+              <div className="failed-delivery-banner-text">
+                <strong>Failed Delivery</strong>
+                <p>Closed after 3 unsuccessful attempts. Your product payment will be refunded. Shipping fee is not included.</p>
+              </div>
+            </div>
           )}
 
           {!isGuest && needsPayment && (
             <div className="pending-payment-banner">
               <div className="pending-payment-icon"><i className="fas fa-exclamation-circle"></i></div>
-              <div className="pending-payment-text"><strong>Payment Incomplete</strong><p>Your order is reserved but payment was not completed.</p></div>
+              <div className="pending-payment-text"><strong>Payment Incomplete</strong><p>Your order is unpaid. Complete payment within 5 minutes once you start Pay Now — that locks the item so others can’t pay for it at the same time.</p></div>
               <button className="btn btn-continue-payment" onClick={handleContinuePayment} disabled={continuingPayment}>{continuingPayment ? <><i className="fas fa-spinner fa-spin"></i> Loading…</> : <><i className="fas fa-credit-card"></i> Complete Payment</>}</button>
             </div>
           )}
@@ -1695,6 +1991,10 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
           {showDeliverySplit && (
             <div className={`track-delivery-split${!isGuest ? ' has-chat' : ''}`}>
               <div className="track-delivery-left">
+                {timelineBlock}
+              </div>
+
+              <div className="track-delivery-center">
                 <div className="rider-info-banner">
                   {riderPhoto ? (
                     <img src={riderPhoto} alt={order.riderInfo.name || 'Rider'} className="rider-info-photo" />
@@ -1746,10 +2046,6 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
                     )}
                   </div>
                 )}
-              </div>
-
-              <div className="track-delivery-center">
-                {timelineBlock}
               </div>
 
               {!isGuest && (

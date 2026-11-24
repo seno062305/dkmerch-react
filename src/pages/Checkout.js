@@ -1923,6 +1923,15 @@ const Checkout = () => {
           paymentLinkUrl = result.paymentLinkUrl;
         } else {
           const result = await createPaymentLink(payArgs);
+          if (result?.ok === false || result?.blocked) {
+            setLoading(false);
+            showNotification(
+              result?.message
+                || 'Another customer is already paying for this item. Please wait until their 5-minute payment window ends.',
+              'warning'
+            );
+            return;
+          }
           paymentLinkUrl = result.paymentLinkUrl;
         }
       } catch (payError) {

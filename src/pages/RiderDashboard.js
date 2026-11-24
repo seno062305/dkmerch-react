@@ -1223,8 +1223,20 @@ const RiderDashboard = () => {
   }, [stopRiderTracking]);
 
   const toggleExpanded     = (id, setFn) => setFn(prev => ({ ...prev, [id]: !prev[id] }));
-  const getPickupStatusStyle = (status) => ({ approved: { bg: '#d1fae5', color: '#0f5132' }, out_for_delivery: { bg: '#dbeafe', color: '#1e40af' }, completed: { bg: '#d1fae5', color: '#065f46' }, scanned: { bg: '#fce7f3', color: '#9d174d' } }[status] || { bg: '#e2e8f0', color: '#475569' });
-  const getStatusLabel = (status) => ({ approved: 'Accepted', out_for_delivery: 'Out for Delivery', completed: 'Delivered', scanned: 'From Scan' }[status] || status);
+  const getPickupStatusStyle = (status, order = null) => {
+    if (order?.deliveryFailedFinal || String(order?.status || '').toLowerCase() === 'failed delivery'
+      || String(order?.orderStatus || '').toLowerCase() === 'failed_delivery') {
+      return { bg: '#fee2e2', color: '#991b1b' };
+    }
+    return ({ approved: { bg: '#d1fae5', color: '#0f5132' }, out_for_delivery: { bg: '#dbeafe', color: '#1e40af' }, completed: { bg: '#d1fae5', color: '#065f46' }, scanned: { bg: '#fce7f3', color: '#9d174d' } }[status] || { bg: '#e2e8f0', color: '#475569' });
+  };
+  const getStatusLabel = (status, order = null) => {
+    if (order?.deliveryFailedFinal || String(order?.status || '').toLowerCase() === 'failed delivery'
+      || String(order?.orderStatus || '').toLowerCase() === 'failed_delivery') {
+      return 'Failed Delivery';
+    }
+    return ({ approved: 'Accepted', out_for_delivery: 'Out for Delivery', completed: 'Delivered', scanned: 'From Scan' }[status] || status);
+  };
   const getStatusIcon = (status) => ({
     approved: DK_ICONS.completed,
     out_for_delivery: DK_ICONS.outForDelivery,
@@ -1540,7 +1552,7 @@ const RiderDashboard = () => {
       if (result?.finalizedFailed) {
         await stopTrackingOnDelivery(delivery.orderId).catch(() => {});
         showNotification(
-          `Failed Delivery · 3/3 attempts. Order moved to Completed as Failed Delivery.`,
+          `Failed Delivery · 3/3 attempts. Order closed as Failed Delivery — admin notified for Return Payment.`,
           'warning'
         );
       } else {
@@ -1598,7 +1610,7 @@ const RiderDashboard = () => {
     const reasonLabel = failReasonCode === 'other' ? otherText : (opt?.label || failReasonCode);
     const shortId = String(failReasonOpen.orderId || '').slice(-8).toUpperCase();
     const finalNote = nextAttempt >= FAILED_ATTEMPT_MAX
-      ? '\n\nThis is attempt 3/3 — order will move to Completed as Failed Delivery.'
+      ? '\n\nThis is attempt 3/3 — order will close as Failed Delivery (product refund, shipping not included).'
       : '';
     const ok = await confirm({
       title: `Failed attempt ${nextAttempt}/${FAILED_ATTEMPT_MAX}?`,
@@ -1820,9 +1832,12 @@ const RiderDashboard = () => {
             ) : (
               <div className="rider-compact-list">
                 {myPickupHistory.map(req => {
-                  const style = getPickupStatusStyle(req.status);
-                  const isExpanded = expandedPickups[req._id];
                   const order = allOrders.find(o => o.orderId === req.orderId);
+                  const isFailedFinal = !!(order?.deliveryFailedFinal
+                    || String(order?.status || '').toLowerCase() === 'failed delivery'
+                    || String(order?.orderStatus || '').toLowerCase() === 'failed_delivery');
+                  const style = getPickupStatusStyle(req.status, order);
+                  const isExpanded = expandedPickups[req._id];
                   return (
                     <div key={req._id} className="rider-compact-card">
                       <div className="rider-compact-row">
@@ -1834,7 +1849,7 @@ const RiderDashboard = () => {
                         <div className="rider-compact-right">
                           <span className="rider-status-pill" style={{ background: style.bg, color: style.color }}>
                             {getStatusIcon(req.status) && <DkIcon name={getStatusIcon(req.status)} size={12} />}
-                            {getStatusLabel(req.status)}
+                            {getStatusLabel(req.status, order)}
                           </span>
                           <button className="rider-view-btn" onClick={() => toggleExpanded(req._id, setExpandedPickups)}>
                             <i className={`fas fa-chevron-${isExpanded ? 'up' : 'down'}`}></i> {isExpanded ? 'Hide' : 'View'}
@@ -1860,7 +1875,14 @@ const RiderDashboard = () => {
                             </div>
                           )}
                           {req.status === 'out_for_delivery' && <div className="rider-ofd-notice">🚚 Still out for delivery — open <strong>Deliver</strong> for live map + OTP.</div>}
-                          {req.status === 'completed' && <div className="rider-completed-notice">🎉 Completed — order delivered.</div>}
+                          {req.status === 'completed' && isFailedFinal && (
+                            <div className="rider-completed-notice rider-failed-delivery-notice">
+                              Failed Delivery — closed after 3 unsuccessful attempts. Product cost refundable; shipping fee is not.
+                            </div>
+                          )}
+                          {req.status === 'completed' && !isFailedFinal && (
+                            <div className="rider-completed-notice">🎉 Completed — order delivered.</div>
+                          )}
                           {req.status === 'completed' && (
                             <button className="rider-delete-btn" onClick={() => handleDeletePickup(req._id, req.status, req.orderId)}>
                               <i className="fas fa-trash-alt"></i> Remove from List

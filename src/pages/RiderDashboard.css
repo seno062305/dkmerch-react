@@ -840,6 +840,7 @@
 .rider-rejected-notice  { margin-top: 4px; padding: 10px 14px; background: #fee2e2; color: #e5e7eb; border-radius: 10px; font-size: 13px; }
 .rider-ofd-notice       { margin-top: 4px; padding: 10px 14px; background: #dbeafe; color: #1e40af; border-radius: 10px; font-size: 13px; font-weight: 600; }
 .rider-completed-notice { margin-top: 4px; padding: 10px 14px; background: #d1fae5; color: #065f46; border-radius: 10px; font-size: 13px; font-weight: 700; }
+.rider-failed-delivery-notice { background: #fee2e2; color: #991b1b; }
 
 /* ------ DELIVER TAB ------ */
 .rider-delivery-badge { background: #d1fae5; color: #065f46; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; white-space: nowrap; }

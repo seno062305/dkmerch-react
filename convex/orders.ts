@@ -888,7 +888,17 @@ const FAILED_ATTEMPT_REASONS: Record<string, string> = {
   no_answer: "Cannot be reached",
 };
 
-/** Rider reports unsuccessful delivery handoff (max 3). 3rd attempt → Failed Delivery completed. */
+/** Product-only refund for failed delivery (shipping fee excluded). */
+const failedDeliveryProductRefundAmount = (order: any) => {
+  const total = Number(order?.finalTotal ?? order?.total ?? 0);
+  const shipping = Number(order?.shippingFee ?? 0);
+  if (order?.subtotal != null && Number.isFinite(Number(order.subtotal))) {
+    return Math.max(0, Number(order.subtotal));
+  }
+  return Math.max(0, total - (Number.isFinite(shipping) ? shipping : 0));
+};
+
+/** Rider reports unsuccessful delivery handoff (max 3). 3rd attempt → Failed Delivery. */
 export const reportFailedDeliveryAttempt = mutation({
   args: {
     orderId: v.string(),
@@ -992,15 +1002,37 @@ export const reportFailedDeliveryAttempt = mutation({
     existing.push(entry);
 
     const isFinalFail = existing.length >= FAILED_ATTEMPT_MAX;
+    const productRefund = failedDeliveryProductRefundAmount(order);
     const patch: Record<string, unknown> = {
       deliveryFailedAttempts: existing,
       deliveryFailedAttemptCount: existing.length,
     };
     if (isFinalFail) {
-      patch.orderStatus = "completed";
+      patch.orderStatus = "failed_delivery";
       patch.status = "Failed Delivery";
       patch.deliveryFailedFinal = true;
       patch.deliveryConfirmedAt = at;
+      // Auto-open Return Payment for product cost only (shipping excluded)
+      if (String(order.paymentStatus || "").toLowerCase() === "paid" && productRefund > 0) {
+        patch.refundStatus = "requested";
+        patch.refundReason = "failed_delivery";
+        patch.refundComment =
+          "Failed Delivery after 3 attempts — product cost will be returned; shipping fee is not refunded.";
+        patch.refundAmount = productRefund;
+        patch.refundRequestedAt = at;
+        patch.refundMethod = order.paymentMethod || order.paymentFeeMethod || "gcash";
+        const history = Array.isArray((order as any).refundHistory)
+          ? [...(order as any).refundHistory]
+          : [];
+        history.push({
+          status: "requested",
+          reason: "failed_delivery",
+          comment: "Failed Delivery — product refund only (shipping excluded)",
+          amount: productRefund,
+          requestedAt: at,
+        });
+        patch.refundHistory = history;
+      }
     }
     await db.patch(order._id, patch as any);
 
@@ -1011,6 +1043,7 @@ export const reportFailedDeliveryAttempt = mutation({
           String(p.orderId) === String(args.orderId)
           && ["approved", "out_for_delivery", "scanned", "pending"].includes(String(p.status || ""))
         ) {
+          // Keep pickup "completed" so rider My Orders can clear it; order carries Failed Delivery
           await db.patch(p._id, { status: "completed" });
         }
       }
@@ -1029,10 +1062,12 @@ export const reportFailedDeliveryAttempt = mutation({
     const placeLabel = address || "map pin (tap to view)";
     const attemptLabel = `Attempt ${attempt}/${FAILED_ATTEMPT_MAX}`;
     const devicePart = deviceLabel ? ` · Device: ${deviceLabel}` : "";
-    const finalPart = isFinalFail ? " · Order closed as Failed Delivery (3/3)." : "";
+    const finalPart = isFinalFail
+      ? ` · FAILED DELIVERY (3/3) — product ₱${productRefund.toLocaleString("en-PH")} pending Return Payment (shipping not refunded).`
+      : "";
 
     await db.insert("riderNotifications", {
-      type: "delivery_failed_attempt",
+      type: isFinalFail ? "delivery_failed_final" : "delivery_failed_attempt",
       orderId: String(args.orderId),
       customerName: String(customer),
       total: Number(order.finalTotal ?? order.total ?? 0),
@@ -1053,7 +1088,7 @@ export const reportFailedDeliveryAttempt = mutation({
         ? `Failed Delivery · #${shortId}`
         : `Delivery attempt unsuccessful · #${shortId}`;
       const body = isFinalFail
-        ? `${timelineMsg} This order is now closed after 3 unsuccessful attempts.`
+        ? `${timelineMsg} Order closed after 3 unsuccessful attempts. Product cost (₱${productRefund.toLocaleString("en-PH")}) will be refunded; shipping fee is not included.`
         : timelineMsg;
       await notifyCustomerInApp(db, {
         email: order.email,
@@ -1078,6 +1113,59 @@ export const reportFailedDeliveryAttempt = mutation({
       reason: reason || null,
       finalizedFailed: isFinalFail,
     };
+  },
+});
+
+/** Quiet delete + optional stock restore (test cleanup / admin tooling). */
+export const purgeOrdersQuiet = mutation({
+  args: {
+    orderIds: v.array(v.string()),
+    restoreStock: v.optional(v.boolean()),
+  },
+  handler: async ({ db }, { orderIds, restoreStock }) => {
+    let deleted = 0;
+    let stockRestored = 0;
+    for (const orderId of orderIds) {
+      const order = await db
+        .query("orders")
+        .withIndex("by_orderId", (q) => q.eq("orderId", orderId))
+        .first();
+      if (!order) continue;
+
+      if (restoreStock !== false && order.stockDeducted) {
+        for (const item of order.items || []) {
+          const qty = Number(item.quantity || item.qty || 1);
+          if (qty <= 0) continue;
+          const product = await findProductForOrderItem(db, item);
+          if (!product || typeof (product as any).stock !== "number") continue;
+          await db.patch(product._id, {
+            stock: Number((product as any).stock) + qty,
+          });
+          stockRestored += qty;
+        }
+      }
+
+      try {
+        const holds = await db
+          .query("paymentHolds")
+          .withIndex("by_orderId", (q: any) => q.eq("orderId", String(orderId)))
+          .collect();
+        for (const h of holds) await db.delete(h._id);
+      } catch { /* table may be empty */ }
+
+      try {
+        const pickups = await db.query("pickupRequests").collect();
+        for (const p of pickups) {
+          if (String((p as any).orderId || "") === String(orderId)) {
+            await db.delete(p._id);
+          }
+        }
+      } catch { /* ignore */ }
+
+      await db.delete(order._id);
+      deleted += 1;
+    }
+    return { success: true, deleted, stockRestored };
   },
 });
 
@@ -1342,6 +1430,105 @@ export const resetReturnPaymentProgress = mutation({
   },
 });
 
+/** One-time / admin repair: fix legacy completed+Failed Delivery rows and open product refund. */
+export const repairFailedDeliveryOrders = mutation({
+  args: {},
+  handler: async ({ db }) => {
+    const all = await db.query("orders").collect();
+    let fixed = 0;
+    for (const order of all) {
+      const isFailed = !!(order as any).deliveryFailedFinal
+        || String((order as any).status || "").toLowerCase() === "failed delivery"
+        || String(order.orderStatus || "").toLowerCase() === "failed_delivery";
+      if (!isFailed) continue;
+
+      const productRefund = failedDeliveryProductRefundAmount(order);
+      const at = new Date().toISOString();
+      const patch: Record<string, unknown> = {
+        orderStatus: "failed_delivery",
+        status: "Failed Delivery",
+        deliveryFailedFinal: true,
+      };
+
+      const wasPaid = String(order.paymentStatus || "").toLowerCase() === "paid";
+      if (wasPaid && order.refundStatus !== "approved" && order.refundStatus !== "rejected") {
+        if (order.refundStatus !== "requested") {
+          patch.refundStatus = "requested";
+          patch.refundReason = "failed_delivery";
+          patch.refundComment =
+            "Failed Delivery after 3 attempts — product cost will be returned; shipping fee is not refunded.";
+          patch.refundAmount = productRefund;
+          patch.refundRequestedAt = (order as any).refundRequestedAt || at;
+          patch.refundMethod = (order as any).refundMethod || order.paymentMethod || order.paymentFeeMethod || "gcash";
+        } else if ((order as any).refundAmount == null || Number((order as any).refundAmount) <= 0) {
+          patch.refundAmount = productRefund;
+        }
+      }
+
+      await db.patch(order._id, patch as any);
+      fixed += 1;
+    }
+    return { success: true, fixed };
+  },
+});
+
+/** Open / repair Return Payment for a Failed Delivery order (product only). */
+export const ensureFailedDeliveryRefund = mutation({
+  args: { orderId: v.string() },
+  handler: async ({ db }, { orderId }) => {
+    const order = await db.query("orders")
+      .withIndex("by_orderId", (q) => q.eq("orderId", orderId))
+      .first();
+    if (!order) return { success: false, error: "Order not found." };
+
+    const isFailed = !!(order as any).deliveryFailedFinal
+      || String((order as any).status || "").toLowerCase() === "failed delivery"
+      || String(order.orderStatus || "").toLowerCase() === "failed_delivery";
+    if (!isFailed) return { success: false, error: "Not a failed delivery order." };
+
+    const wasPaid = String(order.paymentStatus || "").toLowerCase() === "paid";
+    if (!wasPaid) return { success: false, error: "Order was not paid." };
+
+    if (order.refundStatus === "approved") {
+      return { success: true, alreadyApproved: true, refundAmount: (order as any).refundAmount };
+    }
+
+    const productRefund = failedDeliveryProductRefundAmount(order);
+    const at = new Date().toISOString();
+    const patch: Record<string, unknown> = {
+      orderStatus: "failed_delivery",
+      status: "Failed Delivery",
+      deliveryFailedFinal: true,
+    };
+
+    if (order.refundStatus !== "requested") {
+      patch.refundStatus = "requested";
+      patch.refundReason = "failed_delivery";
+      patch.refundComment =
+        "Failed Delivery after 3 attempts — product cost will be returned; shipping fee is not refunded.";
+      patch.refundAmount = productRefund;
+      patch.refundRequestedAt = (order as any).refundRequestedAt || at;
+      patch.refundMethod = (order as any).refundMethod || order.paymentMethod || order.paymentFeeMethod || "gcash";
+      const history = Array.isArray((order as any).refundHistory)
+        ? [...(order as any).refundHistory]
+        : [];
+      history.push({
+        status: "requested",
+        reason: "failed_delivery",
+        comment: "Failed Delivery — product refund only (shipping excluded)",
+        amount: productRefund,
+        requestedAt: at,
+      });
+      patch.refundHistory = history;
+    } else if ((order as any).refundAmount == null || Number((order as any).refundAmount) <= 0) {
+      patch.refundAmount = productRefund;
+    }
+
+    await db.patch(order._id, patch as any);
+    return { success: true, refundAmount: productRefund };
+  },
+});
+
 /** Step 1 of damage refund — mark that admin started returning payment (PayMongo or manual). */
 export const recordDamageRefundPayment = mutation({
   args: {
@@ -1358,7 +1545,10 @@ export const recordDamageRefundPayment = mutation({
     const wasPaid = String(order.paymentStatus || "").toLowerCase() === "paid";
     const isPaidPending = wasPaid && (!status || status === "pending" || status === "pending payment");
     const isDamageRefund = order.refundStatus === "requested";
-    if (!isDamageRefund && !isPaidPending) {
+    const isFailedDelivery = !!(order as any).deliveryFailedFinal
+      || String((order as any).status || "").toLowerCase() === "failed delivery"
+      || status === "failed_delivery";
+    if (!isDamageRefund && !isPaidPending && !isFailedDelivery) {
       return { success: false, error: "No pending refund / Return Payment." };
     }
     const now = new Date().toISOString();
@@ -1413,7 +1603,13 @@ export const resolveRefund = mutation({
     // Proof optional (testing) — still store when provided
 
     const now = new Date().toISOString();
-    const refundAmount = (order as any).finalTotal ?? (order as any).total ?? 0;
+    // Prefer stored amount (failed delivery = product only); else full order total
+    const refundAmount = Number(
+      (order as any).refundAmount
+      ?? (order as any).finalTotal
+      ?? (order as any).total
+      ?? 0
+    );
 
     const history = ((order as any).refundHistory || []).map((entry: any, idx: number, arr: any[]) => {
       if (idx === arr.length - 1 && entry.status === 'requested') {
