@@ -1458,40 +1458,19 @@ const Checkout = () => {
       navigate(role === 'admin' || role === 'rider' ? home : '/checkout', { replace: true });
     };
 
-    const askLeavePayment = async () => {
-      const { orderId, checkoutUrl } = readPaySession();
-      const params = new URLSearchParams(window.location.search);
-      const id = orderId || params.get('orderId') || params.get('order') || '';
-      if (!id && !checkoutUrl) return;
-
-      const stay = await confirm({
-        title: 'Payment still in progress',
-        message:
-          'You still have an open PayMongo payment. Leave and cancel it, or continue to finish paying?\n\nIf you leave, the item unlocks for other customers right away.',
-        confirmLabel: 'Continue payment',
-        cancelLabel: 'Leave payment',
-        variant: 'warning',
-        icon: 'fa-credit-card',
-      });
-      if (cancelled) return;
-      if (stay) {
-        const url = checkoutUrl || readPaySession().checkoutUrl;
-        if (url) {
-          window.location.assign(url);
-          return;
-        }
-        showNotification('Payment session expired. Place the order again to pay.', 'warning', { fullText: true });
-        await clearHold(id);
-        navigate('/checkout', { replace: true });
-        return;
+    const resumePayMongo = () => {
+      const { checkoutUrl } = readPaySession();
+      if (checkoutUrl) {
+        window.location.assign(checkoutUrl);
+        return true;
       }
-      await leavePayment({ notify: true });
+      return false;
     };
 
     const params = new URLSearchParams(window.location.search);
     const cancelOrderId = params.get('orderId') || params.get('order') || '';
 
-    // Explicit PayMongo "Cancel" — leave without extra prompt
+    // Explicit PayMongo "Cancel" / Back to merchant — leave without browser "Leave site?"
     if (params.get('payCancel') === '1' && cancelOrderId) {
       const returnHome = params.get('returnHome') || '';
       clearHold(cancelOrderId).then(() => {
@@ -1508,35 +1487,28 @@ const Checkout = () => {
       return () => { cancelled = true; };
     }
 
-    // Returned via phone/desktop Back onto our paying marker
+    // Legacy ?paying=1 — bounce straight back to PayMongo (no confirm / Leave site?)
     if (params.get('paying') === '1') {
-      askLeavePayment();
+      if (!resumePayMongo()) {
+        leavePayment({ notify: true });
+      }
     }
 
     const onPageShow = () => {
       const { orderId, checkoutUrl } = readPaySession();
       if (!orderId && !checkoutUrl) return;
       const q = new URLSearchParams(window.location.search);
-      if (q.get('paying') === '1' || q.get('payCancel') === '1') return;
-      // Back landed on plain checkout while a pay session is still open
-      askLeavePayment();
+      if (q.get('payCancel') === '1') return;
+      // Still in a pay session — return to PayMongo (cannot overlay their page)
+      resumePayMongo();
     };
     window.addEventListener('pageshow', onPageShow);
-
-    const onBeforeUnload = (e) => {
-      const { orderId } = readPaySession();
-      if (!orderId) return;
-      e.preventDefault();
-      e.returnValue = '';
-    };
-    window.addEventListener('beforeunload', onBeforeUnload);
 
     return () => {
       cancelled = true;
       window.removeEventListener('pageshow', onPageShow);
-      window.removeEventListener('beforeunload', onBeforeUnload);
     };
-  }, [confirm, navigate, releasePaymentHold, role, showNotification]);
+  }, [navigate, releasePaymentHold, role, showNotification]);
 
   // ── Init form ─────────────────────────────────────────────────────────────
   useEffect(() => {

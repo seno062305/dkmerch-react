@@ -64,9 +64,9 @@ export function roleHome(role, storedHome) {
 
 /**
  * Open PayMongo after planting `/paying` in history.
- * Browser Back from PayMongo hits `/paying` immediately (confirm only —
- * not Checkout / Order Details), so the user is not "removed" into the app
- * until they choose Leave. Continue re-opens PayMongo.
+ * Browser Back hits `/paying`, which immediately returns the user to PayMongo
+ * (browsers cannot show our UI on top of checkout.paymongo.com).
+ * To leave payment, use PayMongo Cancel / Back to merchant.
  */
 export function goToPayMongo(checkoutUrl, returnPath) {
   if (!checkoutUrl) return;

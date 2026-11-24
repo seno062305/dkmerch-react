@@ -1,175 +1,96 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useAuth } from '../context/AuthContext';
-import { useNotification } from '../context/NotificationContext';
-import useBodyScrollLock from '../hooks/useBodyScrollLock';
-import { getOverlayRoot } from '../utils/scrollLock';
 import {
   clearPaySessionAll,
-  goToPayMongo,
   readPaySession,
   roleHome,
   PAY_RETURN_KEY,
 } from '../utils/paymentLeaveGuard';
 import { forceUnlockBodyScroll } from '../utils/scrollLock';
-import '../components/ConfirmModal.css';
 import './PayingBridge.css';
 
 /**
- * History trap between our app and PayMongo.
- * Browser Back from PayMongo lands here immediately with the leave confirm —
- * Order Details / Checkout stay off-screen until the user chooses Leave.
- * Extra Back on this screen stays here (does not leave payment).
+ * History trap: Back from PayMongo lands here, then we immediately return
+ * the user to PayMongo (cannot overlay UI on checkout.paymongo.com).
+ *
+ * Leave payment = PayMongo "Cancel" / Back to merchant (cancelUrl), not browser Back.
  */
 const PayingBridge = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { role } = useAuth();
-  const { showNotification } = useNotification();
   const releasePaymentHold = useMutation(api.payments.releasePaymentHold);
-  const leavingRef = useRef(false);
-  const [busy, setBusy] = useState(false);
-
-  useBodyScrollLock(true);
+  const bouncedRef = useRef(false);
 
   const sess = readPaySession();
   const orderId =
     String(searchParams.get('orderId') || sess.orderId || '').trim();
   const checkoutUrl = String(sess.checkoutUrl || '').trim();
 
-  const resolveReturnPath = useCallback(() => {
+  const returnPath = (() => {
     try {
       const stored = sessionStorage.getItem(PAY_RETURN_KEY);
       if (stored && stored.startsWith('/')) return stored;
     } catch { /* ignore */ }
     if (orderId) return `/track-order?order=${encodeURIComponent(orderId)}`;
     return roleHome(role, sess.home);
-  }, [orderId, role, sess.home]);
+  })();
 
-  // Trap Back — stay on this confirm until Leave or Continue
+  // Bounce back to PayMongo before paint when possible (no black confirm page)
+  useLayoutEffect(() => {
+    if (bouncedRef.current) return;
+    if (!checkoutUrl) return;
+
+    bouncedRef.current = true;
+
+    // Browser Back left a forward entry to PayMongo — use it so we stay on payment
+    try {
+      const nav = performance.getEntriesByType?.('navigation')?.[0];
+      const viaBack = nav?.type === 'back_forward' || (window.performance?.navigation?.type === 2);
+      if (viaBack) {
+        window.history.forward();
+        // If forward did nothing (no entry), fall through to assign shortly
+        window.setTimeout(() => {
+          if (document.visibilityState === 'visible' && !document.hidden) {
+            const stillHere = window.location.pathname.startsWith('/paying');
+            if (stillHere) window.location.assign(checkoutUrl);
+          }
+        }, 120);
+        return;
+      }
+    } catch { /* ignore */ }
+
+    window.location.assign(checkoutUrl);
+  }, [checkoutUrl]);
+
+  // No PayMongo URL — release hold and leave the bridge
   useEffect(() => {
-    const lock = () => {
-      try {
-        window.history.pushState({ dkPayingBridge: true }, '', window.location.href);
-      } catch { /* ignore */ }
-    };
-    lock();
-    const onPop = () => {
-      if (leavingRef.current) return;
-      lock();
-    };
-    window.addEventListener('popstate', onPop);
-    return () => window.removeEventListener('popstate', onPop);
-  }, []);
+    if (checkoutUrl) return undefined;
 
-  useEffect(() => {
-    if (checkoutUrl || orderId) return;
-    navigate(roleHome(role, sess.home), { replace: true });
-  }, [checkoutUrl, orderId, navigate, role, sess.home]);
-
-  const continuePayment = useCallback(() => {
-    if (busy || leavingRef.current) return;
-    if (!checkoutUrl) {
-      showNotification('Payment session expired. Open Pay again from your order.', 'warning', {
-        fullText: true,
-      });
-      leavingRef.current = true;
+    let cancelled = false;
+    (async () => {
+      if (orderId) {
+        try { await releasePaymentHold({ orderId }); } catch { /* ignore */ }
+      }
+      if (cancelled) return;
       clearPaySessionAll();
-      navigate(resolveReturnPath(), { replace: true });
-      return;
-    }
-    setBusy(true);
-    goToPayMongo(checkoutUrl, resolveReturnPath());
-  }, [busy, checkoutUrl, navigate, resolveReturnPath, showNotification]);
+      forceUnlockBodyScroll();
+      navigate(returnPath, { replace: true });
+    })();
 
-  const leavePayment = useCallback(async () => {
-    if (busy || leavingRef.current) return;
-    leavingRef.current = true;
-    setBusy(true);
-    const id = orderId;
-    if (id) {
-      try { await releasePaymentHold({ orderId: id }); } catch { /* ignore */ }
-    }
-    clearPaySessionAll();
-    try { sessionStorage.removeItem(PAY_RETURN_KEY); } catch { /* ignore */ }
-    forceUnlockBodyScroll();
-    showNotification(
-      'Payment cancelled. You can pay again anytime — no waiting period.',
-      'info',
-      { fullText: true, duration: 4500 }
-    );
-    const dest = role === 'admin' || role === 'rider'
-      ? roleHome(role, sess.home)
-      : resolveReturnPath();
-    navigate(dest, { replace: true });
-  }, [
-    busy,
-    orderId,
-    releasePaymentHold,
-    showNotification,
-    role,
-    sess.home,
-    resolveReturnPath,
-    navigate,
-  ]);
-
-  if (!checkoutUrl && !orderId) {
-    return (
-      <div className="paying-bridge">
-        <div className="paying-bridge-loading">
-          <i className="fas fa-spinner fa-spin" aria-hidden="true" />
-        </div>
-      </div>
-    );
-  }
-
-  const dialog = (
-    <div className="dk-confirm-overlay paying-bridge-overlay" role="presentation">
-      <div
-        className="dk-confirm-modal dk-confirm-warning"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="paying-bridge-title"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 id="paying-bridge-title" className="dk-confirm-title">
-          Payment still in progress
-        </h3>
-        <p className="dk-confirm-message">
-          You still have an open PayMongo payment. Leave and cancel it, or continue to finish paying?
-          {'\n\n'}
-          If you leave, the item unlocks for other customers right away.
-        </p>
-        <div className="dk-confirm-actions">
-          <button
-            type="button"
-            className="dk-confirm-cancel"
-            onClick={leavePayment}
-            disabled={busy}
-          >
-            Leave payment
-          </button>
-          <button
-            type="button"
-            className="dk-confirm-proceed"
-            onClick={continuePayment}
-            disabled={busy}
-            autoFocus
-          >
-            {busy ? 'Opening…' : 'Continue payment'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+    return () => { cancelled = true; };
+  }, [checkoutUrl, orderId, releasePaymentHold, navigate, returnPath]);
 
   return (
-    <div className="paying-bridge">
-      <div className="paying-bridge-backdrop" aria-hidden="true" />
-      {createPortal(dialog, getOverlayRoot() || document.body)}
+    <div className="paying-bridge paying-bridge--bounce">
+      <div className="paying-bridge-card">
+        <i className="fas fa-spinner fa-spin" aria-hidden="true" />
+        <p>Returning to PayMongo…</p>
+        <p className="paying-bridge-hint">Finish payment there, or use Cancel on PayMongo to leave.</p>
+      </div>
     </div>
   );
 };

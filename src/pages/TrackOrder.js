@@ -1050,7 +1050,7 @@ const TrackOrder = ({ onProductClick }) => {
     orderIdParam ? { orderId: orderIdParam } : 'skip'
   );
 
-  // PayMongo Cancel clears hold; phone/desktop Back asks confirmation first
+  // PayMongo Cancel clears hold; browser Back returns to PayMongo (no "Leave site?" / black confirm)
   useEffect(() => {
     let cancelled = false;
     const clearHold = async (orderId) => {
@@ -1061,44 +1061,13 @@ const TrackOrder = ({ onProductClick }) => {
       forceUnlockBodyScroll();
     };
 
-    const askLeavePayment = async () => {
+    const resumePayMongo = () => {
       const sess = readPaySession();
-      const id = sess.orderId || searchParams.get('order') || searchParams.get('orderId') || '';
-      if (!id && !sess.checkoutUrl) return;
-
-      const stay = await confirm({
-        title: 'Payment still in progress',
-        message:
-          'You still have an open PayMongo payment. Leave and cancel it, or continue to finish paying?\n\nIf you leave, the item unlocks for other customers right away.',
-        confirmLabel: 'Continue payment',
-        cancelLabel: 'Leave payment',
-        variant: 'warning',
-        icon: 'fa-credit-card',
-      });
-      if (cancelled) return;
-      if (stay) {
-        if (sess.checkoutUrl) {
-          window.location.assign(sess.checkoutUrl);
-          return;
-        }
-        showNotification('Payment session expired. Tap Pay again.', 'warning', { fullText: true });
-        await clearHold(id);
-        return;
+      if (sess.checkoutUrl) {
+        window.location.assign(sess.checkoutUrl);
+        return true;
       }
-      await clearHold(id);
-      showNotification(
-        'Payment cancelled. You can pay again anytime — no waiting period.',
-        'info',
-        { fullText: true, duration: 4500 }
-      );
-      const home = roleHome(role, sess.home);
-      if (role === 'admin' || role === 'rider') navigate(home, { replace: true });
-      else {
-        const next = new URLSearchParams(searchParams);
-        next.delete('paying');
-        next.delete('payCancel');
-        setSearchParams(next, { replace: true });
-      }
+      return false;
     };
 
     if (searchParams.get('payCancel') === '1') {
@@ -1117,31 +1086,28 @@ const TrackOrder = ({ onProductClick }) => {
     }
 
     if (searchParams.get('paying') === '1') {
-      askLeavePayment();
+      if (!resumePayMongo()) {
+        const id = searchParams.get('order') || searchParams.get('orderId') || '';
+        if (id) clearHold(id);
+        const next = new URLSearchParams(searchParams);
+        next.delete('paying');
+        setSearchParams(next, { replace: true });
+      }
     }
 
     const onPageShow = () => {
       const sess = readPaySession();
       if (!sess.orderId && !sess.checkoutUrl) return;
-      if (searchParams.get('paying') === '1' || searchParams.get('payCancel') === '1') return;
-      askLeavePayment();
+      if (searchParams.get('payCancel') === '1') return;
+      resumePayMongo();
     };
     window.addEventListener('pageshow', onPageShow);
-
-    const onBeforeUnload = (e) => {
-      const sess = readPaySession();
-      if (!sess.orderId) return;
-      e.preventDefault();
-      e.returnValue = '';
-    };
-    window.addEventListener('beforeunload', onBeforeUnload);
 
     return () => {
       cancelled = true;
       window.removeEventListener('pageshow', onPageShow);
-      window.removeEventListener('beforeunload', onBeforeUnload);
     };
-  }, [confirm, navigate, releasePaymentHold, role, searchParams, setSearchParams, showNotification]);
+  }, [navigate, releasePaymentHold, role, searchParams, setSearchParams, showNotification]);
 
   useEffect(() => {
     if (!orderIdParam) {
