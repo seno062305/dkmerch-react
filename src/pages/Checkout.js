@@ -7,7 +7,7 @@ import { useConfirm } from '../context/ConfirmContext';
 import { useNotification } from '../context/NotificationContext';
 import { useProducts, usePreOrderProducts, useCollectionProducts } from '../utils/productStorage';
 import { useCreateOrder } from '../utils/orderStorage';
-import { useCart, useClearCart, useRemoveFromCartById } from '../context/cartUtils';
+import { useCart } from '../context/cartUtils';
 import { useMutation, useQuery, useAction } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { runWithFailover } from '../lib/failoverWrite';
@@ -1270,8 +1270,6 @@ const Checkout = () => {
 
   const cartItems          = useCart();
   const createOrder        = useCreateOrder();
-  const clearCart          = useClearCart();
-  const removeFromCartById = useRemoveFromCartById();
 
   const storeSettings    = useQuery(api.settings.getSettings);
   const hasStoreLocation = !!(storeSettings?.storeLat && storeSettings?.storeLng);
@@ -1290,6 +1288,9 @@ const Checkout = () => {
   const createPaymentLink        = useAction(api.payments.createPaymentLink);
   const releasePaymentHold       = useMutation(api.payments.releasePaymentHold);
   const markOrderPaid            = useMutation(api.payments.markOrderPaid);
+  const placingOrderRef          = useRef(false);
+  // Pending unpaid checkout orderId for this session (reuse Pay Now after Back)
+  const pendingCheckoutOrderRef  = useRef('');
   const latestAppUpdate          = useQuery(api.appUpdates.getLatestUpdate);
   const markTicketCheckedOutMut  = useMutation(api.rewards.markTicketCheckedOut);
   const saveProfile = (args) =>
@@ -1420,7 +1421,12 @@ const Checkout = () => {
     const clearHold = async (orderId) => {
       const id = String(orderId || '').trim();
       if (!id) return;
+      // Release stock hold only — keep the unpaid order so Pay again reuses it
+      // (createOrder fingerprint match) instead of stacking admin Pending rows.
       try { await releasePaymentHold({ orderId: id }); } catch { /* ignore */ }
+      // Remember for client-side reuse if server match misses
+      pendingCheckoutOrderRef.current = id;
+      try { sessionStorage.setItem('dk_checkout_pending_order', id); } catch { /* ignore */ }
       clearPaySessionAll();
     };
 
@@ -1885,8 +1891,8 @@ const Checkout = () => {
       rememberLabel: 'Do not show again',
     });
     if (!payOk) return;
-    if (loading) return; // hard lock — prevent double place-order / duplicate rows
-
+    if (loading || placingOrderRef.current) return; // hard lock — prevent double place-order / duplicate rows
+    placingOrderRef.current = true;
     setLoading(true);
 
     try {
@@ -1933,7 +1939,13 @@ const Checkout = () => {
       if (savedAddress.zipCode)  addressParts.push(savedAddress.zipCode);
       const shippingAddressStr = addressParts.join(', ');
 
+      let reuseOrderId = String(pendingCheckoutOrderRef.current || '').trim();
+      if (!reuseOrderId) {
+        try { reuseOrderId = String(sessionStorage.getItem('dk_checkout_pending_order') || '').trim(); } catch { /* ignore */ }
+      }
+
       const createResult = await createOrder({
+        ...(reuseOrderId ? { orderId: reuseOrderId } : {}),
         email:           savedContact.email,
         customerName:    savedContact.fullName,
         phone:           savedContact.phone,
@@ -1971,6 +1983,8 @@ const Checkout = () => {
       if (!orderId) {
         throw new Error('Order was created but no order ID was returned. Please check Track Order.');
       }
+      pendingCheckoutOrderRef.current = orderId;
+      try { sessionStorage.setItem('dk_checkout_pending_order', orderId); } catch { /* ignore */ }
 
       // ── Mark ticket as checked out ─────────────────────────────────────
       if (rewardOrder) {
@@ -2049,6 +2063,7 @@ const Checkout = () => {
               { fullText: true, duration: 6000 }
             );
             // Stay on checkout/payment — do not leave this tab when the hold notif shows
+            placingOrderRef.current = false;
             return;
           }
           paymentLinkUrl = result.paymentLinkUrl;
@@ -2063,6 +2078,7 @@ const Checkout = () => {
           } catch (fnErr) {
             console.error('Failover pay/email error:', fnErr);
             setLoading(false);
+            placingOrderRef.current = false;
             if (usedFailover) {
               showNotification(
                 `Order ${orderId} was saved offline, but payment setup failed. Try again later or contact support.`,
@@ -2076,6 +2092,7 @@ const Checkout = () => {
           }
         } else {
           setLoading(false);
+          placingOrderRef.current = false;
           if (usedFailover) {
             showNotification(
               `Order ${orderId} was saved while offline. Configure failover Cloud Functions to enable live payment.`,
@@ -2114,27 +2131,26 @@ const Checkout = () => {
       // Payment Received email is sent only after PayMongo confirms paid
       // (see payments.markOrderPaid) — never here on payment-link create/cancel.
 
-      // ── Remove checked-out cart items only (Buy Now never touches cart) ─
-      if (!rewardOrder && !isBuyNowCheckout) {
-        const idsToRemove = selectedCartIds?.length
-          ? selectedCartIds
-          : checkoutItems.map(i => i._id).filter(Boolean);
-        if (idsToRemove.length) {
-          for (const id of idsToRemove) {
-            try { await removeFromCartById(id); } catch { /* non-critical */ }
-          }
-        } else {
-          await clearCart();
-        }
-      }
-
+      // Keep cart / Buy Now until payment succeeds (OrderSuccess). Clearing here
+      // caused empty checkout after Back, so customers re-bought and duplicated orders.
       try {
-        sessionStorage.removeItem(CHECKOUT_SEL_KEY);
-        sessionStorage.removeItem(CHECKOUT_BUYNOW_KEY);
+        const idsToRemove = (!rewardOrder && !isBuyNowCheckout)
+          ? (selectedCartIds?.length
+            ? selectedCartIds
+            : checkoutItems.map(i => i._id).filter(Boolean))
+          : [];
+        sessionStorage.setItem('dk_checkout_clear_cart', JSON.stringify({
+          orderId,
+          ids: idsToRemove,
+          clearAll: !rewardOrder && !isBuyNowCheckout && !selectedCartIds?.length,
+          selKey: CHECKOUT_SEL_KEY,
+          buyNowKey: CHECKOUT_BUYNOW_KEY,
+        }));
       } catch { /* ignore */ }
 
       if (!paymentLinkUrl) {
         setLoading(false);
+        placingOrderRef.current = false;
         showNotification(
           'Payment link could not be opened. Stay on this page and try Place Order / Pay again in a moment.',
           'warning',
@@ -2155,6 +2171,7 @@ const Checkout = () => {
 
     } catch (error) {
       setLoading(false);
+      placingOrderRef.current = false;
       const detail = String(error?.data || error?.message || error || '').trim();
       const short = detail && detail.length < 160 ? detail : '';
       showNotification(

@@ -1,10 +1,15 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAction, useMutation, useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useAuth } from '../context/AuthContext';
+import { useClearCart, useRemoveFromCartById } from '../context/cartUtils';
 import { clearPaySessionAll } from '../utils/paymentLeaveGuard';
 import './OrderSuccess.css';
+
+const CHECKOUT_CLEAR_KEY = 'dk_checkout_clear_cart';
+const CHECKOUT_SEL_KEY = 'dk_checkout_selected';
+const CHECKOUT_BUYNOW_KEY = 'dk_checkout_buynow';
 
 const homeForRole = (role) => {
   if (role === 'admin') return '/admin';
@@ -19,9 +24,43 @@ const OrderSuccess = () => {
   const { role, isReady } = useAuth();
   const checkPaymentStatus = useAction(api.payments.checkPaymentStatus);
   const releasePaymentHold = useMutation(api.payments.releasePaymentHold);
+  const clearCart = useClearCart();
+  const removeFromCartById = useRemoveFromCartById();
+  const cartClearedRef = useRef(false);
 
   // checking | paid | unpaid — never treat "redirect only" as paid
   const [status, setStatus] = useState('checking');
+
+  const clearCheckoutCartIfNeeded = useCallback(async () => {
+    if (cartClearedRef.current) return;
+    cartClearedRef.current = true;
+    let payload = null;
+    try {
+      payload = JSON.parse(sessionStorage.getItem(CHECKOUT_CLEAR_KEY) || 'null');
+    } catch { /* ignore */ }
+    try {
+      sessionStorage.removeItem(CHECKOUT_CLEAR_KEY);
+      sessionStorage.removeItem(CHECKOUT_SEL_KEY);
+      sessionStorage.removeItem(CHECKOUT_BUYNOW_KEY);
+      sessionStorage.removeItem('dk_checkout_pending_order');
+      if (payload?.selKey) sessionStorage.removeItem(payload.selKey);
+      if (payload?.buyNowKey) sessionStorage.removeItem(payload.buyNowKey);
+    } catch { /* ignore */ }
+
+    if (!payload) return;
+    // Only clear if this success page matches the checkout that stored the intent
+    if (payload.orderId && orderId && String(payload.orderId) !== String(orderId)) return;
+
+    try {
+      if (Array.isArray(payload.ids) && payload.ids.length) {
+        for (const id of payload.ids) {
+          try { await removeFromCartById(id); } catch { /* non-critical */ }
+        }
+      } else if (payload.clearAll) {
+        await clearCart();
+      }
+    } catch { /* non-critical */ }
+  }, [clearCart, orderId, removeFromCartById]);
 
   const order = useQuery(
     api.orders.getOrderById,
@@ -54,6 +93,7 @@ const OrderSuccess = () => {
 
     // Already paid in DB (PayMongo confirmed earlier)
     if (order?.paymentStatus === 'paid') {
+      clearCheckoutCartIfNeeded();
       if (isReady && (role === 'admin' || role === 'rider')) {
         goPayerHome();
         return;
@@ -74,6 +114,7 @@ const OrderSuccess = () => {
           const result = await checkPaymentStatus({ orderId });
 
           if (result?.status === 'paid') {
+            await clearCheckoutCartIfNeeded();
             if (isReady && (role === 'admin' || role === 'rider')) {
               goPayerHome();
               return;
@@ -99,7 +140,7 @@ const OrderSuccess = () => {
 
     verifyWithRetry();
     return () => { cancelled = true; };
-  }, [order, orderId, role, isReady, checkPaymentStatus, goPayerHome, releasePaymentHold]);
+  }, [order, orderId, role, isReady, checkPaymentStatus, goPayerHome, releasePaymentHold, clearCheckoutCartIfNeeded]);
 
   useEffect(() => {
     if (!isReady || !orderId) return;

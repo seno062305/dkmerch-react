@@ -16,6 +16,31 @@ function shortOrderId(orderId: string): string {
   return String(orderId || "").slice(-8).toUpperCase();
 }
 
+/** Stable fingerprint so back+repay reuses the same unpaid checkout row. */
+function checkoutItemsFingerprint(items: any[]): string {
+  const rows = (Array.isArray(items) ? items : [])
+    .map((it) => {
+      const id = String(it?.id || it?.productId || "").trim();
+      const qty = Math.max(0, Math.floor(Number(it?.quantity ?? it?.qty ?? 1)));
+      return `${id}:${qty}`;
+    })
+    .filter((r) => !r.startsWith(":"))
+    .sort();
+  return rows.join("|");
+}
+
+function isUnpaidCheckoutReusable(order: any): boolean {
+  if (!order) return false;
+  if (String(order.paymentStatus || "").toLowerCase() === "paid") return false;
+  const st = String(order.orderStatus || order.status || "").toLowerCase();
+  if (st === "cancelled" || st === "canceled") return false;
+  // Fresh checkout rows only (not already confirmed / shipped / etc.)
+  if (st && st !== "pending" && st !== "pending payment") return false;
+  return true;
+}
+
+const CHECKOUT_REUSE_WINDOW_MS = 45 * 60 * 1000;
+
 async function notifyCustomerInApp(
   db: any,
   args: {
@@ -122,13 +147,97 @@ export const createOrder = mutation({
         .withIndex("by_orderId", (q) => q.eq("orderId", clientId))
         .first();
       if (existing) {
-        return { success: true, orderId: existing.orderId, orderSeq: existing.orderSeq, duplicate: true };
+        // Only short-circuit when still an unpaid checkout; otherwise mint a new row
+        if (isUnpaidCheckoutReusable(existing)) {
+          return { success: true, orderId: existing.orderId, orderSeq: existing.orderSeq, duplicate: true };
+        }
+        // Fall through — paid/cancelled id must not block a new checkout
       }
     }
 
     // Promo: one use per customer email
     const promoCode = String(args.promoCode || "").toUpperCase().trim();
     const emailNorm = String(args.email || "").trim().toLowerCase();
+    const wantFp = checkoutItemsFingerprint(args.items);
+    const wantTotal = Number(args.finalTotal ?? args.total ?? 0);
+    const rewardTicket = String(args.rewardTicketCode || "").trim();
+
+    // Reuse recent unpaid checkout for same cart — back from PayMongo + Pay again
+    // must not create another admin Pending row (or burn promo usedCount again).
+    if (emailNorm) {
+      const prior = await db
+        .query("orders")
+        .withIndex("by_email", (q) => q.eq("email", emailNorm))
+        .order("desc")
+        .take(25);
+      const now = Date.now();
+      const reusable = prior.find((o: any) => {
+        if (!isUnpaidCheckoutReusable(o)) return false;
+        const createdMs = Date.parse(String(o._creationTime || o.createdAt || "")) || Number(o._creationTime) || 0;
+        // Convex _creationTime is ms epoch on docs
+        const ageMs = now - (typeof o._creationTime === "number" ? o._creationTime : createdMs);
+        if (ageMs < 0 || ageMs > CHECKOUT_REUSE_WINDOW_MS) return false;
+        if (rewardTicket || o.isRewardOrder) {
+          return rewardTicket && String(o.rewardTicketCode || "").trim() === rewardTicket;
+        }
+        if (checkoutItemsFingerprint(o.items) !== wantFp) return false;
+        const prevTotal = Number(o.finalTotal ?? o.total ?? 0);
+        return Math.abs(prevTotal - wantTotal) < 0.05;
+      });
+      if (reusable) {
+        const patch: any = {
+          status: "Pending Payment",
+          orderStatus: "pending",
+          paymentStatus: "pending",
+          paymentMethod: args.paymentMethod,
+          shippingAddress: args.shippingAddress,
+          deliveryMethod: args.deliveryMethod,
+          notes: args.notes,
+          phone: args.phone,
+          customerName: args.customerName,
+          total: args.total,
+          subtotal: args.subtotal,
+          shippingFee: args.shippingFee,
+          finalTotal: args.finalTotal,
+          paymentFee: args.paymentFee,
+          paymentFeeRate: args.paymentFeeRate,
+          paymentFeeMethod: args.paymentFeeMethod,
+        };
+        if (typeof args.addressLat === "number") patch.addressLat = args.addressLat;
+        if (typeof args.addressLng === "number") patch.addressLng = args.addressLng;
+        await db.patch(reusable._id, patch);
+
+        // Collapse legacy duplicate unpaid rows from earlier back+repay bugs
+        const cancelAt = new Date().toISOString();
+        for (const o of prior) {
+          if (o._id === reusable._id) continue;
+          if (!isUnpaidCheckoutReusable(o)) continue;
+          const sameCart =
+            (rewardTicket || o.isRewardOrder)
+              ? rewardTicket && String(o.rewardTicketCode || "").trim() === rewardTicket
+              : checkoutItemsFingerprint(o.items) === wantFp
+                && Math.abs(Number(o.finalTotal ?? o.total ?? 0) - wantTotal) < 0.05;
+          if (!sameCart) continue;
+          await db.patch(o._id, {
+            status: "Cancelled",
+            orderStatus: "cancelled",
+            paymentStatus: "cancelled",
+            paymentHoldUntil: undefined,
+            cancelledAt: cancelAt,
+            cancelledBy: "customer",
+            cancelReason: "Duplicate unpaid checkout collapsed on repay",
+          } as any);
+        }
+
+        return {
+          success: true,
+          orderId: reusable.orderId,
+          orderSeq: reusable.orderSeq,
+          reused: true,
+        };
+      }
+    }
+
     if (promoCode) {
       if (!emailNorm || !emailNorm.includes("@")) {
         throw new Error("Login required to use a promo code.");

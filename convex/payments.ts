@@ -401,6 +401,68 @@ export const releasePaymentHold = mutation({
   },
 });
 
+/**
+ * Customer left PayMongo without paying — cancel the unpaid checkout row so
+ * admin Pending does not keep stacking when they try again later.
+ * Paid orders are never touched.
+ */
+export const abandonUnpaidCheckout = mutation({
+  args: { orderId: v.string() },
+  handler: async ({ db }, { orderId }) => {
+    const id = String(orderId || "").trim();
+    if (!id) return { success: false, reason: "missing_order" };
+
+    await clearPaymentHoldsForOrder(db, id);
+
+    const order = await db
+      .query("orders")
+      .withIndex("by_orderId", (q) => q.eq("orderId", id))
+      .first();
+    if (!order) return { success: false, reason: "not_found" };
+
+    if (String(order.paymentStatus || "").toLowerCase() === "paid") {
+      return { success: false, reason: "already_paid" };
+    }
+
+    const st = String(order.orderStatus || order.status || "").toLowerCase();
+    if (st === "cancelled" || st === "canceled") {
+      await db.patch(order._id, { paymentHoldUntil: undefined } as any);
+      return { success: true, alreadyCancelled: true };
+    }
+    if (st && st !== "pending" && st !== "pending payment") {
+      await db.patch(order._id, { paymentHoldUntil: undefined } as any);
+      return { success: false, reason: "not_pending" };
+    }
+
+    const now = new Date().toISOString();
+    await db.patch(order._id, {
+      status: "Cancelled",
+      orderStatus: "cancelled",
+      paymentStatus: "cancelled",
+      paymentHoldUntil: undefined,
+      cancelledAt: now,
+      cancelledBy: "customer",
+      cancelReason: "Left payment before completing PayMongo checkout",
+    } as any);
+
+    // Undo promo usedCount from createOrder (cancelled orders don't count as a use)
+    const promoCode = String(order.promoCode || "").toUpperCase().trim();
+    if (promoCode) {
+      const promo = await db
+        .query("promos")
+        .withIndex("by_code", (q) => q.eq("code", promoCode))
+        .first();
+      if (promo) {
+        await db.patch(promo._id, {
+          usedCount: Math.max(0, Number(promo.usedCount || 0) - 1),
+        });
+      }
+    }
+
+    return { success: true, cancelled: true };
+  },
+});
+
 // Save payment link info to order in DB
 export const savePaymentLink = mutation({
   args: {
