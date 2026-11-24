@@ -170,6 +170,8 @@ export default defineSchema({
     releasedAt: v.optional(v.number()),
     /** Prevents re-blasting “new item released” emails on every cron tick */
     releaseAnnouncedAt: v.optional(v.number()),
+    /** OCC stamp when a payment hold is acquired (serializes concurrent payers) */
+    paymentHoldStamp: v.optional(v.number()),
   }),
 
   cart: defineTable({

@@ -17,11 +17,14 @@ const DEFAULT_MS = {
   error: 3500,
 };
 
-/** Keep toast text readable in the top-center card without wrapping too tall. */
-const shortenToast = (text, max = 96) => {
+/** Optional shorten — never cut mid-word. Prefer full text (toasts wrap). */
+const shortenToast = (text, max = 220) => {
   const t = String(text || '').replace(/\s+/g, ' ').trim();
   if (t.length <= max) return t;
-  return `${t.slice(0, max - 1).trim()}…`;
+  const sliced = t.slice(0, max - 1);
+  const lastSpace = sliced.lastIndexOf(' ');
+  const cut = lastSpace > Math.floor(max * 0.45) ? sliced.slice(0, lastSpace) : sliced;
+  return `${cut.trim()}…`;
 };
 
 const guessType = (message) => {
@@ -54,7 +57,10 @@ export const NotificationProvider = ({ children }) => {
   const showNotification = useCallback((message, type = 'info', options = {}) => {
     const safeType = ICONS[type] ? type : 'info';
     const full = String(message || '');
-    const text = options.fullText ? full : shortenToast(full, options.maxLen || 72);
+    // Default: show full message (mobile wraps). Pass maxLen only when truncation is intentional.
+    const text = options.fullText || options.maxLen == null
+      ? full
+      : shortenToast(full, options.maxLen);
     const dedupeKey = options.dedupeKey || `${safeType}:${full}`;
     // Always auto-dismiss unless explicitly set to 0 / Infinity
     const rawDuration = options.duration;

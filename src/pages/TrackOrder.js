@@ -1335,7 +1335,11 @@ const TrackOrder = ({ onProductClick }) => {
         // Always re-check stock — another customer may have paid first
         const stock = await assertOrderStock({ orderId: order.orderId });
         if (stock && stock.ok === false) {
-          showNotification(stock.message || 'Items are out of stock.', 'error');
+          showNotification(
+            stock.message || 'Items are out of stock.',
+            stock.blocked ? 'warning' : 'error',
+            { fullText: true, duration: 6000 }
+          );
           setContinuingPayment(false);
           return;
         }
@@ -1351,11 +1355,12 @@ const TrackOrder = ({ onProductClick }) => {
           customerPhone: order.phone,
           ...(paymentMethodType ? { paymentMethodType } : {}),
         });
-        if (result?.ok === false || result?.blocked) {
+        if (result?.ok === false || result?.blocked || !result?.paymentLinkUrl) {
           showNotification(
             result?.message
               || 'Another customer is already paying for this item. Try again when their 5-minute window ends.',
-            'warning'
+            'warning',
+            { fullText: true, duration: 6000 }
           );
           setContinuingPayment(false);
           return;
@@ -1365,7 +1370,8 @@ const TrackOrder = ({ onProductClick }) => {
         const msg = String(err?.message || err?.data || '');
         showNotification(
           /out of stock|paying for this item|payment window/i.test(msg) ? msg : 'Failed. Please try again.',
-          'error'
+          'error',
+          /out of stock|paying for this item|payment window/i.test(msg) ? { fullText: true } : undefined
         );
         setContinuingPayment(false);
       }
@@ -1905,7 +1911,11 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
     try {
       const stock = await assertOrderStock({ orderId: order.orderId });
       if (stock && stock.ok === false) {
-        showNotification(stock.message || 'Items are out of stock.', 'error');
+        showNotification(
+          stock.message || 'Items are out of stock.',
+          stock.blocked ? 'warning' : 'error',
+          { fullText: true, duration: 6000 }
+        );
         setContinuingPayment(false);
         return;
       }
@@ -1921,11 +1931,12 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
         customerPhone: order.phone,
         ...(paymentMethodType ? { paymentMethodType } : {}),
       });
-      if (result?.ok === false || result?.blocked) {
+      if (result?.ok === false || result?.blocked || !result?.paymentLinkUrl) {
         showNotification(
           result?.message
             || 'Another customer is already paying for this item. Try again when their 5-minute window ends.',
-          'warning'
+          'warning',
+          { fullText: true, duration: 6000 }
         );
         setContinuingPayment(false);
         return;
@@ -1935,7 +1946,8 @@ const TrackingModal = ({ order, products, onClose, getTimelineSteps, getStatusCl
       const msg = String(err?.message || err?.data || '');
       showNotification(
         /out of stock|paying for this item|payment window/i.test(msg) ? msg : 'Failed. Please try again.',
-        'error'
+        'error',
+        { fullText: true }
       );
       setContinuingPayment(false);
     }

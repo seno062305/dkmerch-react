@@ -1923,13 +1923,16 @@ const Checkout = () => {
           paymentLinkUrl = result.paymentLinkUrl;
         } else {
           const result = await createPaymentLink(payArgs);
-          if (result?.ok === false || result?.blocked) {
+          if (result?.ok === false || result?.blocked || !result?.paymentLinkUrl) {
             setLoading(false);
             showNotification(
               result?.message
                 || 'Another customer is already paying for this item. Please wait until their 5-minute payment window ends.',
-              'warning'
+              'warning',
+              { fullText: true, duration: 6000 }
             );
+            // Stay on site with the unpaid order — never redirect to a blank/undefined URL
+            navigate(`/track-order?order=${encodeURIComponent(orderId)}`, { replace: true });
             return;
           }
           paymentLinkUrl = result.paymentLinkUrl;
@@ -2014,6 +2017,17 @@ const Checkout = () => {
         sessionStorage.removeItem(CHECKOUT_BUYNOW_KEY);
       } catch { /* ignore */ }
 
+      if (!paymentLinkUrl) {
+        setLoading(false);
+        showNotification(
+          'Payment link could not be opened. Your order is saved — try Pay again from Track Order.',
+          'warning',
+          { fullText: true, duration: 6000 }
+        );
+        navigate(`/track-order?order=${encodeURIComponent(orderId)}`, { replace: true });
+        return;
+      }
+
       setLoading(false);
       window.location.href = paymentLinkUrl;
 
@@ -2025,7 +2039,8 @@ const Checkout = () => {
         short
           ? `Error placing order: ${short}`
           : 'Error placing order. Please try again.',
-        'error'
+        'error',
+        { fullText: true }
       );
       console.error('Order error:', error);
     }

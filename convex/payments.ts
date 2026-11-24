@@ -323,16 +323,46 @@ export const acquirePaymentHold = mutation({
     const expiresAt = now + PAYMENT_HOLD_MS;
     await clearPaymentHoldsForOrder(db, orderId);
 
+    // Touch products before inserting holds so concurrent acquires conflict (OCC retry)
+    // and the loser re-runs evaluateOrderStock after the winner's holds exist.
+    const holdRows: {
+      productId: string;
+      productName: string;
+      qty: number;
+    }[] = [];
     for (const item of order.items || []) {
       const qty = Math.max(0, Math.floor(Number(item.quantity || item.qty || 1)));
       if (qty <= 0) continue;
       const product = await findProductForOrderItem(db, item);
       if (!product || typeof (product as any).stock !== "number") continue;
-      await db.insert("paymentHolds", {
-        orderId: String(orderId),
+      await db.patch(product._id, {
+        paymentHoldStamp: now,
+      } as any);
+      holdRows.push({
         productId: String(product._id),
         productName: String(item.name || (product as any).name || "Item"),
         qty,
+      });
+    }
+
+    // Re-check after product locks — blocks the concurrent loser immediately
+    const stockCheck2 = await evaluateOrderStock(db, order);
+    if (!stockCheck2.ok) {
+      return {
+        ok: false,
+        blocked: !!stockCheck2.blocked,
+        message: stockCheck2.message,
+        retryAfterSec: stockCheck2.retryAfterSec || 0,
+        expiresAt: stockCheck2.expiresAt || 0,
+      };
+    }
+
+    for (const row of holdRows) {
+      await db.insert("paymentHolds", {
+        orderId: String(orderId),
+        productId: row.productId,
+        productName: row.productName,
+        qty: row.qty,
         createdAt: now,
         expiresAt,
       });

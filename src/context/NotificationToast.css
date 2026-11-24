@@ -66,10 +66,11 @@
   min-width: 0;
   font-size: 13px;
   font-weight: 600;
-  line-height: 1.4;
+  line-height: 1.45;
   color: #1a1f36;
   white-space: normal;
   overflow: visible;
+  overflow-wrap: anywhere;
   word-break: break-word;
 }
 
