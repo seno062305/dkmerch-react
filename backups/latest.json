@@ -1,7 +1,7 @@
 {
-  "latestBackup": "2026-11-27",
-  "date": "2026-11-27",
-  "timestamp": "2026-11-27T05:38:22.209Z",
+  "latestBackup": "2026-11-28",
+  "date": "2026-11-28",
+  "timestamp": "2026-11-28T05:16:07.924Z",
   "tables": {
     "users": {
       "count": 5,
@@ -28,7 +28,7 @@
       "status": "ok"
     },
     "riderLocations": {
-      "count": 1,
+      "count": 0,
       "status": "ok"
     },
     "reviews": {
@@ -44,6 +44,6 @@
       "status": "ok"
     }
   },
-  "totalRecords": 70,
+  "totalRecords": 69,
   "status": "success"
 }
